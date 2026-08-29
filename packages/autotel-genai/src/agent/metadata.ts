@@ -63,18 +63,32 @@ export function normalizeTool(
   };
 }
 
-export function sanitizeTool(
-  tool?: ToolCallMetadata,
-): ToolCallMetadata | undefined {
+export /**
+ * The tool fields as the wide event carries them.
+ *
+ * Snake_case, matching the span attributes in `attributes.ts`: the logger
+ * flattens these keys onto the same span, so a camelCased copy filed every
+ * tool call twice under two names. One fact, one spelling.
+ */
+interface ToolLogFields {
+  name: string;
+  call_id?: string;
+  input_hash?: string;
+  output_hash?: string;
+  status?: ToolCallMetadata['status'];
+  execution_ms?: number;
+}
+
+function sanitizeTool(tool?: ToolCallMetadata): ToolLogFields | undefined {
   if (!tool) return undefined;
 
   return {
     name: tool.name,
-    ...(tool.callId !== undefined && { callId: tool.callId }),
-    ...(tool.inputHash !== undefined && { inputHash: tool.inputHash }),
-    ...(tool.outputHash !== undefined && { outputHash: tool.outputHash }),
+    ...(tool.callId !== undefined && { call_id: tool.callId }),
+    ...(tool.inputHash !== undefined && { input_hash: tool.inputHash }),
+    ...(tool.outputHash !== undefined && { output_hash: tool.outputHash }),
     ...(tool.status !== undefined && { status: tool.status }),
-    ...(tool.executionMs !== undefined && { executionMs: tool.executionMs }),
+    ...(tool.executionMs !== undefined && { execution_ms: tool.executionMs }),
   };
 }
 

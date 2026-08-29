@@ -1,6 +1,7 @@
 import {
   createNoopRequestLogger,
   getRequestLoggerSafe,
+  trace,
   type RequestLogger,
 } from 'autotel';
 import { forceKeepAuditEvent, withAudit } from 'autotel-audit';
@@ -25,6 +26,7 @@ import {
   type AgentContext,
 } from './context.js';
 import { hashPayload } from './hash.js';
+import { GEN_AI_OPERATION, genAiSpanName } from '../semconv.js';
 import type {
   AgentActionFactory,
   AgentActionMetadata,
@@ -70,7 +72,16 @@ function recordAiTelemetry(
       usage,
       ai.pricing ? { pricing: ai.pricing } : undefined,
     );
-    Object.assign(attrs, genAiUsageAttributes({ ...usage, costUsd: cost }));
+    Object.assign(
+      attrs,
+      genAiUsageAttributes({
+        ...usage,
+        costUsd: cost,
+        // No price found: say which model, rather than leave a gap that reads
+        // as free.
+        unpricedModel: cost === undefined ? ai.model : undefined,
+      }),
+    );
   }
   ctx.setAttributes(attrs);
 }
@@ -238,6 +249,26 @@ export function defineAgentToolCall<TArgs extends unknown[], TResult>(
 }
 
 export async function withAgentToolCall<T>(
+  metadata: AgentActionMetadata & { tool: ToolCallMetadata },
+  fn: AgentHandler<T>,
+  options: AgentToolCallOptions = {},
+): Promise<T> {
+  // A tool call is an operation with its own duration, status and evidence.
+  // Recorded onto whatever span happened to be open, a second call in the same
+  // span overwrites the first. So it gets a span, named per the GenAI
+  // semantic conventions.
+  //
+  // Unless the caller named a context: passing `ctx` is a statement about where
+  // this call belongs, and a wrapper span would put the attributes somewhere
+  // else than the caller asked for.
+  if (options.ctx) return runAgentToolCall(metadata, fn, options);
+  return trace.run(
+    genAiSpanName(GEN_AI_OPERATION.EXECUTE_TOOL, metadata.tool.name),
+    () => runAgentToolCall(metadata, fn, options),
+  );
+}
+
+async function runAgentToolCall<T>(
   metadata: AgentActionMetadata & { tool: ToolCallMetadata },
   fn: AgentHandler<T>,
   options: AgentToolCallOptions = {},

@@ -298,7 +298,7 @@ Only import from these public entry points:
 | ------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `autotel`                             | Core: trace, span, instrument, init, getRequestLogger, createStructuredError, parseError, track |
 | `autotel/event`                       | Event class for advanced event creation                                                         |
-| `autotel/testing`                     | createTraceCollector() for test assertions                                                      |
+| `autotel/testing`                     | createTraceCollector() and createMemoryExporter() for test assertions                           |
 | `autotel/exporters`                   | InMemorySpanExporter for low-level testing                                                      |
 | `autotel/logger`                      | Pino integration                                                                                |
 | `autotel/metric`                      | Metrics helpers (counters, histograms, gauges)                                                  |

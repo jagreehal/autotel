@@ -60,6 +60,11 @@ export {
   serializeSpan,
   type SerializedSpan,
 } from './test-span-collector';
+export {
+  createMemoryExporter,
+  type MemoryExporter,
+  type RecordedSpan,
+} from './memory-exporter';
 
 /**
  * Note: OpenTelemetry exporters and processors have moved to dedicated modules

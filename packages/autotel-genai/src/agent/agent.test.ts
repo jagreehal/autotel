@@ -82,6 +82,11 @@ vi.mock('autotel', () => ({
   getRequestLogger: vi.fn(() => mocked.logger),
   getRequestLoggerSafe: vi.fn(() => mocked.logger),
   createNoopRequestLogger: vi.fn(() => mocked.logger),
+  // A tool call without an explicit ctx runs inside its own span. Here the
+  // span is not the subject, so running the body is the whole behaviour.
+  trace: Object.assign(vi.fn(), {
+    run: (_name: string, fn: () => unknown) => fn(),
+  }),
   GEN_AI_COST_ATTRIBUTE: 'gen_ai.usage.cost.usd',
   estimateLLMCost: vi.fn(
     (_model: string, usage: { inputTokens?: number; outputTokens?: number }) =>
@@ -415,6 +420,27 @@ describe('autotel-genai', () => {
     );
   });
 
+  it('withAgentAction names an unpriced model rather than dropping the cost', async () => {
+    // text-embedding-3-small has no pricing entry, so the cost silently never
+    // reached the span. A run on an unpriced model has to be distinguishable
+    // from a run that cost nothing.
+    await withAgentAction(
+      {
+        action: 'agent.embed',
+        agent: { id: 'embedder' },
+        ai: { model: 'text-embedding-3-small', usage: { inputTokens: 200 } },
+      },
+      async () => 'done',
+      { ctx: mockCtx },
+    );
+
+    expect(setAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'gen_ai.usage.cost.unpriced_model': 'text-embedding-3-small',
+      }),
+    );
+  });
+
   it('withAgentAction without ai metadata records no GenAI attributes', async () => {
     await withAgentAction(
       { action: 'agent.plain', agent: { id: 'a1' } },
@@ -507,10 +533,12 @@ describe('autotel-genai', () => {
     expect(result).toEqual({ status: 'complete', refundId: 're_123' });
     expect(logger.set).toHaveBeenCalledWith(
       expect.objectContaining({
+        // Snake_case, the same spelling the span attributes use: the logger
+        // flattens these onto the same span.
         tool: expect.objectContaining({
           name: 'stripe_refund_v3',
-          inputHash: expect.stringMatching(/^sha256:/),
-          outputHash: expect.stringMatching(/^sha256:/),
+          input_hash: expect.stringMatching(/^sha256:/),
+          output_hash: expect.stringMatching(/^sha256:/),
           status: 'complete',
         }),
       }),

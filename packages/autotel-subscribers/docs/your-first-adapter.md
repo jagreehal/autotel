@@ -182,15 +182,15 @@ export class WebhookAdapter extends EventsAdapter {
 
 ## Test Your Adapter
 
-Use `AdapterTestHarness` to validate it works:
+Use `SubscriberTestHarness` to validate it works:
 
 ```typescript
-import { AdapterTestHarness } from 'autotel-subscribers/testing';
+import { SubscriberTestHarness } from 'autotel-subscribers/testing';
 
-const harness = new AdapterTestHarness(new MyFirstAdapter());
+const harness = new SubscriberTestHarness(new MyFirstAdapter());
 const results = await harness.runAll();
 
-AdapterTestHarness.printResults(results);
+SubscriberTestHarness.printResults(results);
 // ✅ All tests passed! Your adapter is ready to use.
 ```
 

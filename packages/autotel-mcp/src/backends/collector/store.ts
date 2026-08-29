@@ -308,7 +308,7 @@ export class CollectorStore {
     });
     const totalCount = Number(countResult.rows[0]?.cnt ?? 0);
 
-    // ponytail: newest MAX_POINT_ROWS points, grouped in memory. Push the
+    // Newest MAX_POINT_ROWS points, grouped in memory. Push the
     // grouping into SQL if a collector ever holds more than a dev workload.
     const result = await this.db.execute({
       sql: `SELECT metric_name, unit, attributes, timestamp_unix_ms, value

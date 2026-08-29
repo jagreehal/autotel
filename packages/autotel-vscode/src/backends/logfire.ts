@@ -48,7 +48,7 @@ function rowsOf<Row>(body: LogfireQueryResponse<Row>): Row[] {
 // The query API rejects a request with no `min_timestamp` (HTTP 422), so every
 // call needs one. Callers that know the window pass it; the rest fall back to
 // this lookback, which also bounds `getTrace` by id.
-// ponytail: single fixed lookback, make it a setting if someone needs older traces
+// Single fixed lookback; make it a setting if someone needs older traces.
 const DEFAULT_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function logfireFetch<T>(

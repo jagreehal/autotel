@@ -1,0 +1,224 @@
+{
+  "version": 1,
+  "generatedAt": "2026-08-28T21:22:58.597Z",
+  "framework": "hono",
+  "projectName": "@jagreehal/example-hono",
+  "score": 66,
+  "routes": [
+    {
+      "framework": "hono",
+      "kind": "middleware",
+      "method": null,
+      "path": "*",
+      "file": "src/app.ts",
+      "handler": {
+        "line": 17,
+        "column": 1
+      },
+      "id": "* * (src/app.ts)",
+      "checks": {
+        "trace": {
+          "status": "fail",
+          "message": "no trace() or span() — this handler is invisible when it breaks",
+          "fix": "export const handler = instrument({ key: 'handle *', fn: async () => { /* … */ } });",
+          "evidence": {
+            "file": "src/app.ts",
+            "line": 17,
+            "snippet": "app.use("
+          }
+        },
+        "context": {
+          "status": "fail",
+          "message": "no request-scoped attributes — the span says what failed, not for whom",
+          "fix": "const log = getRequestLogger(); log.set({ 'user.id': userId });",
+          "evidence": {
+            "file": "src/app.ts",
+            "line": 17,
+            "snippet": "app.use("
+          }
+        },
+        "structured-errors": {
+          "status": "n/a"
+        },
+        "error-handling": {
+          "status": "n/a"
+        },
+        "audit": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 35
+    },
+    {
+      "framework": "hono",
+      "kind": "api",
+      "method": "GET",
+      "path": "/health",
+      "file": "src/app.ts",
+      "handler": {
+        "line": 51,
+        "column": 1
+      },
+      "id": "GET /health (src/app.ts)",
+      "checks": {
+        "trace": {
+          "status": "n/a",
+          "message": "health check — nothing to instrument"
+        },
+        "context": {
+          "status": "n/a",
+          "message": "health check — nothing to instrument"
+        },
+        "structured-errors": {
+          "status": "n/a",
+          "message": "health check — nothing to instrument"
+        },
+        "error-handling": {
+          "status": "n/a",
+          "message": "health check — nothing to instrument"
+        },
+        "audit": {
+          "status": "n/a",
+          "message": "health check — nothing to instrument"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    },
+    {
+      "framework": "hono",
+      "kind": "api",
+      "method": "GET",
+      "path": "/users/:userId",
+      "file": "src/app.ts",
+      "handler": {
+        "line": 55,
+        "column": 1
+      },
+      "id": "GET /users/:userId (src/app.ts)",
+      "checks": {
+        "trace": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "pass"
+        },
+        "structured-errors": {
+          "status": "n/a"
+        },
+        "error-handling": {
+          "status": "pass"
+        },
+        "audit": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    },
+    {
+      "framework": "hono",
+      "kind": "api",
+      "method": "GET",
+      "path": "/users/:userId/orders",
+      "file": "src/app.ts",
+      "handler": {
+        "line": 71,
+        "column": 1
+      },
+      "id": "GET /users/:userId/orders (src/app.ts)",
+      "checks": {
+        "trace": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "pass"
+        },
+        "structured-errors": {
+          "status": "n/a"
+        },
+        "error-handling": {
+          "status": "pass"
+        },
+        "audit": {
+          "status": "fail",
+          "message": "no audit trail (money: path says \"order\") — withAudit() survives tail sampling",
+          "fix": "withAudit({ action: 'users.:userId.orders', resource: '…', actorId }, async (ctx, log) => { /* … */ });",
+          "evidence": {
+            "file": "src/app.ts",
+            "line": 71,
+            "snippet": "app.get('/users/:userId/orders', async (c) => {"
+          }
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "high",
+        "reasons": ["money: path says \"order\""]
+      },
+      "score": 75
+    },
+    {
+      "framework": "hono",
+      "kind": "api",
+      "method": "GET",
+      "path": "/error",
+      "file": "src/app.ts",
+      "handler": {
+        "line": 87,
+        "column": 1
+      },
+      "id": "GET /error (src/app.ts)",
+      "checks": {
+        "trace": {
+          "status": "fail",
+          "message": "no trace() or span() — this handler is invisible when it breaks",
+          "fix": "export const handler = instrument({ key: 'get /error', fn: async () => { /* … */ } });",
+          "evidence": {
+            "file": "src/app.ts",
+            "line": 87,
+            "snippet": "app.get('/error', () => {"
+          }
+        },
+        "context": {
+          "status": "pass"
+        },
+        "structured-errors": {
+          "status": "fail",
+          "message": "throws a bare Error — no why, fix, or status for the caller",
+          "fix": "throw createStructuredError({ message: 'Payment declined', why: '…', fix: '…', status: 402 });",
+          "evidence": {
+            "file": "src/app.ts",
+            "line": 90,
+            "snippet": "throw new Error('This is a test error');"
+          }
+        },
+        "error-handling": {
+          "status": "n/a"
+        },
+        "audit": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 45
+    }
+  ]
+}

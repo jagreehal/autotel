@@ -41,6 +41,39 @@ app.get('/users/:id', async (c) => {
 serve(app);
 ```
 
+## What am I not seeing?
+
+A backend can only describe the spans it received, so it can never name a
+handler that emitted nothing. `autotel map` reads the source instead: it walks
+the project, scores every entry point, and writes `autotel.map.json`, which is
+committed here.
+
+```bash
+pnpm map        # score every entry point, write autotel.map.json
+pnpm map:check  # fail on a regression against the committed map (CI)
+pnpm coverage   # join the map against what actually arrived
+```
+
+`pnpm coverage` starts a devtools in-process, calls two of the five entry
+points, and asserts that Coverage reports the two as seen and the rest as dark:
+
+```
+Coverage: 2 of 5 entry points seen
+
+  DARK  ANY *                        0 spans
+  DARK  GET /health                  0 spans
+  DARK  GET /error                   0 spans
+  seen  GET /users/:userId           1 spans
+  seen  GET /users/:userId/orders    1 spans
+```
+
+It also asserts that a project with no map gets a 404 rather than an empty
+report, because "0 of 0" would read as a clean bill of health. The script exits
+non-zero when either claim stops holding.
+
+`src/app.ts` holds the routes and `src/index.ts` serves them, so the coverage
+check can drive the same app through `app.request()` without a port.
+
 ## See Also
 
 - [autotel-hono](../../packages/autotel-hono)

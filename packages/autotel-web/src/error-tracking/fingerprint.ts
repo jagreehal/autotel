@@ -4,7 +4,7 @@
  * destination groups this error the same way instead of each re-deriving
  * grouping from the stack string it happens to get.
  *
- * ponytail: these rules mirror `exception-fingerprint.ts` in the `autotel`
+ * These rules mirror `exception-fingerprint.ts` in the `autotel`
  * package, deliberately copied rather than imported — autotel-web carries no
  * workspace dependencies so the browser bundle stays in its 2–5KB budget. Both
  * copies must produce identical output; if they ever need to diverge, or a

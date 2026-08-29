@@ -42,7 +42,18 @@ pnpm type-check         # TypeScript type checking
 ### Quality Check
 
 ```bash
-pnpm quality            # Runs: build + lint + format + type-check + test + test:integration
+pnpm quality            # Runs: build + build-storybook + lint + format + type-check + test + test:integration + check-exports-map
+```
+
+`check-exports-map` compares every package's `exports` map against what the
+build actually wrote. A subpath declared with no matching build entry resolves
+to nothing and throws `ERR_MODULE_NOT_FOUND` for consumers, while the repo's own
+tests, which import from source, keep passing. Run it alone with:
+
+```bash
+pnpm check-exports-map
+pnpm bundle-size          # compare dist sizes against bundle-size-baseline.json
+pnpm bundle-size:update   # accept intentional growth, then commit the baseline
 ```
 
 ### Running Examples

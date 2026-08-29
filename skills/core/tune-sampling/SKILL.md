@@ -38,6 +38,18 @@ The right mix:
 - **Tail keep** the high-value subset (errors, slow, AI, debug-headered).
 - **Don't sample audit spans**: separate processor, see [`build-audit-trails`](../build-audit-trails/SKILL.md).
 
+### Where the sampler comes from
+
+A wrapped function resolves its sampler per call, in this order: the `sampler`
+passed to `trace()` / `withTracing()` / `instrument()`, then the one `init()`
+was configured with, then keep-everything. So `init({ sampling: 'production' })`
+governs the functions you wrap; it is not only an SDK-level setting. Resolution
+happens per call rather than at wrap time because wrappers are usually created
+at module load, before `init()` has run.
+
+An app that set `sampling` and saw every wrapped span exported anyway was hitting
+a bug, not a feature: it now samples for real, and the trace volume drops.
+
 ## Head sampling recipes
 
 ### Default for a typical web service

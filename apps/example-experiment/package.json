@@ -1,0 +1,20 @@
+{
+  "name": "@jagreehal/example-experiment",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/compare.ts",
+    "start:keep": "tsx src/keep.ts",
+    "start:devtools": "AUTOTEL_DEVTOOLS=1 tsx src/compare.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "autotel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.1",
+    "typescript": "^6.0.3"
+  }
+}

@@ -70,7 +70,7 @@ interface ContextManagerInternals {
  * parenting to the test span. Entering the context on this async resource
  * instead is inherited by the test body and everything it awaits.
  *
- * ponytail: reads the context manager's private AsyncLocalStorage, since the
+ * Reads the context manager's private AsyncLocalStorage, since the
  * OTel ContextManager interface has no callback-free entry point. Returns false
  * on any manager that does not expose one, and the caller falls back to
  * `context.with`.

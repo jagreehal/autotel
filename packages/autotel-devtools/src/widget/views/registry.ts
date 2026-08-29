@@ -24,6 +24,7 @@ import ErrorsView from '../components/ErrorsView.svelte';
 import SecurityView from '../components/SecurityView.svelte';
 import CompareView from '../components/CompareView.svelte';
 import CoverageView from '../components/CoverageView.svelte';
+import WebMcpView from '../components/WebMcpView.svelte';
 
 /** Views this build includes. A missing id falls back to Traces. */
 export const VIEWS: Partial<Record<TabType, Component>> = {
@@ -39,6 +40,7 @@ export const VIEWS: Partial<Record<TabType, Component>> = {
   security: SecurityView,
   compare: CompareView,
   coverage: CoverageView,
+  webmcp: WebMcpView,
 };
 
 /** Whether this build is the reduced set — drives the "open full viewer" hint. */

@@ -143,20 +143,20 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
 
 `autotel` has ~35 subpath exports. For most scenarios you only need one or two. Cloudflare Workers and other edge runtimes should use [`autotel-cloudflare`](../autotel-cloudflare) or [`autotel-edge`](../autotel-edge), not `autotel` (which expects Node).
 
-| Scenario                                           | Package                               | Import                                                                      |
-| -------------------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------- |
-| Node service: init + spans                         | `autotel`                             | `import { init, trace, span, withTracing, span } from 'autotel'`            |
-| Node service: pino-style logger with trace context | `autotel`                             | `import { createLogger } from 'autotel/logger'`                             |
-| Node service: class decorators                     | `autotel`                             | `import { Trace, Span } from 'autotel/decorators'`                          |
-| Node service: Drizzle ORM spans                    | `autotel-drizzle`                     | `import { instrumentDrizzleClient } from 'autotel-drizzle'`                 |
-| Node service: testing assertions                   | `autotel`                             | `import { createTraceCollector } from 'autotel/testing'`                    |
-| Cloudflare Worker: fetch with spans                | `autotel-cloudflare`                  | `import { wrapModule, trace, span, withTracing } from 'autotel-cloudflare'` |
-| Cloudflare Worker: logs only, no `nodejs_compat`   | `autotel-cloudflare`                  | `import { createEdgeLogger } from 'autotel-cloudflare/logger'`              |
-| Cloudflare Worker: queue consumer                  | `autotel-cloudflare`                  | `import { wrapModule, getQueueLogger } from 'autotel-cloudflare'`           |
-| Cloudflare Worker: Durable Object                  | `autotel-cloudflare`                  | `import { wrapDurableObject } from 'autotel-cloudflare'`                    |
-| Hono on Workers                                    | `autotel-cloudflare` + `autotel-hono` | `wrapModule` from `autotel-cloudflare`, middleware from `autotel-hono`      |
-| Vercel Edge / Netlify Edge / Deno Deploy           | `autotel-edge`                        | `import { init, trace, span, withTracing } from 'autotel-edge'`             |
-| Edge runtime: logs only                            | `autotel-edge`                        | `import { createEdgeLogger } from 'autotel-edge/logger'`                    |
+| Scenario                                           | Package                               | Import                                                                         |
+| -------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------ |
+| Node service: init + spans                         | `autotel`                             | `import { init, trace, span, withTracing, span } from 'autotel'`               |
+| Node service: pino-style logger with trace context | `autotel`                             | `import { createLogger } from 'autotel/logger'`                                |
+| Node service: class decorators                     | `autotel`                             | `import { Trace, Span } from 'autotel/decorators'`                             |
+| Node service: Drizzle ORM spans                    | `autotel-drizzle`                     | `import { instrumentDrizzleClient } from 'autotel-drizzle'`                    |
+| Node service: testing assertions                   | `autotel`                             | `import { createTraceCollector, createMemoryExporter } from 'autotel/testing'` |
+| Cloudflare Worker: fetch with spans                | `autotel-cloudflare`                  | `import { wrapModule, trace, span, withTracing } from 'autotel-cloudflare'`    |
+| Cloudflare Worker: logs only, no `nodejs_compat`   | `autotel-cloudflare`                  | `import { createEdgeLogger } from 'autotel-cloudflare/logger'`                 |
+| Cloudflare Worker: queue consumer                  | `autotel-cloudflare`                  | `import { wrapModule, getQueueLogger } from 'autotel-cloudflare'`              |
+| Cloudflare Worker: Durable Object                  | `autotel-cloudflare`                  | `import { wrapDurableObject } from 'autotel-cloudflare'`                       |
+| Hono on Workers                                    | `autotel-cloudflare` + `autotel-hono` | `wrapModule` from `autotel-cloudflare`, middleware from `autotel-hono`         |
+| Vercel Edge / Netlify Edge / Deno Deploy           | `autotel-edge`                        | `import { init, trace, span, withTracing } from 'autotel-edge'`                |
+| Edge runtime: logs only                            | `autotel-edge`                        | `import { createEdgeLogger } from 'autotel-edge/logger'`                       |
 
 ## Quick Start
 
@@ -433,6 +433,8 @@ calling a model, this is why.
 ## Sampling
 
 Autotel defaults to production-ready adaptive sampling: a 10% baseline, with errors and slow requests kept automatically.
+
+A sampler configured here also governs the functions you wrap. `trace()`, `withTracing()` and `instrument()` resolve their sampler per call as `options.sampler ?? init()'s sampler ?? keep everything`, so `sampling: 'production'` applies to wrapped spans and not only to the SDK. Resolution is per call because a wrapper is usually created at module load, before `init()` has run. A sampler passed at the wrapper still wins.
 
 ### Preset Shorthand
 

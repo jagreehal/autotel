@@ -8,6 +8,7 @@ import { trace } from '@opentelemetry/api';
 import { EventQueue } from './event-queue';
 import {
   getConfig,
+  getLogger,
   warnIfNotInitialized,
   isInitialized,
   getValidationConfig,
@@ -20,6 +21,8 @@ import type { AutotelEventContext } from './event-subscriber';
 
 // Global events queue (initialized on first track call)
 let eventsQueue: EventQueue | null = null;
+// Whether we have already said that events are going nowhere.
+let warnedNoSubscribers = false;
 
 /**
  * Build autotel event context for trace correlation
@@ -119,7 +122,19 @@ function getOrCreateQueue(): EventQueue | null {
   if (!eventsQueue) {
     const config = getConfig();
     if (!config?.subscribers || config.subscribers.length === 0) {
-      // No subscribers configured - no-op
+      // No subscribers: the event is dropped. Say so once, because a silent
+      // drop makes a recorded-looking event (an evaluation result, an audit
+      // event) indistinguishable from one that reached a backend. Once per
+      // process, since the alternative is a line per event.
+      if (!warnedNoSubscribers) {
+        warnedNoSubscribers = true;
+        getLogger().warn(
+          {},
+          '[autotel] track() dropped an event: init() configured no subscribers. ' +
+            'Events (including gen_ai.evaluation.result and audit events) reach a ' +
+            'backend through init({ subscribers: [...] }).',
+        );
+      }
       return null;
     }
 
@@ -213,4 +228,5 @@ export function getEventQueue(): EventQueue | null {
  */
 export function resetEventQueue(): void {
   eventsQueue = null;
+  warnedNoSubscribers = false;
 }

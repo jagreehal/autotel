@@ -4,6 +4,7 @@ import { encodeTraces } from '../wire/wire';
 import type { Server as HTTPServer } from 'node:http';
 import { createServer } from 'node:http';
 import { ErrorAggregator } from './error-aggregator';
+import { foldWebMcpTools, type WebMcpInventory } from './webmcp-aggregator';
 import {
   ingestAgentEvents,
   ingestAgentMetrics,
@@ -468,6 +469,49 @@ export class DevtoolsServer {
       if (cursor) seenCursors.add(cursor);
     } while (cursor);
     return { errors: aggregator.getErrorGroups() };
+  }
+
+  /**
+   * Fold WebMCP lifecycle history through the window end into the tool surface
+   * an agent is offered, while counting executions only inside the window.
+   *
+   * Drains every page rather than folding the first one: an inventory built
+   * from a page of results does not fail, it *under-reports* — "2 tools dropped
+   * annotations" when the answer is 6 — and gets more wrong the more traffic
+   * there is, which is backwards for an observability answer.
+   *
+   * The span-name filter is composed here rather than accepted from the client:
+   * this endpoint answers one question, and a caller-supplied predicate could
+   * only narrow it into a wrong answer.
+   */
+  queryWebMcp(args: {
+    window?: { start: number; end: number };
+    limit?: number;
+  }): {
+    webmcp: WebMcpInventory;
+    errors_parse?: QueryError[];
+  } {
+    const traces: TraceData[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const result = this.store.queryTraces({
+        query: 'name ^ "webmcp."',
+        window: args.window ? { start: 0, end: args.window.end } : undefined,
+        limit: args.limit,
+        cursor,
+      });
+      if (result.errors)
+        return {
+          webmcp: foldWebMcpTools([]),
+          errors_parse: result.errors,
+        };
+      traces.push(...result.traces);
+      cursor = result.nextCursor ?? undefined;
+      if (cursor && seenCursors.has(cursor)) break;
+      if (cursor) seenCursors.add(cursor);
+    } while (cursor);
+    return { webmcp: foldWebMcpTools(traces, args.window) };
   }
 
   /** Run a log query against the durable store. */

@@ -13,9 +13,9 @@ import type { Sampler } from './sampling';
  * Observed through what survives the tail sampling processor, which is the
  * boundary deciding whether a trace reaches a backend.
  *
- * The sampler is passed per wrapper rather than to `init()`: the tracing
- * wrapper reads `options.sampler` and falls back to `AlwaysSampler`, so a
- * sampler given to `init()` never reaches this decision.
+ * The sampler is passed per wrapper here to keep each case's decision local.
+ * A sampler given to `init()` reaches the same decision (see
+ * `init-sampler.test.ts`); the wrapper's own sampler wins when both are set.
  */
 const dropEverything: Sampler = {
   shouldSample: () => true,

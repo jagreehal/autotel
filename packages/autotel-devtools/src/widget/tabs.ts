@@ -20,6 +20,7 @@ import {
   ShieldAlert,
   GitCompare,
   ScanSearch,
+  Wrench,
 } from '@lucide/svelte';
 import type { TabType } from './types';
 import { VIEWS } from './views/registry';
@@ -43,6 +44,7 @@ const ALL_TABS: readonly TabDef[] = [
   { id: 'security', label: 'Security', icon: ShieldAlert },
   { id: 'compare', label: 'Compare', icon: GitCompare },
   { id: 'coverage', label: 'Coverage', icon: ScanSearch },
+  { id: 'webmcp', label: 'WebMCP', icon: Wrench },
 ];
 
 /**

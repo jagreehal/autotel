@@ -273,7 +273,28 @@ describe('instrumentWebMCP', () => {
     const handle = instrumentWebMCP({ span: recordingSpan });
     handle.uninstall();
     await register();
-    expect(spans).toEqual([]);
+    // The install span stands: the installation did happen. Nothing after it should.
+    expect(spans.map((s) => s.name)).toEqual(['webmcp.install']);
+  });
+
+  it('stops watching registered tool signals after uninstall', async () => {
+    const handle = instrumentWebMCP({ span: recordingSpan });
+    const controller = new AbortController();
+    await document.modelContext!.registerTool(
+      {
+        name: 'checkout',
+        description: 'Check out',
+        execute: () => 'ok',
+      } as never,
+      { signal: controller.signal } as never,
+    );
+
+    handle.uninstall();
+    controller.abort();
+
+    expect(spans.some((span) => span.name === 'webmcp.tool.withdraw')).toBe(
+      false,
+    );
   });
 
   it('instruments calls through an existing reference to the shared model context', async () => {
@@ -334,5 +355,65 @@ describe('instrumentWebMCP', () => {
         writable: true,
       });
     }
+  });
+  it("records a withdrawal when the tool's signal aborts", async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    // One controller per tool is how a library unregisters: aborting it is the
+    // only signal that a tool the agent could see is gone.
+    const controller = new AbortController();
+    await document.modelContext!.registerTool(
+      {
+        name: 'checkout',
+        description: 'Check out',
+        execute: () => 'ok',
+      } as never,
+      { signal: controller.signal } as never,
+    );
+    expect(spans.some((s) => s.name === 'webmcp.tool.withdraw')).toBe(false);
+
+    controller.abort();
+
+    const span = spans.find((s) => s.name === 'webmcp.tool.withdraw');
+    expect(span?.attributes['webmcp.tool.name']).toBe('checkout');
+  });
+
+  it('withdraws only once, however many times the signal is aborted', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    const controller = new AbortController();
+    await document.modelContext!.registerTool(
+      {
+        name: 'checkout',
+        description: 'Check out',
+        execute: () => 'ok',
+      } as never,
+      { signal: controller.signal } as never,
+    );
+    controller.abort();
+    controller.abort();
+
+    expect(spans.filter((s) => s.name === 'webmcp.tool.withdraw')).toHaveLength(
+      1,
+    );
+  });
+
+  it('emits an install span even when nothing registers afterwards', () => {
+    instrumentWebMCP({ span: recordingSpan });
+    // The signature of calling instrumentWebMCP() *after* registering tools:
+    // an installation that saw nothing, which is otherwise indistinguishable
+    // from an app with no tools at all.
+    expect(spans.map((s) => s.name)).toEqual(['webmcp.install']);
+  });
+
+  it('stamps one installation id across install, registration and execution', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    await register();
+    const [tool] = await document.modelContext!.getTools();
+    await document.modelContext!.executeTool(tool as never, '{"q":"x"}');
+
+    const ids = new Set(
+      spans.map((s) => s.attributes['webmcp.installation.id']),
+    );
+    expect(ids.size).toBe(1);
+    expect([...ids][0]).toEqual(expect.any(String));
   });
 });

@@ -151,6 +151,8 @@ export interface GenAiUsageInput {
   cacheCreationInputTokens?: number;
   /** Estimated USD cost (autotel extension). */
   costUsd?: number;
+  /** Model id that has no pricing, set in place of a cost (autotel extension). */
+  unpricedModel?: string;
 }
 
 export function genAiUsageAttributes(
@@ -167,6 +169,7 @@ export function genAiUsageAttributes(
     input.cacheCreationInputTokens,
   );
   set(attrs, GEN_AI.USAGE_COST_USD, input.costUsd);
+  set(attrs, GEN_AI.USAGE_COST_UNPRICED_MODEL, input.unpricedModel);
   // Same value, second name: backends split on which one they read, and a cost
   // that only lands under the name yours does not know is a cost you cannot see.
   set(attrs, GEN_AI.USAGE_COST, input.costUsd);

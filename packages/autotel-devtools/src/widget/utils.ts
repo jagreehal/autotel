@@ -187,3 +187,19 @@ export function isOutsideClick(
   if (!element) return true;
   return !element.contains(event.target as Node);
 }
+
+/**
+ * Scrub the obvious secrets from captured text.
+ *
+ * Used wherever opt-in payload capture puts user data on screen — agent prompts
+ * and WebMCP tool results. Shared rather than copied: two scrubbers is how one
+ * of them ends up a pattern behind, and the one that lags is the one that
+ * leaks. Not a guarantee, and not a substitute for keeping capture off: it
+ * catches the shapes that show up by accident, not a determined secret.
+ */
+export function redact(text: string): string {
+  return text
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '«email»')
+    .replace(/\b(sk|pk|ghp|xox[baprs])[-_][A-Za-z0-9]{8,}\b/g, '«secret»')
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '«token»');
+}

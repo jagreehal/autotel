@@ -49,6 +49,20 @@ interface InstallationState {
   restore(): void;
 }
 
+/**
+ * A tool set is only meaningful relative to the installation that registered
+ * it. A reload tears the page down without aborting any signal, so load 1's
+ * tools are registered and never withdrawn; without this id a reader pairing
+ * registrations with withdrawals cannot tell the two loads apart, and reports
+ * tools the agent can no longer see as still offered.
+ *
+ * Not a security boundary — `randomUUID` is unavailable on insecure origins,
+ * and a counter-free random string is enough to separate two page loads.
+ */
+const newInstallationId = (): string =>
+  globalThis.crypto?.randomUUID?.() ??
+  `webmcp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
 const installations = new WeakMap<WebMCP.ModelContext, InstallationState>();
 
 function installationHandle(
@@ -100,11 +114,14 @@ export function instrumentWebMCP(
   const capture = options.capturePayloads ?? false;
   const maxLength = options.maxPayloadLength ?? DEFAULT_MAX_PAYLOAD;
   const isErrorResult = options.isErrorResult;
+  const installationId = newInstallationId();
+  const withdrawalCleanups: Array<() => void> = [];
 
   const wrapExecute =
     (name: string, execute: (input: unknown, opts: unknown) => unknown) =>
     (input: unknown, opts: unknown) =>
       emit('webmcp.tool.execute', (span) => {
+        span.setAttribute('webmcp.installation.id', installationId);
         span.setAttribute('webmcp.tool.name', name);
         span.setAttribute('gen_ai.operation.name', 'execute_tool');
         span.setAttribute('gen_ai.tool.name', name);
@@ -159,6 +176,34 @@ export function instrumentWebMCP(
           : record(result);
       });
 
+  /**
+   * Withdrawal is an abort.
+   *
+   * `registerTool(tool, { signal })` is how the platform hands a tool back:
+   * a library holds one AbortController per tool and aborts it when the tool
+   * should no longer be offered. Under `when:`-style gating that happens
+   * continuously, not at teardown — so an inventory built from registrations
+   * alone only ever grows, and lists tools the agent can no longer see.
+   */
+  const watchWithdrawal = (name: string, registerOptions: unknown) => {
+    const signal = (registerOptions as { signal?: AbortSignal } | undefined)
+      ?.signal;
+    if (!signal) return;
+    const record = () =>
+      emit('webmcp.tool.withdraw', (span) => {
+        span.setAttribute('webmcp.installation.id', installationId);
+        span.setAttribute('webmcp.tool.name', name);
+        span.setAttribute('gen_ai.tool.name', name);
+      });
+    if (signal.aborted) record();
+    else {
+      signal.addEventListener('abort', record, { once: true });
+      withdrawalCleanups.push(() =>
+        signal.removeEventListener('abort', record),
+      );
+    }
+  };
+
   const ownRegisterDescriptor = Object.getOwnPropertyDescriptor(
     original,
     'registerTool',
@@ -179,7 +224,10 @@ export function instrumentWebMCP(
       ),
     };
 
+    watchWithdrawal(name, registerOptions);
+
     return emit('webmcp.tool.register', async (span) => {
+      span.setAttribute('webmcp.installation.id', installationId);
       span.setAttribute('webmcp.tool.name', name);
       span.setAttribute('gen_ai.tool.name', name);
       span.setAttribute(
@@ -232,6 +280,14 @@ export function instrumentWebMCP(
     });
   };
 
+  // Emitted before the patch is live, so it exists even when nothing registers
+  // afterwards. An installation with no registration spans is the "called
+  // instrumentWebMCP() after registering your tools" mistake, which is
+  // otherwise indistinguishable from having no tools at all.
+  emit('webmcp.install', (span) => {
+    span.setAttribute('webmcp.installation.id', installationId);
+  });
+
   Object.defineProperty(original, 'registerTool', {
     value: instrumentedRegister,
     configurable: true,
@@ -241,6 +297,7 @@ export function instrumentWebMCP(
   const state: InstallationState = {
     references: 1,
     restore() {
+      for (const cleanup of withdrawalCleanups) cleanup();
       if (ownRegisterDescriptor)
         Object.defineProperty(original, 'registerTool', ownRegisterDescriptor);
       else delete (original as { registerTool?: unknown }).registerTool;

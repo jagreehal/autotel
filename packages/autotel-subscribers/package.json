@@ -63,9 +63,9 @@
       "require": "./dist/file.cjs"
     },
     "./testing": {
-      "types": "./dist/testing/index.d.ts",
-      "import": "./dist/testing/index.js",
-      "require": "./dist/testing/index.cjs"
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "require": "./dist/testing.cjs"
     },
     "./loki": {
       "types": "./dist/loki.d.ts",

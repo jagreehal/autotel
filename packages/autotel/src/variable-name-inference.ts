@@ -44,7 +44,7 @@ function captureStackTrace(): string {
  * Modules whose stack frames sit between the user's `trace()` call and this
  * file. Add a module here when you add a file to that call path.
  *
- * ponytail: frames are identified by filename, so renaming one of these files
+ * Frames are identified by filename, so renaming one of these files
  * silently degrades inference to no name rather than failing loudly. The robust
  * upgrade is threading the public entry function (`trace`/`instrument`/
  * `withTracing`) down to `Error.captureStackTrace` as a boundary — that needs a

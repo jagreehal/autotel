@@ -588,7 +588,7 @@ function instrumentCreateQueryJob(BigQuery: any): void {
  * stream ends or errors — that duration is the read, which is the thing worth
  * measuring.
  *
- * ponytail: a stream that is never drained leaves its span open until the
+ * A stream that is never drained leaves its span open until the
  * process exits. Add a configurable idle timeout if that shows up in practice.
  */
 function instrumentCreateQueryStream(BigQuery: any): void {
