@@ -1,5 +1,12 @@
 # Changelog
 
+## 23.0.0
+
+### Patch Changes
+
+- Updated dependencies [78c7131]
+  - autotel-subscribers@53.0.0
+
 ## 22.0.0
 
 ### Patch Changes
