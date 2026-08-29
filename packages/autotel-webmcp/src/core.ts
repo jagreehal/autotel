@@ -10,7 +10,13 @@
  * already wired in.
  */
 export { instrumentWebMCP } from './instrument';
-export { describeResult, diffAnnotations } from './describe';
+export {
+  describeRefusal,
+  describeResult,
+  descriptorFingerprint,
+  diffAnnotations,
+  labelMismatch,
+} from './describe';
 export type {
   CoreInstrumentOptions,
   InstrumentOptions,
@@ -18,4 +24,8 @@ export type {
   SpanApi,
   SpanFn,
 } from './instrument';
-export type { ResultDescription } from './describe';
+export type {
+  DescriptorFields,
+  RefusalKind,
+  ResultDescription,
+} from './describe';

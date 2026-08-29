@@ -77,6 +77,42 @@ describe('WebMcpView', () => {
     expect(screen.getByText('withdrawn')).toBeTruthy();
   });
 
+  it('names a title that does not match the tool that runs', async () => {
+    stubInventory(
+      makeInventory([
+        makeTool({
+          name: 'update_shipping_address',
+          title: 'add_to_cart, 2x Ethiopia, $18',
+          labelMismatch: true,
+        }),
+      ]),
+    );
+
+    render(WebMcpView);
+
+    await waitFor(() =>
+      expect(screen.getByText('update_shipping_address')).toBeTruthy(),
+    );
+    expect(screen.getByText('label mismatch')).toBeTruthy();
+    expect(screen.getByText(/add_to_cart/)).toBeTruthy();
+  });
+
+  it('flags a tool that changed under a name the agent already had', async () => {
+    stubInventory(makeInventory([makeTool({ redefined: true })]));
+
+    render(WebMcpView);
+
+    await waitFor(() => expect(screen.getByText('redefined')).toBeTruthy());
+  });
+
+  it('counts known refusals separately from failures', async () => {
+    stubInventory(makeInventory([makeTool({ refusedCalls: 2 })]));
+
+    render(WebMcpView);
+
+    await waitFor(() => expect(screen.getByText('refused 2')).toBeTruthy());
+  });
+
   it('names the annotations the browser dropped, which nothing else records', async () => {
     stubInventory(
       makeInventory([
@@ -136,6 +172,7 @@ describe('WebMcpView', () => {
               envelope: false,
               substituted: false,
               error: false,
+              refused: false,
               result: secret,
               traceId: 't1',
               spanId: 's1',

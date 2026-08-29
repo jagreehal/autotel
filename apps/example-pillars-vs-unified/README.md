@@ -4,6 +4,14 @@
 
 Companion post (draft): [OpenTelemetry Is Not the Three Pillars](https://www.arrangeactassert.com/posts/otel-is-not-the-three-pillars/).
 
+## What it checks
+
+Neither mode narrates its own result. Each collects what it emitted as records
+and runs the same search over them: find one record that names the user and
+carries `payment.provider`. Pillars mode asserts that no record does, unified
+mode asserts that one does and that the provider is the right one, so a run
+exits non-zero the moment either claim stops being true.
+
 ## The filing-cabinet analogy
 
 Think of a failed payment as a short story about one person and one cart.
@@ -12,7 +20,7 @@ Think of a failed payment as a short story about one person and one cart.
 
 1. **Metrics** — a summary chart ("checkout is a bit slow"). Useful, but the person's name never made it onto the chart.
 2. **Logs** — sticky notes written at different times, with different spellings of the same field (`userId` vs `customer`).
-3. **Traces** — a map of which function called which. Clear about *where* time went. Quiet about *who* and *which payment provider*.
+3. **Traces** — a map of which function called which. Clear about _where_ time went. Quiet about _who_ and _which payment provider_.
 
 To answer "which provider failed for Bob?" you open all three cabinets and glue the pieces yourself.
 
@@ -20,30 +28,30 @@ To answer "which provider failed for Bob?" you open all three cabinets and glue 
 
 ```mermaid
 flowchart LR
-  subgraph pillars [ThreePillarsModel]
-    App1[Checkout] --> M[MetricsStore]
-    App1 --> L[LogStore]
-    App1 --> T[TraceStore]
+  subgraph pillars ["Three pillars model"]
+    App1["Checkout"] --> M["Metrics store"]
+    App1 --> L["Log store"]
+    App1 --> T["Trace store"]
     M -.-> Q1["Who failed? unknown"]
     L -.-> Q1
     T -.-> Q1
   end
-  subgraph unified [UnifiedModel]
-    App2[Checkout] --> Wide[WideEvent]
+  subgraph unified ["Unified model"]
+    App2["Checkout"] --> Wide["Wide event"]
     Wide --> Ans["payment.provider = paypal"]
   end
 ```
 
-That dossier idea is what *Observability Engineering* (2nd ed.) calls the **unified** model. The **three-pillars** model is the three-cabinet habit. OpenTelemetry is the *shipping method* for telemetry, not a requirement to use three cabinets.
+That dossier idea is what _Observability Engineering_ (2nd ed.) calls the **unified** model. The **three-pillars** model is the three-cabinet habit. OpenTelemetry is the _shipping method_ for telemetry, not a requirement to use three cabinets.
 
 ## Why two modes?
 
 Same checkout. Same user (`user_456`). Same failure (`insufficient_funds` on PayPal).
 
-| Script | What you see | Can you answer the question? |
-| --- | --- | --- |
-| `pnpm start:pillars` | Fake metric slice + scattered logs + bare span | No |
-| `pnpm start:unified` | One Autotel canonical wide event | Yes: `payment.provider = "paypal"` |
+| Script               | What you see                                   | Can you answer the question?       |
+| -------------------- | ---------------------------------------------- | ---------------------------------- |
+| `pnpm start:pillars` | Fake metric slice + scattered logs + bare span | No                                 |
+| `pnpm start:unified` | One Autotel canonical wide event               | Yes: `payment.provider = "paypal"` |
 
 The question both scripts ask at the end:
 
@@ -51,11 +59,11 @@ The question both scripts ask at the end:
 
 ## Run
 
-From the Autotel repo root (Node 22+):
+From the Autotel repo root (Node 24+, per the workspace engines):
 
 ```bash
 pnpm install
-pnpm build
+pnpm --filter autotel build
 cd apps/example-pillars-vs-unified
 pnpm start:pillars
 pnpm start:unified
@@ -94,9 +102,10 @@ Three stores, none of which name `payment.provider`:
 
 Question: Which payment.provider failed for user_456?
 Answer:   unknown from this output alone.
+7 records: 2 name the user (log store, log store), 0 carry payment.provider. No record has both.
 ```
 
-`method=paypal` on a log line is the payment *method*, not the provider field the question asks for. The metric never saw the user. The span never saw the cart.
+`method=paypal` on a log line is the payment _method_, not the provider field the question asks for. The metric never saw the user. The span never saw the cart. The counts are computed from the records the mode emitted, so the "no" is measured rather than asserted by the narrator.
 
 ### `pnpm start:unified`
 
@@ -122,7 +131,7 @@ Autotel emits one canonical wide event (fields trimmed for reading; your termina
 ```
 Question: Which payment.provider failed for user_456?
 Answer:   payment.provider = "paypal"
-You read it off one event. No tab hopping, no timestamp stitching.
+Read off one record in the wide event. No tab hopping.
 ```
 
 ```mermaid
@@ -139,23 +148,23 @@ sequenceDiagram
 
 ## How to read the fields
 
-| Field | Why it is there |
-| --- | --- |
-| `user.id` / email | Who hit the bug |
-| `cart.id`, `cart.total_cents` | What they were buying |
-| `payment.provider` | The answer to the demo question |
-| `error.type`, `error.code` | Why it failed |
-| `traceId` / `spanId` | Join to the call graph if you need deeper timing |
+| Field                         | Why it is there                                  |
+| ----------------------------- | ------------------------------------------------ |
+| `user.id` / email             | Who hit the bug                                  |
+| `cart.id`, `cart.total_cents` | What they were buying                            |
+| `payment.provider`            | The answer to the demo question                  |
+| `error.type`, `error.code`    | Why it failed                                    |
+| `traceId` / `spanId`          | Join to the call graph if you need deeper timing |
 
-**Cardinality** (plain English): how many distinct values a field can take. `status=200|500` is low cardinality. `user.id` is high cardinality. High-cardinality fields are what let you find *this* user later without planning that dashboard yesterday.
+**Cardinality** (plain English): how many distinct values a field can take. `status=200|500` is low cardinality. `user.id` is high cardinality. High-cardinality fields are what let you find _this_ user later without planning that dashboard yesterday.
 
 ## Map to the book
 
-From *Observability Engineering*, 2nd edition (Majors, Fong-Jones, Miranda, Parker):
+From _Observability Engineering_, 2nd edition (Majors, Fong-Jones and Miranda, with Parker):
 
 - Three pillars = **siloed stores**, not "having three signal types."
 - That model fits **infra you did not write**. It is a weak fit for **code you own**.
-- Unified observability keeps **wide, structured, high-cardinality** context so you can ask unplanned questions.
+- Unified observability keeps **wide, structured, high-cardinality** context so you pass what the book calls the arbitrary question test: "Can more engineers answer novel questions without escalating?"
 - OpenTelemetry is the portable wire. Autotel is ergonomics on top of that wire so wide events are the default, not a weekend project.
 
 ## Where Autotel fits

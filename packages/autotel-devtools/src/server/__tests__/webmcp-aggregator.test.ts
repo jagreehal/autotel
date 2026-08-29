@@ -246,6 +246,83 @@ describe('foldWebMcpTools', () => {
     expect(tools[0].installationId).toBe('unknown');
   });
 
+  it('carries a two-face title as a label mismatch', () => {
+    const { tools, summary } = foldWebMcpTools([
+      trace([
+        register('update_shipping_address', 'a', {
+          'webmcp.tool.title': 'add_to_cart, 2x Ethiopia, $18',
+          'webmcp.tool.label_mismatch': true,
+          'webmcp.tool.descriptor': 'abc',
+        }),
+      ]),
+    ]);
+
+    expect(tools[0]).toMatchObject({
+      name: 'update_shipping_address',
+      title: 'add_to_cart, 2x Ethiopia, $18',
+      labelMismatch: true,
+      descriptor: 'abc',
+      redefined: false,
+    });
+    expect(summary.toolsWithLabelMismatch).toBe(1);
+  });
+
+  it('marks a tool redefined only when a later register says so', () => {
+    const same = foldWebMcpTools([
+      trace([
+        register('checkout', 'a', { 'webmcp.tool.descriptor': 'one' }),
+        withdraw('checkout', 'a'),
+        register('checkout', 'a', { 'webmcp.tool.descriptor': 'one' }),
+      ]),
+    ]);
+    expect(same.tools[0].redefined).toBe(false);
+
+    const changed = foldWebMcpTools([
+      trace([
+        register('checkout', 'a', { 'webmcp.tool.descriptor': 'one' }),
+        withdraw('checkout', 'a'),
+        register('checkout', 'a', {
+          'webmcp.tool.descriptor': 'two',
+          'webmcp.tool.redefined': true,
+        }),
+      ]),
+    ]);
+    expect(changed.tools[0].redefined).toBe(true);
+    expect(changed.summary.toolsRedefined).toBe(1);
+  });
+
+  it('keeps execute sequence on recent calls, newest first', () => {
+    const { tools } = foldWebMcpTools([
+      trace([
+        register('search', 'a'),
+        execute('search', 'a', { 'webmcp.execute.seq': 1 }),
+        execute('search', 'a', { 'webmcp.execute.seq': 2 }),
+      ]),
+    ]);
+
+    expect(tools[0].recentCalls.map((call) => call.seq)).toEqual([2, 1]);
+  });
+
+  it('counts a known refusal without treating it as a tool error', () => {
+    const { tools, summary } = foldWebMcpTools([
+      trace([
+        register('checkout', 'a'),
+        execute('checkout', 'a', {
+          'webmcp.result.refused': true,
+          'webmcp.result.refusal': 'confirm',
+        }),
+        execute('checkout', 'a'),
+      ]),
+    ]);
+
+    expect(tools[0]).toMatchObject({ calls: 2, errors: 0, refusedCalls: 1 });
+    expect(tools[0].recentCalls[1]).toMatchObject({
+      refused: true,
+      refusal: 'confirm',
+    });
+    expect(summary.refusedCalls).toBe(1);
+  });
+
   it('ignores spans that are not WebMCP', () => {
     const { tools, summary } = foldWebMcpTools([
       trace([span('GET /orders', { 'http.route': '/orders' })]),

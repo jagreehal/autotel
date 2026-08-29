@@ -23,11 +23,21 @@ export function instrumentWebMCP(
   });
 }
 
-export { describeResult, diffAnnotations } from './describe';
+export {
+  describeRefusal,
+  describeResult,
+  descriptorFingerprint,
+  diffAnnotations,
+  labelMismatch,
+} from './describe';
 export type {
   InstrumentOptions,
   Instrumentation,
   SpanApi,
   SpanFn,
 } from './instrument';
-export type { ResultDescription } from './describe';
+export type {
+  DescriptorFields,
+  RefusalKind,
+  ResultDescription,
+} from './describe';

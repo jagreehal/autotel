@@ -5,6 +5,10 @@
   "description": "WebMCP tool tracing in the browser with autotel-webmcp",
   "scripts": {
     "start": "npx --yes http-server -p 8010 -c-1 ../../",
-    "build:deps": "pnpm --filter autotel-webmcp build"
+    "build:deps": "pnpm --filter autotel-webmcp build",
+    "test:conformance": "pnpm build:deps && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0"
   }
 }

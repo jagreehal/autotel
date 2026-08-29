@@ -264,6 +264,9 @@ export async function queryWebMcp(
         envelopeBytes: 0,
         toolsWithDroppedAnnotations: 0,
         toolsWithoutInputSchema: 0,
+        toolsWithLabelMismatch: 0,
+        toolsRedefined: 0,
+        refusedCalls: 0,
       },
     },
   };

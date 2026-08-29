@@ -416,8 +416,14 @@ init({
 | `autotel-cloudflare`          | Cloudflare Workers implementation                                                                                                    |
 | `autotel-adapters`            | Framework adapters (Next.js, Hono, Nitro)                                                                                            |
 | `autotel-mcp-instrumentation` | MCP instrumentation                                                                                                                  |
+| `autotel-webmcp`              | Browser WebMCP: traces tool registration and execution through the shared ModelContext                                               |
 | `autotel-tanstack`            | TanStack Start                                                                                                                       |
-| `autotel-subscribers`         | Event subscribers (PostHog, Mixpanel, Webhook)                                                                                       |
+| `autotel-subscribers`         | Event subscribers and the `EventSubscriber` base (Mixpanel, Amplitude, Segment, Slack, Loki, file, webhooks)                         |
+| `autotel-posthog`             | Every PostHog surface: `joinPostHog()`, `posthogCompatibility()`, and `PostHogSubscriber` on `autotel-posthog/subscriber`            |
+| `autotel-langfuse`            | Langfuse compatibility: `langfuseCompatibility()`, `langfuseScores()`, `langfuseMedia()`                                             |
+| `autotel-schema`              | Telemetry surface as a typed, versioned contract: declare, validate, diff for breaking changes                                       |
+| `autotel-agents`              | Coding-agent observability: turns Claude Code / opencode / Codex signals into a session model                                        |
+| `autotel-devtools`            | Local devtools widget and server                                                                                                     |
 
 Each package has a `CLAUDE.md` for local conventions.
 

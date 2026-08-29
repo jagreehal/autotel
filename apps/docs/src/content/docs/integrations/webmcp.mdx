@@ -77,16 +77,27 @@ instrumentWebMCP({
 });
 ```
 
-| Option             | Default  | Meaning                                                     |
-| ------------------ | -------- | ----------------------------------------------------------- |
-| `span`             | `span()` | Span factory. Inject one to test without a pipeline.        |
-| `capturePayloads`  | `false`  | Record tool arguments and results as attributes.            |
-| `maxPayloadLength` | `2048`   | Truncation limit for captured payloads.                     |
-| `isErrorResult`    | —        | Classify failures a tool library returned instead of threw. |
+| Option               | Default  | Meaning                                                           |
+| -------------------- | -------- | ----------------------------------------------------------------- |
+| `span`               | `span()` | Span factory. Inject one to test without a pipeline.              |
+| `capturePayloads`    | `false`  | Record tool arguments and results as attributes.                  |
+| `maxPayloadLength`   | `2048`   | Truncation limit for captured payloads.                           |
+| `isErrorResult`      | —        | Classify failures a tool library returned instead of threw.       |
+| `isRefusal`          | —        | Classify your own refusals instead of the built-in English match. |
+| `fingerprintHandler` | `false`  | Fold the handler source into `webmcp.tool.descriptor`.            |
 
-`instrumentWebMCP()` returns `{ uninstall() }`. Repeated calls share one
-installation and are reference-counted, so each caller uninstalls its own
-handle.
+`instrumentWebMCP()` returns `{ recordConsent(), uninstall() }`. Repeated calls
+share one installation and are reference-counted, so each caller uninstalls its
+own handle.
+
+Refusal classification defaults to matching two English sentences, which goes
+quiet if a tool library rewords them. `isRefusal` returns `confirm`,
+`unavailable`, or `undefined` for a value that is not a refusal.
+
+`fingerprintHandler` catches a swap that keeps the descriptor identical and
+changes only the function: the fingerprint moves and `webmcp.tool.redefined` is
+set. It is off by default because a handler defined inline moves on every page
+load, which is noise rather than evidence.
 
 ## Payload capture is opt-in
 
@@ -103,20 +114,33 @@ questions about a misbehaving tool.
 Shared concepts use the canonical names, so WebMCP tool calls land on the same
 dashboards as server-side MCP calls. WebMCP-specific facts sit under `webmcp.*`.
 
-| Attribute                               | Notes                                            |
-| --------------------------------------- | ------------------------------------------------ |
-| `gen_ai.tool.name` / `webmcp.tool.name` | Tool name                                        |
-| `gen_ai.operation.name`                 | `execute_tool`                                   |
-| `mcp.tool.arguments.size`               | Argument bytes, recorded with capture off        |
-| `mcp.tool.result.size`                  | Result bytes the agent pays for                  |
-| `gen_ai.tool.call.arguments`            | Arguments, only with capture on                  |
-| `gen_ai.tool.call.result`               | The exact string the agent received, capture on  |
-| `webmcp.result.type`                    | The handler's return type before serialisation   |
-| `webmcp.result.envelope`                | The value is an MCP `{ content: [...] }` wrapper |
-| `webmcp.result.substituted`             | The browser replaced an empty result             |
-| `webmcp.annotations.sent`               | Annotation keys you passed                       |
-| `webmcp.annotations.dropped`            | Annotation keys the browser discarded            |
-| `error.type` / `webmcp.result.error`    | Set when `isErrorResult` recognises a failure    |
+Execute spans are named `execute_tool {gen_ai.tool.name}`, the GenAI convention
+`autotel-genai` already follows.
+
+| Attribute                               | Notes                                                               |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `gen_ai.tool.name` / `webmcp.tool.name` | Tool name                                                           |
+| `gen_ai.operation.name`                 | `execute_tool`                                                      |
+| `mcp.tool.arguments.size`               | Argument bytes, recorded with capture off                           |
+| `mcp.tool.result.size`                  | Result bytes the agent pays for                                     |
+| `gen_ai.tool.call.arguments`            | Arguments, only with capture on                                     |
+| `gen_ai.tool.call.result`               | The exact string the agent received, capture on                     |
+| `webmcp.result.type`                    | The handler's return type before serialisation                      |
+| `webmcp.result.envelope`                | The value is an MCP `{ content: [...] }` wrapper                    |
+| `webmcp.result.substituted`             | The browser replaced an empty result                                |
+| `webmcp.tool.title`                     | Display label, when one was sent                                    |
+| `webmcp.tool.label_mismatch`            | Title is present and does not equal the name                        |
+| `webmcp.tool.descriptor`                | Fingerprint of the sent descriptor                                  |
+| `webmcp.tool.redefined`                 | Same name, different descriptor, this install                       |
+| `webmcp.execute.seq`                    | Order of this call in the installation                              |
+| `webmcp.result.refused`                 | Result matched a known library refusal                              |
+| `webmcp.result.refusal`                 | `confirm` or `unavailable`                                          |
+| `webmcp.annotations.sent`               | Annotation keys you passed                                          |
+| `webmcp.annotations.dropped`            | Annotation keys the browser discarded                               |
+| `webmcp.execute.depth`                  | How many executions were already in flight                          |
+| `webmcp.execute.parent`                 | The tool whose handler started this one                             |
+| `error.type` / `webmcp.result.error`    | Set when the handler threw, or `isErrorResult` recognised a failure |
+| `webmcp.error.message`                  | The rejection's message, only with capture on                       |
 
 ## Three things the browser does quietly
 
@@ -150,6 +174,29 @@ instrumentWebMCP({
 The span gets `error.type` and `webmcp.result.error`, and the agent still
 receives what your library decided to send. A classifier that throws is
 recorded and ignored rather than allowed to break the tool call.
+
+## Consent the instrumentation cannot see
+
+WebMCP runs on the session the user is already logged into, so the consent
+dialogue is the whole human-agent interface — and it is host UI, invisible to
+code that patches `registerTool`. Report it and the label the human read lands
+on the same trace as the call that ran:
+
+```typescript
+const webmcp = instrumentWebMCP();
+
+webmcp.recordConsent({
+  shown: 'Search the product catalogue',
+  resolved: 'search',
+  granted: true,
+});
+```
+
+This emits a `webmcp.consent` span carrying `webmcp.consent.shown`,
+`webmcp.consent.resolved`, `webmcp.consent.granted`, and
+`webmcp.consent.mismatch` when the label does not name the tool that ran.
+`arguments` is recorded as `webmcp.consent.arguments` only with payload capture
+on. An execution with no consent span before it is then visible as exactly that.
 
 ## Coverage
 

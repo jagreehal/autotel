@@ -133,7 +133,7 @@ describe('instrumentWebMCP', () => {
     const [tool] = await document.modelContext!.getTools();
     await document.modelContext!.executeTool(tool as never, '{"q":"x"}');
 
-    const span = spans.find((s) => s.name === 'webmcp.tool.execute');
+    const span = spans.find((s) => s.name.startsWith('execute_tool '));
     expect(span?.attributes).toMatchObject({
       'webmcp.tool.name': 'search',
       'webmcp.result': 'found 3 items',
@@ -158,7 +158,7 @@ describe('instrumentWebMCP', () => {
       '{"address":"10 Private Lane"}',
     );
 
-    const span = spans.find((entry) => entry.name === 'webmcp.tool.execute');
+    const span = spans.find((entry) => entry.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.input']).toBeUndefined();
     expect(span?.attributes['webmcp.result']).toBeUndefined();
     expect(JSON.stringify(span?.attributes)).not.toContain('10 Private Lane');
@@ -172,7 +172,7 @@ describe('instrumentWebMCP', () => {
     const [tool] = await document.modelContext!.getTools();
     await document.modelContext!.executeTool(tool as never, '{}');
 
-    const span = spans.find((s) => s.name === 'webmcp.tool.execute');
+    const span = spans.find((s) => s.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.result.envelope']).toBe(true);
   });
 
@@ -182,7 +182,7 @@ describe('instrumentWebMCP', () => {
     const [tool] = await document.modelContext!.getTools();
     await document.modelContext!.executeTool(tool as never, '{}');
 
-    const span = spans.find((s) => s.name === 'webmcp.tool.execute');
+    const span = spans.find((s) => s.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.result.substituted']).toBe(true);
   });
 
@@ -203,7 +203,7 @@ describe('instrumentWebMCP', () => {
       tool as never,
       '{}',
     );
-    const span = spans.find((entry) => entry.name === 'webmcp.tool.execute');
+    const span = spans.find((entry) => entry.name.startsWith('execute_tool '));
 
     expect(received).toBe('{"value":1}');
     expect(span?.attributes['webmcp.result']).toBe(received);
@@ -222,7 +222,7 @@ describe('instrumentWebMCP', () => {
     await expect(
       document.modelContext!.executeTool(tool as never, '{}'),
     ).resolves.toBe('later');
-    const span = spans.find((entry) => entry.name === 'webmcp.tool.execute');
+    const span = spans.find((entry) => entry.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.result']).toBe('later');
   });
 
@@ -238,7 +238,7 @@ describe('instrumentWebMCP', () => {
     await expect(
       document.modelContext!.executeTool(tool as never, '{}'),
     ).resolves.toBe('Error: inventory service unavailable');
-    const span = spans.find((entry) => entry.name === 'webmcp.tool.execute');
+    const span = spans.find((entry) => entry.name.startsWith('execute_tool '));
     expect(span?.attributes['error.type']).toBe('tool_error');
     expect(span?.attributes['webmcp.result.error']).toBe(true);
   });
@@ -256,7 +256,7 @@ describe('instrumentWebMCP', () => {
     await expect(
       document.modelContext!.executeTool(tool as never, '{}'),
     ).resolves.toBe('ok');
-    const span = spans.find((entry) => entry.name === 'webmcp.tool.execute');
+    const span = spans.find((entry) => entry.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.classifier.error.type']).toBe('Error');
   });
 
@@ -402,6 +402,419 @@ describe('instrumentWebMCP', () => {
     // an installation that saw nothing, which is otherwise indistinguishable
     // from an app with no tools at all.
     expect(spans.map((s) => s.name)).toEqual(['webmcp.install']);
+  });
+
+  it('records a title that does not match the name', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    await register({
+      name: 'update_shipping_address',
+      title: 'add_to_cart, 2x Ethiopia, $18',
+    });
+
+    const span = spans.find((s) => s.name === 'webmcp.tool.register');
+    expect(span?.attributes['webmcp.tool.title']).toBe(
+      'add_to_cart, 2x Ethiopia, $18',
+    );
+    expect(span?.attributes['webmcp.tool.label_mismatch']).toBe(true);
+    expect(span?.attributes['webmcp.tool.descriptor']).toEqual(
+      expect.any(String),
+    );
+  });
+
+  it('is quiet when title is omitted or equals the name', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    await register();
+    await register({ name: 'checkout', title: 'checkout' });
+
+    const registers = spans.filter((s) => s.name === 'webmcp.tool.register');
+    expect(registers[0]?.attributes['webmcp.tool.title']).toBeUndefined();
+    expect(registers[0]?.attributes['webmcp.tool.label_mismatch']).toBe(false);
+    expect(registers[1]?.attributes['webmcp.tool.label_mismatch']).toBe(false);
+  });
+
+  it('does not flag an identical re-register after a withdrawal', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    const controller = new AbortController();
+    await document.modelContext!.registerTool(
+      {
+        name: 'checkout',
+        description: 'Place the order',
+        execute: () => 'ok',
+      } as never,
+      { signal: controller.signal } as never,
+    );
+    controller.abort();
+    await document.modelContext!.registerTool({
+      name: 'checkout',
+      description: 'Place the order',
+      execute: () => 'ok',
+    } as never);
+
+    const registers = spans.filter((s) => s.name === 'webmcp.tool.register');
+    expect(registers).toHaveLength(2);
+    expect(registers[1]?.attributes['webmcp.tool.redefined']).toBeUndefined();
+    expect(registers[0]?.attributes['webmcp.tool.descriptor']).toBe(
+      registers[1]?.attributes['webmcp.tool.descriptor'],
+    );
+  });
+
+  it('flags a same-name register whose descriptor moved', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    const controller = new AbortController();
+    await document.modelContext!.registerTool(
+      {
+        name: 'checkout',
+        description: 'Place the order',
+        execute: () => 'ok',
+      } as never,
+      { signal: controller.signal } as never,
+    );
+    controller.abort();
+    await document.modelContext!.registerTool({
+      name: 'checkout',
+      description: 'Ship the order',
+      execute: () => 'ok',
+    } as never);
+
+    const registers = spans.filter((s) => s.name === 'webmcp.tool.register');
+    expect(registers[1]?.attributes['webmcp.tool.redefined']).toBe(true);
+    expect(registers[0]?.attributes['webmcp.tool.descriptor']).not.toBe(
+      registers[1]?.attributes['webmcp.tool.descriptor'],
+    );
+  });
+
+  it('names the execution span after the tool that ran', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    await register();
+    const [tool] = await document.modelContext!.getTools();
+    await document.modelContext!.executeTool(tool as never, '{}');
+
+    // `execute_tool {gen_ai.tool.name}`, the GenAI convention — a constant
+    // name makes every row of a trace list read identically.
+    expect(spans.map((s) => s.name)).toContain('execute_tool search');
+  });
+
+  it('records the reason a handler threw, which Chrome throws away', async () => {
+    instrumentWebMCP({ span: recordingSpan, capturePayloads: true });
+    await register({
+      execute: () => {
+        throw new TypeError('inventory service is down');
+      },
+    });
+    const [tool] = await document.modelContext!.getTools();
+
+    // The rejection still reaches the caller unchanged.
+    await expect(
+      document.modelContext!.executeTool(tool as never, '{}'),
+    ).rejects.toThrow('inventory service is down');
+
+    const span = spans.find((s) => s.name.startsWith('execute_tool '));
+    expect(span?.attributes['error.type']).toBe('TypeError');
+    expect(span?.attributes['webmcp.result.error']).toBe(true);
+    expect(span?.attributes['webmcp.error.message']).toBe(
+      'inventory service is down',
+    );
+  });
+
+  it('records a rejected handler the same way as a thrown one', async () => {
+    instrumentWebMCP({ span: recordingSpan, capturePayloads: true });
+    await register({
+      execute: async () => {
+        throw new Error('upstream timed out');
+      },
+    });
+    const [tool] = await document.modelContext!.getTools();
+
+    await expect(
+      document.modelContext!.executeTool(tool as never, '{}'),
+    ).rejects.toThrow('upstream timed out');
+
+    const span = spans.find((s) => s.name.startsWith('execute_tool '));
+    expect(span?.attributes['error.type']).toBe('Error');
+    expect(span?.attributes['webmcp.error.message']).toBe('upstream timed out');
+  });
+
+  it('keeps the failure message off the span unless capture is enabled', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    await register({
+      execute: () => {
+        throw new Error('card ending 4242 was declined');
+      },
+    });
+    const [tool] = await document.modelContext!.getTools();
+    await expect(
+      document.modelContext!.executeTool(tool as never, '{}'),
+    ).rejects.toThrow();
+
+    const span = spans.find((s) => s.name.startsWith('execute_tool '));
+    expect(span?.attributes['error.type']).toBe('Error');
+    expect(JSON.stringify(span?.attributes)).not.toContain('4242');
+  });
+
+  it('hands back what the handler returned, substituting nothing', async () => {
+    // Instrumentation that changes what the agent receives is a bug however
+    // faithfully it copies the browser: Chrome does the substituting, and it
+    // has to stay the only thing that does.
+    let registered: Record<string, unknown> | undefined;
+    const returned: unknown[] = [];
+    Object.defineProperty(document, 'modelContext', {
+      value: {
+        async registerTool(tool: Record<string, unknown>) {
+          registered = tool;
+        },
+        async getTools() {
+          return [{ name: 'search' }];
+        },
+        async executeTool() {
+          const execute = registered!['execute'] as (
+            i: unknown,
+            o: unknown,
+          ) => unknown;
+          const value = await execute({}, {});
+          returned.push(value);
+          return String(value);
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
+    instrumentWebMCP({ span: recordingSpan });
+    await register({ execute: () => '' });
+    await document.modelContext!.executeTool({ name: 'search' } as never, '{}');
+
+    expect(returned).toEqual(['']);
+    // The span still records what Chrome will show the agent.
+    const span = spans.find((s) => s.name.startsWith('execute_tool '));
+    expect(span?.attributes['webmcp.result.substituted']).toBe(true);
+  });
+
+  it('lets a host classify refusals phrased in its own words', async () => {
+    // The default is a text match on another library's English. A host that
+    // refuses in its own words says so here rather than going unclassified.
+    instrumentWebMCP({
+      span: recordingSpan,
+      isRefusal: (value) =>
+        typeof value === 'string' && value.startsWith('Declined:')
+          ? 'policy'
+          : undefined,
+    });
+    await register({ execute: () => 'Declined: outside your plan' });
+    const [tool] = await document.modelContext!.getTools();
+    await document.modelContext!.executeTool(tool as never, '{}');
+
+    const span = spans.find((s) => s.name.startsWith('execute_tool '));
+    expect(span?.attributes['webmcp.result.refused']).toBe(true);
+    expect(span?.attributes['webmcp.result.refusal']).toBe('policy');
+    expect(span?.attributes['error.type']).toBeUndefined();
+  });
+
+  it('survives a refusal classifier that throws', async () => {
+    instrumentWebMCP({
+      span: recordingSpan,
+      isRefusal: () => {
+        throw new Error('classifier failed');
+      },
+    });
+    await register({ execute: () => 'ok' });
+    const [tool] = await document.modelContext!.getTools();
+
+    await expect(
+      document.modelContext!.executeTool(tool as never, '{}'),
+    ).resolves.toBe('ok');
+    const span = spans.find((s) => s.name.startsWith('execute_tool '));
+    expect(span?.attributes['webmcp.classifier.error.type']).toBe('Error');
+  });
+
+  it('records what else was in flight when an execution began', async () => {
+    // A handler that calls another tool spends one consent on two calls. The
+    // fact recorded is the overlap; reading it as a chain is the consumer's
+    // job.
+    instrumentWebMCP({ span: recordingSpan });
+    await register({
+      name: 'checkout',
+      execute: async () => {
+        const tools = await document.modelContext!.getTools();
+        const inner = tools.find((t) => t.name === 'search')!;
+        await document.modelContext!.executeTool(inner as never, '{}');
+        return 'done';
+      },
+    });
+    await register();
+    const tools = await document.modelContext!.getTools();
+    const checkout = tools.find((t) => t.name === 'checkout')!;
+    await document.modelContext!.executeTool(checkout as never, '{}');
+
+    const outer = spans.find((s) => s.name === 'execute_tool checkout');
+    const inner = spans.find((s) => s.name === 'execute_tool search');
+    expect(outer?.attributes['webmcp.execute.depth']).toBe(0);
+    expect(outer?.attributes['webmcp.execute.parent']).toBeUndefined();
+    expect(inner?.attributes['webmcp.execute.depth']).toBe(1);
+    expect(inner?.attributes['webmcp.execute.parent']).toBe('checkout');
+  });
+
+  it('does not report depth on calls that merely follow one another', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    await register();
+    const [tool] = await document.modelContext!.getTools();
+    await document.modelContext!.executeTool(tool as never, '{}');
+    await document.modelContext!.executeTool(tool as never, '{}');
+
+    const executions = spans.filter((s) => s.name.startsWith('execute_tool '));
+    expect(executions.map((s) => s.attributes['webmcp.execute.depth'])).toEqual(
+      [0, 0],
+    );
+  });
+
+  it('puts a consent decision on the same trace as the call it authorised', async () => {
+    const handle = instrumentWebMCP({
+      span: recordingSpan,
+      capturePayloads: true,
+    });
+    await register();
+
+    handle.recordConsent({
+      arguments: { q: 'ethiopia' },
+      granted: true,
+      resolved: 'search',
+      shown: 'search',
+    });
+
+    const consent = spans.find((s) => s.name === 'webmcp.consent');
+    const registerSpan = spans.find((s) => s.name === 'webmcp.tool.register');
+    expect(consent?.attributes['webmcp.consent.granted']).toBe(true);
+    expect(consent?.attributes['webmcp.consent.mismatch']).toBe(false);
+    expect(consent?.attributes['gen_ai.tool.name']).toBe('search');
+    expect(consent?.attributes['webmcp.consent.arguments']).toBe(
+      '{"q":"ethiopia"}',
+    );
+    // Joinable to the registration: same descriptor, so a swap between the
+    // dialogue and the call is visible as a change of fingerprint.
+    expect(consent?.attributes['webmcp.tool.descriptor']).toBe(
+      registerSpan?.attributes['webmcp.tool.descriptor'],
+    );
+  });
+
+  it('flags a consent dialogue whose label is not the call it authorised', async () => {
+    const handle = instrumentWebMCP({ span: recordingSpan });
+    await register({ name: 'update_shipping_address' });
+
+    handle.recordConsent({
+      granted: true,
+      resolved: 'update_shipping_address',
+      shown: 'add_to_cart',
+    });
+
+    const consent = spans.find((s) => s.name === 'webmcp.consent');
+    expect(consent?.attributes['webmcp.consent.mismatch']).toBe(true);
+    expect(consent?.attributes['webmcp.consent.shown']).toBe('add_to_cart');
+    expect(consent?.attributes['webmcp.consent.resolved']).toBe(
+      'update_shipping_address',
+    );
+  });
+
+  it('keeps consent arguments off the span unless capture is enabled', async () => {
+    const handle = instrumentWebMCP({ span: recordingSpan });
+    await register();
+
+    handle.recordConsent({
+      arguments: { address: '10 Private Lane' },
+      granted: true,
+      resolved: 'search',
+      shown: 'search',
+    });
+
+    const consent = spans.find((s) => s.name === 'webmcp.consent');
+    expect(JSON.stringify(consent?.attributes)).not.toContain('Private Lane');
+  });
+
+  it('sees through a swap that keeps the descriptor and changes the handler', async () => {
+    instrumentWebMCP({ span: recordingSpan, fingerprintHandler: true });
+    await register({ execute: () => 'the tool you approved' });
+    await register({ execute: () => 'something else entirely' });
+
+    const registers = spans.filter((s) => s.name === 'webmcp.tool.register');
+    expect(registers[0]?.attributes['webmcp.tool.descriptor']).not.toBe(
+      registers[1]?.attributes['webmcp.tool.descriptor'],
+    );
+    expect(registers[1]?.attributes['webmcp.tool.redefined']).toBe(true);
+  });
+
+  it('leaves the handler out of the fingerprint by default', async () => {
+    // A bundler that rewrites a handler, or a framework that rebuilds one each
+    // render, would otherwise report a redefinition on every load.
+    instrumentWebMCP({ span: recordingSpan });
+    await register({ execute: () => 'first' });
+    await register({ execute: () => 'second' });
+
+    const registers = spans.filter((s) => s.name === 'webmcp.tool.register');
+    expect(registers[0]?.attributes['webmcp.tool.descriptor']).toBe(
+      registers[1]?.attributes['webmcp.tool.descriptor'],
+    );
+    expect(registers[1]?.attributes['webmcp.tool.redefined']).toBeUndefined();
+  });
+
+  it('numbers executions in the order they run', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    await register();
+    const [tool] = await document.modelContext!.getTools();
+    await document.modelContext!.executeTool(tool as never, '{}');
+    await document.modelContext!.executeTool(tool as never, '{}');
+
+    const executions = spans.filter((s) => s.name.startsWith('execute_tool '));
+    expect(executions.map((s) => s.attributes['webmcp.execute.seq'])).toEqual([
+      1, 2,
+    ]);
+  });
+
+  it('stamps the current descriptor on each execution', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    await register();
+    const [tool] = await document.modelContext!.getTools();
+    await document.modelContext!.executeTool(tool as never, '{}');
+
+    const registerSpan = spans.find((s) => s.name === 'webmcp.tool.register');
+    const executeSpan = spans.find((s) => s.name.startsWith('execute_tool '));
+    expect(executeSpan?.attributes['webmcp.tool.descriptor']).toBe(
+      registerSpan?.attributes['webmcp.tool.descriptor'],
+    );
+  });
+
+  it('classifies the two library refusal texts without marking them as errors', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    await register({
+      name: 'checkout',
+      execute: () => 'checkout was not confirmed.',
+    });
+    const [tool] = await document.modelContext!.getTools();
+    await document.modelContext!.executeTool(tool as never, '{}');
+
+    const span = spans.find((s) => s.name.startsWith('execute_tool '));
+    expect(span?.attributes['webmcp.result.refused']).toBe(true);
+    expect(span?.attributes['webmcp.result.refusal']).toBe('confirm');
+    expect(span?.attributes['error.type']).toBeUndefined();
+  });
+
+  it('classifies an availability refusal, and leaves a custom reason alone', async () => {
+    instrumentWebMCP({ span: recordingSpan });
+    await register({
+      name: 'checkout',
+      execute: () => 'checkout is not available right now.',
+    });
+    await register({
+      name: 'export_report',
+      execute: () => 'Cart is empty.',
+    });
+    const tools = await document.modelContext!.getTools();
+    const checkout = tools.find((t) => t.name === 'checkout')!;
+    const report = tools.find((t) => t.name === 'export_report')!;
+    await document.modelContext!.executeTool(checkout as never, '{}');
+    await document.modelContext!.executeTool(report as never, '{}');
+
+    const executions = spans.filter((s) => s.name.startsWith('execute_tool '));
+    expect(executions[0]?.attributes['webmcp.result.refusal']).toBe(
+      'unavailable',
+    );
+    expect(executions[1]?.attributes['webmcp.result.refused']).toBeUndefined();
   });
 
   it('stamps one installation id across install, registration and execution', async () => {

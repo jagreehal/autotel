@@ -160,6 +160,11 @@
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 mb-1 flex-wrap">
                 <span class="text-sm font-mono font-semibold">{tool.name}</span>
+                {#if tool.title && tool.labelMismatch}
+                  <span class="text-xs text-fg-muted font-normal"
+                    >title {tool.title}</span
+                  >
+                {/if}
                 {#if tool.offered}
                   <span
                     class="px-1.5 py-0.5 text-xs font-medium bg-success-bg text-success rounded"
@@ -169,6 +174,27 @@
                   <span
                     class="px-1.5 py-0.5 text-xs font-medium bg-hover text-fg-muted rounded"
                     >withdrawn</span
+                  >
+                {/if}
+                {#if tool.labelMismatch}
+                  <span
+                    class="px-1.5 py-0.5 text-xs font-medium bg-warning-bg text-warning rounded"
+                    title="The title the browser may show does not match the name that runs"
+                    >label mismatch</span
+                  >
+                {/if}
+                {#if tool.redefined}
+                  <span
+                    class="px-1.5 py-0.5 text-xs font-medium bg-warning-bg text-warning rounded"
+                    title="This name came back with a different descriptor after it was first offered"
+                    >redefined</span
+                  >
+                {/if}
+                {#if tool.refusedCalls > 0}
+                  <span
+                    class="px-1.5 py-0.5 text-xs font-medium bg-hover text-fg-muted rounded"
+                    title="A known library refusal — the handler did not run"
+                    >refused {tool.refusedCalls}</span
                   >
                 {/if}
                 {#if tool.annotationsDropped.length > 0}
@@ -284,9 +310,17 @@
                   <ul class="space-y-1">
                     {#each tool.recentCalls as call (call.spanId)}
                       <li class="font-mono text-[11px] flex flex-wrap gap-2">
+                        {#if call.seq !== undefined}
+                          <span class="text-fg-subtle">#{call.seq}</span>
+                        {/if}
                         <span class="text-fg-subtle"
                           >{formatTimestamp(call.timestamp)}</span
                         >
+                        {#if call.refused}
+                          <span class="text-fg-muted"
+                            >{call.refusal ?? 'refused'}</span
+                          >
+                        {/if}
                         <span class:text-danger={call.error}
                           >{call.resultType ?? 'result'} · {bytes(
                             call.resultBytes,
