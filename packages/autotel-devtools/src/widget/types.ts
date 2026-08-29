@@ -195,6 +195,11 @@ export interface WebMcpCall {
   envelope: boolean;
   substituted: boolean;
   error: boolean;
+  /** Installation-local order of this execute. Makes a chain readable. */
+  seq?: number;
+  /** True when the result matched a known library refusal string. */
+  refused: boolean;
+  refusal?: 'confirm' | 'unavailable';
   /** Present only when the app opted into payload capture. Render masked. */
   input?: string;
   /** The exact string the agent received. Present only with payload capture. */
@@ -220,8 +225,18 @@ export interface WebMcpTool {
   annotationsSent: string[];
   /** Annotations the browser discarded. Available nowhere else. */
   annotationsDropped: string[];
+  /** Display label the browser may promote over `name`. */
+  title?: string;
+  /** True when a non-empty title does not equal the tool name. */
+  labelMismatch: boolean;
+  /** True when this name came back with a different descriptor in this install. */
+  redefined: boolean;
+  /** Fingerprint of the last registered descriptor. */
+  descriptor?: string;
   calls: number;
   errors: number;
+  /** Executions whose result matched a known library refusal. */
+  refusedCalls: number;
   /** Executions whose result was an unwrapped MCP `{ content: [...] }` envelope. */
   envelopeCalls: number;
   /** Of `resultBytes`, the part that is envelope wrapper rather than content. */
@@ -250,6 +265,9 @@ export interface WebMcpSummary {
   envelopeBytes: number;
   toolsWithDroppedAnnotations: number;
   toolsWithoutInputSchema: number;
+  toolsWithLabelMismatch: number;
+  toolsRedefined: number;
+  refusedCalls: number;
 }
 
 export interface WebMcpInventory {

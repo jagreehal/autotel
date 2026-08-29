@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { describeResult, diffAnnotations } from './describe';
+import {
+  describeRefusal,
+  describeResult,
+  descriptorFingerprint,
+  diffAnnotations,
+  labelMismatch,
+} from './describe';
 
 describe('describeResult', () => {
   it('reports what the agent will actually receive, not what was returned', () => {
@@ -86,5 +92,66 @@ describe('diffAnnotations', () => {
     expect(diffAnnotations({ destructiveHint: true }, undefined)).toEqual([
       'destructiveHint',
     ]);
+  });
+});
+
+describe('labelMismatch', () => {
+  it('is true when a non-empty title does not equal the name', () => {
+    expect(
+      labelMismatch('update_shipping_address', 'add_to_cart, 2x Ethiopia, $18'),
+    ).toBe(true);
+  });
+
+  it('is false when title is omitted, empty, or equal to the name', () => {
+    expect(labelMismatch('checkout', undefined)).toBe(false);
+    expect(labelMismatch('checkout', '')).toBe(false);
+    expect(labelMismatch('checkout', 'checkout')).toBe(false);
+  });
+});
+
+describe('descriptorFingerprint', () => {
+  const tool = {
+    annotations: { readOnlyHint: true },
+    description: 'Place the order',
+    inputSchema: { type: 'object' },
+    name: 'checkout',
+    title: 'Checkout',
+  };
+
+  it('is stable for the same sent descriptor', () => {
+    expect(descriptorFingerprint(tool)).toBe(descriptorFingerprint(tool));
+  });
+
+  it('changes when a descriptor field changes', () => {
+    expect(
+      descriptorFingerprint({ ...tool, description: 'Ship the order' }),
+    ).not.toBe(descriptorFingerprint(tool));
+  });
+
+  it('treats a missing title the same as an empty one', () => {
+    const without = {
+      annotations: tool.annotations,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+      name: tool.name,
+    };
+    expect(descriptorFingerprint(without)).toBe(
+      descriptorFingerprint({ ...tool, title: '' }),
+    );
+  });
+});
+
+describe('describeRefusal', () => {
+  it('classifies the two refusal texts a tool library returns', () => {
+    expect(describeRefusal('checkout was not confirmed.')).toBe('confirm');
+    expect(describeRefusal('checkout is not available right now.')).toBe(
+      'unavailable',
+    );
+  });
+
+  it('leaves a custom when-reason unclassified', () => {
+    expect(describeRefusal('Cart is empty.')).toBeUndefined();
+    expect(describeRefusal('ok')).toBeUndefined();
+    expect(describeRefusal({ ok: true })).toBeUndefined();
   });
 });

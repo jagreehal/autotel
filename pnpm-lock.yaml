@@ -1572,7 +1572,11 @@ importers:
 
   apps/example-web-vanilla: {}
 
-  apps/example-webmcp: {}
+  apps/example-webmcp:
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.62.0
+        version: 1.62.0
 
   apps/example-winston:
     dependencies:

@@ -37,7 +37,7 @@ Simple working examples demonstrating autotel functionality.
 
 ### Three Pillars vs Unified
 
-**`example-pillars-vs-unified`** - Same failed checkout, two telemetry shapes. Pillars mode prints a siloed metric slice, scattered logs, and a bare span. Unified mode emits one Autotel wide event with `user`, `cart`, `payment.provider`, and `error` together. Built for newcomers; no Docker or API keys.
+**`example-pillars-vs-unified`** - Same failed checkout, two telemetry shapes. Pillars mode emits a siloed metric slice, scattered logs, and a bare span. Unified mode emits one Autotel wide event with `user`, `cart`, `payment.provider`, and `error` together. Each mode then searches its own output for a single record naming the user and the provider, and asserts the result, so a run fails if siloed telemetry ever answers the question or the wide event stops answering it. No Docker or API keys.
 
 ```bash
 cd apps/example-pillars-vs-unified

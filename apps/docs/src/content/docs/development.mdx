@@ -80,6 +80,11 @@ Autotel re-exports commonly-needed OpenTelemetry utilities in semantically-organ
 **`autotel/testing`**. High-level testing utilities with assertions:
 
 - `createTraceCollector()`: Auto-configured trace collector with helpers
+- `createMemoryExporter()`: A `SpanExporter` that collects finished spans as
+  plain objects (`name`, `traceId`, `parentSpanId`, `durationMs`, `attributes`,
+  `status`) with `spans()`, `findSpan(name)`, `findSpans(name)` and `reset()`.
+  Pass it to `init({ spanExporters: [...] })` to read telemetry back the way a
+  backend would see it, without hand-writing an exporter against the SDK types.
 - Trace-tree helpers: `getSpansByTraceId()`, `getRootSpans()`, `getDescendants()`
 - `expectSpan(nameOrCriteria)`: Require exactly one match by name, IDs, kind, and/or attributes
 - `assertTraceCreated()`, `assertTraceSucceeded()`, `assertTraceFailed()`, etc.

@@ -19,8 +19,11 @@ export function makeTool(over: Partial<WebMcpTool> = {}): WebMcpTool {
     hasInputSchema: true,
     annotationsSent: [],
     annotationsDropped: [],
+    labelMismatch: false,
+    redefined: false,
     calls: 3,
     errors: 0,
+    refusedCalls: 0,
     envelopeCalls: 0,
     envelopeBytes: 0,
     substitutedCalls: 0,
@@ -52,6 +55,9 @@ export function makeInventory(
       toolsWithoutInputSchema: tools.filter(
         (t) => t.observedAtRegistration && t.hasInputSchema === false,
       ).length,
+      toolsWithLabelMismatch: tools.filter((t) => t.labelMismatch).length,
+      toolsRedefined: tools.filter((t) => t.redefined).length,
+      refusedCalls: tools.reduce((n, t) => n + t.refusedCalls, 0),
       ...summary,
     },
   };

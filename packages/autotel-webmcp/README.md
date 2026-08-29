@@ -39,15 +39,28 @@ thing. These spans record the second one.
 | `gen_ai.tool.name` / `webmcp.tool.name` | Tool name (canonical and WebMCP-specific aliases)     |
 | `webmcp.tool.description.length`        | Short descriptions are why agents pick the wrong tool |
 | `webmcp.tool.has_input_schema`          | Whether the agent was told what arguments to send     |
+| `webmcp.tool.title`                     | Display label, when one was sent                      |
+| `webmcp.tool.label_mismatch`            | Title is present and does not equal the name          |
+| `webmcp.tool.descriptor`                | Fingerprint of the descriptor that was sent           |
+| `webmcp.tool.redefined`                 | Same name, different descriptor, in this install      |
 | `webmcp.annotations.sent`               | What you passed                                       |
 | `webmcp.annotations.dropped`            | **What the browser threw away**                       |
+
+`label_mismatch` and `redefined` are facts about what was registered, not a
+judgement about whether that was allowed. `autotel-devtools` folds them into
+the WebMCP tab.
 
 `annotations.dropped` is the one you cannot get any other way. Chrome keeps
 only `readOnlyHint` and `untrustedContentHint`; pass `destructiveHint` — as
 anyone arriving from server-side MCP will — and it disappears with no error,
 no warning, and no trace in `getTools()`. This attribute is the trace.
 
-### `webmcp.tool.execute`
+### `execute_tool {tool}`
+
+Named for the GenAI convention, so a trace list reads as the tools that ran —
+`execute_tool checkout` — rather than one repeated string. Filter on
+`gen_ai.tool.name` or `webmcp.tool.name`, which carry the name as an attribute.
+
 
 | Attribute                                     | Meaning                                                                  |
 | --------------------------------------------- | ------------------------------------------------------------------------ |
@@ -61,6 +74,65 @@ no warning, and no trace in `getTools()`. This attribute is the trace.
 | `webmcp.result.bytes`                         | What the result costs in the agent's context                             |
 | `webmcp.result.envelope`                      | The result is an MCP `{ content: [...] }` wrapper                        |
 | `webmcp.result.substituted`                   | The browser replaced an empty result                                     |
+| `webmcp.execute.seq`                          | Order of this call in the installation (1, 2, 3…)                        |
+| `webmcp.execute.depth`                        | How many executions were already in flight when this one began           |
+| `webmcp.execute.parent`                       | The innermost of them, when there was one                                |
+| `webmcp.tool.descriptor`                      | Fingerprint from the last register of this name                          |
+| `webmcp.result.refused` / `webmcp.result.refusal` | Known library refusal (`confirm` or `unavailable`), not a handler error |
+| `error.type`                                  | The handler threw or rejected: the error's name                          |
+| `webmcp.error.message`                        | **Why it failed**, when payload capture is enabled                        |
+
+The last two are the counterpart of `annotations.dropped`. Chrome replaces a
+thrown error with a generic `UnknownError` before the agent sees it, so the
+message the handler threw exists nowhere else — not in the agent's transcript,
+not in the tool result. The span is the only copy. The rejection itself is
+passed through untouched.
+
+Nothing here changes what the agent receives. A handler's string is handed back
+as it was returned, empty string included: Chrome substitutes `"Operation
+succeeded"` for an empty result, and it stays the only thing that does. The
+span records that substitution in `webmcp.result.substituted` rather than
+performing it.
+
+`execute.depth` is what a chained call looks like from here. A handler that
+calls another tool spends one consent on two calls, and the second begins while
+the first is still running. Two calls an agent fired in parallel overlap the
+same way, so this records the fact — what else was running — and leaves the
+reading of it to whatever consumes the spans.
+
+### `webmcp.consent`
+
+Emitted when the host calls `recordConsent()`. WebMCP runs on the session the
+user is already logged into, so the moment a human approves an action is the
+only checkpoint there is — and this package cannot see it: it patches
+`registerTool`, and the dialogue is your UI.
+
+| Attribute                               | Meaning                                                    |
+| --------------------------------------- | ---------------------------------------------------------- |
+| `webmcp.consent.shown`                  | The label the human read                                    |
+| `webmcp.consent.resolved`               | The tool that will actually run                             |
+| `webmcp.consent.mismatch`               | Those two are not the same string                           |
+| `webmcp.consent.granted`                | Whether the human said yes                                  |
+| `webmcp.tool.descriptor`                | Fingerprint registered for the resolved tool at that moment |
+| `webmcp.consent.arguments`              | The arguments approved, when payload capture is enabled     |
+
+```ts
+const webmcp = instrumentWebMCP({ span });
+
+// from your consent dialogue, before the call runs
+webmcp.recordConsent({
+  shown: 'add 2 coffees to the cart',
+  resolved: 'update_shipping_address',
+  arguments: { address: '…' },
+  granted: true,
+});
+```
+
+Section 6.3.2 of the WebMCP draft says it plainly: nothing guarantees that a
+tool's declared intent matches its behaviour. Binding your dialogue to the call
+that runs is your job. Recording that the two disagreed, that the descriptor
+moved between the yes and the call, or that an execution had no consent span
+before it at all, is this package's.
 
 ### `webmcp.tool.withdraw`
 
@@ -100,6 +172,19 @@ instrumentWebMCP({
   // thrown messages. The response is unchanged; the span gets error.type.
   isErrorResult: (value) =>
     typeof value === 'string' && value.startsWith('Error: '),
+  // A refusal is a tool declining to act, which is not a failure. The default
+  // recognises two common phrasings; supply your own when your tools refuse in
+  // their own words, or when that wording changes. This package depends on no
+  // tool library.
+  isRefusal: (value) =>
+    typeof value === 'string' && value.startsWith('Declined:')
+      ? 'policy'
+      : undefined,
+  // Fold the handler's source into webmcp.tool.descriptor. Off by default: a
+  // handler a bundler rewrites produces a new fingerprint on every load, which
+  // is noise. On, it catches the swap a descriptor cannot see — same name,
+  // same description, different function.
+  fingerprintHandler: true,
 });
 ```
 
@@ -124,8 +209,9 @@ Payload capture is off by default because tool arguments and results commonly
 contain personal or confidential data. Size, type, envelope, and substitution
 signals remain available without payload content.
 
-`instrumentWebMCP()` returns `{ uninstall() }`, and does nothing when WebMCP is
-unavailable (including during SSR), so it is safe to call unconditionally.
+`instrumentWebMCP()` returns `{ recordConsent(), uninstall() }`, and does
+nothing when WebMCP is unavailable (including during SSR), so it is safe to
+call unconditionally.
 
 Repeated calls share one installation and are reference-counted: each returned
 handle should be uninstalled by its owner. Instrumentation covers imperative
@@ -137,9 +223,12 @@ tool registration.
 
 ## Notes
 
-Verified against Chrome 151. Behaviour is recorded from measurement rather than
-read from the specification — the draft and the implementation disagree in
-several places.
+Verified against Chrome 152, which is also where `navigator.modelContext` and
+`navigator.modelContextTesting` were withdrawn — the surface is
+`document.modelContext`. Behaviour is recorded from measurement rather than
+read from the specification: the draft and the implementation disagree in
+several places, and `apps/example-webmcp` carries a conformance lane that
+drives a real Chrome so the measurements can be re-taken rather than trusted.
 
 Records facts, not judgements: no rules, no thresholds, no opinions about your
 tools. Analysis belongs in whatever consumes the spans.

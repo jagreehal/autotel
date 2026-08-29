@@ -1,4 +1,10 @@
-import { describeResult, diffAnnotations } from './describe';
+import {
+  describeRefusal,
+  describeResult,
+  descriptorFingerprint,
+  diffAnnotations,
+  labelMismatch,
+} from './describe';
 
 /**
  * OpenTelemetry instrumentation for WebMCP, with no telemetry dependency.
@@ -36,15 +42,57 @@ export interface InstrumentOptions {
   maxPayloadLength?: number;
   /** Classify application-normalised failures that are returned instead of thrown. */
   isErrorResult?: (value: unknown) => boolean;
+  /**
+   * Classify a returned value as a refusal — the tool declining to act, which
+   * is not a failure. Defaults to `describeRefusal` and its two recognised
+   * sentences; supply your own when your tools refuse in their own words, or
+   * when that wording changes.
+   */
+  isRefusal?: (value: unknown) => string | undefined;
+  /**
+   * Fold the handler's source into `webmcp.tool.descriptor`.
+   *
+   * A descriptor is what a tool claims to be. Registering the same name, the
+   * same description and a different function is a swap that the descriptor
+   * alone cannot see — the fingerprint matches and `webmcp.tool.redefined`
+   * stays quiet. Off by default: a handler built by a bundler, or one whose
+   * source moves for reasons of its own, produces a new fingerprint on every
+   * load, which is noise rather than evidence.
+   */
+  fingerprintHandler?: boolean;
+}
+
+/** What a host's consent dialogue showed, and what it was consent for. */
+export interface ConsentRecord {
+  /** Arguments the call carries. Recorded only when payload capture is on. */
+  arguments?: unknown;
+  /** Whether the human said yes. */
+  granted: boolean;
+  /** The tool that will actually run. */
+  resolved: string;
+  /** The label the human read — a friendly name, a description, a summary. */
+  shown: string;
 }
 
 export interface Instrumentation {
+  /**
+   * Record a consent decision alongside the call it was consent for.
+   *
+   * The instrumentation cannot see a consent dialogue: it patches
+   * `registerTool`, and the dialogue is the host's own UI. So the host reports
+   * it here, and the label the human read lands on the same trace as the call
+   * that ran. `webmcp.consent.mismatch` is then a query rather than an
+   * investigation, and an execution with no consent span before it is visible
+   * as exactly that.
+   */
+  recordConsent(record: ConsentRecord): void;
   uninstall(): void;
 }
 
 const DEFAULT_MAX_PAYLOAD = 2048;
 
 interface InstallationState {
+  recordConsent(record: ConsentRecord): void;
   references: number;
   restore(): void;
 }
@@ -71,6 +119,7 @@ function installationHandle(
 ): Instrumentation {
   let active = true;
   return {
+    recordConsent: state.recordConsent,
     uninstall() {
       if (!active) return;
       active = false;
@@ -102,7 +151,7 @@ export function instrumentWebMCP(
 ): Instrumentation {
   const browserDocument = globalThis.document;
   const original = browserDocument?.modelContext;
-  if (!original) return { uninstall() {} };
+  if (!original) return { recordConsent() {}, uninstall() {} };
 
   const existing = installations.get(original);
   if (existing) {
@@ -114,17 +163,75 @@ export function instrumentWebMCP(
   const capture = options.capturePayloads ?? false;
   const maxLength = options.maxPayloadLength ?? DEFAULT_MAX_PAYLOAD;
   const isErrorResult = options.isErrorResult;
+  const classifyRefusal = options.isRefusal ?? describeRefusal;
   const installationId = newInstallationId();
   const withdrawalCleanups: Array<() => void> = [];
+  const fingerprints = new Map<string, string>();
+  const fingerprintHandler = options.fingerprintHandler ?? false;
+  /**
+   * Executions that have started and not yet settled, innermost last.
+   *
+   * A tool whose handler calls another tool spends its consent twice: the
+   * human approved one call and two ran. That shows up here as an execution
+   * beginning while another is in flight. Two calls the agent fired in
+   * parallel overlap the same way, so this is recorded as the fact it is —
+   * what else was running — and whether that amounts to a chain is the
+   * reader's call, not this package's.
+   */
+  const inFlight: string[] = [];
+  let executeSeq = 0;
+
+  /**
+   * A consent decision, on the same trace as the call it authorised.
+   *
+   * Emitted through the host's span factory like everything else, so it is
+   * joinable to the execution by installation id, tool name and descriptor —
+   * including when the descriptor changed between the two, which is the swap
+   * a consent dialogue cannot show.
+   */
+  const recordConsent = (record: ConsentRecord) =>
+    emit('webmcp.consent', (span) => {
+      span.setAttribute('webmcp.installation.id', installationId);
+      span.setAttribute('webmcp.consent.shown', record.shown);
+      span.setAttribute('webmcp.consent.resolved', record.resolved);
+      span.setAttribute('gen_ai.tool.name', record.resolved);
+      span.setAttribute('webmcp.consent.granted', record.granted);
+      // A string comparison, not a verdict: the label the human read is not
+      // the name of the call it authorised.
+      span.setAttribute(
+        'webmcp.consent.mismatch',
+        record.shown !== record.resolved,
+      );
+      const descriptor = fingerprints.get(record.resolved);
+      if (descriptor) span.setAttribute('webmcp.tool.descriptor', descriptor);
+      if (capture && record.arguments !== undefined) {
+        span.setAttribute(
+          'webmcp.consent.arguments',
+          truncate(JSON.stringify(record.arguments) ?? '', maxLength),
+        );
+      }
+    });
 
   const wrapExecute =
     (name: string, execute: (input: unknown, opts: unknown) => unknown) =>
     (input: unknown, opts: unknown) =>
-      emit('webmcp.tool.execute', (span) => {
+      // Named for the GenAI convention — `execute_tool {gen_ai.tool.name}` —
+      // so a trace list reads as the tools that ran rather than one repeated
+      // string. The tool name stays on `webmcp.tool.name` for filtering.
+      emit(`execute_tool ${name}`, (span) => {
+        executeSeq += 1;
         span.setAttribute('webmcp.installation.id', installationId);
         span.setAttribute('webmcp.tool.name', name);
+        span.setAttribute('webmcp.execute.seq', executeSeq);
+        span.setAttribute('webmcp.execute.depth', inFlight.length);
+        const outer = inFlight.at(-1);
+        if (outer !== undefined) {
+          span.setAttribute('webmcp.execute.parent', outer);
+        }
         span.setAttribute('gen_ai.operation.name', 'execute_tool');
         span.setAttribute('gen_ai.tool.name', name);
+        const descriptor = fingerprints.get(name);
+        if (descriptor) span.setAttribute('webmcp.tool.descriptor', descriptor);
         const serializedInput =
           input === undefined ? undefined : (JSON.stringify(input) ?? '');
         if (serializedInput !== undefined) {
@@ -141,6 +248,18 @@ export function instrumentWebMCP(
 
         const record = (value: unknown) => {
           const described = describeResult(value);
+          try {
+            const refusal = classifyRefusal(value);
+            if (refusal) {
+              span.setAttribute('webmcp.result.refused', true);
+              span.setAttribute('webmcp.result.refusal', refusal);
+            }
+          } catch (error) {
+            span.setAttribute(
+              'webmcp.classifier.error.type',
+              error instanceof Error ? error.name : typeof error,
+            );
+          }
           if (isErrorResult) {
             try {
               if (isErrorResult(value)) {
@@ -164,16 +283,61 @@ export function instrumentWebMCP(
             span.setAttribute('webmcp.result', capturedResult);
             span.setAttribute('gen_ai.tool.call.result', capturedResult);
           }
-          // Return the already-serialised value to the browser. Chrome passes
-          // strings through, so this preserves the agent-visible result while
-          // avoiding a second JSON.stringify() over stateful getters/toJSON().
-          return described.serialized;
+          // Hand back what the handler produced. Serialising an object here
+          // avoids a second JSON.stringify() over stateful getters/toJSON(),
+          // but a string and `undefined` are returned untouched: substituting
+          // Chrome's "Operation succeeded" for an empty result would make
+          // installing telemetry change what the agent receives, and would go
+          // on doing it after Chrome stopped.
+          return value === undefined || typeof value === 'string'
+            ? value
+            : described.serialized;
         };
 
-        const result = execute(input, opts);
-        return isThenable(result)
-          ? Promise.resolve(result).then(record)
-          : record(result);
+        /**
+         * Chrome replaces a thrown error with a generic UnknownError before
+         * the agent sees it, so this span is the only place the reason
+         * survives. Recording it here rather than leaving it to the span
+         * factory means it survives under `autotel-webmcp/core` too, where
+         * the factory is whatever the host supplied.
+         */
+        const failed = (error: unknown): never => {
+          span.setAttribute(
+            'error.type',
+            error instanceof Error ? error.name : typeof error,
+          );
+          span.setAttribute('webmcp.result.error', true);
+          if (capture) {
+            span.setAttribute(
+              'webmcp.error.message',
+              truncate(
+                error instanceof Error ? error.message : String(error),
+                maxLength,
+              ),
+            );
+          }
+          throw error;
+        };
+
+        const settled = () => {
+          const at = inFlight.lastIndexOf(name);
+          if (at !== -1) inFlight.splice(at, 1);
+        };
+
+        inFlight.push(name);
+        try {
+          const result = execute(input, opts);
+          if (!isThenable(result)) {
+            settled();
+            return record(result);
+          }
+          return Promise.resolve(result)
+            .then(record, failed)
+            .finally(settled) as never;
+        } catch (error) {
+          settled();
+          return failed(error);
+        }
       });
 
   /**
@@ -215,6 +379,15 @@ export function instrumentWebMCP(
   ) => {
     const name = String(tool['name']);
     const sent = tool['annotations'] as Record<string, unknown> | undefined;
+    const title = tool['title'];
+    const fingerprint = descriptorFingerprint({
+      annotations: sent,
+      description: tool['description'],
+      handler: fingerprintHandler ? tool['execute'] : undefined,
+      inputSchema: tool['inputSchema'],
+      name,
+      title,
+    });
 
     const instrumented = {
       ...tool,
@@ -238,6 +411,14 @@ export function instrumentWebMCP(
         'webmcp.tool.has_input_schema',
         tool['inputSchema'] !== undefined,
       );
+      span.setAttribute('webmcp.tool.descriptor', fingerprint);
+      span.setAttribute(
+        'webmcp.tool.label_mismatch',
+        labelMismatch(name, title),
+      );
+      if (typeof title === 'string' && title.length > 0) {
+        span.setAttribute('webmcp.tool.title', title);
+      }
       if (sent)
         span.setAttribute(
           'webmcp.annotations.sent',
@@ -248,6 +429,12 @@ export function instrumentWebMCP(
         instrumented,
         registerOptions,
       ]);
+
+      const previous = fingerprints.get(name);
+      fingerprints.set(name, fingerprint);
+      if (previous !== undefined && previous !== fingerprint) {
+        span.setAttribute('webmcp.tool.redefined', true);
+      }
 
       // Introspection is diagnostic only. It must never change the outcome of
       // a registration that the browser already accepted.
@@ -295,6 +482,7 @@ export function instrumentWebMCP(
   });
 
   const state: InstallationState = {
+    recordConsent,
     references: 1,
     restore() {
       for (const cleanup of withdrawalCleanups) cleanup();

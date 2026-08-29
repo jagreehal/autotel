@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T09:49:43.778Z",
+  "generatedAt": "2026-08-29T20:28:05.164Z",
   "sizes": {
     "autotel": 1947909,
     "autotel-adapters": 142517,
@@ -9,7 +9,7 @@
     "autotel-backends": 72294,
     "autotel-cli": 326684,
     "autotel-cloudflare": 177108,
-    "autotel-devtools": 1755197,
+    "autotel-devtools": 1760031,
     "autotel-drizzle": 63604,
     "autotel-edge": 158827,
     "autotel-eventcatalog": 163954,
@@ -32,8 +32,8 @@
     "autotel-telemetry": 29626,
     "autotel-terminal": 281998,
     "autotel-vitest": 22115,
-    "autotel-vscode": 1860671,
+    "autotel-vscode": 1861720,
     "autotel-web": 88567,
-    "autotel-webmcp": 13813
+    "autotel-webmcp": 24015
   }
 }

@@ -77,8 +77,8 @@ describe('instrumentWebMCP telemetry export', () => {
     const [tool] = await document.modelContext!.getTools();
     await document.modelContext!.executeTool(tool!, '{"q":"hat"}');
 
-    const span = exported.find(
-      (candidate) => candidate.name === 'webmcp.tool.execute',
+    const span = exported.find((candidate) =>
+      candidate.name.startsWith('execute_tool '),
     );
     expect(span?.attributes).toMatchObject({
       'gen_ai.operation.name': 'execute_tool',

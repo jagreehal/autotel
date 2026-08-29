@@ -11,7 +11,11 @@ minimumReleaseAge: 4320
 # Allow the fast-moving AI SDK betas used by apps/example-ai-sdk-observer past
 # the release-age gate (they publish daily; the example pins exact versions).
 # The Langfuse SDK (apps/example-langfuse) also publishes very frequently.
+# `webmcpable` is the library autotel-webmcp instruments; its refusal strings
+# are matched by text, so the drift test in autotel-webmcp has to run against
+# the version that is actually out, not the one from three days ago.
 minimumReleaseAgeExclude:
+  - webmcpable
   - ai
   - ai-sdk-ollama
   - ollama

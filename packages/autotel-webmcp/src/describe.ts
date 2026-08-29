@@ -72,3 +72,71 @@ export function diffAnnotations(
   const survived = new Set(Object.keys(kept ?? {}));
   return Object.keys(sent).filter((key) => !survived.has(key));
 }
+
+/** True when the browser may show a friendlier label than the name that runs. */
+export function labelMismatch(name: string, title: unknown): boolean {
+  return typeof title === 'string' && title.length > 0 && title !== name;
+}
+
+export interface DescriptorFields {
+  annotations?: unknown;
+  description?: unknown;
+  /**
+   * The handler's source, when the host asked for it. A descriptor says what a
+   * tool claims to be; only this says what it will do. Left out by default —
+   * see `fingerprintHandler`.
+   */
+  handler?: unknown;
+  inputSchema?: unknown;
+  name: string;
+  title?: unknown;
+}
+
+/**
+ * A short identity for the descriptor that was sent to `registerTool`.
+ *
+ * Not a security boundary — it exists so a later register of the same name
+ * can be compared to the earlier one. FNV-1a over the canonical JSON.
+ */
+export function descriptorFingerprint(tool: DescriptorFields): string {
+  const canonical = JSON.stringify([
+    tool.name,
+    typeof tool.title === 'string' ? tool.title : '',
+    String(tool.description ?? ''),
+    tool.inputSchema ?? null,
+    tool.annotations ?? null,
+    tool.handler === undefined ? null : String(tool.handler),
+  ]);
+  return fnv1aHex(canonical);
+}
+
+/** The two refusal shapes recognised by default. Anything else is unclassified. */
+export type RefusalKind = 'confirm' | 'unavailable';
+
+/**
+ * A refusal is a tool declining to act rather than failing, and telling the
+ * two apart is worth an attribute. This is a text match on someone else's
+ * English, and it is the default only because it costs nothing and covers the
+ * common case: reword either sentence and `webmcp.result.refused` goes quiet
+ * with nothing failing. A host that cares, or one whose tools refuse in their
+ * own words, passes `isRefusal` to `instrumentWebMCP` instead. This package
+ * depends on no tool library.
+ */
+export function describeRefusal(value: unknown): RefusalKind | undefined {
+  if (typeof value !== 'string') return undefined;
+  if (value.endsWith(' was not confirmed.')) return 'confirm';
+  if (value.endsWith(' is not available right now.')) return 'unavailable';
+  return undefined;
+}
+
+const FNV_OFFSET = 0x811c9dc5;
+const FNV_PRIME = 0x01000193;
+
+const fnv1aHex = (value: string): string => {
+  let hash = FNV_OFFSET;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, FNV_PRIME);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+};
