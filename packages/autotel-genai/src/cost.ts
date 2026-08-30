@@ -47,7 +47,35 @@ export interface ModelPricing {
    * input; most other providers do not bill cache writes separately.
    */
   cacheWritePer1M?: number;
+  /**
+   * USD per 1,000 calls to a server-side tool, keyed by tool name. Overrides
+   * {@link SERVER_TOOL_PRICING_PER_1K} for this model.
+   */
+  serverToolPer1K?: Record<string, number>;
 }
+
+/**
+ * USD per 1,000 calls for provider-hosted tools **that are billed per call**.
+ * Approximate public list prices at the time of writing and, like
+ * {@link MODEL_PRICING}, a convenience default rather than a billing source of
+ * truth.
+ *
+ * An agent that searches the web on every step can spend more here than on
+ * tokens, and a cost built from token counts alone will never show it.
+ *
+ * The unit is the entry requirement. A tool billed by container session
+ * (OpenAI's code interpreter), by execution time (Anthropic's), or bundled free
+ * alongside another tool has no per-call price, and inventing one is worse than
+ * having none: 100 calls inside a single session priced per call overstates the
+ * bill by two orders of magnitude, and a confident wrong number is harder to
+ * catch than a missing one. Such tools stay out of this table and surface
+ * through {@link unpricedServerTools} instead — a caller who knows their own
+ * contract can still price one via `ModelPricing.serverToolPer1K`.
+ */
+export const SERVER_TOOL_PRICING_PER_1K: Record<string, number> = {
+  web_search: 10,
+  file_search: 2.5,
+};
 
 /**
  * Token counts for a single GenAI call. Field names mirror the canonical
@@ -70,6 +98,29 @@ export interface TokenUsage {
   cacheReadInputTokens?: number;
   /** `gen_ai.usage.cache_creation.input_tokens` — billed in addition. */
   cacheCreationInputTokens?: number;
+  /**
+   * Whether the provider reports cache tokens *in addition to* `inputTokens`
+   * rather than as a subset of it. Defaults to `false` (subset), which is what
+   * OpenAI and Anthropic do directly.
+   *
+   * Gateways and normalised usage objects — Bedrock, the Vercel AI SDK — do not
+   * all agree, and getting it backwards subtracts a pool that was never in the
+   * input, understating the bill on exactly the calls that cost the most.
+   */
+  cacheTokensExclusive?: boolean;
+  /**
+   * Calls to provider-hosted tools, keyed by tool name — `web_search`,
+   * `code_interpreter`, `file_search`. Billed per call, priced from
+   * {@link SERVER_TOOL_PRICING_PER_1K}.
+   */
+  serverToolCalls?: Record<string, number>;
+  /**
+   * Where the token counts came from: `observed` when the provider reported
+   * them, `estimated` when they were counted or guessed locally. Recorded as
+   * `autotel.evidence.tokens`, because an estimated count and a reported one
+   * look identical once they are both just numbers on a span.
+   */
+  tokenSource?: 'observed' | 'estimated';
 }
 
 export interface EstimateCostOptions {
@@ -151,6 +202,37 @@ function resolvePricing(
   return best;
 }
 
+/** The table this model's tool prices resolve through, model entry first. */
+function serverToolRate(
+  price: ModelPricing,
+  tool: string,
+): number | undefined {
+  return price.serverToolPer1K?.[tool] ?? SERVER_TOOL_PRICING_PER_1K[tool];
+}
+
+/**
+ * Server-side tools in `usage` that no price table covers, so their charge is
+ * absent from {@link estimateLLMCost}'s figure. Empty when everything priced —
+ * including when the model itself has no pricing, since then there is no cost
+ * to be incomplete.
+ */
+export function unpricedServerTools(
+  model: string,
+  usage: TokenUsage,
+  options?: EstimateCostOptions,
+): string[] {
+  const calls = usage.serverToolCalls;
+  if (!calls) return [];
+  const table = options?.pricing
+    ? { ...MODEL_PRICING, ...options.pricing }
+    : MODEL_PRICING;
+  const price = resolvePricing(table, model);
+  if (!price) return [];
+  return Object.keys(calls).filter(
+    (tool) => serverToolRate(price, tool) === undefined,
+  );
+}
+
 function round(value: number): number {
   return Math.round(value * 1e6) / 1e6;
 }
@@ -172,16 +254,29 @@ export function estimateLLMCost(
 
   const cacheRead = usage.cacheReadInputTokens ?? 0;
   const cacheWrite = usage.cacheCreationInputTokens ?? 0;
-  const billedInput = Math.max(0, (usage.inputTokens ?? 0) - cacheRead);
+  const input = usage.inputTokens ?? 0;
+  // Cache writes are always billed on top; only cache reads are ambiguous.
+  const billedInput = usage.cacheTokensExclusive
+    ? input
+    : Math.max(0, input - cacheRead);
   const output = usage.outputTokens ?? 0;
   const cacheReadRate = price.cachedInputPer1M ?? price.inputPer1M;
   const cacheWriteRate = price.cacheWritePer1M ?? price.inputPer1M;
+
+  let serverToolCost = 0;
+  for (const [tool, count] of Object.entries(usage.serverToolCalls ?? {})) {
+    const rate = serverToolRate(price, tool);
+    // An unpriced tool is left out rather than guessed at zero; the gap is
+    // declared through `unpricedServerTools`.
+    if (rate !== undefined) serverToolCost += (count / 1000) * rate;
+  }
 
   const cost =
     (billedInput / 1_000_000) * price.inputPer1M +
     (cacheRead / 1_000_000) * cacheReadRate +
     (cacheWrite / 1_000_000) * cacheWriteRate +
-    (output / 1_000_000) * price.outputPer1M;
+    (output / 1_000_000) * price.outputPer1M +
+    serverToolCost;
 
   return round(cost);
 }
@@ -205,10 +300,15 @@ export function recordLLMCost(
   usage: TokenUsage,
   options?: EstimateCostOptions,
 ): number | undefined {
+  if (usage.tokenSource) recordEvidence(ctx, 'tokens', usage.tokenSource);
   const cost = estimateLLMCost(model, usage, options);
   if (cost === undefined) {
     recordEvidence(ctx, 'cost', 'unobservable');
     return undefined;
+  }
+  const unpriced = unpricedServerTools(model, usage, options);
+  if (unpriced.length > 0) {
+    ctx.setAttribute(GEN_AI.USAGE_COST_UNPRICED_TOOLS, unpriced);
   }
   ctx.setAttribute(GEN_AI_COST_ATTRIBUTE, cost);
   recordEvidence(ctx, 'cost', 'estimated');

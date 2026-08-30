@@ -56,6 +56,7 @@ import {
 } from './attributes.js';
 import {
   estimateLLMCost,
+  unpricedServerTools,
   type EstimateCostOptions,
   type TokenUsage,
 } from './cost.js';
@@ -310,12 +311,14 @@ export function recordGenAiUsage(
 ): number | undefined {
   const declined = options?.recordCost === false;
   const cost = declined ? undefined : estimateLLMCost(model, usage, options);
+  // Only reported when a price was wanted: a caller who declined the cost is
+  // not missing one, and cannot have an incomplete one either.
+  const unpriced = declined ? [] : unpricedServerTools(model, usage, options);
   const attrs = genAiUsageAttributes({
     ...usage,
     costUsd: cost,
-    // Only when a price was wanted and none was found. A caller who declined
-    // the cost is not missing one.
     unpricedModel: !declined && cost === undefined ? model : undefined,
+    unpricedServerTools: unpriced.length > 0 ? unpriced : undefined,
   });
   if (Object.keys(attrs).length > 0) ctx.setAttributes(attrs);
   return cost;

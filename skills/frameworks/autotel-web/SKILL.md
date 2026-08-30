@@ -1,14 +1,14 @@
 ---
 name: autotel-web
 description: >
-  Use this skill when adding distributed tracing to a browser application — covers lean mode (traceparent header injection, ~1.6KB), full mode (real OTel spans, Web Vitals, error capture), privacy controls, and SSR-safe setup.
+  Use this skill when adding distributed tracing or RUM to a browser application — covers lean mode (traceparent header injection, ~5.4KB), full mode (real OTel spans, Web Vitals, error capture), frustration signals (dead and rage clicks), breadcrumbs, page engagement, console-to-OTLP logs, session-consistent sampling, remote capture config, privacy controls, and SSR-safe setup.
 ---
 
 # autotel-web
 
 Ultra-lightweight browser SDK for distributed tracing. Two modes:
 
-- **Lean** (`autotel-web`): ~1.6KB gzipped. No OTel dependencies. Injects W3C `traceparent` headers on fetch/XHR so the backend can continue the trace. No real browser spans.
+- **Lean** (`autotel-web`): ~5.4KB gzipped. No OTel dependencies. Injects W3C `traceparent` headers on fetch/XHR so the backend can continue the trace. No real browser spans.
 - **Full** (`autotel-web/full`): Real OTel spans, Web Vitals, error capture, network timing, OTLP export. Larger bundle (~40–50KB gzipped).
 
 ## Setup
@@ -150,6 +150,127 @@ setAttribute('user.id', '123');
 addEvent('button.clicked', { 'button.name': 'submit' });
 ```
 
+### Canonical names (do not invent your own)
+
+Every signal is emitted under the name OpenTelemetry owns, so any backend's
+browser dashboard works unchanged. When suggesting queries or dashboards, use
+these — the pre-v2 homegrown names (`click: x`, `web_vitals.lcp`, `long_task`)
+are gone.
+
+| signal       | name                                                                                                     |
+| ------------ | -------------------------------------------------------------------------------------------------------- |
+| click        | `app.widget.click` + `app.widget.name` / `.id` / `app.screen.name` / `app.screen.coordinate.x`,`.y`      |
+| web vital    | `browser.web_vital` (one event per metric) + `browser.web_vital.name` / `.value` / `.rating`             |
+| long task    | `app.jank` + `app.jank.threshold`, `app.jank.duration`                                                   |
+| session      | `session.id`, `session.previous_id`; `session.start` / `session.end` events                              |
+| browser      | `browser.language`, `.platform`, `.mobile`, `.brands` (resource attributes)                              |
+| frustration  | `app.widget.click.frustration` + `app.widget.click.outcome` (`dead` \| `rage`)                           |
+| engagement   | `browser.page_engagement` + `browser.page.max_scroll_percentage`, `.max_content_percentage`, `.duration` |
+| feature flag | `feature_flag.*` + the `feature_flag.evaluation` event                                                   |
+
+`src/semconv.ts` is the source of truth and is pinned by a test.
+`user_agent.*` is deliberately unset — deriving it needs a real UA database and
+every collector ships one.
+
+**These are events, so they are log records, not spans.** They arrive on the
+logs pipeline with the name in both `eventName` and `event.name`. Query them
+where your logs are, not in trace search — and never suggest emitting one as a
+zero-duration span: it is invisible to every event dashboard, and in lean mode
+(no tracer provider) it produces nothing at all.
+
+`browser.web_vital` carries `name` lower-cased (`lcp`, not `LCP`) plus `value`,
+`delta` and `id`. `app.jank.period` and `app.jank.threshold` are in **seconds** —
+the browser's 50ms long-task threshold is `0.05`.
+
+### Frustration signals (dead and rage clicks)
+
+```typescript
+initFull({ service: 'my-app', endpoint: '...', captureFrustration: true });
+```
+
+The one browser signal a tracer cannot produce for itself: a click that does
+nothing runs no code, so the trace is empty exactly where the user is stuck.
+
+- `app.widget.click.outcome = 'rage'` — three clicks within 30px and a second,
+  with `app.widget.click.rage_count`. One event per burst.
+- `app.widget.click.outcome = 'dead'` — nothing responded, with
+  `app.widget.click.verdict_signal` naming the deciding timeout.
+
+A dead click is judged ~1s later. Liveness suppresses (DOM mutation <2500ms,
+scroll <100ms, `selectionchange` <100ms, visibility/focus change within 1s
+either side); only then does a timeout convict. Anchors, modifier-key clicks and
+repeat clicks on one node are never candidates.
+
+**Do not loosen the thresholds.** A "dead click" that fires on working buttons
+teaches people to ignore the signal. Touch (dead swipes) is not covered.
+
+### Breadcrumbs (what happened before the error)
+
+```typescript
+initFull({ service: 'my-app', endpoint: '...', breadcrumbs: true });
+
+import { addBreadcrumb } from 'autotel-web';
+addBreadcrumb({
+  category: 'checkout',
+  message: 'applied coupon',
+  data: { code },
+});
+```
+
+Clicks and `console.*` are captured automatically; the trail is attached to every
+exception as `exception.breadcrumbs`. Bounded in **bytes** (32KB default), not
+entries — one enormous crumb is not an entry-count problem. The newest is never
+dropped.
+
+### Page engagement
+
+```typescript
+initFull({ service: 'my-app', endpoint: '...', captureEngagement: true });
+```
+
+Emits `browser.page_engagement` on page hide and route change. Suggest **both**
+percentages: scroll depth is how far they moved, content depth is how far down
+the page was on screen. On a page shorter than the viewport nothing scrolls, so
+scroll depth alone reads a fully-read page as a bounce.
+
+### Console output as log records
+
+```typescript
+initFull({ service: 'my-app', endpoint: '...', captureConsoleLogs: true });
+```
+
+Exports `console.*` as OTLP **log records** over the same transport as spans
+(so it inherits retries and the offline queue), carrying `session.id`.
+Auto-captured output uses the `console` instrumentation scope. Distinct from
+breadcrumbs: this feeds the log pipeline, breadcrumbs feed the error.
+
+### Sampling keeps whole sessions
+
+`sampleRate` hashes the session id, so a sampled session is sampled whole.
+Random per-span sampling keeps a tenth of _every_ session and leaves none of
+them reconstructable — never suggest replacing this with `Math.random()`.
+Monotonic in the rate: raising it mid-incident only adds sessions.
+
+### Remote capture config
+
+```typescript
+initFull({
+  service: 'my-app',
+  endpoint: '...',
+  remoteConfigUrl: '/autotel.json',
+});
+```
+
+A JSON file at a URL the app already serves, controlling `sampleRate`,
+`captureDeadClicks`, `captureRageClicks`, `captureEngagement` and
+`errorSuppression`. Cached and applied **synchronously** on the next visit; a
+failed fetch changes nothing. Only known keys with valid values survive parsing.
+
+Two merge rules, deliberately different. Capture toggles let remote win **both**
+ways — it can turn a signal on the app left off, which is half the reason remote
+config exists. Suppression rules are **additive only**: a fetched file must not
+be able to switch off error reporting the app asked for.
+
 ### Full mode: advanced options
 
 ```typescript
@@ -167,6 +288,12 @@ initFull({
   webVitals: {
     reportAllChanges: false, // default false for stability
   },
+  captureFrustration: true, // dead + rage clicks
+  captureEngagement: true, // scroll / content depth
+  breadcrumbs: true, // trail attached to exceptions
+  captureConsoleLogs: true, // console.* as OTLP log records
+  sampleRate: 0.1, // hashed on session id, not per span
+  remoteConfigUrl: '/autotel.json',
 });
 ```
 
@@ -223,7 +350,7 @@ initFull({ service: 'my-app' }); // when you only need header propagation
 Correct:
 
 ```typescript
-import { init } from 'autotel-web'; // ~1.6KB gzipped, zero OTel dependencies
+import { init } from 'autotel-web'; // ~5.4KB gzipped, zero OTel dependencies
 init({ service: 'my-app' });
 ```
 
@@ -278,6 +405,19 @@ init({ service: 'my-app' }); // second call is silently ignored
 ```
 
 Correct: Call `init()` once at app startup. Subsequent calls are no-ops (with a warning logged if `debug: true`). The module-level `isInitialized` flag prevents double-patching.
+
+### MEDIUM: Assuming a failed export is lost
+
+Wrong: adding a second delivery path because "spans get dropped on flaky
+networks".
+
+Correct: the exporter already retries with jittered backoff, queues while
+offline, caps at 1000 spans, and uses `sendBeacon` only on unload (it reports no
+outcome, so there is nothing to retry against). A request that dies before any
+HTTP status while the browser is online is treated as **blocked**, not broken —
+that is an ad blocker or CORS — and after three the exporter waits for an
+`online` event rather than retrying something that will never work.
+`pendingSpanCount()` / `pendingLogCount()` expose the backlog.
 
 ## Version
 

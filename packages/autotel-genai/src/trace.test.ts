@@ -306,3 +306,28 @@ describe('recordGenAiUsage', () => {
     expect(attrs).not.toHaveProperty('gen_ai.usage.cost.usd');
   });
 });
+
+describe('recordGenAiUsage provenance', () => {
+  it('carries token source and unpriced tools onto the span', () => {
+    const setAttributes = vi.fn();
+    recordGenAiUsage({ setAttributes }, 'gpt-4o', {
+      inputTokens: 1000,
+      tokenSource: 'observed',
+      serverToolCalls: { web_search: 10, mystery_tool: 1 },
+    });
+    const attrs = setAttributes.mock.calls[0][0];
+    expect(attrs['autotel.evidence.tokens']).toBe('observed');
+    expect(attrs['gen_ai.usage.cost.unpriced_tools']).toEqual(['mystery_tool']);
+  });
+
+  it('keeps quiet about tools when every one is priced', () => {
+    const setAttributes = vi.fn();
+    recordGenAiUsage({ setAttributes }, 'gpt-4o', {
+      inputTokens: 1000,
+      serverToolCalls: { web_search: 10 },
+    });
+    const attrs = setAttributes.mock.calls[0][0];
+    expect(attrs['gen_ai.usage.cost.unpriced_tools']).toBeUndefined();
+    expect(attrs['autotel.evidence.tokens']).toBeUndefined();
+  });
+});

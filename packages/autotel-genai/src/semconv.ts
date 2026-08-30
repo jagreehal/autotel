@@ -81,6 +81,19 @@ export const GEN_AI = {
   // --- Workflow / prompt ---------------------------------------------------
   WORKFLOW_NAME: 'gen_ai.workflow.name',
   PROMPT_NAME: 'gen_ai.prompt.name',
+  /**
+   * Version of the named prompt this call ran (autotel extension). Without it a
+   * change in cost, latency or evaluation score cannot be attributed to the
+   * prompt edit that caused it — the whole point of naming the prompt.
+   */
+  PROMPT_VERSION: 'gen_ai.prompt.version',
+  /** Moving label the version was resolved through, e.g. `production` (autotel extension). */
+  PROMPT_LABEL: 'gen_ai.prompt.label',
+  /**
+   * Digest of the rendered prompt template (autotel extension). Identifies the
+   * exact text where there is no registry to give it a version.
+   */
+  PROMPT_HASH: 'gen_ai.prompt.hash',
 
   // --- Embeddings ----------------------------------------------------------
   EMBEDDINGS_DIMENSION_COUNT: 'gen_ai.embeddings.dimension.count',
@@ -116,6 +129,13 @@ export const GEN_AI = {
    * this says which model needs a price before either can be trusted.
    */
   USAGE_COST_UNPRICED_MODEL: 'gen_ai.usage.cost.unpriced_model',
+  /**
+   * Server-side tools the call used that no price table covers, so their charge
+   * is missing from the cost. A web search or code-interpreter session is real
+   * money billed outside the token counts; without this a cost that excludes
+   * them is indistinguishable from one that has nothing to exclude.
+   */
+  USAGE_COST_UNPRICED_TOOLS: 'gen_ai.usage.cost.unpriced_tools',
   /**
    * The same number under the name the ecosystem converged on before the spec
    * covered cost at all. OpenLLMetry writes it, and Langfuse, among others,
@@ -156,6 +176,14 @@ export const GEN_AI = {
   /** Mean seconds between streamed output chunks. */
   RESPONSE_TIME_PER_OUTPUT_CHUNK: 'gen_ai.response.time_per_output_chunk',
 } as const;
+
+/**
+ * Suffix on a content attribute naming its UTF-8 byte size before truncation
+ * (autotel extension). Set only when content was actually cut, so its presence
+ * is the signal: `gen_ai.output.messages.original_size = 4_100_000` says the
+ * span holds a prefix, and how much of one.
+ */
+export const CONTENT_ORIGINAL_SIZE_SUFFIX = '.original_size';
 
 /** Union of every canonical `gen_ai.*` attribute key. */
 export type GenAiAttributeKey = (typeof GEN_AI)[keyof typeof GEN_AI];

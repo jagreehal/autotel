@@ -6,6 +6,7 @@ vi.mock('./span-exporter', () => ({
   configureExporter: vi.fn(),
   setRawFetch: vi.fn(),
   recordSpan: vi.fn(),
+  recordEvent: vi.fn(),
   flushSpans: vi.fn(),
   isConfigured: vi.fn(() => true),
   resetForTesting: vi.fn(),

@@ -9,15 +9,17 @@
 
 import { createTraceparent, parseTraceparent } from './traceparent';
 import { PrivacyManager, PrivacyConfig, getDenialReason } from './privacy';
+import { setEventSink } from './emit-event';
 import {
   configureExporter,
+  recordEvent,
   setRawFetch,
   recordSpan,
   flushSpans,
   isConfigured,
   resetForTesting as resetExporter,
 } from './span-exporter';
-import { configureSession } from './session';
+import { configureSession, endSessionOnUnload } from './session';
 import {
   setBaggage as setBaggageInternal,
   clearBaggage,
@@ -149,7 +151,28 @@ export interface AutotelWebConfig {
    *
    * @default { timeoutMs: 1_800_000 }
    */
-  session?: false | { timeoutMs?: number; id?: () => string | undefined };
+  /**
+   * Fraction of sessions to export, 0..1. Default 1.
+   *
+   * Hashed on `session.id`, so a sampled visit is kept whole — and applied to
+   * spans, logs and events alike, since a visit whose events survive but whose
+   * spans do not is unreadable either way. With `session: false` there is no
+   * key to be consistent about and the draw is per record.
+   */
+  sampleRate?: number;
+
+  session?: false | {
+    timeoutMs?: number;
+    id?: () => string | undefined;
+    /**
+     * Emit `session.start` / `session.end` events, so session count and session
+     * duration are direct queries rather than something a backend has to infer
+     * by grouping every span it has.
+     *
+     * @default false
+     */
+    emitEvents?: boolean;
+  };
 }
 
 let isInitialized = false;
@@ -225,7 +248,11 @@ export function init(userConfig: AutotelWebConfig): void {
   // Capture unpatched fetch for the exporter before we patch it
   if (config.endpoint !== undefined) {
     setRawFetch(window.fetch.bind(window));
-    configureExporter(config.service, config.endpoint, config.debug);
+    configureExporter(config.service, config.endpoint, config.debug, {
+      ...(config.sampleRate != null && { sampleRate: config.sampleRate }),
+    });
+    // Browser events are log records, so they need the exporter's log half.
+    setEventSink(recordEvent);
   }
 
   // Patch fetch
@@ -240,7 +267,12 @@ export function init(userConfig: AutotelWebConfig): void {
 
   if (config.endpoint !== undefined) {
     window.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') flushSpans();
+      if (document.visibilityState !== 'hidden') return;
+      // The page may not come back. `sendBeacon` is the only send that outlives
+      // it, at the cost of reporting no outcome — which is why it is used here
+      // and nowhere else.
+      endSessionOnUnload();
+      flushSpans({ beacon: true });
     });
   }
 

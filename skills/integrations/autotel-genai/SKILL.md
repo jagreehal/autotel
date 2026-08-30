@@ -90,8 +90,27 @@ estimateLLMCost('gpt-4o', { inputTokens: 1000, outputTokens: 500 }); // 0.0075
 recordLLMCost(ctx, 'claude-sonnet-4', {
   inputTokens: 4000,
   cacheReadInputTokens: 3500,
+  serverToolCalls: { web_search: 12 }, // billed per call, outside the tokens
+  tokenSource: 'observed', // labels autotel.evidence.tokens
 });
 ```
+
+**Server-side tools are money too.** Web search and file search are billed per
+call, outside the token counts — an agent that searches on every step can spend
+more there than on tokens, and a cost built from tokens alone never shows it.
+`SERVER_TOOL_PRICING_PER_1K` covers **only per-call-billed tools**; a tool billed
+per container session (OpenAI's code interpreter) or by execution time
+(Anthropic's) has no per-call price and is deliberately absent. Never add one:
+100 calls inside a single session priced per call overstates the bill by two
+orders of magnitude, and a confident wrong number is harder to catch than a
+missing one. Unpriced tools surface as `gen_ai.usage.cost.unpriced_tools`; a
+caller who knows their own contract sets `ModelPricing.serverToolPer1K`.
+
+**Cache accounting.** Cache reads default to a _subset_ of `inputTokens` (what
+OpenAI and Anthropic report directly) and cache writes to additive. Where a
+gateway or normalised usage object reports them separately, pass
+`cacheTokensExclusive: true` — getting it backwards subtracts a pool that was
+never in the input, understating exactly the calls that cost the most.
 
 `estimateLLMCost` returns `undefined` when no pricing entry matches the model.
 Rather than leave the cost attribute unset, where an unpriced call and a free
@@ -136,8 +155,8 @@ import {
   recordModelWarnings,
 } from 'autotel-genai/events';
 
-// Opt-in content on the span. Gate input/output independently; binary parts
-// (image/audio/file) are base64-encoded, not corrupted by JSON.stringify.
+// Opt-in content on the span. Gate input/output independently; inline binary is
+// replaced by a placeholder and the result is capped at 200KB — see below.
 setGenAiContent(
   ctx,
   { inputMessages, outputMessages },
@@ -154,6 +173,37 @@ recordEvaluationResult(ctx, { name: 'relevance', scoreValue: 0.92 });
 // gen_ai.client.warnings event — surface provider warnings vendors only log
 recordModelWarnings(ctx, [{ type: 'unsupported-setting', setting: 'topK' }]);
 ```
+
+**Binary is redacted, never recorded.** A multimodal prompt carries images and
+audio inline as base64; serialised verbatim, one call is a megabyte-scale
+attribute that collectors truncate mid-string and nobody reads. Payloads become
+`[base64 image/png redacted]`. Recognition is contextual — a bare base64-shaped
+string needs 1KB before it is suspected, 64 bytes under a key that means binary
+(`data`, `image_url`, `inline_data`) or beside a `mediaType`/`format` hint, and
+an explicit `text/*` media type suppresses it. Pass `redactBinary: false` only
+when the payload itself is under investigation.
+
+**Content is capped at `DEFAULT_MAX_CONTENT_BYTES` (200KB)** and always stays
+**valid JSON**: long string leaves are cut first, keeping every message, role and
+part where it was, and only then do trailing entries go. Never suggest slicing a
+serialised attribute — a byte-offset cut lands mid-token and consumers drop the
+whole thing. Both losses are declared: `<key>.original_size` plus
+`autotel.evidence.input` / `.output` as `truncated` or `redacted`.
+
+Both are exported for payloads that never reach a span — an event body, a log
+line, your own exporter:
+
+```typescript
+import { redactBinaryContent, serializeWithinBudget } from 'autotel-genai';
+
+const safe = redactBinaryContent(messages); // placeholders, not base64
+const { text, truncated, originalBytes } = serializeWithinBudget(safe, 200_000);
+```
+
+**Prompt versions.** `gen_ai.prompt.name` alone cannot tell you which edit moved
+the numbers. Pass `promptVersion`, `promptLabel` and `promptHash` through
+`traceGenAI({ workflow: {...} })` so cost, latency and evaluation score become
+splittable by prompt change.
 
 ### Streaming performance: `autotel-genai/streaming`
 

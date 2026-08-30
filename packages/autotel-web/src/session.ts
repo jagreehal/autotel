@@ -19,6 +19,9 @@
  * aside.
  */
 
+import { emitEvent } from './emit-event';
+import { AUTOTEL_WEB, SESSION, WEB_EVENT } from './semconv';
+
 const STORAGE_KEY = 'autotel.session';
 
 /** Idle gap that ends a session. 30 minutes is the analytics convention. */
@@ -27,6 +30,8 @@ const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 interface SessionState {
   id: string;
   lastActivity: number;
+  /** When this session began, for `session.duration` on the way out. */
+  startedAt: number;
   /**
    * Set only when a session just rolled over, and cleared once emitted:
    * `session.previous_id` exists to link the new session to the old one on the
@@ -40,7 +45,55 @@ export type SessionIdProvider = () => string | undefined;
 let enabled = true;
 let timeoutMs = DEFAULT_TIMEOUT_MS;
 let idProvider: SessionIdProvider | undefined;
+let emitEvents = false;
 let state: SessionState | undefined;
+let announced: string | undefined;
+let resolving = false;
+
+/**
+ * Emit `session.start` / `session.end`.
+ *
+ * Without them a session id is a join key and nothing more: session count and
+ * session duration have to be inferred by grouping every span in the backend,
+ * which is expensive where it is possible at all. Two zero-duration spans a
+ * session make both a direct query.
+ */
+function emit(name: string, attributes: Record<string, string | number>): void {
+  if (!emitEvents) return;
+  emitEvent(name, attributes);
+}
+
+function announceStart(id: string): void {
+  if (announced === id) return;
+  announced = id;
+  emit(WEB_EVENT.SESSION_START, { [SESSION.ID]: id });
+}
+
+function announceEnd(
+  session: SessionState,
+  endedAt: number,
+  reason: 'timeout' | 'unload',
+): void {
+  emit(WEB_EVENT.SESSION_END, {
+    [SESSION.ID]: session.id,
+    [AUTOTEL_WEB.SESSION_DURATION]: Math.round(
+      (endedAt - session.startedAt) / 1000,
+    ),
+    [AUTOTEL_WEB.SESSION_END_REASON]: reason,
+  });
+}
+
+/**
+ * Close the current session because the page is going away. Idle rollover is
+ * detected on the next read; an unload has no next read, so it is announced
+ * here or not at all.
+ */
+export function endSessionOnUnload(): void {
+  if (state && announced === state.id) {
+    announceEnd(state, Date.now(), 'unload');
+    announced = undefined;
+  }
+}
 
 function newId(): string {
   // `randomUUID` needs a secure context; a page served over plain HTTP still
@@ -69,7 +122,13 @@ function readStored(): SessionState | undefined {
       typeof parsed.lastActivity !== 'number'
     )
       return undefined;
-    return { id: parsed.id, lastActivity: parsed.lastActivity };
+    return {
+      id: parsed.id,
+      lastActivity: parsed.lastActivity,
+      // A session restored from a reload predates this tab; without a stored
+      // start we can only claim it began when we first saw it.
+      startedAt: parsed.startedAt ?? parsed.lastActivity,
+    };
   } catch {
     return undefined;
   }
@@ -79,7 +138,11 @@ function writeStored(next: SessionState): void {
   try {
     globalThis.sessionStorage?.setItem(
       STORAGE_KEY,
-      JSON.stringify({ id: next.id, lastActivity: next.lastActivity }),
+      JSON.stringify({
+        id: next.id,
+        lastActivity: next.lastActivity,
+        startedAt: next.startedAt,
+      }),
     );
   } catch {
     // Memory-only session; nothing to recover.
@@ -91,7 +154,9 @@ function writeStored(next: SessionState): void {
  * host app can turn it off or lengthen the window without re-initializing.
  */
 export function configureSession(
-  config: false | { timeoutMs?: number; id?: SessionIdProvider } = {},
+  config:
+    | false
+    | { timeoutMs?: number; id?: SessionIdProvider; emitEvents?: boolean } = {},
 ): void {
   if (config === false) {
     enabled = false;
@@ -102,6 +167,7 @@ export function configureSession(
   enabled = true;
   timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   idProvider = config.id;
+  emitEvents = config.emitEvents ?? false;
 }
 
 /**
@@ -112,34 +178,66 @@ export function configureSession(
 export function getSessionAttributes(): Record<string, string> | undefined {
   if (!enabled || globalThis.window === undefined) return undefined;
 
+  // A sink reading the session back while an event is being emitted must see
+  // the settled answer, not start a second rollover on top of the first. Belt
+  // and braces alongside the ordering above: any future emitter gets this for
+  // free rather than rediscovering the recursion.
+  if (resolving) {
+    return state ? { [SESSION.ID]: state.id } : undefined;
+  }
+
   // A provider owns its own lifecycle — rollover, storage, the lot — so its id
   // is returned as-is and never written to `sessionStorage`, where a stale copy
   // could outlive the session it came from. A provider that is still starting
   // up returns nothing, and rather than emit spans with no session at all, the
   // locally minted id below covers the gap.
+  // A provider owns its own lifecycle, so no start/end is announced for it:
+  // claiming a session began the moment we first asked would be a guess.
   const provided = idProvider?.();
   if (provided !== undefined && provided.length > 0) {
-    return { 'session.id': provided };
+    return { [SESSION.ID]: provided };
   }
 
+  resolving = true;
+  try {
+    return resolveSession();
+  } finally {
+    resolving = false;
+  }
+}
+
+/** The rollover decision itself, guarded against re-entry by its caller. */
+function resolveSession(): Record<string, string> | undefined {
   const now = Date.now();
   const restored = state ?? readStored();
 
   if (!restored) {
-    state = { id: newId(), lastActivity: now };
+    state = { id: newId(), lastActivity: now, startedAt: now };
   } else if (now - restored.lastActivity > timeoutMs) {
-    state = { id: newId(), lastActivity: now, previousId: restored.id };
+    state = {
+      id: newId(),
+      lastActivity: now,
+      startedAt: now,
+      previousId: restored.id,
+    };
+    // Settled *before* the old session is announced. Emitting first would leave
+    // the expired state in place while the sink stamps `session.id` on the
+    // record it is writing — which re-enters here, finds the same expired
+    // session, and rolls it over again, for as long as the stack holds.
+    writeStored(state);
+    announceEnd(restored, restored.lastActivity, 'timeout');
   } else {
     state = { ...restored, lastActivity: now };
   }
 
   writeStored(state);
+  announceStart(state.id);
 
   const previousId = state.previousId;
   state.previousId = undefined;
   return previousId
-    ? { 'session.id': state.id, 'session.previous_id': previousId }
-    : { 'session.id': state.id };
+    ? { [SESSION.ID]: state.id, [SESSION.PREVIOUS_ID]: previousId }
+    : { [SESSION.ID]: state.id };
 }
 
 /** @internal Reset for testing */
@@ -147,7 +245,10 @@ export function resetSessionForTesting(): void {
   enabled = true;
   timeoutMs = DEFAULT_TIMEOUT_MS;
   idProvider = undefined;
+  emitEvents = false;
   state = undefined;
+  announced = undefined;
+  resolving = false;
   try {
     globalThis.sessionStorage?.removeItem(STORAGE_KEY);
   } catch {

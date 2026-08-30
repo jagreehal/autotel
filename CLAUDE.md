@@ -48,6 +48,7 @@ pnpm changeset          # Create a changeset
 - `packages/autotel-agents` - Coding-agent observability: browser-safe domain layer that turns the OTel metrics + log events from Claude Code / opencode / Codex into a session model (adapter registry, reducers, MCP/sub-agent/skill taxonomy). Consumed by the autotel-devtools Agents tab (see `packages/autotel-agents/README.md`)
 - `packages/autotel-schema` - Telemetry surface as a typed, versioned contract: declare spans/attributes, validate live spans, diff for breaking changes (see `packages/autotel-schema/CLAUDE.md`)
 - `packages/autotel-message-contract` - Optional, standalone, test-time adjacent: brokerless message contract testing: pin serialized message shape + backward/forward version compatibility as unit tests (see `packages/autotel-message-contract/CLAUDE.md`)
+- `packages/autotel-web` - Browser SDK. Lean mode is dependency-free `traceparent` + baggage propagation with a hand-rolled OTLP exporter; full mode adds the Web SDK plus the RUM signals a tracer cannot derive for itself — frustration (dead/rage clicks), breadcrumbs on exceptions, page engagement, console-as-OTLP-logs. Every name comes from `src/semconv.ts`, which holds only canonical OpenTelemetry names plus extensions that extend one (see `packages/autotel-web/CLAUDE.md`)
 - `packages/autotel-webmcp` - Browser WebMCP instrumentation: traces imperative tool registration and execution through the shared ModelContext; payload capture is opt-in and shared tool attributes use canonical `gen_ai.*` / `mcp.*` names
 
 ## Documentation

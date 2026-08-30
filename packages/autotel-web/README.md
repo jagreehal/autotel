@@ -1,6 +1,6 @@
 # autotel-web
 
-Ultra-lightweight browser SDK for distributed tracing (**1.6KB gzipped**)
+Lightweight browser SDK for distributed tracing and RUM (**~5.4KB gzipped** in lean mode)
 
 **Purpose:** Enable distributed tracing between browser and backend applications. The browser propagates W3C `traceparent` headers, and your backend (using [Autotel](../autotel)) automatically continues the trace.
 
@@ -11,18 +11,23 @@ Ultra-lightweight browser SDK for distributed tracing (**1.6KB gzipped**)
 ```
 ┌─────────┐  traceparent   ┌─────────┐   spans    ┌───────────┐
 │ Browser │  ----------->  │ Backend │  ------->  │ Collector │
-│  1.6KB  │    header      │ (OTel)  │   export   │ (Datadog) │
+│  5.4KB  │    header      │ (OTel)  │   export   │ (Datadog) │
 └─────────┘                └─────────┘            └───────────┘
 ```
 
 ## Features
 
-✅ **Tiny bundle** - **1.6KB gzipped** (33x smaller than full OTel browser SDK)
+✅ **Small bundle** - **~5.4KB gzipped** for lean mode (vs ~39KB for full mode)
 ✅ **Zero dependencies** - No `@opentelemetry/*` packages needed
 ✅ **W3C trace propagation** - Automatic `traceparent` header injection on fetch/XHR
 ✅ **SSR-safe** - Works with Next.js, Remix, and other SSR frameworks
 ✅ **Framework-agnostic** - Works with React, Vue, Svelte, Angular, vanilla JS
 ✅ **No Zone.js** - [Context propagation without global patching](#context-propagation-without-zonejs)
+✅ **[Canonical names](#canonical-names)** - `app.widget.click`, `browser.web_vital`, `app.jank`, `session.start`
+✅ **[Frustration signals](#frustration-signals)** - dead clicks and rage clicks, which no tracer can see for itself
+✅ **[Breadcrumbs](#breadcrumbs)** - what the user did before the error, attached to it
+✅ **[Reliable delivery](#delivery)** - retries, offline queueing, and no retrying past an ad blocker
+✅ **[Console → OTLP logs](#console-output-as-log-records)** - a log signal, not just traces
 
 ## Installation
 
@@ -38,8 +43,8 @@ yarn add autotel-web
 
 ### Lean vs Full mode
 
-- **Lean (default)** : `import { init } from 'autotel-web'`. Zero dependencies, ~1.6KB gzipped. Only injects W3C `traceparent` on fetch/XHR; no real spans in the browser. Backend does the real tracing.
-- **Full**: `import { initFull } from 'autotel-web/full'`. Real spans (navigation, fetch/XHR, optional user interaction), optional `http.client.network_timing` events, **Web Vitals** (LCP, INP, CLS, FCP, TTFB), **unhandled error capture**, optional long-task capture, sampling, and OTLP export. No Zone.js; bundle size is larger (~40-50KB gzipped). Use when you need client-side spans and export from the browser.
+- **Lean (default)** : `import { init } from 'autotel-web'`. Zero dependencies, ~5.4KB gzipped. Only injects W3C `traceparent` on fetch/XHR; no real spans in the browser. Backend does the real tracing.
+- **Full**: `import { initFull } from 'autotel-web/full'`. Real spans (navigation, fetch/XHR, optional user interaction), optional `http.client.network_timing` events, **Web Vitals** (LCP, INP, CLS, FCP, TTFB), **unhandled error capture**, optional long-task capture, sampling, and OTLP export. No Zone.js; bundle size is larger (~39KB gzipped). Use when you need client-side spans and export from the browser.
 
 Use lean mode by default; use full mode when you need real browser spans and network timing. You can use dynamic import to load full mode only when needed: `import('autotel-web/full').then(({ initFull }) => initFull(config))`.
 
@@ -84,6 +89,169 @@ app.get('/api/users', async (req, res) => {
 ### 3. View Distributed Trace
 
 Open your observability platform (Honeycomb, Datadog, Jaeger, etc.) and see the complete trace from browser → backend → database!
+
+## Canonical names
+
+Every signal here is emitted under the name OpenTelemetry owns, so a dashboard
+built on the browser conventions works without knowing autotel exists.
+
+| signal         | name                                                                      |
+| -------------- | ------------------------------------------------------------------------- |
+| a click        | `app.widget.click` + `app.widget.name` / `app.widget.id` / `app.screen.*` |
+| a web vital    | `browser.web_vital` (one event per metric)                                |
+| a long task    | `app.jank` + `app.jank.threshold`                                         |
+| a session      | `session.id` / `session.previous_id`, `session.start` / `session.end`     |
+| the browser    | `browser.language`, `.platform`, `.mobile`, `.brands` (resource)          |
+| a feature flag | `feature_flag.*` + the `feature_flag.evaluation` event                    |
+
+`src/semconv.ts` is the source of truth and is pinned by a test — a typo in one
+of these strings is invisible at runtime and silently empties a panel.
+
+Where the spec names an event but not its body, the fields are autotel
+extensions prefixed with the canonical event name (`browser.web_vital.value`),
+so they read as extensions and line up if the spec later lands.
+
+`user_agent.name` and friends are deliberately **not** set: deriving them needs
+a real user-agent database, every OTLP collector ships one, and a regex shipped
+to every visitor would be wrong in a way nobody could fix without a release.
+
+## Frustration signals
+
+The one browser signal a tracer cannot produce for itself. A click that does
+nothing runs no code, issues no request and opens no span — the trace is empty
+exactly where the user is most stuck, and that absence looks identical to a page
+nobody visited.
+
+```ts
+initFull({
+  service: 'web',
+  endpoint: 'https://collector.example.com/v1/traces',
+  captureFrustration: true,
+});
+```
+
+Emits `app.widget.click.frustration` with `app.widget.click.outcome`:
+
+- **`rage`** — three clicks within 30px and a second, with
+  `app.widget.click.rage_count`. One event per burst, not one per click.
+- **`dead`** — a click nothing responded to, with
+  `app.widget.click.verdict_signal` naming the timeout that decided it.
+
+A dead click is judged about a second later. Something-happened-fast wins:
+a DOM mutation under 2500ms, a scroll under 100ms, a `selectionchange` under
+100ms, or a visibility/focus change within a second **either side** all mean the
+click did something. Only with none of those does a timeout convict it. Anchors,
+modifier-key clicks and repeat clicks on one node never become candidates at
+all.
+
+The thresholds are the interesting part and are tuned against real traffic —
+loosening them turns this into a noise generator, and a "dead click" that fires
+on working buttons teaches people to ignore the signal. Touch (dead swipes) is
+not covered.
+
+## Breadcrumbs
+
+An exception says where the code gave up, never what the person was doing. The
+trail leading in is the half that reproduces it.
+
+```ts
+initFull({ service: 'web', endpoint, breadcrumbs: true });
+
+import { addBreadcrumb } from 'autotel-web';
+addBreadcrumb({
+  category: 'checkout',
+  message: 'applied coupon',
+  data: { code },
+});
+```
+
+Clicks and `console.*` are recorded automatically, and the trail is attached to
+every exception as `exception.breadcrumbs`. Bounded in bytes (32KB by default)
+rather than entries, because one enormous crumb is not an entry count problem;
+the newest is never dropped, since it is the one nearest the error.
+
+Console capture lives here rather than in a log pipeline of its own on purpose:
+console output is read when something has already gone wrong, which is exactly
+when the trail is read.
+
+## Page engagement
+
+```ts
+initFull({ service: 'web', endpoint, captureEngagement: true });
+```
+
+Emits `browser.page_engagement` on page hide and on route change, with
+`browser.page.max_scroll_percentage`, `browser.page.max_content_percentage` and
+`browser.page.duration`.
+
+The two percentages answer different questions and the difference is the point.
+Scroll depth is how far the reader moved; content depth is how far down the page
+has been _on screen_ — scroll position plus viewport height. On a page shorter
+than the window nothing scrolls, so a scroll-only reading says 0% and a fully
+read page looks like a bounce.
+
+## Sampling keeps whole sessions
+
+`sampleRate` hashes the session id rather than rolling per span. Random
+per-event sampling at 10% gives you a tenth of every session: enough to draw a
+chart, never enough to reconstruct what one person hit.
+
+```ts
+initFull({ service: 'web', endpoint, sampleRate: 0.1 });
+```
+
+Monotonic in the rate, so raising it mid-incident only adds sessions — the ones
+you were already watching stay in the set.
+
+## Capture settings without a release
+
+```ts
+initFull({ service: 'web', endpoint, remoteConfigUrl: '/autotel.json' });
+```
+
+A JSON file at a URL you already serve, controlling `sampleRate`,
+`captureDeadClicks`, `captureRageClicks`, `captureEngagement` and
+`errorSuppression`. The last good copy is cached and applied **synchronously**
+on the next visit, so the first spans of a visit already obey it and a failed
+fetch changes nothing. Only known keys with valid values survive parsing — the
+file is fetched, so it is untrusted input.
+
+autotel deliberately has nothing to serve this from and should not grow one.
+
+## Console output as log records
+
+The package had a trace signal and no log signal, so everything the browser
+already tells you in the console stayed on the floor.
+
+```ts
+initFull({ service: 'web', endpoint, captureConsoleLogs: true });
+```
+
+Exports `console.*` as OpenTelemetry log records over the same transport as
+spans — so it inherits the retries, the offline queue and the blocked-request
+breaker — carrying `session.id` so a line sits alongside the spans from the same
+visit. Auto-captured output uses the instrumentation scope `console`, distinct
+from programmatic logs, so a dashboard can tell "the app said this" from
+"something the app depends on said this". `minLevel` defaults to `info`.
+
+This is not the same thing as [breadcrumbs](#breadcrumbs): this feeds the log
+pipeline, breadcrumbs attach the same output to an exception for whoever is
+reading the error. Enabling both is reasonable.
+
+## Delivery
+
+Spans are retried with jittered exponential backoff, held while offline, and
+capped at 1000 queued spans (oldest dropped first — in a queue that is not
+draining, the newest spans describe what is going wrong now). `fetch` is used
+while the page is alive, because there is a status code to retry against;
+`sendBeacon` only on unload, where nothing else survives.
+
+A request that dies before any HTTP status while the browser reports itself
+online is treated as blocked, not broken — that is an ad blocker or a CORS
+misconfiguration, and retrying it forever only burns battery. After three the
+exporter waits for an `online` event.
+
+`pendingSpanCount()` exposes the backlog.
 
 ## Browser Span Export (lean mode)
 
@@ -227,9 +395,9 @@ initFull({
   captureXHR: true,
   captureNetworkTiming: true, // http.client.network_timing events (semantic-conventions#3385)
   captureErrors: true, // unhandled errors → span.recordException (default: true)
-  captureWebVitals: true, // LCP, INP, CLS, FCP, TTFB as web_vitals span (default: true)
+  captureWebVitals: true, // LCP, INP, CLS, FCP, TTFB → browser.web_vital events (default: true)
   webVitals: { reportAllChanges: false }, // pass through to web-vitals (default: false)
-  captureLongTasks: false, // long-task spans (main thread >= 50ms); opt-in, can be noisy
+  captureLongTasks: false, // app.jank events (main thread >= 50ms); opt-in, can be noisy
   copyHttpSpanAttributesToEvent: false,
   userInteraction: {
     enabled: true,
@@ -240,7 +408,14 @@ initFull({
 });
 ```
 
-With sensible defaults, **one `initFull()`** gives you: **navigation spans**, **fetch/XHR spans** with W3C propagation, **http.client.network_timing** events, **Web Vitals** (LCP, INP, CLS, FCP, TTFB) as a single `web_vitals` span per page, and **unhandled error capture** (window errors and unhandled promise rejections). Optional: **user interaction** spans (clicks on configurable selectors), **long-task** spans (opt-in via `captureLongTasks: true`), **sampling** (`sampleRate` or custom `sampler`), and **setAttribute** / **addEvent** / **span()** on the active span. Async context propagation is best-effort (no Zone.js).
+With sensible defaults, **one `initFull()`** gives you: **navigation spans**, **fetch/XHR spans** with W3C propagation, **http.client.network_timing** events, **Web Vitals** as one `browser.web_vital` event per metric, and **unhandled error capture** (window errors and unhandled promise rejections). Optional: **clicks** as `app.widget.click` events (on configurable selectors), **long tasks** as `app.jank` events (opt-in via `captureLongTasks: true`), **sampling** (`sampleRate` or a custom `sampler`), and **setAttribute** / **addEvent** / **span()** on the active span. Async context propagation is best-effort (no Zone.js).
+
+**Events are log records, not spans.** Web vitals, clicks, jank, session
+lifecycle, frustration and engagement all arrive on the **logs** pipeline,
+carrying the name in both `eventName` and `event.name` — query them where your
+logs are, not in trace search. Sampling (`sampleRate`) covers spans, logs and
+events alike; a custom `sampler` replaces it for spans and leaves events
+unsampled, since there is nothing to ask a span sampler about a log record.
 
 ## Framework Integration
 
@@ -579,9 +754,9 @@ interface AutotelWebFullConfig {
   captureXHR?: boolean; // default true
   captureNetworkTiming?: boolean; // http.client.network_timing events (default true)
   captureErrors?: boolean; // unhandled errors → span.recordException (default true)
-  captureWebVitals?: boolean; // LCP, INP, CLS, FCP, TTFB as web_vitals span (default true)
+  captureWebVitals?: boolean; // LCP, INP, CLS, FCP, TTFB → browser.web_vital events (default true)
   webVitals?: { reportAllChanges?: boolean }; // pass through to web-vitals (default false)
-  captureLongTasks?: boolean; // long-task spans (main thread >= 50ms); opt-in (default false)
+  captureLongTasks?: boolean; // app.jank events (main thread >= 50ms); opt-in (default false)
   copyHttpSpanAttributesToEvent?: boolean;
   userInteraction?: { enabled: boolean; selectors?: string[] };
   privacy?: PrivacyConfig;
@@ -1015,8 +1190,8 @@ export default function MyComponent() { ... }
 
 ## Bundle Size
 
-- **Lean mode** (`autotel-web`): **~1.6KB gzipped**. Zero dependencies. Pure JavaScript using native `crypto.getRandomValues()`.
-- **Full mode** (`autotel-web/full`): ~40-50KB gzipped (includes OpenTelemetry SDK and instrumentations). No Zone.js. Use when you need real spans and export from the browser.
+- **Lean mode** (`autotel-web`): **~5.4KB gzipped**. Zero dependencies. Pure JavaScript using native `crypto.getRandomValues()`.
+- **Full mode** (`autotel-web/full`): ~39KB gzipped (includes OpenTelemetry SDK and instrumentations). No Zone.js. Use when you need real spans and export from the browser.
 
 ## Architecture: Header-Only Approach
 
@@ -1041,7 +1216,7 @@ The browser's job is **trace propagation only**. Your backend (using Autotel) re
 
 This approach:
 
-- Keeps bundle size tiny (1.6KB vs 55KB for full OTel)
+- Keeps bundle size small (~5.4KB vs ~39KB for full mode)
 - Avoids CORS issues (no exporter endpoints)
 - Eliminates Zone.js conflicts (Angular, etc.)
 - Simplifies maintenance (no OTel version updates)
@@ -1070,7 +1245,7 @@ The official OpenTelemetry browser SDK (`@opentelemetry/sdk-trace-web`) is a **f
 ✅ You only need **trace correlation** between frontend and backend → use **lean mode** (`init` from `autotel-web`)
 ✅ You want **real browser spans and network timing** but **one install and no Zone.js** → use **full mode** (`initFull` from `autotel-web/full`)
 ✅ Your backend **already exports to a collector** (OTLP, Datadog, etc.)
-✅ You want **minimal bundle size impact** (~1.6KB for lean vs ~55KB for full OTel with Zone)
+✅ You want **minimal bundle size impact** (~5.4KB for lean vs ~39KB for full mode)
 ✅ You want to **avoid Zone.js** (conflicts with Angular, adds complexity)
 ✅ You prefer **zero dependencies** and simpler maintenance
 
