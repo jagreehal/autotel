@@ -1,6 +1,6 @@
 # Autotel + Effect Example
 
-Minimal example of using [Effect](https://effect.website) with [autotel](https://github.com/jagreehal/autotel): autotel configures OpenTelemetry and exports spans; Effect's runtime uses the global tracer so all `Effect.withSpan` spans go through autotel.
+Minimal [Effect v4](https://effect.website/) app with [autotel](https://github.com/jagreehal/autotel) export and [`autotel-effect`](../../packages/autotel-effect) bridging `Effect.withSpan` to the global OpenTelemetry provider.
 
 ## Try it
 
@@ -9,20 +9,23 @@ pnpm install
 pnpm start
 ```
 
-From repo root you can run `pnpm --filter @jagreehal/example-effect start`. Without an OTLP endpoint, autotel logs spans to the console (when `debug: true`).
+From the monorepo root:
+
+```bash
+pnpm --filter @jagreehal/example-effect start
+```
+
+Without an OTLP endpoint, autotel logs spans to the console (`debug: true` in `instrumentation.ts`).
 
 ## How it works
 
-1. **Autotel runs first**  
-   `instrumentation.ts` is loaded via `tsx --import ./instrumentation.ts src/index.ts` and calls `autotel.init()`. That registers the global OpenTelemetry `TracerProvider` (NodeSDK).
+1. **`instrumentation.ts` runs first** — loaded via `tsx --import ./instrumentation.ts`. Calls `autotel.init()` and registers the global `TracerProvider`.
 
-2. **Effect uses the global tracer**  
-   The app builds a Layer that provides Effect's `Tracer` from the global OTel API (`Tracer.layerGlobal` from `@effect/opentelemetry`) and the OTel `Resource` (`Resource.layer` with `serviceName: 'example-effect'`). No Effect NodeSdk or OTLP layer : autotel handles export.
+2. **`autotel-effect` provides Effect's tracer** — `layer({ serviceName: 'example-effect' })` wires `OtelTracer.layerGlobal` to that provider. No Effect NodeSdk or OTLP layer in the app.
 
-3. **Spans are recorded by autotel**  
-   Any `Effect.withSpan(...)` in the program creates spans that go to the global provider, so they are processed and exported by autotel (OTLP, console, etc.) according to your autotel config.
+3. **Spans export through autotel** — `Effect.withSpan(...)` in the program creates spans on the global provider; autotel handles OTLP/console export.
 
-## Copy-paste snippets
+## Snippets
 
 ### Initialize autotel (before any Effect code)
 
@@ -38,21 +41,18 @@ init({
 });
 ```
 
-Run the app with: `tsx --import ./instrumentation.ts src/index.ts`
+```bash
+tsx --import ./instrumentation.ts src/index.ts
+```
 
-### Provide Effect Tracer from global provider and run a traced effect
+### Run traced Effect code
 
 ```typescript
-import * as Resource from '@effect/opentelemetry/Resource';
-import * as Tracer from '@effect/opentelemetry/Tracer';
 import * as Effect from 'effect/Effect';
 import { pipe } from 'effect/Function';
-import * as Layer from 'effect/Layer';
+import { layer } from 'autotel-effect';
 
-const AutotelEffectLive = pipe(
-  Tracer.layerGlobal,
-  Layer.provide(Resource.layer({ serviceName: 'example-effect' })),
-);
+const AutotelEffect = layer({ serviceName: 'example-effect' });
 
 const program = pipe(
   Effect.log('Hello from Effect'),
@@ -61,16 +61,12 @@ const program = pipe(
   Effect.withSpan('example-effect'),
 );
 
-pipe(
-  program,
-  Effect.provide(AutotelEffectLive),
-  Effect.catchAllCause(Effect.logError),
-  Effect.runPromise,
-);
+await pipe(program, Effect.provide(AutotelEffect), Effect.runPromise);
 ```
 
 ## Learn more
 
-- [autotel](https://github.com/jagreehal/autotel) : OpenTelemetry setup and conventions
-- [Effect](https://effect.website) : TypeScript effect system
-- [@effect/opentelemetry](https://github.com/Effect-TS/effect/tree/main/packages/opentelemetry) : Effect's OpenTelemetry integration
+- [autotel-effect](../../packages/autotel-effect)
+- [autotel](https://github.com/jagreehal/autotel)
+- [Effect](https://effect.website/)
+- [@effect/opentelemetry](https://github.com/Effect-TS/effect/tree/main/packages/opentelemetry)

@@ -2,8 +2,8 @@
  * Autotel initialization for the Effect example.
  *
  * Loaded before the app via: tsx --import ./instrumentation.ts src/index.ts
- * This registers the global OpenTelemetry TracerProvider so Effect's
- * Tracer.layerGlobal uses autotel for span export.
+ * Registers the global OpenTelemetry TracerProvider. autotel-effect's layer()
+ * reads that provider so Effect.withSpan spans export through autotel.
  */
 
 import { init } from 'autotel';

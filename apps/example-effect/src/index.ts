@@ -1,27 +1,21 @@
 /**
- * Autotel + Effect example
+ * Autotel + Effect example (Effect v4)
  *
- * Run: pnpm start  (do not run tsx src/index.ts directly — init runs in instrumentation.ts via --import)
+ * Run: pnpm start
  *
- * Autotel is initialized in instrumentation.ts (loaded via --import). That file calls
- * init({ service: 'example-effect', ... }), so the global OTel provider is set before
- * this file runs. Effect's Tracer.layerGlobal uses that provider; all Effect.withSpan
- * spans are recorded and exported by autotel.
+ * autotel.init() runs in instrumentation.ts (via --import). autotel-effect
+ * provides Effect's Tracer from that global provider; all Effect.withSpan spans
+ * export through autotel.
  */
 
 import 'dotenv/config';
 
-import * as Resource from '@effect/opentelemetry/Resource';
-import * as Tracer from '@effect/opentelemetry/Tracer';
 import * as Effect from 'effect/Effect';
 import { pipe } from 'effect/Function';
-import * as Layer from 'effect/Layer';
-import { shutdown } from 'autotel';
+import { flush, shutdown } from 'autotel';
+import { layer } from 'autotel-effect';
 
-const AutotelEffectLive = pipe(
-  Tracer.layerGlobal,
-  Layer.provide(Resource.layer({ serviceName: 'example-effect' })),
-);
+const AutotelEffect = layer({ serviceName: 'example-effect' });
 
 const program = pipe(
   Effect.log('Hello from Effect'),
@@ -33,10 +27,11 @@ const program = pipe(
 async function main() {
   await pipe(
     program,
-    Effect.provide(AutotelEffectLive),
-    Effect.catchAllCause(Effect.logError),
+    Effect.provide(AutotelEffect),
+    Effect.catchCause(Effect.logError),
     Effect.runPromise,
   );
+  await flush();
   await shutdown();
   process.exit(0);
 }

@@ -84,6 +84,7 @@ export default defineConfig({
             { label: 'Validation Telemetry', slug: 'integrations/validation' },
             { label: 'AWS', slug: 'integrations/aws' },
             { label: 'Prisma', slug: 'integrations/prisma' },
+            { label: 'Effect', slug: 'integrations/effect' },
             { label: 'Drizzle ORM', slug: 'integrations/drizzle' },
             { label: 'Mongoose', slug: 'integrations/mongoose' },
             { label: 'Grafana Loki', slug: 'integrations/loki' },
