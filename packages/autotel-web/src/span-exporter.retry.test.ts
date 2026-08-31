@@ -37,6 +37,15 @@ afterEach(() => {
 });
 
 describe('delivery', () => {
+  it("exports to the same-origin path when endpoint is ''", async () => {
+    // '' is the documented same-origin configuration, not "no endpoint".
+    configureExporter('web', '', false);
+    span();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/v1/traces');
+  });
+
   it('sends through fetch so the outcome is known', async () => {
     span();
     await vi.advanceTimersByTimeAsync(0);
@@ -159,11 +168,17 @@ describe('delivery', () => {
 
 describe('unload and exhaustion keep what they should', () => {
   function queueOffline(count = 1): void {
-    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+    Object.defineProperty(navigator, 'onLine', {
+      value: false,
+      configurable: true,
+    });
     for (let i = 0; i < count; i++) span();
   }
   function goOnline(): void {
-    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
+    Object.defineProperty(navigator, 'onLine', {
+      value: true,
+      configurable: true,
+    });
   }
 
   it('keeps the queue when sendBeacon refuses the payload', () => {
@@ -220,8 +235,9 @@ describe('unload and exhaustion keep what they should', () => {
     );
     // The healthy records reached the collector on their own, rather than
     // riding — and dying — with the batch in front of them.
-    expect(bodies.some((b) => b.includes('healthy-1') && !b.includes('poison')))
-      .toBe(true);
+    expect(
+      bodies.some((b) => b.includes('healthy-1') && !b.includes('poison')),
+    ).toBe(true);
     expect(pendingSpanCount()).toBe(0);
   });
 });

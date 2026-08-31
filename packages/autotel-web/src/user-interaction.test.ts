@@ -14,8 +14,12 @@ describe('click instrumentation', () => {
   });
 
   it('emits the canonical app.widget.click event', () => {
-    document.body.innerHTML = '<button id="buy" aria-label="Buy now">Buy</button>';
-    setupUserInteractionInstrumentation({ selectors: ['button'], debug: false });
+    document.body.innerHTML =
+      '<button id="buy" aria-label="Buy now">Buy</button>';
+    setupUserInteractionInstrumentation({
+      selectors: ['button'],
+      debug: false,
+    });
     click(document.querySelector('#buy')!, { clientX: 12, clientY: 34 });
 
     const [span] = eventsNamed('app.widget.click');
@@ -29,7 +33,10 @@ describe('click instrumentation', () => {
 
   it('names the screen from the path so clicks can be grouped by page', () => {
     document.body.innerHTML = '<button>Go</button>';
-    setupUserInteractionInstrumentation({ selectors: ['button'], debug: false });
+    setupUserInteractionInstrumentation({
+      selectors: ['button'],
+      debug: false,
+    });
     click(document.querySelector('button')!);
     const [span] = eventsNamed('app.widget.click');
     expect(span.attributes['app.screen.name']).toBe(window.location.pathname);
@@ -38,16 +45,22 @@ describe('click instrumentation', () => {
   it('prefers an explicit data-track name over the accessible one', () => {
     document.body.innerHTML =
       '<button data-track="checkout_submit" aria-label="Buy now">Buy</button>';
-    setupUserInteractionInstrumentation({ selectors: ['button'], debug: false });
+    setupUserInteractionInstrumentation({
+      selectors: ['button'],
+      debug: false,
+    });
     click(document.querySelector('button')!);
-    expect(eventsNamed('app.widget.click')[0].attributes['app.widget.name']).toBe(
-      'checkout_submit',
-    );
+    expect(
+      eventsNamed('app.widget.click')[0].attributes['app.widget.name'],
+    ).toBe('checkout_submit');
   });
 
   it('ignores clicks that match no configured selector', () => {
     document.body.innerHTML = '<div>not tracked</div>';
-    setupUserInteractionInstrumentation({ selectors: ['button'], debug: false });
+    setupUserInteractionInstrumentation({
+      selectors: ['button'],
+      debug: false,
+    });
     click(document.querySelector('div')!);
     expect(eventsNamed('app.widget.click')).toHaveLength(0);
   });

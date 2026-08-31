@@ -23,7 +23,10 @@
 
 import { recordLog, type LogSeverity } from './span-exporter';
 
-const LEVELS: { method: 'debug' | 'log' | 'info' | 'warn' | 'error'; severity: LogSeverity }[] = [
+const LEVELS: {
+  method: 'debug' | 'log' | 'info' | 'warn' | 'error';
+  severity: LogSeverity;
+}[] = [
   { method: 'debug', severity: 'debug' },
   { method: 'log', severity: 'info' },
   { method: 'info', severity: 'info' },
@@ -32,6 +35,9 @@ const LEVELS: { method: 'debug' | 'log' | 'info' | 'warn' | 'error'; severity: L
 ];
 
 const ORDER: LogSeverity[] = ['debug', 'info', 'warn', 'error'];
+
+/** Every line this package prints starts with it. */
+const SELF_PREFIX = '[autotel-web]';
 
 export interface ConsoleLogsConfig {
   /** Lowest level to capture. @default 'info' — `debug` is usually noise. */
@@ -69,7 +75,17 @@ export function captureConsoleAsLogs(config: ConsoleLogsConfig): () => void {
       original.apply(console, args);
       try {
         const line = args.map((arg) => render(arg)).join(' ');
-        recordLog(severity, config.redactor ? config.redactor(line) : line, {}, 'console');
+        // autotel's own debug output is not the application's. Exporting it
+        // would also never settle: in debug mode the exporter narrates every
+        // flush, and narrating a flush would queue the record that causes the
+        // next one, for as long as the page is open.
+        if (line.startsWith(SELF_PREFIX)) return;
+        recordLog(
+          severity,
+          config.redactor ? config.redactor(line) : line,
+          {},
+          'console',
+        );
       } catch {
         // Nothing here is worth an exception in an application's log call.
       }

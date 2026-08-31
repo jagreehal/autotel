@@ -42,6 +42,10 @@ init({
   // No top-level `logger` on purpose: init({ logger }) is also the fallback
   // for canonical log lines, which would send them to this console logger
   // instead of the OTel Logs API, and nothing would reach Loki.
+  //
+  // If you want both — the console for a platform log view that reads stdout,
+  // and Loki — name the logger here and ask for OTel alongside it:
+  //   canonicalLogLines: { enabled: true, logger, otel: true }
   canonicalLogLines: { enabled: true },
 });
 

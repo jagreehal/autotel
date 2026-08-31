@@ -1,0 +1,146 @@
+---
+title: Chrome Built-in AI
+description: OpenTelemetry instrumentation for Chrome's on-device built-in AI APIs.
+---
+
+[Chrome's built-in AI APIs](https://developer.chrome.com/docs/ai/built-in) run a
+model on the device. `autotel-builtin-ai` patches the globals and every session
+they hand back, so each availability check, session creation and model call
+becomes a span — with no change to your calls.
+
+The counterpart to [WebMCP](/autotel/integrations/webmcp/): that one traces the
+tools a page offers an agent, this one traces the model a page runs itself.
+
+## Installation
+
+```bash
+npm install autotel-builtin-ai autotel-web
+```
+
+```typescript
+import { initFull } from 'autotel-web/full';
+import { instrumentBuiltInAI } from 'autotel-builtin-ai';
+
+initFull({ service: 'shop', endpoint: 'https://collector.example.com' });
+instrumentBuiltInAI();
+```
+
+Call it before the page creates any session. A session created earlier keeps its
+original methods and produces no spans.
+
+## Why this exists
+
+The Prompt API looks synchronous and cheap. Measured, it is neither, and the
+parts that bite are the parts nothing reports afterwards:
+
+- `availability()` answers for the **options you passed it**, not for model
+  readiness — so the guard in the documentation refuses on a browser where the
+  call would have worked.
+- `create()` **blocks for the whole model download**: 190,163 ms measured,
+  against 1–3 ms warm.
+- The download monitor **fires when nothing is downloaded**, so a progress bar
+  flashes 0→100 for every returning visitor.
+- A session **cannot say how it samples**: `samplingMode` reads back `null` when
+  `topK` or `temperature` was used.
+- Time to first token exists only while the stream is running.
+
+None of it is recoverable after the call.
+
+## Spans
+
+| Span                      | When                                                            |
+| ------------------------- | --------------------------------------------------------------- |
+| `builtin_ai.availability` | The page asks whether a model is usable                         |
+| `create_session {api}`    | A session is created — `create_session LanguageModel`           |
+| `{method} {api}`          | One model call — `prompt LanguageModel`, `summarize Summarizer` |
+
+The attributes each carries are listed in the
+[package README](https://github.com/jagreehal/autotel/tree/main/packages/autotel-builtin-ai).
+Three are worth knowing about before you build a dashboard.
+
+### `builtin_ai.availability.options_supplied`
+
+The one to alert on. On Canary 154 with speculative decoding enabled and a
+working model:
+
+```javascript
+await LanguageModel.availability(); // 'unavailable'
+await LanguageModel.availability({ samplingMode: 'most-predictable' }); // 'available'
+await LanguageModel.create({ samplingMode: 'most-predictable' }); // succeeds
+```
+
+So `availability() !== 'available'` — the shape the docs show — turns the
+feature off for users who have it. A bare guard followed by an optioned
+`create()` is two spans sharing an installation id, and the disagreement becomes
+a query rather than a bug report. `guardWouldRefuse(bare, withOptions)` is
+exported for pages that want to check it themselves.
+
+### `builtin_ai.download.real`
+
+`create()` fires the download monitor whether or not it downloads anything, so
+"the monitor fired" and "a download happened" are different facts. Only the
+availability answer from _before_ the call separates them, and that answer is
+read from the page's own `availability()` calls — never probed, because
+installing telemetry must not add a call the application did not make. A page
+that never calls `availability()` leaves this attribute off the span, which is
+the honest answer rather than a guess.
+
+`builtin_ai.create.blocked_on_download` says whether this call paid for the
+fetch. That is the 190-second one.
+
+### `builtin_ai.session.sampling_mode_reported`
+
+Whether the session could describe its own sampling at all. It reads back `null`
+for `topK` and `temperature`, so `builtin_ai.create.sampling_option` carries what
+was actually passed.
+
+## Streaming
+
+A streaming call is measured as it drains: `builtin_ai.stream.ttft_ms`,
+`.total_ms`, `.chunks` and `.chars`. The span is emitted alongside the stream
+rather than around it — the caller is handed the stream immediately and the span
+closes when the stream does. A stream that fails records `error.type`; one the
+caller walks away from records `builtin_ai.stream.cancelled` and closes rather
+than staying open for the life of the page.
+
+## Payload capture
+
+Off by default. Prompts and outputs are people's data, and a span is not the
+place for them unless you decided it is:
+
+```typescript
+instrumentBuiltInAI({ capturePayloads: true, maxPayloadLength: 2000 });
+```
+
+Character counts, timings and refusal classifications are recorded either way —
+`builtin_ai.create.refusal` is a classification (`sampling_incompatible`,
+`service_unavailable`), not the platform's message, so it carries no caller data.
+
+## Two entry points
+
+`autotel-builtin-ai` wires in autotel-web's `span()` and needs a bundler like any
+app dependency.
+
+`autotel-builtin-ai/core` is the same instrumentation with no telemetry
+dependency: you pass `span` yourself, it imports nothing beyond itself, and it
+loads straight into a browser with no build step.
+
+```javascript
+import { instrumentBuiltInAI } from 'autotel-builtin-ai/core';
+
+instrumentBuiltInAI({ span: mySpanFactory });
+```
+
+## Teardown
+
+`instrumentBuiltInAI()` returns a handle whose `uninstall()` puts every patched
+global and session method back. Installations are reference-counted, so calling
+it twice and uninstalling once leaves the instrumentation in place.
+
+Safe to call unconditionally: with no built-in AI globals present — an unflagged
+Chrome, another browser, or server rendering — it patches nothing and returns a
+no-op handle. Restrict what it touches with `apis`:
+
+```typescript
+instrumentBuiltInAI({ apis: ['LanguageModel', 'Summarizer'] });
+```

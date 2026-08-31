@@ -26,6 +26,7 @@ Event guidance: for new instrumentation, emit events as correlated logs (via req
 | Init (once at startup)                | `init({ service, ... })`                                                                                      | `autotel` or `autotel/instrumentation` |
 | Same error thrown from many places    | `defineErrorCatalog(ns, entries)` → typed builders + `.match()`                                               | `autotel`                              |
 | Error budgets and burn-rate alerts    | `createSloTracker()`, `evaluateBurnRateAlert()`                                                               | `autotel/slo`                          |
+| Split a metric by feature flag        | `recordFeatureFlag(ctx, { key, value })`, `autotelOpenFeatureHook()`                                          | `autotel/feature-flags`                |
 | Flush telemetry on SIGTERM / crash    | `init({ processHandlers: true })`                                                                             | `autotel`                              |
 | Testing                               | `createTraceCollector()`, `InMemorySpanExporter`                                                              | `autotel/testing`, `autotel/exporters` |
 

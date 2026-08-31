@@ -56,15 +56,31 @@ two answers to `get_session_id()`.
 | `session.id`         | `posthog.get_session_id()`                                | every span                    |
 | `user.id`            | `posthog.get_distinct_id()`                               | every span                    |
 | `session.replay.url` | `posthog.get_session_replay_url({ withTimestamp: true })` | spans that recorded an error  |
-| `feature_flag.<key>` | `posthog.getFeatureFlag(key)`                             | every span, for keys you name |
+| `feature_flag.*`     | `posthog.getFeatureFlag(key)`                             | every span, for keys you name |
 
 Identity is read when the span starts. PostHog rotates a session after 30
 minutes idle, and `identify()` can land mid-request. The replay URL is decided
 at the end, because only the end knows the span failed. If the session rotated
 in between, the URL is withheld.
 
-A flag that evaluates to `false` is kept. A flag PostHog has no opinion on is
-omitted.
+A flag that evaluates to `false` is kept — that is an answer, and comparing the
+two groups is the point. A flag PostHog has no opinion on yet is omitted, because
+recording it as `false` would make "off" and "unknown" the same reading.
+
+### Flags use the canonical convention
+
+Flags are recorded as `feature_flag.key`, `feature_flag.result.value`,
+`feature_flag.result.variant`, `feature_flag.provider.name` and
+`feature_flag.context.id`, plus one `feature_flag.evaluation` event per flag.
+Values keep their type: a boolean flag records `true`, not `"true"`.
+
+Never `feature_flag.<key>`. Keyed by flag name it cannot be grouped across
+flags, and no backend ships a panel that reads it. Span attributes hold one
+evaluation — a second overwrites the first — which is why the events carry the
+rest.
+
+Outside PostHog, [`recordFeatureFlag()`](/autotel/advanced/#feature-flag-evaluations)
+does the same job for any provider.
 
 :::caution
 Pass the enricher in `spanEnrichers`, not `spanProcessor`. `spanProcessor`

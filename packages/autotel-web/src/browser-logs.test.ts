@@ -16,7 +16,11 @@ let stop: (() => void) | undefined;
 
 function sentBodies(): Record<string, unknown>[] {
   return fetchMock.mock.calls.map(
-    ([, init]) => JSON.parse((init as RequestInit).body as string) as Record<string, unknown>,
+    ([, init]) =>
+      JSON.parse((init as RequestInit).body as string) as Record<
+        string,
+        unknown
+      >,
   );
 }
 
@@ -37,6 +41,16 @@ afterEach(() => {
 });
 
 describe('browser logs over OTLP', () => {
+  it('goes quiet after the app stops logging, with debug on', async () => {
+    // The exporter narrates every flush in debug mode. Exporting its own
+    // narration queues the record that causes the next flush, forever.
+    configureExporter('web', 'https://collector.example.com', true);
+    stop = captureConsoleAsLogs({});
+    console.info('hello');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(pendingLogCount()).toBe(0);
+  });
+
   it('posts log records to the logs endpoint, not the traces one', async () => {
     recordLog('warn', 'disk almost full');
     await vi.advanceTimersByTimeAsync(0);
@@ -97,7 +111,10 @@ describe('console capture', () => {
 
     const entry = (
       (sentBodies()[0].resourceLogs as never[])[0] as {
-        scopeLogs: { scope: { name: string }; logRecords: Record<string, unknown>[] }[];
+        scopeLogs: {
+          scope: { name: string };
+          logRecords: Record<string, unknown>[];
+        }[];
       }
     ).scopeLogs[0];
     // A distinct scope, so auto-captured output can be told apart from logs the
@@ -149,7 +166,11 @@ describe('ambient enrichment never overwrites an explicit attribute', () => {
     recordEvent('session.end', { 'session.id': 'the-session-that-ended' });
     const entry = (
       (sentBodies()[0].resourceLogs as never[])[0] as {
-        scopeLogs: { logRecords: { attributes: { key: string; value: { stringValue: string } }[] }[] }[];
+        scopeLogs: {
+          logRecords: {
+            attributes: { key: string; value: { stringValue: string } }[];
+          }[];
+        }[];
       }
     ).scopeLogs[0].logRecords[0];
     const sessionId = entry.attributes.find((a) => a.key === 'session.id');

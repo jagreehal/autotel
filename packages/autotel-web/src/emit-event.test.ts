@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { emitEvent, resetEventSinkForTesting, setEventSink } from './emit-event';
+import {
+  emitEvent,
+  resetEventSinkForTesting,
+  setEventSink,
+} from './emit-event';
 
 afterEach(() => resetEventSinkForTesting());
 

@@ -65,8 +65,21 @@ export interface KeepCondition {
 }
 
 export interface CanonicalLogLineOptions {
-  /** Logger to use for emitting canonical log lines (defaults to OTel Logs API) */
-  logger?: Logger;
+  /**
+   * Logger(s) to emit canonical log lines through. Pass an array to fan out to
+   * several. When omitted, lines go to the OTel Logs API instead.
+   */
+  logger?: Logger | Logger[];
+  /**
+   * Also emit through the OTel Logs API (and so to an OTLP logs backend such
+   * as Loki) alongside any `logger`.
+   *
+   * Defaults to true only when no `logger` is given, which is the historical
+   * either/or behaviour. Set it explicitly to have both: a console/pino logger
+   * keeps lines in the platform's own log view while OTLP carries the same
+   * lines to your backend.
+   */
+  otel?: boolean;
   /** Only emit canonical log lines for root spans (default: false) */
   rootSpansOnly?: boolean;
   /** Minimum log level for canonical log lines (default: 'info') */
@@ -160,7 +173,8 @@ export interface CanonicalLogLineOptions {
  * ```
  */
 export class CanonicalLogLineProcessor implements SpanProcessor {
-  private logger?: Logger;
+  private loggers: Logger[];
+  private useOtel: boolean;
   private rootSpansOnly: boolean;
   private minLevel: 'debug' | 'info' | 'warn' | 'error';
   private messageFormat: (span: ReadableSpan) => string;
@@ -174,7 +188,13 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     null;
 
   constructor(options: CanonicalLogLineOptions = {}) {
-    this.logger = options.logger;
+    this.loggers = options.logger
+      ? Array.isArray(options.logger)
+        ? options.logger.filter(Boolean)
+        : [options.logger]
+      : [];
+    // Historical default: OTel only when nothing else is listening.
+    this.useOtel = options.otel ?? this.loggers.length === 0;
     this.rootSpansOnly = options.rootSpansOnly ?? false;
     this.minLevel = options.minLevel ?? 'info';
     this.messageFormat =
@@ -189,7 +209,7 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
       options.pretty ??
       (hasProcess() && process.env.NODE_ENV === 'development');
 
-    if (!this.logger) {
+    if (this.useOtel) {
       this.getOTelLogger = () => logs.getLogger('autotel.canonical-log-line');
     }
   }
@@ -257,11 +277,19 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
       console.log(formatPrettyLogLine(eventContext));
     }
 
-    if (this.logger) {
+    if (this.loggers.length > 0) {
       this.emitViaLogger(level, message, canonicalLogLine);
-    } else if (this.getOTelLogger) {
-      const otelLogger = this.getOTelLogger();
-      this.emitViaOTel(level, message, canonicalLogLine, otelLogger);
+    }
+    if (this.getOTelLogger) {
+      try {
+        const otelLogger = this.getOTelLogger();
+        this.emitViaOTel(level, message, canonicalLogLine, otelLogger);
+      } catch (error) {
+        this.reportInternalWarning(
+          'canonical log line OTel emission failed',
+          error,
+        );
+      }
     }
 
     if (this.drain) {
@@ -327,7 +355,19 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     message: string,
     canonicalLogLine: UnknownRecord,
   ): void {
-    this.logger![level](canonicalLogLine, message);
+    for (const logger of this.loggers) {
+      try {
+        logger[level](canonicalLogLine, message);
+      } catch (error) {
+        // Destinations are independent. A broken stdout transport must not
+        // prevent the next logger or the OTLP/Grafana path from receiving the
+        // line, and a SpanProcessor must never throw into application code.
+        this.reportInternalWarning(
+          'canonical log line logger emission failed',
+          error,
+        );
+      }
+    }
   }
 
   private emitViaOTel(
@@ -379,11 +419,23 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
 
   private reportInternalWarning(message: string, cause: unknown): void {
     const err = cause === undefined ? 'unknown error' : toError(cause).message;
-    if (this.logger) {
-      this.logger.warn({ error: err }, `[autotel] ${message}`);
-      return;
+    if (this.loggers.length > 0) {
+      let reported = false;
+      for (const logger of this.loggers) {
+        try {
+          logger.warn({ error: err }, `[autotel] ${message}`);
+          reported = true;
+        } catch {
+          // Keep trying the remaining destinations.
+        }
+      }
+      if (reported) return;
     }
-    console.warn(`[autotel] ${message}: ${err}`);
+    try {
+      console.warn(`[autotel] ${message}: ${err}`);
+    } catch {
+      // Diagnostics must not make span completion fail either.
+    }
   }
 
   async forceFlush(): Promise<void> {

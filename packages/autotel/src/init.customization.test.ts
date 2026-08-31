@@ -568,6 +568,110 @@ describe('init() customization', () => {
     expect(customSdk.start).toHaveBeenCalled();
   });
 
+  it('exports nothing but still traces when no endpoint is configured', async () => {
+    // Omitting the key lets NodeSDK install its own default exporter, which is
+    // OTLP to http://localhost:4318. That turns "no endpoint configured" into
+    // "export to localhost" — a doomed request per batch on any server with
+    // nothing listening there, and no error naming the cause.
+    //
+    // An empty array is not the answer either: NodeSDK registers no
+    // TracerProvider for one, so nothing records, `traceparent` stops being
+    // injected, and a service with no endpoint of its own can no longer pass
+    // the trace on. One processor that does nothing keeps the provider.
+    const { init, sdkInstances, traceExporterOptions } =
+      await loadInitWithMocks();
+
+    init({ service: 'no-endpoint', metrics: false });
+
+    const options = sdkInstances.at(-1)!.options;
+    expect(traceExporterOptions).toHaveLength(0);
+    expect(options.spanProcessors).toHaveLength(1);
+    expect(options.spanProcessors![0]!.constructor.name).toBe(
+      'NoopSpanProcessor',
+    );
+  });
+
+  it('passes an empty logRecordProcessors array when nothing is configured', async () => {
+    // The logs half of the same default: absent means NodeSDK builds its own
+    // OTLP log exporter to http://localhost:4318, so canonical log lines and
+    // events land at a collector nobody configured.
+    const { init, sdkInstances } = await loadInitWithMocks();
+
+    init({ service: 'no-endpoint-logs', metrics: false });
+
+    expect(sdkInstances.at(-1)!.options.logRecordProcessors).toEqual([]);
+  });
+
+  it('still builds a log processor from a configured endpoint', async () => {
+    const { init, sdkInstances } = await loadInitWithMocks();
+
+    init({
+      service: 'has-endpoint-logs',
+      endpoint: 'http://localhost:4318',
+      metrics: false,
+      logs: true,
+    });
+
+    expect(
+      sdkInstances.at(-1)!.options.logRecordProcessors!.length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('honours an explicit empty spanProcessors as an off switch', async () => {
+    // Empty and absent used to be indistinguishable, so a caller asking for
+    // no processors silently got NodeSDK's default one instead.
+    const { init, sdkInstances, traceExporterOptions } =
+      await loadInitWithMocks();
+
+    init({
+      service: 'explicitly-off',
+      endpoint: 'http://localhost:4318',
+      spanProcessors: [],
+    });
+
+    expect(traceExporterOptions).toHaveLength(0);
+    expect(
+      sdkInstances.at(-1)!.options.spanProcessors![0]!.constructor.name,
+    ).toBe('NoopSpanProcessor');
+  });
+
+  it('still builds a processor from a configured endpoint', async () => {
+    // The other half of the guard: switching off the localhost default must not
+    // switch off exporting when an endpoint really is configured.
+    const { init, sdkInstances } = await loadInitWithMocks();
+
+    init({
+      service: 'has-endpoint',
+      endpoint: 'http://localhost:4318',
+      metrics: false,
+    });
+
+    expect(sdkInstances.at(-1)!.options.spanProcessors!.length).toBeGreaterThan(
+      0,
+    );
+  });
+
+  it('lets an explicit empty spanProcessors win over the singular spanProcessor', async () => {
+    // Pinning the precedence the "empty means empty" change introduces: the
+    // plural key is the more specific statement, so [] means none even when a
+    // singular processor is also present.
+    const { init, sdkInstances } = await loadInitWithMocks();
+    const singular = mock<SpanProcessor>();
+    singular.shutdown.mockResolvedValue();
+    singular.forceFlush.mockResolvedValue();
+
+    init({
+      service: 'precedence',
+      spanProcessors: [],
+      spanProcessor: singular,
+    });
+
+    const processors = sdkInstances.at(-1)!.options.spanProcessors!;
+    expect(processors).toHaveLength(1);
+    expect(processors[0]!.constructor.name).toBe('NoopSpanProcessor');
+    expect(processors).not.toContain(singular);
+  });
+
   it('uses provided spanProcessors when supplied', async () => {
     const { init, sdkInstances } = await loadInitWithMocks();
     const customProcessor = mock<SpanProcessor>();
@@ -761,6 +865,38 @@ describe('init() customization', () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
+  it('auto-configures OTLP logs for canonical lines with otel enabled', async () => {
+    const { init, sdkInstances, logExporterOptions } =
+      await loadInitWithMocks();
+
+    init({
+      service: 'grafana-log-app',
+      endpoint: 'http://localhost:4318',
+      canonicalLogLines: {
+        enabled: true,
+        logger: mock<import('./logger').Logger>(),
+        otel: true,
+      },
+    });
+
+    expect(logExporterOptions).toHaveLength(1);
+    expect(logExporterOptions[0]!.url).toBe('http://localhost:4318/v1/logs');
+    expect(sdkInstances.at(-1)!.options.logRecordProcessors).toBeDefined();
+  });
+
+  it('lets logs false override canonical otel export', async () => {
+    const { init, logExporterOptions } = await loadInitWithMocks();
+
+    init({
+      service: 'no-grafana-logs',
+      endpoint: 'http://localhost:4318',
+      logs: false,
+      canonicalLogLines: { enabled: true, otel: true },
+    });
+
+    expect(logExporterOptions).toHaveLength(0);
+  });
+
   it('supports singular logRecordProcessor alias', async () => {
     const { init, sdkInstances } = await loadInitWithMocks();
     const customLogProcessor = mock<LogRecordProcessor>();
@@ -787,9 +923,10 @@ describe('init() customization', () => {
     });
 
     expect(logExporterOptions).toHaveLength(0);
-    // init() constructs exactly one SDK, so the last record is this run's.
+    // Empty, not absent: absent is what makes NodeSDK build its own OTLP log
+    // exporter to http://localhost:4318, which is not "logs off".
     const options = sdkInstances.at(-1)!.options;
-    expect(options.logRecordProcessors).toBeUndefined();
+    expect(options.logRecordProcessors).toEqual([]);
   });
 
   it('does not override OTEL_LOGS_EXPORTER env configuration by default', async () => {

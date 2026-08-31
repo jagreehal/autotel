@@ -73,7 +73,11 @@ describe('featureFlagAttributes', () => {
 
   it('records an evaluation error under the current attribute', () => {
     expect(
-      featureFlagAttributes({ key: 'k', value: false, errorMessage: 'timeout' }),
+      featureFlagAttributes({
+        key: 'k',
+        value: false,
+        errorMessage: 'timeout',
+      }),
     ).toMatchObject({ 'feature_flag.error.message': 'timeout' });
   });
 });
@@ -138,9 +142,11 @@ describe('recordFeatureFlag', () => {
 
   it('passes an unknown reason through unchanged apart from case', () => {
     expect(
-      featureFlagAttributes({ key: 'k', value: true, reason: 'Provider_Quirk' })[
-        'feature_flag.result.reason'
-      ],
+      featureFlagAttributes({
+        key: 'k',
+        value: true,
+        reason: 'Provider_Quirk',
+      })['feature_flag.result.reason'],
     ).toBe('provider_quirk');
   });
 

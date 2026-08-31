@@ -182,7 +182,18 @@ export interface AutotelConfig {
    * Single-destination shorthand. For multi-backend OTLP fan-out, use
    * `destinations` instead.
    * Only used if you don't provide custom exporters/processors
-   * @default process.env.OTLP_ENDPOINT || 'http://localhost:4318'
+   *
+   * Falls back to the OTel spec's `OTEL_EXPORTER_OTLP_ENDPOINT`, which is the
+   * variable every vendor's docs hand you (see `env-config.ts`;
+   * `OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_EXPORTER_OTLP_PROTOCOL` are read
+   * the same way).
+   *
+   * With no endpoint from either source there is NO default and no fallback
+   * to localhost: the span processor list stays empty and nothing is
+   * exported, so telemetry is off rather than aimed at a collector that is
+   * not there. Point it at a local collector explicitly when you want one.
+   *
+   * @default process.env.OTEL_EXPORTER_OTLP_ENDPOINT, else no exporter
    */
   endpoint?: string;
 
@@ -388,13 +399,26 @@ export interface AutotelConfig {
 
   /**
    * OTLP protocol to use for traces, metrics, and logs
-   * - 'http': HTTP/protobuf (default, uses port 4318)
+   * - 'http': OTLP over HTTP with a **JSON** body (default, port 4318)
+   * - 'http/protobuf': OTLP over HTTP with a protobuf body (port 4318)
    * - 'grpc': gRPC (uses port 4317)
+   *
+   * The default is JSON, not protobuf — `createTraceExporter` falls through to
+   * `OTLPTraceExporterHTTP`, which sends `content-type: application/json`.
+   * Grafana Cloud, Honeycomb and the other hosted OTLP gateways all accept
+   * JSON, so the default needs no extra install and is what the vendor presets
+   * in `autotel-backends` rely on.
    *
    * Can be overridden with OTEL_EXPORTER_OTLP_PROTOCOL env var.
    *
-   * Note: gRPC exporters are optional peer dependencies. Install them with:
+   * Note: only the JSON exporters ship with autotel. 'http/protobuf' and
+   * 'grpc' need optional peer dependencies, and a bundler (Vercel, Nitro,
+   * esbuild) will not trace a lazy `require`, so they must be direct
+   * dependencies of the *application* to survive bundling:
    * ```bash
+   * # http/protobuf
+   * pnpm add @opentelemetry/exporter-trace-otlp-proto @opentelemetry/exporter-metrics-otlp-proto
+   * # grpc
    * pnpm add @opentelemetry/exporter-trace-otlp-grpc @opentelemetry/exporter-metrics-otlp-grpc
    * ```
    *
@@ -527,6 +551,20 @@ export interface AutotelConfig {
    *   debug: (msg, extra) => console.debug(msg, extra),
    * }
    * init({ service: 'my-app', logger })
+   * ```
+   *
+   * @remarks
+   * This is also the fallback logger for canonical log lines, so setting it
+   * sends them here INSTEAD of the OTel Logs API — and therefore stops them
+   * reaching an OTLP logs backend such as Loki. On a platform whose log view
+   * reads stdout you usually want both, which is what
+   * `canonicalLogLines.otel` is for:
+   *
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   canonicalLogLines: { enabled: true, logger, otel: true },
+   * })
    * ```
    */
   logger?: Logger;

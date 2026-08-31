@@ -6,7 +6,10 @@ import { configureSession, resetSessionForTesting } from './session';
 
 const traceId = (n: number) => n.toString(16).padStart(32, '0');
 
-function decide(sampler: ReturnType<typeof createSessionRatioSampler>, id: string) {
+function decide(
+  sampler: ReturnType<typeof createSessionRatioSampler>,
+  id: string,
+) {
   return sampler.shouldSample(
     undefined as never,
     id,
@@ -23,7 +26,9 @@ afterEach(() => resetSessionForTesting());
 describe('session-consistent sampling', () => {
   it('keeps everything at 1', () => {
     const sampler = createSessionRatioSampler(1);
-    expect(decide(sampler, traceId(1))).toBe(SamplingDecision.RECORD_AND_SAMPLED);
+    expect(decide(sampler, traceId(1))).toBe(
+      SamplingDecision.RECORD_AND_SAMPLED,
+    );
   });
 
   it('keeps nothing at 0', () => {

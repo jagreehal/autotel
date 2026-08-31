@@ -8,10 +8,22 @@ let stop: (() => void) | undefined;
 
 function sizePage(scrollHeight: number, clientHeight: number, scrollTop = 0) {
   const el = document.documentElement;
-  Object.defineProperty(el, 'scrollHeight', { value: scrollHeight, configurable: true });
-  Object.defineProperty(el, 'clientHeight', { value: clientHeight, configurable: true });
-  Object.defineProperty(el, 'scrollTop', { value: scrollTop, configurable: true });
-  Object.defineProperty(window, 'scrollY', { value: scrollTop, configurable: true });
+  Object.defineProperty(el, 'scrollHeight', {
+    value: scrollHeight,
+    configurable: true,
+  });
+  Object.defineProperty(el, 'clientHeight', {
+    value: clientHeight,
+    configurable: true,
+  });
+  Object.defineProperty(el, 'scrollTop', {
+    value: scrollTop,
+    configurable: true,
+  });
+  Object.defineProperty(window, 'scrollY', {
+    value: scrollTop,
+    configurable: true,
+  });
 }
 
 beforeEach(() => {

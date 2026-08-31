@@ -184,7 +184,11 @@ export function createHoneycombConfig(
     service,
     environment,
     version,
-    protocol: 'grpc', // Honeycomb uses gRPC for better performance
+    // Honeycomb uses gRPC for better performance. That needs
+    // @opentelemetry/exporter-trace-otlp-grpc (and -metrics- for metrics):
+    // They are optional peer dependencies loaded lazily, and bundlers (Vercel, Nitro, esbuild) do not follow that require, so a bundled app needs them as direct dependencies even when they resolve locally.
+    // The failure surfaces at init(), which in a serverless app means the first traced request in production.
+    protocol: 'grpc',
     endpoint,
     headers,
   };

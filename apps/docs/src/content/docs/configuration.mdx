@@ -55,6 +55,31 @@ init({
 });
 ```
 
+## No endpoint means no export
+
+With no `endpoint` from `init()`, YAML or `OTEL_EXPORTER_OTLP_ENDPOINT`, there is
+**no default and no fallback to localhost**. The processor lists stay empty and
+nothing is exported.
+
+This is worth stating because the OpenTelemetry Node SDK does the opposite:
+leave the processors unset and it installs its own OTLP exporter aimed at
+`http://localhost:4318`. On a server with nothing listening there, that is a
+doomed request per batch, forever, with no error that names the cause — so
+"no endpoint configured" would quietly become "export to localhost". Autotel
+passes empty processor lists for both traces and logs instead.
+
+Two consequences worth knowing:
+
+- `spanProcessors: []` is a real off switch. Empty and absent are different
+  things: an empty array means "no processors", and it wins over the endpoint
+  pipeline autotel would otherwise build.
+- `OTEL_LOGS_EXPORTER` still governs itself. Set it and autotel stays out of the
+  way, because that is the specification's own switch and someone who set it
+  means it.
+
+Point `endpoint` at a local collector, or set `devtools: true`, to send there on
+purpose.
+
 ## OTLP wire protocol
 
 Autotel keeps the two OTLP/HTTP encodings distinct:

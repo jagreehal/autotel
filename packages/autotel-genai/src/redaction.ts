@@ -78,12 +78,23 @@ const FILE_PART_TYPES = new Set([
   'file-data',
 ]);
 
-const AUDIO_FORMATS = new Set(['wav', 'mp3', 'ogg', 'flac', 'm4a', 'aac', 'webm']);
+const AUDIO_FORMATS = new Set([
+  'wav',
+  'mp3',
+  'ogg',
+  'flac',
+  'm4a',
+  'aac',
+  'webm',
+]);
 
 type Parent = Record<string, unknown> | undefined;
 
 /** The media type a sibling field states outright, when one does. */
-function statedMediaType(parent: Parent, explicit?: string): string | undefined {
+function statedMediaType(
+  parent: Parent,
+  explicit?: string,
+): string | undefined {
   if (explicit !== undefined) return explicit;
   if (!parent) return undefined;
   for (const key of MIME_HINT_KEYS) {
@@ -172,9 +183,7 @@ function hasExplicitBinaryMediaType(
 }
 
 function looksBase64(value: string, minBytes: number): boolean {
-  return (
-    minBytes > 0 && BASE64_ALPHABET_RE.test(value.slice(0, minBytes))
-  );
+  return minBytes > 0 && BASE64_ALPHABET_RE.test(value.slice(0, minBytes));
 }
 
 function redactString(
@@ -282,7 +291,14 @@ function walk(
     const record = value as Record<string, unknown>;
     const out: Record<string, unknown> = {};
     for (const field of Object.keys(record)) {
-      out[field] = walk(record[field], record, field, undefined, path, onRedact);
+      out[field] = walk(
+        record[field],
+        record,
+        field,
+        undefined,
+        path,
+        onRedact,
+      );
     }
     return out;
   } finally {

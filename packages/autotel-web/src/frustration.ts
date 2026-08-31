@@ -134,18 +134,18 @@ function emit(
  * Start watching for dead and rage clicks. Returns a teardown that removes
  * every listener and observer it installed.
  */
-export function setupFrustrationSignals(
-  config: FrustrationConfig,
-): () => void {
+export function setupFrustrationSignals(config: FrustrationConfig): () => void {
   if (globalThis.document === undefined) return () => {};
 
-  const dead = config.deadClicks === false ? undefined : (config.deadClicks ?? {});
+  const dead =
+    config.deadClicks === false ? undefined : (config.deadClicks ?? {});
   const rage = config.rage === false ? undefined : (config.rage ?? {});
   if (!dead && !rage) return () => {};
 
   const mutationThresholdMs =
     dead?.mutationThresholdMs ?? DEFAULTS.mutationThresholdMs;
-  const scrollThresholdMs = dead?.scrollThresholdMs ?? DEFAULTS.scrollThresholdMs;
+  const scrollThresholdMs =
+    dead?.scrollThresholdMs ?? DEFAULTS.scrollThresholdMs;
   const selectionThresholdMs =
     dead?.selectionThresholdMs ?? DEFAULTS.selectionThresholdMs;
   const absoluteThresholdMs = mutationThresholdMs * 1.1;
@@ -176,7 +176,10 @@ export function setupFrustrationSignals(
     for (const candidate of pending) {
       const now = Date.now();
       const mutationDelay = delaySince(candidate.timestamp, lastMutation);
-      const selectionDelay = delaySince(candidate.timestamp, lastSelectionChange);
+      const selectionDelay = delaySince(
+        candidate.timestamp,
+        lastSelectionChange,
+      );
       const absoluteDelay = now - candidate.timestamp;
 
       const alive =
@@ -239,7 +242,8 @@ export function setupFrustrationSignals(
   function ignored(target: Element, event: MouseEvent): boolean {
     if (target === document.documentElement) return true;
     if (target.closest('a')) return true;
-    if (dead?.ignoreSelector && target.closest(dead.ignoreSelector)) return true;
+    if (dead?.ignoreSelector && target.closest(dead.ignoreSelector))
+      return true;
     if (
       !dead?.captureWithModifierKeys &&
       (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)

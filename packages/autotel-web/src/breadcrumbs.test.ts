@@ -42,8 +42,9 @@ describe('breadcrumbs', () => {
     const kept = readBreadcrumbs();
     expect(kept.length).toBeLessThan(200);
     expect(kept.at(-1)!.message).toContain('step 199');
-    expect(new TextEncoder().encode(JSON.stringify(kept)).byteLength)
-      .toBeLessThanOrEqual(500);
+    expect(
+      new TextEncoder().encode(JSON.stringify(kept)).byteLength,
+    ).toBeLessThanOrEqual(500);
   });
 
   it('keeps the newest step even when it alone exceeds the budget', () => {

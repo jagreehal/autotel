@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { resolveCaptureToggles } from './remote-config';
+import {
+  applyRemoteFrustrationToggles,
+  resolveCaptureToggles,
+} from './remote-config';
 
 describe('remote capture toggles', () => {
   it('turns a signal on that the app left off', () => {
@@ -11,16 +14,30 @@ describe('remote capture toggles', () => {
         { frustration: false, engagement: false },
         { captureDeadClicks: true, captureEngagement: true },
       ),
-    ).toEqual({ frustration: true, engagement: true, deadClicks: true, rage: undefined });
+    ).toEqual({
+      frustration: true,
+      engagement: true,
+      deadClicks: true,
+      rage: undefined,
+    });
   });
 
   it('turns a signal off that the app left on', () => {
     expect(
       resolveCaptureToggles(
         { frustration: true, engagement: true },
-        { captureDeadClicks: false, captureRageClicks: false, captureEngagement: false },
+        {
+          captureDeadClicks: false,
+          captureRageClicks: false,
+          captureEngagement: false,
+        },
       ),
-    ).toEqual({ frustration: false, engagement: false, deadClicks: false, rage: false });
+    ).toEqual({
+      frustration: false,
+      engagement: false,
+      deadClicks: false,
+      rage: false,
+    });
   });
 
   it('enables frustration when only one half is asked for', () => {
@@ -33,9 +50,37 @@ describe('remote capture toggles', () => {
     expect(resolved.deadClicks).toBeUndefined();
   });
 
+  it('silencing one half leaves the other half running', () => {
+    // Remote said nothing about rage clicks, so the local setting stands — and
+    // the listener that produces them has to stay up.
+    const resolved = resolveCaptureToggles(
+      { frustration: true, engagement: false },
+      { captureDeadClicks: false },
+    );
+    expect(resolved.frustration).toBe(true);
+    expect(resolved.deadClicks).toBe(false);
+    expect(resolved.rage).toBeUndefined();
+  });
+
+  it('lets remote true re-enable a locally disabled half', () => {
+    const resolved = resolveCaptureToggles(
+      { frustration: true, engagement: false },
+      { captureDeadClicks: true },
+    );
+    expect(
+      applyRemoteFrustrationToggles(
+        { deadClicks: false, rage: { clickCount: 5 } },
+        resolved,
+      ),
+    ).toEqual({ deadClicks: {}, rage: { clickCount: 5 } });
+  });
+
   it('leaves local config alone when there is no remote config', () => {
     expect(
-      resolveCaptureToggles({ frustration: true, engagement: false }, undefined),
+      resolveCaptureToggles(
+        { frustration: true, engagement: false },
+        undefined,
+      ),
     ).toEqual({
       frustration: true,
       engagement: false,

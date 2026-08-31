@@ -202,6 +202,69 @@ For **KafkaJS `eachBatch`**, use `withBatchConsumer` from `autotel-plugins/kafka
 - Supports lag metrics via `lagMetrics.getCurrentOffset` / `getEndOffset`
 - Automatic semantic attributes: `messaging.system`, `messaging.destination.name`, `messaging.operation`, `messaging.consumer.group`
 
+## Feature flag evaluations
+
+A flagged rollout splits your traffic into two populations that share a service
+name, a route and a version. Without the flag on the span there is no way to ask
+the only question that matters during a rollout — is the new branch slower, or
+failing more, than the old one — and the usual workaround is to read it in the
+flag vendor's dashboard, where the latency and the errors are not.
+
+`autotel/feature-flags` records evaluations under the OpenTelemetry convention,
+so any backend can split any metric by variant with no vendor in the query path.
+
+```typescript
+import { recordFeatureFlag } from 'autotel/feature-flags';
+
+export const checkout = trace((ctx) => async (userId: string) => {
+  const useNewFlow = await flags.get('new-checkout');
+  recordFeatureFlag(ctx, {
+    key: 'new-checkout',
+    value: useNewFlow,
+    provider: 'launchdarkly',
+    contextId: userId,
+  });
+  // …
+});
+```
+
+Using OpenFeature? The hook is the zero-config path — it already sits between
+your application and the vendor, and it already fires at the moment the code
+branched:
+
+```typescript
+import { OpenFeature } from '@openfeature/server-sdk';
+import { autotelOpenFeatureHook } from 'autotel/feature-flags';
+
+OpenFeature.addHooks(autotelOpenFeatureHook());
+```
+
+**Record where the code reads the flag, not where it is fetched.** A flag
+evaluated and ignored explains nothing; the value the request actually branched
+on is the one that explains its behaviour.
+
+### Attributes and events both
+
+Each evaluation writes `feature_flag.key`, `feature_flag.result.value`,
+`feature_flag.result.variant`, `feature_flag.result.reason`,
+`feature_flag.provider.name` and `feature_flag.context.id`, and emits one
+`feature_flag.evaluation` event.
+
+Both, because span attributes hold a single flag — a second call overwrites the
+first — while a request that branched on three flags needs one event each.
+Attributes keep a single-flag span filterable without unpacking events; the
+events keep a many-flag span complete.
+
+Values keep their type: a boolean flag records `true`, not `"true"`. Reasons are
+normalised to the registry's lower snake case, so a provider reporting
+`TARGETING_MATCH` and one reporting `targeting_match` land in the same bucket. A
+failed evaluation is still recorded, with the default value the code actually
+used and `reason: 'error'` — the default is what the request behaved as, and the
+failure is why.
+
+Never key an attribute by flag name (`feature_flag.new-checkout`): it cannot be
+grouped across flags and no backend ships a panel that reads it.
+
 ## Safe Baggage Propagation
 
 Type-safe baggage schemas with built-in guardrails:

@@ -90,6 +90,7 @@ export default defineConfig({
             { label: 'Grafana Loki', slug: 'integrations/loki' },
             { label: 'MCP', slug: 'integrations/mcp' },
             { label: 'WebMCP', slug: 'integrations/webmcp' },
+            { label: 'Chrome Built-in AI', slug: 'integrations/builtin-ai' },
             { label: 'Langfuse', slug: 'integrations/langfuse' },
             { label: 'PostHog', slug: 'integrations/posthog' },
             { label: 'Sentry', slug: 'integrations/sentry' },

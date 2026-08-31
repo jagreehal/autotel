@@ -144,7 +144,10 @@ export function setGenAiContent(
   const attrs: Record<string, string | number> = {};
   // What was lost, per side. Truncation outranks redaction: a placeholder
   // still describes what stood there, a cut end describes nothing.
-  const lost: { input?: 'redacted' | 'truncated'; output?: 'redacted' | 'truncated' } = {};
+  const lost: {
+    input?: 'redacted' | 'truncated';
+    output?: 'redacted' | 'truncated';
+  } = {};
 
   const place = (
     key: string,

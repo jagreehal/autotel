@@ -73,6 +73,7 @@ autotel/
 │   ├── autotel-subscribers/   # Event subscribers (Mixpanel, Amplitude, Segment, Slack, Loki, file, webhooks)
 │   ├── autotel-web/           # Browser SDK: traceparent + baggage, canonical browser signals, frustration/breadcrumbs/engagement
 │   ├── autotel-webmcp/        # Browser WebMCP tool registration/execution tracing
+│   ├── autotel-builtin-ai/   # Chrome built-in AI (Prompt/Summarizer/Writer/...) session tracing
 │   └── ...
 ├── docs/
 │   ├── DEVELOPMENT.md
@@ -117,6 +118,7 @@ When the user wants observability, suggest these entry points. All from `autotel
 - **Request logger** requires an active span (or explicit `TraceContext`). So wrap HTTP handlers with `trace()` (or framework middleware that creates a span), then call `getRequestLogger()` inside.
 - **Structured errors**: Prefer `createStructuredError` over `new Error()` in API routes and services. On the client, use `parseError(caught)` to show message/why/fix in UI.
 - **Span Event deprecation direction**: Existing span-event data remains supported, but new code should prefer log-based correlated events and keep span-timeline compatibility as an implementation detail.
+- **Canonical log destinations**: `canonicalLogLines.logger` accepts one logger or an array. Add `otel: true` to fan the same line out through the OpenTelemetry Logs API as well (for example, stdout/Pino plus Grafana Loki over OTLP). Selecting the OTel destination auto-configures endpoint log export unless `logs: false` or `AUTOTEL_LOGS=off` explicitly disables it. Destination failures are isolated so one logger cannot prevent the remaining loggers or OTLP from receiving the line.
 - **Reaching the span**: Prefer the ambient `ctx` import (`import { trace, ctx } from 'autotel'`) over threading a context parameter. It resolves to the active span at any depth, so a helper several frames inside a traced body sees the same span without being handed anything. `trace.run`'s `ctx` parameter is there for when an explicit binding reads better.
 - **`trace` wraps, `trace.run` runs**: Every `trace(...)` form returns a wrapper and executes nothing, so a `trace()` call can never run user code at module load. `trace.run(nameOrOptions, operation)` is the only immediate form. Because the two are separate names, no call shape is ambiguous and nothing needs to inspect a callback's parameter name, so #166 cannot recur. Never reintroduce an overload where the same call shape can either wrap or run. `instrument({ key, fn })` is the options form of the wrapper and `withTracing({ name })((ctx) => fn)` the reusable context factory. Keep edge behavior identical.
 - **Stable names in examples**: Runnable examples must not emit `unknown` span names. Use `trace('operation.name', fn)` for a reusable function, or `trace.run('operation.name', ctx => result)` for immediate work, when inference is not guaranteed.

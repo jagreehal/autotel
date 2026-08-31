@@ -24,6 +24,7 @@
 const STORAGE_KEY = 'autotel.remote-config';
 
 import type { SuppressionRule } from './error-tracking/types';
+import type { FrustrationConfig } from './frustration';
 
 const SUPPRESSION_KEYS = new Set(['type', 'value']);
 const SUPPRESSION_OPERATORS = new Set(['exact', 'contains', 'regex']);
@@ -190,6 +191,31 @@ export interface ResolvedCaptureToggles {
   rage: boolean | undefined;
 }
 
+type LocalFrustrationConfig = Omit<FrustrationConfig, 'debug'>;
+
+/** Apply per-detector remote choices after the local detector configuration. */
+export function applyRemoteFrustrationToggles(
+  local: LocalFrustrationConfig,
+  resolved: Pick<ResolvedCaptureToggles, 'deadClicks' | 'rage'>,
+): LocalFrustrationConfig {
+  const options: LocalFrustrationConfig = { ...local };
+
+  if (resolved.deadClicks === false) options.deadClicks = false;
+  else if (resolved.deadClicks === true) {
+    // `true` means enabled; preserve tuned local thresholds where present and
+    // replace an explicit local `false` with the detector's defaults.
+    options.deadClicks =
+      local.deadClicks === false ? {} : (local.deadClicks ?? {});
+  }
+
+  if (resolved.rage === false) options.rage = false;
+  else if (resolved.rage === true) {
+    options.rage = local.rage === false ? {} : (local.rage ?? {});
+  }
+
+  return options;
+}
+
 /**
  * Merge local capture settings with the remote ones.
  *
@@ -206,15 +232,15 @@ export function resolveCaptureToggles(
   const deadClicks = remote?.captureDeadClicks;
   const rage = remote?.captureRageClicks;
 
-  // Frustration runs when either half is wanted: remote asking for rage clicks
-  // alone must be enough to start the listener that produces them.
-  const remoteWantsFrustration =
-    deadClicks !== undefined || rage !== undefined
-      ? deadClicks === true || rage === true
-      : undefined;
+  // Frustration runs when either half is wanted, and a half remote says
+  // nothing about keeps its local setting: remote asking for rage clicks alone
+  // must start the listener, and remote silencing dead clicks alone must not
+  // take rage clicks down with it.
+  const wantsFrustration =
+    (deadClicks ?? local.frustration) || (rage ?? local.frustration);
 
   return {
-    frustration: remoteWantsFrustration ?? local.frustration,
+    frustration: wantsFrustration,
     engagement: remote?.captureEngagement ?? local.engagement,
     deadClicks,
     rage,
