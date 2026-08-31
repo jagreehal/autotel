@@ -1,5 +1,12 @@
 # autotel-devtools
 
+## 25.0.0
+
+### Patch Changes
+
+- Updated dependencies [29546bf]
+  - autotel@7.4.0
+
 ## 24.1.0
 
 ### Minor Changes
