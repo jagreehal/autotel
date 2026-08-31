@@ -1,5 +1,12 @@
 # autotel-audit
 
+## 1.0.6
+
+### Patch Changes
+
+- Updated dependencies [a271e71]
+  - autotel@7.5.0
+
 ## 1.0.5
 
 ### Patch Changes

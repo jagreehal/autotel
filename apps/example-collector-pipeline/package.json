@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-collector-pipeline",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "private": true,
   "type": "module",
   "scripts": {
