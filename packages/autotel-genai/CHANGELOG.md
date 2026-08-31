@@ -1,5 +1,13 @@
 # autotel-genai
 
+## 0.9.1
+
+### Patch Changes
+
+- Updated dependencies [a271e71]
+  - autotel@7.5.0
+  - autotel-audit@1.0.6
+
 ## 0.9.0
 
 ### Minor Changes

@@ -1,5 +1,14 @@
 # @jagreehal/example-agent-trace
 
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies [a271e71]
+  - autotel@7.5.0
+  - autotel-genai@0.9.1
+  - autotel-subscribers@55.0.0
+
 ## 1.0.2
 
 ### Patch Changes

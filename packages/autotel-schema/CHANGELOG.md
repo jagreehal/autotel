@@ -1,5 +1,12 @@
 # autotel-schema
 
+## 16.0.0
+
+### Patch Changes
+
+- Updated dependencies [a271e71]
+  - autotel@7.5.0
+
 ## 15.0.0
 
 ### Patch Changes

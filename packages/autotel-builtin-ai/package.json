@@ -1,6 +1,6 @@
 {
   "name": "autotel-builtin-ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenTelemetry instrumentation for Chrome's built-in AI APIs - traces on-device model sessions from the browser",
   "type": "module",
   "main": "./dist/index.js",
@@ -28,7 +28,7 @@
     "type-check": "tsc --noEmit"
   },
   "peerDependencies": {
-    "autotel-web": "^1.13.3"
+    "autotel-web": "^1.14.1"
   },
   "keywords": [
     "chrome",

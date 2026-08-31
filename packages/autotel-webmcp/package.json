@@ -28,7 +28,7 @@
     "type-check": "tsc --noEmit"
   },
   "peerDependencies": {
-    "autotel-web": "^1.14.0"
+    "autotel-web": "^1.14.1"
   },
   "keywords": [
     "webmcp",
