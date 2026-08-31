@@ -47,14 +47,20 @@ describe('browserResourceAttributes', () => {
   it('omits what the browser does not expose rather than guessing', () => {
     // Safari and Firefox have no userAgentData. A parsed-from-user-agent guess
     // belongs in the collector, which has a real UA database.
-    const attrs = withNavigator({ userAgentData: undefined }, browserResourceAttributes);
+    const attrs = withNavigator(
+      { userAgentData: undefined },
+      browserResourceAttributes,
+    );
     expect(attrs['browser.platform']).toBeUndefined();
     expect(attrs['browser.mobile']).toBeUndefined();
     expect(attrs['browser.brands']).toBeUndefined();
   });
 
   it('returns nothing off-browser', () => {
-    const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    const navigatorDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'navigator',
+    );
     Object.defineProperty(globalThis, 'navigator', {
       value: undefined,
       configurable: true,

@@ -132,6 +132,9 @@ export function createLogfireConfig(
     // Logfire is HTTP-only, and specifically OTLP **protobuf** — a gRPC
     // exporter delivers nothing, and a JSON body is dropped silently, which
     // looks exactly like emitting no telemetry at all.
+    // Needs @opentelemetry/exporter-trace-otlp-proto.
+    // They are optional peer dependencies loaded lazily, and bundlers (Vercel, Nitro, esbuild) do not follow that require, so a bundled app needs them as direct dependencies even when they resolve locally.
+    // The failure surfaces at init(), which in a serverless app means the first traced request in production.
     protocol: 'http/protobuf',
     endpoint: config.endpoint ?? regionEndpoint,
     // Ingest takes the token bare — `Bearer <token>` is only for the query API.

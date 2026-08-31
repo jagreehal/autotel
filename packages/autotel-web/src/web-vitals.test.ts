@@ -24,7 +24,9 @@ describe('web vitals', () => {
     // and forwarding the library's casing makes every query provider-specific.
     expect(event.attributes['browser.web_vital.name']).toBe('lcp');
     expect(event.attributes['browser.web_vital.value']).toBe(2410.5);
-    expect(event.attributes['browser.web_vital.rating']).toBe('needs-improvement');
+    expect(event.attributes['browser.web_vital.rating']).toBe(
+      'needs-improvement',
+    );
     expect(event.attributes['browser.web_vital.delta']).toBe(120.5);
     expect(event.attributes['browser.web_vital.id']).toBe('v5-1730-1');
   });
@@ -33,8 +35,14 @@ describe('web vitals', () => {
     // With reportAllChanges on, one measurement arrives many times. Without an
     // id they are indistinguishable, and without a delta they cannot be
     // differenced.
-    reportWebVital({ name: 'CLS', value: 0.1, rating: 'good', delta: 0.02, id: 'a' }, false);
-    reportWebVital({ name: 'CLS', value: 0.12, rating: 'good', delta: 0.02, id: 'a' }, false);
+    reportWebVital(
+      { name: 'CLS', value: 0.1, rating: 'good', delta: 0.02, id: 'a' },
+      false,
+    );
+    reportWebVital(
+      { name: 'CLS', value: 0.12, rating: 'good', delta: 0.02, id: 'a' },
+      false,
+    );
     const ids = eventsNamed('browser.web_vital').map(
       (e) => e.attributes['browser.web_vital.id'],
     );

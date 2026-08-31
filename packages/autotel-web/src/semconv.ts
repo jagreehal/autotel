@@ -67,7 +67,7 @@ export const SESSION = {
   PREVIOUS_ID: 'session.previous_id',
 } as const;
 
-/** Canonical event names, emitted here as zero-duration spans. */
+/** Canonical event names. Emitted as OTLP log records, never as spans. */
 export const WEB_EVENT = {
   WIDGET_CLICK: 'app.widget.click',
   SCREEN_CLICK: 'app.screen.click',

@@ -107,9 +107,11 @@ describe('remote config', () => {
   });
 
   it('never throws when storage is unavailable', async () => {
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('quota');
-    });
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('quota');
+      });
     await expect(
       refreshRemoteConfig(URL, { fetchImpl: ok({ sampleRate: 0.5 }) }),
     ).resolves.toBeDefined();

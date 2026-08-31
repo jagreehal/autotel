@@ -173,7 +173,10 @@ describe('setGenAiContent binary + size limits', () => {
         {
           role: 'assistant',
           parts: [
-            { type: 'image', image_url: `data:image/png;base64,${'A'.repeat(5000)}` },
+            {
+              type: 'image',
+              image_url: `data:image/png;base64,${'A'.repeat(5000)}`,
+            },
           ],
         },
       ],
@@ -186,7 +189,10 @@ describe('setGenAiContent binary + size limits', () => {
   it('labels redacted content as redacted evidence', () => {
     const attrs = capture({
       inputMessages: [
-        { role: 'user', parts: [{ type: 'input_image', data: new Uint8Array(64) }] },
+        {
+          role: 'user',
+          parts: [{ type: 'input_image', data: new Uint8Array(64) }],
+        },
       ],
     });
     expect(attrs['autotel.evidence.input']).toBe('redacted');
@@ -194,7 +200,9 @@ describe('setGenAiContent binary + size limits', () => {
 
   it('leaves prose alone and labels no evidence', () => {
     const attrs = capture({
-      inputMessages: [{ role: 'user', parts: [{ type: 'text', content: 'hi' }] }],
+      inputMessages: [
+        { role: 'user', parts: [{ type: 'text', content: 'hi' }] },
+      ],
     });
     expect(attrs['autotel.evidence.input']).toBeUndefined();
   });
@@ -250,9 +258,12 @@ describe('setGenAiContent binary + size limits', () => {
   });
 
   it('labels system instructions and tool definitions under input', () => {
-    const attrs = capture({ toolDefinitions: 'a tool, and then. '.repeat(30) }, {
-      maxContentBytes: 100,
-    });
+    const attrs = capture(
+      { toolDefinitions: 'a tool, and then. '.repeat(30) },
+      {
+        maxContentBytes: 100,
+      },
+    );
     expect(attrs['gen_ai.tool.definitions.original_size']).toBe(540);
     expect(attrs['autotel.evidence.input']).toBe('truncated');
   });

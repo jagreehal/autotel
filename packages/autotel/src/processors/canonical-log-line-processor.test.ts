@@ -396,6 +396,90 @@ describe('CanonicalLogLineProcessor', () => {
     });
   });
 
+  describe('multiple destinations', () => {
+    it('emits to a logger AND the OTel Logs API when otel is true', () => {
+      // The reason this option exists: a platform log view (Vercel, Cloud Run)
+      // reads stdout, while Loki reads OTLP. Before, a logger silently took
+      // canonical log lines away from OTLP and nothing reached the backend.
+      const mockGetLogger = vi.fn(() => mockOTelLogger);
+      vi.spyOn(logs, 'getLogger').mockImplementation(mockGetLogger);
+
+      const processor = new CanonicalLogLineProcessor({
+        logger: mockLogger,
+        otel: true,
+      });
+      processor.onEnd(createMockSpan());
+
+      expect(mockLogger.info).toHaveBeenCalledTimes(1);
+      expect(emitSpy).toHaveBeenCalledTimes(1);
+      expect(logEntries[0]!.message).toContain('test.operation');
+      expect(recordedEmit(emitSpy).body).toContain('test.operation');
+    });
+
+    it('fans out to every logger in an array', () => {
+      const second = loggerDouble({ info: vi.fn() });
+      const processor = new CanonicalLogLineProcessor({
+        logger: [mockLogger, second],
+      });
+      processor.onEnd(createMockSpan());
+
+      expect(mockLogger.info).toHaveBeenCalledTimes(1);
+      expect(second.info).toHaveBeenCalledTimes(1);
+    });
+
+    it('continues to later loggers and OTel when one logger throws', () => {
+      const broken = loggerDouble({
+        info: vi.fn(() => {
+          throw new Error('stdout unavailable');
+        }),
+      });
+      const healthy = loggerDouble({ info: vi.fn() });
+      vi.spyOn(logs, 'getLogger').mockReturnValue(mockOTelLogger);
+
+      const processor = new CanonicalLogLineProcessor({
+        logger: [broken, healthy],
+        otel: true,
+      });
+
+      expect(() => processor.onEnd(createMockSpan())).not.toThrow();
+      expect(broken.info).toHaveBeenCalledTimes(1);
+      expect(healthy.info).toHaveBeenCalledTimes(1);
+      expect(emitSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the either/or default: a logger alone still suppresses OTel', () => {
+      const mockGetLogger = vi.fn(() => mockOTelLogger);
+      vi.spyOn(logs, 'getLogger').mockImplementation(mockGetLogger);
+
+      const processor = new CanonicalLogLineProcessor({ logger: mockLogger });
+      processor.onEnd(createMockSpan());
+
+      expect(mockLogger.info).toHaveBeenCalledTimes(1);
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('can explicitly disable OTel while keeping the logger', () => {
+      const mockGetLogger = vi.fn(() => mockOTelLogger);
+      vi.spyOn(logs, 'getLogger').mockImplementation(mockGetLogger);
+
+      const processor = new CanonicalLogLineProcessor({
+        logger: mockLogger,
+        otel: true,
+      });
+      processor.onEnd(createMockSpan());
+      expect(emitSpy).toHaveBeenCalledTimes(1);
+
+      const otelOff = new CanonicalLogLineProcessor({
+        logger: mockLogger,
+        otel: false,
+      });
+      emitSpy.mockClear();
+      otelOff.onEnd(createMockSpan());
+      expect(mockLogger.info).toHaveBeenCalledTimes(2);
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('OTel Logs API fallback', () => {
     it('should use OTel Logs API when no logger provided', () => {
       // Mock the logs API

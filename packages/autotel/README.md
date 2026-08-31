@@ -1836,6 +1836,23 @@ WHERE duration_ms > 200
 
 ### Configuration Options
 
+To keep canonical lines in a platform logger and send the same records to
+Grafana Loki over OTLP, enable both destinations. Selecting `otel: true`
+auto-configures log export from `endpoint`; an explicit `logs: false` or
+`AUTOTEL_LOGS=off` still wins.
+
+```typescript
+init({
+  service: 'my-app',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  canonicalLogLines: {
+    enabled: true,
+    logger: [pino(), auditLogger],
+    otel: true,
+  },
+});
+```
+
 ```typescript
 init({
   service: 'my-app',

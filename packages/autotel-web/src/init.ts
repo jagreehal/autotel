@@ -161,18 +161,20 @@ export interface AutotelWebConfig {
    */
   sampleRate?: number;
 
-  session?: false | {
-    timeoutMs?: number;
-    id?: () => string | undefined;
-    /**
-     * Emit `session.start` / `session.end` events, so session count and session
-     * duration are direct queries rather than something a backend has to infer
-     * by grouping every span it has.
-     *
-     * @default false
-     */
-    emitEvents?: boolean;
-  };
+  session?:
+    | false
+    | {
+        timeoutMs?: number;
+        id?: () => string | undefined;
+        /**
+         * Emit `session.start` / `session.end` events, so session count and session
+         * duration are direct queries rather than something a backend has to infer
+         * by grouping every span it has.
+         *
+         * @default false
+         */
+        emitEvents?: boolean;
+      };
 }
 
 let isInitialized = false;

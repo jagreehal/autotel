@@ -34,7 +34,10 @@ describe('redactBinaryContent', () => {
         mediaType: 'image/jpeg',
         data: new Uint8Array([1, 2, 3]),
       }),
-    ).toEqual({ mediaType: 'image/jpeg', data: '[base64 image/jpeg redacted]' });
+    ).toEqual({
+      mediaType: 'image/jpeg',
+      data: '[base64 image/jpeg redacted]',
+    });
   });
 
   it('leaves ordinary prose alone', () => {
@@ -97,7 +100,10 @@ describe('redactBinaryContent', () => {
             role: 'user',
             parts: [
               { type: 'text', content: 'describe this' },
-              { type: 'image', image_url: `data:image/png;base64,${'A'.repeat(80)}` },
+              {
+                type: 'image',
+                image_url: `data:image/png;base64,${'A'.repeat(80)}`,
+              },
             ],
           },
         ],
@@ -243,7 +249,10 @@ describe('serializeWithinBudget', () => {
 
   it('emits valid JSON when a structure exceeds the budget', () => {
     const value = [
-      { role: 'user', parts: [{ type: 'text', content: 'the fox. '.repeat(5000) }] },
+      {
+        role: 'user',
+        parts: [{ type: 'text', content: 'the fox. '.repeat(5000) }],
+      },
     ];
     const result = serializeWithinBudget(value, 1000);
     expect(result.truncated).toBe(true);
@@ -252,7 +261,10 @@ describe('serializeWithinBudget', () => {
 
   it('keeps the message envelope so a reader still sees the shape', () => {
     const value = [
-      { role: 'user', parts: [{ type: 'text', content: 'the fox. '.repeat(5000) }] },
+      {
+        role: 'user',
+        parts: [{ type: 'text', content: 'the fox. '.repeat(5000) }],
+      },
     ];
     const parsed = parse(serializeWithinBudget(value, 2000).text) as {
       role: string;
@@ -265,12 +277,16 @@ describe('serializeWithinBudget', () => {
   });
 
   it('marks the field it cut', () => {
-    const value = [{ role: 'user', parts: [{ type: 'text', content: 'x '.repeat(5000) }] }];
+    const value = [
+      { role: 'user', parts: [{ type: 'text', content: 'x '.repeat(5000) }] },
+    ];
     expect(serializeWithinBudget(value, 2000).text).toContain('[truncated]');
   });
 
   it('reports the size before truncation', () => {
-    const value = [{ role: 'user', parts: [{ type: 'text', content: 'a '.repeat(5000) }] }];
+    const value = [
+      { role: 'user', parts: [{ type: 'text', content: 'a '.repeat(5000) }] },
+    ];
     const result = serializeWithinBudget(value, 1000);
     expect(result.originalBytes).toBe(
       new TextEncoder().encode(JSON.stringify(value)).byteLength,
@@ -278,9 +294,13 @@ describe('serializeWithinBudget', () => {
   });
 
   it('stays inside the budget', () => {
-    const value = [{ role: 'user', parts: [{ type: 'text', content: 'a '.repeat(5000) }] }];
+    const value = [
+      { role: 'user', parts: [{ type: 'text', content: 'a '.repeat(5000) }] },
+    ];
     const result = serializeWithinBudget(value, 1000);
-    expect(new TextEncoder().encode(result.text).byteLength).toBeLessThanOrEqual(1000);
+    expect(
+      new TextEncoder().encode(result.text).byteLength,
+    ).toBeLessThanOrEqual(1000);
   });
 
   it('keeps an array an array when there are too many small items', () => {
@@ -298,7 +318,10 @@ describe('serializeWithinBudget', () => {
 
   it('keeps an object an object when there are too many keys', () => {
     const value = Object.fromEntries(
-      Array.from({ length: 5000 }, (_, i) => [`tool_${i}`, { description: 'x' }]),
+      Array.from({ length: 5000 }, (_, i) => [
+        `tool_${i}`,
+        { description: 'x' },
+      ]),
     );
     const result = serializeWithinBudget(value, 1000);
     const parsed = parse(result.text);
@@ -307,7 +330,10 @@ describe('serializeWithinBudget', () => {
   });
 
   it('slices a plain string, which is valid on its own', () => {
-    const result = serializeWithinBudget('the quick brown fox. '.repeat(200), 100);
+    const result = serializeWithinBudget(
+      'the quick brown fox. '.repeat(200),
+      100,
+    );
     expect(result.truncated).toBe(true);
     expect(result.text).toHaveLength(100);
   });
@@ -320,7 +346,9 @@ describe('serializeWithinBudget', () => {
   });
 
   it('treats a non-positive budget as no budget', () => {
-    const value = [{ role: 'user', parts: [{ type: 'text', content: 'a '.repeat(5000) }] }];
+    const value = [
+      { role: 'user', parts: [{ type: 'text', content: 'a '.repeat(5000) }] },
+    ];
     const result = serializeWithinBudget(value, 0);
     expect(result.truncated).toBe(false);
     expect(parse(result.text)).toEqual(value);

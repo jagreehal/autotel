@@ -336,7 +336,9 @@ export function createDatadogConfig(
       } catch {
         throw new Error(
           'Log export requires @opentelemetry/sdk-logs and @opentelemetry/exporter-logs-otlp-http. ' +
-            'Install them or set enableLogs: false.',
+            'Install them or set enableLogs: false. Note they are loaded through ' +
+            'createRequire, which bundlers (Vercel, Nitro, esbuild) do not follow, so a ' +
+            'bundled app needs them as direct dependencies even when they resolve locally.',
         );
       }
     }

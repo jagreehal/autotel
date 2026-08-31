@@ -203,10 +203,7 @@ function resolvePricing(
 }
 
 /** The table this model's tool prices resolve through, model entry first. */
-function serverToolRate(
-  price: ModelPricing,
-  tool: string,
-): number | undefined {
+function serverToolRate(price: ModelPricing, tool: string): number | undefined {
   return price.serverToolPer1K?.[tool] ?? SERVER_TOOL_PRICING_PER_1K[tool];
 }
 

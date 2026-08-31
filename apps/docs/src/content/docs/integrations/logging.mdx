@@ -137,6 +137,34 @@ are ignored, because the snapshot has already left.
 Use it to make severity searchable when the interesting thing is the outcome
 rather than a message.
 
+## Canonical log lines: logger and OTLP at once
+
+`canonicalLogLines` emits one wide line per span. Where it goes is the part
+worth getting right.
+
+With no `logger`, lines go through the OpenTelemetry Logs API and out to
+whichever OTLP logs backend you configured — Loki and the like. Set a `logger`
+and they go there **instead**, which is easy to do by accident: the top-level
+`logger` on `init()` is the fallback, so setting that alone also diverts them
+away from OTLP.
+
+On a platform whose log view reads stdout you usually want both:
+
+```typescript
+init({
+  service: 'my-app',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  canonicalLogLines: { enabled: true, logger: pino(), otel: true },
+});
+```
+
+`otel` defaults to `true` only when no `logger` is given. Setting `otel: true`
+explicitly also wires the endpoint's log exporter for you, unless `logs: false`
+(or `AUTOTEL_LOGS=off`) says otherwise — otherwise the lines would be written to
+a no-op provider and never arrive.
+
+`logger` also takes an array, to fan the same line out to several destinations.
+
 ## Examples
 
 - [`example-pino`](https://github.com/jagreehal/autotel/tree/main/apps/example-pino): Pino as first-class logger with `init({ logger })` and trace context injection.

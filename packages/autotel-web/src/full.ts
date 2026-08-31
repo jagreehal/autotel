@@ -38,25 +38,28 @@ import {
   type BreadcrumbsConfig,
 } from './breadcrumbs';
 import { setupEngagement } from './engagement';
-import {
-  setupFrustrationSignals,
-  type FrustrationConfig,
-} from './frustration';
+import { setupFrustrationSignals, type FrustrationConfig } from './frustration';
 import { captureConsoleAsLogs, type ConsoleLogsConfig } from './browser-logs';
 import { setEventSink } from './emit-event';
 import {
   configureExporter,
+  flushSpans,
   recordEvent,
   setRawFetch,
 } from './span-exporter';
 import {
   applyRemoteSuppression,
+  applyRemoteFrustrationToggles,
   cachedRemoteConfig,
   refreshRemoteConfig,
   resolveCaptureToggles,
 } from './remote-config';
 import { createSessionRatioSampler } from './sampler';
-import { configureSession, getSessionAttributes } from './session';
+import {
+  configureSession,
+  endSessionOnUnload,
+  getSessionAttributes,
+} from './session';
 import {
   getBaggageHeader,
   hasBaggage,
@@ -126,11 +129,13 @@ export interface AutotelWebFullConfig {
    *
    * @default { timeoutMs: 1_800_000 }
    */
-  session?: false | {
-    timeoutMs?: number;
-    /** Emit `session.start` / `session.end` events. @default false */
-    emitEvents?: boolean;
-  };
+  session?:
+    | false
+    | {
+        timeoutMs?: number;
+        /** Emit `session.start` / `session.end` events. @default false */
+        emitEvents?: boolean;
+      };
 
   /**
    * Sample rate 0–1. Default 1.0. Use e.g. 0.1 in production.
@@ -239,8 +244,7 @@ export interface AutotelWebFullConfig {
    * @default false
    */
   breadcrumbs?:
-    | boolean
-    | (BreadcrumbsConfig & { console?: boolean; clicks?: boolean });
+    boolean | (BreadcrumbsConfig & { console?: boolean; clicks?: boolean });
 
   /**
    * Export `console.*` output as OpenTelemetry log records, under the
@@ -454,6 +458,15 @@ export function initFull(config: AutotelWebFullConfig): void {
       ...(config.sampler == null && sampleRate != null && { sampleRate }),
     });
     setEventSink(recordEvent);
+    // The same last chance lean mode takes. Events and console logs sit in the
+    // 2-second batch until something sends them, and a page being navigated
+    // away from has no next tick — so the end of every visit, `session.end`
+    // included, would be exactly the part that never arrives.
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'hidden') return;
+      endSessionOnUnload();
+      flushSpans({ beacon: true });
+    });
   }
 
   registerInstrumentations({
@@ -526,13 +539,13 @@ export function initFull(config: AutotelWebFullConfig): void {
   );
 
   if (toggles.frustration) {
+    const localFrustration =
+      typeof config.captureFrustration === 'object'
+        ? config.captureFrustration
+        : {};
     setupFrustrationSignals({
       debug: config.debug ?? false,
-      ...(typeof config.captureFrustration === 'object'
-        ? config.captureFrustration
-        : {}),
-      ...(toggles.deadClicks === false && { deadClicks: false as const }),
-      ...(toggles.rage === false && { rage: false as const }),
+      ...applyRemoteFrustrationToggles(localFrustration, toggles),
     });
   }
 
@@ -550,7 +563,8 @@ export function initFull(config: AutotelWebFullConfig): void {
   }
 
   if (config.breadcrumbs) {
-    const options = typeof config.breadcrumbs === 'object' ? config.breadcrumbs : {};
+    const options =
+      typeof config.breadcrumbs === 'object' ? config.breadcrumbs : {};
     configureBreadcrumbs({
       ...options,
       ...(stringRedactor && { redactor: stringRedactor }),

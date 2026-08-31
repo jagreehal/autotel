@@ -9,7 +9,12 @@ let teardown: (() => void) | undefined;
 
 function click(el: Element, init: MouseEventInit = {}): void {
   el.dispatchEvent(
-    new MouseEvent('click', { bubbles: true, clientX: 10, clientY: 10, ...init }),
+    new MouseEvent('click', {
+      bubbles: true,
+      clientX: 10,
+      clientY: 10,
+      ...init,
+    }),
   );
 }
 
@@ -22,7 +27,8 @@ async function settle(ms: number): Promise<void> {
 beforeEach(() => {
   vi.useFakeTimers();
   captureEvents();
-  document.body.innerHTML = '<button id="buy" aria-label="Buy now">Buy</button>';
+  document.body.innerHTML =
+    '<button id="buy" aria-label="Buy now">Buy</button>';
 });
 
 afterEach(() => {
@@ -41,7 +47,9 @@ describe('dead clicks', () => {
       (s) => s.attributes['app.widget.click.outcome'] === 'dead',
     );
     expect(dead).toHaveLength(1);
-    expect(dead[0].attributes['app.widget.click.verdict_signal']).toBe('absolute');
+    expect(dead[0].attributes['app.widget.click.verdict_signal']).toBe(
+      'absolute',
+    );
   });
 
   it('carries the canonical attributes of what was clicked', async () => {
@@ -175,7 +183,11 @@ describe('rage clicks', () => {
   });
 
   it('can be turned off', async () => {
-    teardown = setupFrustrationSignals({ debug: false, rage: false, deadClicks: false });
+    teardown = setupFrustrationSignals({
+      debug: false,
+      rage: false,
+      deadClicks: false,
+    });
     const button = document.querySelector('#buy')!;
     click(button);
     click(button);

@@ -122,6 +122,9 @@ export function createPostHogConfig(
     version,
     // PostHog accepts OTLP over HTTP with a protobuf body; the JSON exporter
     // does not deliver, and gRPC is not offered.
+    // Needs @opentelemetry/exporter-trace-otlp-proto.
+    // They are optional peer dependencies loaded lazily, and bundlers (Vercel, Nitro, esbuild) do not follow that require, so a bundled app needs them as direct dependencies even when they resolve locally.
+    // The failure surfaces at init(), which in a serverless app means the first traced request in production.
     protocol: 'http/protobuf',
     endpoint,
     headers: { Authorization: `Bearer ${projectToken}` },

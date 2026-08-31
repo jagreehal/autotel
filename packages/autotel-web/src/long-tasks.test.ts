@@ -5,7 +5,9 @@ import { captureEvents, eventsNamed } from './test-events';
 
 class FakeObserver {
   static last: FakeObserver | undefined;
-  constructor(private readonly callback: (list: { getEntries: () => unknown[] }) => void) {
+  constructor(
+    private readonly callback: (list: { getEntries: () => unknown[] }) => void,
+  ) {
     FakeObserver.last = this;
   }
   observe(): void {}
@@ -20,8 +22,9 @@ describe('long tasks', () => {
     captureEvents();
     (globalThis as { PerformanceObserver?: unknown }).PerformanceObserver =
       FakeObserver;
-    (window as unknown as { PerformanceObserver?: unknown }).PerformanceObserver =
-      FakeObserver;
+    (
+      window as unknown as { PerformanceObserver?: unknown }
+    ).PerformanceObserver = FakeObserver;
   });
 
   it('emits the canonical app.jank event', () => {

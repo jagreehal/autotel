@@ -92,7 +92,8 @@ function loadGRPCTraceExporter(): new (
     return OTLPTraceExporterGRPC;
   } catch {
     throw new Error(
-      'gRPC trace exporter not found. Install @opentelemetry/exporter-trace-otlp-grpc',
+      'gRPC trace exporter not found. Install @opentelemetry/exporter-trace-otlp-grpc.' +
+        ' It is an optional peer dependency, and bundlers (Vercel, Nitro, esbuild) do not follow the lazy require that loads it, so add it as a direct dependency of your application, not just of autotel.',
     );
   }
 }
@@ -116,7 +117,8 @@ function loadGRPCMetricExporter(): new (
     return OTLPMetricExporterGRPC;
   } catch {
     throw new Error(
-      'gRPC metric exporter not found. Install @opentelemetry/exporter-metrics-otlp-grpc',
+      'gRPC metric exporter not found. Install @opentelemetry/exporter-metrics-otlp-grpc.' +
+        ' It is an optional peer dependency, and bundlers (Vercel, Nitro, esbuild) do not follow the lazy require that loads it, so add it as a direct dependency of your application, not just of autotel.',
     );
   }
 }
@@ -137,7 +139,8 @@ function loadProtoTraceExporter(): new (
     return OTLPTraceExporterPROTO;
   } catch {
     throw new Error(
-      'Protobuf trace exporter not found. Install @opentelemetry/exporter-trace-otlp-proto',
+      'Protobuf trace exporter not found. Install @opentelemetry/exporter-trace-otlp-proto.' +
+        ' It is an optional peer dependency, and bundlers (Vercel, Nitro, esbuild) do not follow the lazy require that loads it, so add it as a direct dependency of your application, not just of autotel. Or drop `protocol` to use the default JSON exporter, which ships with autotel and is accepted by Grafana Cloud, Honeycomb and the other hosted OTLP gateways.',
     );
   }
 }
@@ -185,7 +188,8 @@ export function createMetricExporter(
         }>('@opentelemetry/exporter-metrics-otlp-proto').OTLPMetricExporter;
       } catch {
         throw new Error(
-          'Protobuf metric exporter not found. Install @opentelemetry/exporter-metrics-otlp-proto',
+          'Protobuf metric exporter not found. Install @opentelemetry/exporter-metrics-otlp-proto.' +
+            ' It is an optional peer dependency, and bundlers (Vercel, Nitro, esbuild) do not follow the lazy require that loads it, so add it as a direct dependency of your application, not just of autotel. Or drop `protocol` to use the default JSON exporter, which ships with autotel and is accepted by Grafana Cloud, Honeycomb and the other hosted OTLP gateways.',
         );
       }
     }
@@ -212,7 +216,8 @@ function loadGRPCLogExporter(): new (
     return OTLPLogExporterGRPC;
   } catch {
     throw new Error(
-      'gRPC log exporter not found. Install @opentelemetry/exporter-logs-otlp-grpc',
+      'gRPC log exporter not found. Install @opentelemetry/exporter-logs-otlp-grpc.' +
+        ' It is an optional peer dependency, and bundlers (Vercel, Nitro, esbuild) do not follow the lazy require that loads it, so add it as a direct dependency of your application, not just of autotel.',
     );
   }
 }
@@ -239,7 +244,8 @@ export function createLogExporter(
         }>('@opentelemetry/exporter-logs-otlp-proto').OTLPLogExporter;
       } catch {
         throw new Error(
-          'Protobuf log exporter not found. Install @opentelemetry/exporter-logs-otlp-proto',
+          'Protobuf log exporter not found. Install @opentelemetry/exporter-logs-otlp-proto.' +
+            ' It is an optional peer dependency, and bundlers (Vercel, Nitro, esbuild) do not follow the lazy require that loads it, so add it as a direct dependency of your application, not just of autotel. Or drop `protocol` to use the default JSON exporter, which ships with autotel and is accepted by Grafana Cloud, Honeycomb and the other hosted OTLP gateways.',
         );
       }
     }

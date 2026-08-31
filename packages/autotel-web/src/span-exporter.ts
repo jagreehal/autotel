@@ -189,7 +189,7 @@ export function recordSpan(
   endMs: number,
   attrs?: Record<string, string | number>,
 ): void {
-  if (!exportEndpoint || !enabledSignals.has('traces')) return;
+  if (exportEndpoint === undefined || !enabledSignals.has('traces')) return;
   if (!sampled()) return;
   if (debug)
     console.log(`[autotel-web] recordSpan: ${name} (${traceId.slice(0, 8)}…)`);
@@ -328,7 +328,7 @@ export function flushSpans(options?: FlushOptions): void {
 }
 
 function flushSignal(signal: OtlpSignal, options?: FlushOptions): void {
-  if (!exportEndpoint || !enabledSignals.has(signal)) return;
+  if (exportEndpoint === undefined || !enabledSignals.has(signal)) return;
   const queue = queues[signal];
   if (queue.pending.length === 0 && !queue.retryBatch?.length) return;
   const url = otlpEndpointFor(exportEndpoint, signal);
@@ -440,7 +440,8 @@ export function recordLog(
   attributes: Record<string, string | number | boolean> = {},
   scope = 'autotel-web',
 ): void {
-  if (!exportEndpoint || !enabledSignals.has('logs') || !sampled()) return;
+  if (exportEndpoint === undefined || !enabledSignals.has('logs') || !sampled())
+    return;
   const { number, text } = SEVERITY[severity];
   enqueue('logs', {
     scope,
@@ -469,7 +470,8 @@ export function recordEvent(
   name: string,
   attributes: Record<string, string | number | boolean> = {},
 ): void {
-  if (!exportEndpoint || !enabledSignals.has('logs') || !sampled()) return;
+  if (exportEndpoint === undefined || !enabledSignals.has('logs') || !sampled())
+    return;
   enqueue('logs', {
     scope: 'autotel-web',
     timeUnixNano: String(Date.now() * 1_000_000),

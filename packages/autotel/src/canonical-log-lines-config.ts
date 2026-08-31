@@ -39,8 +39,31 @@ import type { CanonicalLogLineOptions } from './processors/canonical-log-line-pr
  */
 export interface CanonicalLogLinesConfig {
   enabled: boolean;
-  /** Logger to use for emitting canonical log lines (defaults to OTel Logs API). */
-  logger?: Logger;
+  /**
+   * Logger(s) to emit canonical log lines through. Pass an array to fan out to
+   * several. When omitted, lines go to the OTel Logs API instead.
+   *
+   * Note this falls back to the top-level `logger` on AutotelConfig, so
+   * setting that alone also diverts canonical log lines away from OTLP.
+   */
+  logger?: Logger | Logger[];
+  /**
+   * Also emit through the OTel Logs API alongside any `logger`, so the same
+   * lines reach an OTLP logs backend (Loki, and the like).
+   *
+   * Defaults to true only when no `logger` is given. Set `otel: true` with a
+   * logger to get both: the platform's own log view keeps the lines, and OTLP
+   * carries them to your backend.
+   *
+   * @example Console and Loki at once
+   * ```typescript
+   * init({
+   *   endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+   *   canonicalLogLines: { enabled: true, logger: pino(), otel: true },
+   * });
+   * ```
+   */
+  otel?: boolean;
   /** Only emit canonical log lines for root spans (default: false). */
   rootSpansOnly?: boolean;
   /** Minimum log level for canonical log lines (default: 'info'). */

@@ -26,14 +26,15 @@ fetch('/api/users'); // ← traceparent automatically injected!
 
 ## Full Mode
 
-~40-50KB gzipped. Real browser spans, Web Vitals, error capture, network timing:
+~40-50KB gzipped. Real browser spans, plus the signals a tracing backend cannot
+derive for itself:
 
 ```typescript
 import { initFull } from 'autotel-web/full';
 
 initFull({
   service: 'my-frontend-app',
-  endpoint: 'https://collector.example.com/v1/traces',
+  endpoint: 'https://collector.example.com',
   sampleRate: 0.5,
   captureNavigation: true,
   captureFetch: true,
@@ -42,16 +43,159 @@ initFull({
 });
 ```
 
-### Full Mode Features
+`endpoint` is the collector base — `/v1/traces` and `/v1/logs` are appended per
+signal. Pass `''` for same-origin, which needs a `/v1/traces` proxy.
 
-- Navigation spans
-- Fetch/XHR spans with timing
-- Web Vitals (LCP, INP, CLS, FCP, TTFB)
-- Unhandled error capture
-- Long task detection
-- User interaction spans
+### Spans
+
+- Navigation
+- Fetch/XHR, with timing
+- Unhandled errors
 - Network timing events
-- OTLP export
+
+### Events
+
+Everything else is an **event**, which in the OpenTelemetry data model is a log
+record — not a zero-duration span. A span named `browser.web_vital` is invisible
+to every log and event dashboard and is noise in trace search, so these go to
+the log pipeline instead:
+
+| Event                           | What it says                                              |
+| ------------------------------- | --------------------------------------------------------- |
+| `browser.web_vital`             | One per metric — `lcp`, `inp`, `cls`, `fcp`, `ttfb`       |
+| `app.widget.click`              | A click on a selector you named                           |
+| `app.widget.click.frustration`  | A dead click or a rage click                              |
+| `app.jank`                      | A long task, period and threshold in **seconds**          |
+| `browser.page_engagement`       | Scroll depth, content depth, and how long the view lasted |
+| `session.start` / `session.end` | Session lifecycle, opt-in                                 |
+
+Names come from the OpenTelemetry browser and `app.*` conventions, so a
+dashboard built on them covers web and mobile without knowing which it is
+reading.
+
+## Frustration signals
+
+A dead click is a bug report nobody filed, and it is the one browser signal no
+tracing backend can produce on its own: a click that does nothing runs no code,
+issues no request, and opens no span. The trace is empty exactly when the user
+is most stuck.
+
+```typescript
+initFull({
+  service: 'web',
+  endpoint,
+  captureFrustration: true, // or { deadClicks: {...}, rage: false }
+});
+```
+
+Both detectors are heuristics and **the thresholds are the design**. Liveness
+suppresses first — a DOM mutation under 2500ms, a scroll or `selectionchange`
+under 100ms, a visibility or focus change within a second either side — and only
+then does a timeout convict. Anchors, modifier-key clicks and repeat clicks on
+one node never become candidates. Loosening any of it produces "dead clicks" on
+working buttons, which teaches people to ignore the signal.
+
+## Page engagement
+
+Scroll depth and content depth are different questions. Scroll depth is how far
+the reader moved; content depth is how far down the page has been on screen. On
+a page shorter than the window nothing scrolls, so a scroll-only reading says 0%
+and the visit looks like a bounce when every word was visible.
+
+```typescript
+initFull({ service: 'web', endpoint, captureEngagement: true });
+```
+
+Reported on `pagehide` and on history navigation, so a single-page app gets one
+report per route rather than one per visit.
+
+## Breadcrumbs
+
+An exception on its own is a stack and a shrug. `breadcrumbs` keeps a
+byte-bounded trail of what happened first and attaches it to the error as
+`exception.breadcrumbs`:
+
+```typescript
+initFull({
+  service: 'web',
+  endpoint,
+  breadcrumbs: { console: true, clicks: true, maxBytes: 32_768 },
+});
+```
+
+Bounded in bytes rather than entries — one enormous crumb is not an entry-count
+problem — and the newest step is never dropped, since it is the one nearest the
+error.
+
+## Console as log records
+
+```typescript
+initFull({
+  service: 'web',
+  endpoint,
+  captureConsoleLogs: { minLevel: 'warn' },
+});
+```
+
+Console output becomes OTLP log records on the exporter's existing transport, so
+it inherits the retries, the offline queue and the session id. The real console
+is always called first: a telemetry failure must never be why a developer's
+`console.log` did not appear.
+
+Distinct from breadcrumbs, which keep the same output _on an exception_ for
+whoever reads the error. Turning both on is reasonable.
+
+## Sessions and sampling
+
+`session.id` is stamped on every span, event and log, so a visit's navigation,
+fetches, vitals, clicks and errors reassemble into one journey. A gap longer than
+`timeoutMs` (30 minutes) starts a new session, linked by `session.previous_id`.
+
+```typescript
+initFull({
+  service: 'web',
+  endpoint,
+  sampleRate: 0.1,
+  session: { emitEvents: true },
+});
+```
+
+`sampleRate` is decided by hashing the session id, not by a coin flip per record.
+`Math.random() < 0.1` keeps a tenth of _every_ session — enough to draw a chart,
+never enough to answer a support ticket. Hashing keeps all of a tenth of the
+visits, across spans, events and logs alike. Raising the rate mid-incident only
+ever adds sessions; the ones you were already watching stay in the set.
+
+## Remote config
+
+The sampling rate that was fine last week is drowning the collector; a browser
+update has started throwing an error nobody can fix and it is burying everything
+else. Both are one-line changes that otherwise wait for a deploy.
+
+```typescript
+initFull({ service: 'web', endpoint, remoteConfigUrl: '/autotel.json' });
+```
+
+A JSON file at a URL you already serve. The last good config is read back
+synchronously at startup so the first records of a visit already obey it, and the
+refresh happens behind them; a fetch that fails changes nothing. The file is
+untrusted input, so only known keys with valid values survive parsing:
+
+```json
+{
+  "sampleRate": 0.25,
+  "captureDeadClicks": false,
+  "captureRageClicks": true,
+  "captureEngagement": true,
+  "errorSuppression": [
+    { "key": "value", "operator": "contains", "value": "ResizeObserver" }
+  ]
+}
+```
+
+Capture toggles let remote win **both** ways — a toggle that can only say "off"
+is not a control. Error suppression is additive only: a fetched file must never
+be able to switch off error reporting the application asked for.
 
 ## Privacy Controls
 
@@ -119,6 +263,13 @@ See [PostHog](/autotel/integrations/posthog/).
 - Full `@opentelemetry/sdk-trace-web` is ~700KB
 - `autotel-web` lean mode is **1.6KB** (440x smaller)
 - The browser only needs to propagate context: the backend does the tracing
+
+## Browser AI
+
+- [Chrome Built-in AI](/autotel/integrations/builtin-ai/): spans for the
+  on-device model your page runs.
+- [WebMCP](/autotel/integrations/webmcp/): spans for the tools your page offers
+  a browser agent.
 
 ## Entry Points
 

@@ -68,10 +68,7 @@ export {
 } from './span-exporter';
 
 // Console output as OpenTelemetry log records
-export {
-  captureConsoleAsLogs,
-  type ConsoleLogsConfig,
-} from './browser-logs';
+export { captureConsoleAsLogs, type ConsoleLogsConfig } from './browser-logs';
 
 // Canonical OpenTelemetry names for browser telemetry
 export {

@@ -130,6 +130,11 @@ export function createGrafanaConfig(
   }
 
   const headers = normalizeHeaders(headersInput);
+  // Grafana's UI and docs sometimes show the full signal URL, so a pasted
+  // endpoint may already end in /v1/traces. Autotel appends /v1/{signal}
+  // itself, so the base has to be handed on rather than the raw value —
+  // otherwise traces post to /otlp/v1/traces/v1/traces while logs, built from
+  // this same base, go to the right place.
   const base = endpoint.replace(/\/v1\/(traces|metrics|logs)$/, '');
   const logsUrl = `${base}${base.endsWith('/') ? '' : '/'}v1/logs`;
 
@@ -137,7 +142,7 @@ export function createGrafanaConfig(
     service,
     environment,
     version,
-    endpoint,
+    endpoint: base,
     headers,
     metrics: true,
   };
@@ -167,7 +172,10 @@ export function createGrafanaConfig(
       } catch {
         throw new Error(
           'Log export requires @opentelemetry/sdk-logs and @opentelemetry/exporter-logs-otlp-http. ' +
-            'Install them or set enableLogs: false.',
+            'Install them or set enableLogs: false. Note they are loaded through ' +
+            'createRequire, which bundlers (Vercel, Nitro, esbuild) do not follow, so a ' +
+            'bundled app needs them as direct dependencies even when they resolve locally. ' +
+            'Passing your own logRecordProcessors avoids the lazy require entirely.',
         );
       }
     }

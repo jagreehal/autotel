@@ -44,6 +44,20 @@ import {
   RedactingLogRecordProcessor,
 } from './posthog-logs';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
+/**
+ * Records nothing and exports nothing, so a `TracerProvider` is still
+ * registered when there is no destination. See where it is used below.
+ */
+class NoopSpanProcessor implements SpanProcessor {
+  onStart(): void {}
+  onEnd(): void {}
+  forceFlush(): Promise<void> {
+    return Promise.resolve();
+  }
+  shutdown(): Promise<void> {
+    return Promise.resolve();
+  }
+}
 import { BaggageSpanProcessor } from './baggage-span-processor';
 import { FilteringSpanProcessor } from './filtering-span-processor';
 import {
@@ -350,7 +364,21 @@ export function init(cfg: AutotelConfig): void {
   const environment =
     mergedConfig.environment || process.env.NODE_ENV || 'development';
   const metricsEnabled = resolveMetricsFlag(mergedConfig.metrics);
-  const logsEnabled = resolveLogsFlag(mergedConfig.logs);
+  const canonicalLogger =
+    mergedConfig.canonicalLogLines?.logger ?? mergedConfig.logger;
+  const hasCanonicalLogger = Array.isArray(canonicalLogger)
+    ? canonicalLogger.length > 0
+    : canonicalLogger !== undefined;
+  const canonicalUsesOtel =
+    mergedConfig.canonicalLogLines?.enabled === true &&
+    (mergedConfig.canonicalLogLines.otel ?? !hasCanonicalLogger);
+  // Enabling canonical lines through the Logs API is itself an explicit log
+  // export request. Wire the endpoint's log exporter unless `logs: false` (or
+  // AUTOTEL_LOGS=off) says not to; otherwise `otel: true` writes to a no-op
+  // provider and nothing reaches Grafana/Loki.
+  const logsEnabled = resolveLogsFlag(
+    mergedConfig.logs ?? (canonicalUsesOtel ? true : 'auto'),
+  );
 
   if (devtoolsConfig.enabled && devtoolsConfig.embedded) {
     const devtoolsModule = _optionalRequire<{
@@ -415,8 +443,12 @@ export function init(cfg: AutotelConfig): void {
   const otlpDestinations = resolveOtlpDestinations(mergedConfig, endpoint);
 
   // Backward-compatible singular aliases. Plural forms take precedence when both are provided.
+  // `spanProcessors: []` is a caller saying "no processors", which is not the
+  // same as omitting the key. Collapsing the two made an explicit empty array
+  // fall through to the endpoint pipeline below — the documented "replaces the
+  // pipeline autotel would have built" quietly did nothing.
   const configuredSpanProcessors =
-    mergedConfig.spanProcessors && mergedConfig.spanProcessors.length > 0
+    mergedConfig.spanProcessors !== undefined
       ? mergedConfig.spanProcessors
       : mergedConfig.spanProcessor
         ? [mergedConfig.spanProcessor]
@@ -444,8 +476,8 @@ export function init(cfg: AutotelConfig): void {
   // Build array of span processors (supports multiple)
   let spanProcessors: SpanProcessor[] = [];
 
-  if (configuredSpanProcessors && configuredSpanProcessors.length > 0) {
-    // User provided custom processors (full control)
+  if (configuredSpanProcessors !== undefined) {
+    // User provided custom processors (full control), including an empty list
     spanProcessors.push(...configuredSpanProcessors);
   } else if (configuredSpanExporters && configuredSpanExporters.length > 0) {
     // User provided custom exporters (wrap each with tail sampling)
@@ -504,7 +536,8 @@ export function init(cfg: AutotelConfig): void {
   // (normalized names are used), and attributeRedactor (sensitive data is redacted).
   if (mergedConfig.canonicalLogLines?.enabled) {
     const canonicalOptions: CanonicalLogLineOptions = {
-      logger: mergedConfig.canonicalLogLines.logger || mergedConfig.logger,
+      logger: canonicalLogger,
+      otel: mergedConfig.canonicalLogLines.otel,
       rootSpansOnly: mergedConfig.canonicalLogLines.rootSpansOnly,
       minLevel: mergedConfig.canonicalLogLines.minLevel,
       messageFormat: mergedConfig.canonicalLogLines.messageFormat,
@@ -784,9 +817,24 @@ export function init(cfg: AutotelConfig): void {
     instrumentations: finalInstrumentations,
   };
 
-  if (spanProcessors.length > 0) {
-    sdkOptions.spanProcessors = spanProcessors;
-  }
+  // Always set spanProcessors, even when nothing is being exported. Omitting
+  // the key lets NodeSDK install its own default exporter, which is OTLP over
+  // HTTP to http://localhost:4318 — so "no endpoint configured" silently became
+  // "export to localhost" rather than "do not export", which is the opposite
+  // of what resolving the endpoint above intends. On a server with nothing
+  // listening that is a doomed request per batch, forever, with no error that
+  // names the cause. It also made a caller's explicit `spanProcessors: []`
+  // useless as an off switch, since empty and absent were indistinguishable
+  // here. Point `devtools: true` or an endpoint at a local collector to send
+  // there on purpose.
+  //
+  // An empty list is not enough on its own: NodeSDK registers no TracerProvider
+  // for one, and with no provider there are no recording spans — so
+  // `traceparent` stops being injected and a service with no endpoint of its
+  // own can no longer pass the trace to the next one. Not exporting and not
+  // tracing are different things, so the no-op keeps the provider registered.
+  sdkOptions.spanProcessors =
+    spanProcessors.length > 0 ? spanProcessors : [new NoopSpanProcessor()];
 
   if (metricReaders.length > 0) {
     sdkOptions.metricReaders = metricReaders;
@@ -794,6 +842,14 @@ export function init(cfg: AutotelConfig): void {
 
   if (logRecordProcessors && logRecordProcessors.length > 0) {
     sdkOptions.logRecordProcessors = logRecordProcessors;
+  } else if (!process.env.OTEL_LOGS_EXPORTER) {
+    // Empty rather than absent, for the reason spanProcessors is: with the key
+    // absent NodeSDK configures its own OTLP log exporter to
+    // http://localhost:4318, so an app exporting traces to a real collector
+    // also posts every log record at one nobody asked for. `OTEL_LOGS_EXPORTER`
+    // is left to govern itself — that is the spec's own off switch, and someone
+    // who set it means it.
+    sdkOptions.logRecordProcessors = [];
   }
 
   sdk = mergedConfig.sdkFactory
