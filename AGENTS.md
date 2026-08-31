@@ -23,6 +23,15 @@ When updating, be specific and actionable. Prefer short, targeted notes.
 - **GenAI/LLM**: All GenAI instrumentation lives in `autotel-genai` (not core `autotel`). Trace calls with `traceGenAI()` from `autotel-genai/trace` (names the span `"{operation} {model}"`, e.g. `chat gpt-4o`), record token usage with `recordGenAiUsage()`, costs via `autotel-genai/cost`, and emit events via `autotel-genai/events`. Always use the canonical `gen_ai.*` attribute namespace (e.g. `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.provider.name`, `gen_ai.usage.cost.usd`).
 - **Agent audits**: For agentic workflows, prefer `autotel-genai/agent` for identity-bound audit metadata, delegated scope checks, session lifecycle, tool-call hashing, and bounded `decision.summary` evidence. Do not log raw reasoning traces or raw tool payloads.
 
+### Browser Direction
+
+- **Canonical names only.** Every browser signal has a specification name: clicks are `app.widget.click` (+ `app.widget.*` / `app.screen.*`), web vitals are `browser.web_vital` (one event per metric), long tasks are `app.jank`, sessions carry `session.id` / `session.previous_id` and emit `session.start` / `session.end`, browser context is `browser.language` / `.platform` / `.mobile` / `.brands`. `packages/autotel-web/src/semconv.ts` is the source of truth and is pinned by a test. Never suggest a homegrown name — a dashboard built on the conventions finds an empty panel and reads it as "this never happened".
+- **Feature flags** use the canonical `feature_flag.*` convention plus one `feature_flag.evaluation` event per flag (`recordFeatureFlag` / `autotelOpenFeatureHook` from `autotel/feature-flags`). Never `feature_flag.<key>`: keyed by flag name it cannot be grouped across flags. Record where the code _branches_, not where the flag is fetched.
+- **Frustration signals** (`captureFrustration`) are the one browser signal a tracer cannot produce for itself — a click that does nothing runs no code. Do not loosen the dead-click thresholds; one that fires on working buttons teaches people to ignore the signal.
+- **Sampling is session-consistent**, hashed on `session.id`. Never replace it with per-span `Math.random()`: that keeps a tenth of every session and leaves none reconstructable.
+- **Delivery is already reliable** — retries with jittered backoff, offline queue, 1000-span cap, `sendBeacon` on unload only, and a blocked-request breaker for responseless failures (ad blocker / CORS). Do not add a second delivery path.
+- **Engagement** reports scroll depth _and_ content depth. Suggest both: on a page shorter than the viewport nothing scrolls, so scroll depth alone reads a fully-read page as a bounce.
+
 ### Cloudflare Direction
 
 - For `autotel-cloudflare`, prefer one DX across Workers, Queues, Scheduled, Email, Durable Objects, alarms, and Workflows.
@@ -62,7 +71,7 @@ autotel/
 │   ├── autotel-langfuse/      # Langfuse: langfuseCompatibility() enricher, langfuseScores(), langfuseMedia()
 │   ├── autotel-posthog/       # PostHog join: joinPostHog() browser session/replay, PostHogSubscriber for server track()
 │   ├── autotel-subscribers/   # Event subscribers (Mixpanel, Amplitude, Segment, Slack, Loki, file, webhooks)
-│   ├── autotel-web/           # Browser SDK: traceparent + W3C baggage propagation (setBaggage)
+│   ├── autotel-web/           # Browser SDK: traceparent + baggage, canonical browser signals, frustration/breadcrumbs/engagement
 │   ├── autotel-webmcp/        # Browser WebMCP tool registration/execution tracing
 │   └── ...
 ├── docs/
@@ -147,6 +156,9 @@ Always suggest `init()` (or instrumentation) once at app entry; then spans + req
 - **Executable examples**: Changes to public APIs must keep `apps/book-chapters` type-checking and all chapter scripts runnable via its `run-all` command.
 - **No secrets**: Never commit API keys, tokens, or secrets. Do not log sensitive data in examples or docs.
 - **Vendor read APIs**: Implement read backends against the vendor's current documented endpoint and response envelope, and make fixtures mirror that contract. When a search API returns matching spans rather than complete traces, use it to discover trace IDs and hydrate each full trace before running trace-level analysis.
+- **Canonical browser + flag names**: `autotel-web` and `autotel-posthog` emit only names the OpenTelemetry specification owns (`app.widget.click`, `browser.web_vital`, `app.jank`, `session.start`/`.end`, `feature_flag.*`). autotel extensions must extend a canonical name (`browser.web_vital.value`, `app.widget.click.outcome`) rather than open a new namespace, so spec and extension are distinguishable at a glance.
+- **GenAI content never grows**: `setGenAiContent` redacts inline binary to a placeholder rather than base64-encoding it, and caps each attribute at 200KB while keeping the value **valid JSON** — long string leaves first, then trailing entries. Never slice serialised JSON at a byte offset; the cut lands mid-token and consumers drop the attribute entirely.
+- **Cost tables carry one billing unit**: `SERVER_TOOL_PRICING_PER_1K` holds only tools providers bill per call. A tool billed per session or by duration stays out and surfaces through `gen_ai.usage.cost.unpriced_tools`; a confident wrong number is harder to catch than a missing one.
 - **Devtools transports and embedding**: `autotel-devtools` accepts OTLP/gRPC on `:4317` and OTLP/HTTP on `:4318`; both must feed the same ingestion method. `createDevtools()` stays embeddable without claiming the gRPC port; start the exported gRPC receiver when an embedder wants it.
 
 ---

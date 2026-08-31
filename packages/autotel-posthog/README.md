@@ -83,11 +83,13 @@ initFull({
 | `session.id`         | `posthog.get_session_id()`                                | every span                    |
 | `user.id`            | `posthog.get_distinct_id()`                               | every span                    |
 | `session.replay.url` | `posthog.get_session_replay_url({ withTimestamp: true })` | spans that recorded an error  |
-| `feature_flag.<key>` | `posthog.getFeatureFlag(key)`                             | every span, for keys you name |
+| `feature_flag.*`     | `posthog.getFeatureFlag(key)`                             | every span, for keys you name |
 
 Identity is read when the span **starts**, not when it ends. PostHog rotates a session after 30 minutes idle and `identify()` can land mid-request; a long span asking at the end would be filed under whoever the visitor had become by then. The replay link is the one thing decided at the end, because only the end knows whether the span failed — and it is withheld if the session rotated in between, since the link would point at a recording the span has nothing to do with.
 
-A flag that evaluates to `false` is kept as a boolean: "not in the variant" is an answer, and comparing the two groups is the whole point. Only a flag PostHog has no opinion on is omitted.
+Flags land under the **canonical** OpenTelemetry convention — `feature_flag.key`, `feature_flag.result.value`, `feature_flag.result.variant`, `feature_flag.provider.name`, `feature_flag.context.id` — plus one `feature_flag.evaluation` event per flag, because span attributes hold a single flag and a second call would overwrite the first. That is what makes "error rate by variant" a query your backend already knows how to answer; an attribute keyed by flag name could not be grouped across flags, and nothing reads it.
+
+A flag that evaluates to `false` is kept: "not in the variant" is an answer, and comparing the two groups is the whole point. Only a flag PostHog has no opinion on is omitted — recording that as `false` would make "off" and "unknown" the same reading.
 
 Use `spanEnrichers`, not `spanProcessor`. The latter _replaces_ the pipeline autotel builds, so passing an enricher there switches off the export you just configured.
 

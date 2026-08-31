@@ -13,7 +13,6 @@ import {
   SpanStatusCode,
 } from '@opentelemetry/api';
 import type { Sampler, SpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { SamplingDecision } from '@opentelemetry/sdk-trace-base';
 import {
   BatchSpanProcessor,
   WebTracerProvider,
@@ -32,6 +31,31 @@ import { setupErrorTracking, type ErrorTrackingConfig } from './error-tracking';
 import { createStringRedactor } from './error-tracking/redact-values';
 import { setupWebVitals } from './web-vitals';
 import { setupLongTaskObserver } from './long-tasks';
+import { browserResourceAttributes } from './browser-context';
+import {
+  collectBreadcrumbs,
+  configureBreadcrumbs,
+  type BreadcrumbsConfig,
+} from './breadcrumbs';
+import { setupEngagement } from './engagement';
+import {
+  setupFrustrationSignals,
+  type FrustrationConfig,
+} from './frustration';
+import { captureConsoleAsLogs, type ConsoleLogsConfig } from './browser-logs';
+import { setEventSink } from './emit-event';
+import {
+  configureExporter,
+  recordEvent,
+  setRawFetch,
+} from './span-exporter';
+import {
+  applyRemoteSuppression,
+  cachedRemoteConfig,
+  refreshRemoteConfig,
+  resolveCaptureToggles,
+} from './remote-config';
+import { createSessionRatioSampler } from './sampler';
 import { configureSession, getSessionAttributes } from './session';
 import {
   getBaggageHeader,
@@ -102,14 +126,30 @@ export interface AutotelWebFullConfig {
    *
    * @default { timeoutMs: 1_800_000 }
    */
-  session?: false | { timeoutMs?: number };
+  session?: false | {
+    timeoutMs?: number;
+    /** Emit `session.start` / `session.end` events. @default false */
+    emitEvents?: boolean;
+  };
 
   /**
    * Sample rate 0–1. Default 1.0. Use e.g. 0.1 in production.
+   *
+   * Decided by hashing the session id, so a sampled session is sampled whole.
+   * Sampling per span instead would keep a tenth of every visit and leave none
+   * of them reconstructable. Overridden by `remoteConfigUrl` when that supplies
+   * a rate.
    */
   sampleRate?: number;
 
-  /** Custom sampler. If set, sampleRate is ignored. */
+  /**
+   * Custom sampler. If set, `sampleRate` is ignored — for every signal, not
+   * just spans.
+   *
+   * A sampler decides about spans, and there is nothing to ask it about a log
+   * record or an event, so those are exported unsampled. Use `sampleRate`
+   * instead where events and logs need sampling too.
+   */
   sampler?: Sampler;
 
   /** Enable document load / navigation spans. @default true */
@@ -133,7 +173,7 @@ export interface AutotelWebFullConfig {
    */
   copyHttpSpanAttributesToEvent?: boolean;
 
-  /** Optional user interaction (click) spans. */
+  /** Optional click capture, emitted as `app.widget.click` events. */
   userInteraction?: {
     enabled: boolean;
     /** CSS selectors for elements to track (e.g. ['button', '[data-track]']). Default: ['button', 'a'] */
@@ -147,7 +187,8 @@ export interface AutotelWebFullConfig {
   captureErrors?: boolean;
 
   /**
-   * Capture Web Vitals (LCP, INP, CLS, FCP, TTFB) and report as attributes on a web_vitals span.
+   * Capture Web Vitals (LCP, INP, CLS, FCP, TTFB), one `browser.web_vital`
+   * event per metric.
    * @default true
    */
   captureWebVitals?: boolean;
@@ -158,7 +199,8 @@ export interface AutotelWebFullConfig {
   webVitals?: { reportAllChanges?: boolean };
 
   /**
-   * Capture long tasks (main thread blocking >= 50ms) as long_task spans. Opt-in; can be noisy.
+   * Capture long tasks (main thread blocking >= 50ms) as `app.jank` events.
+   * Opt-in; can be noisy.
    * @default false
    */
   captureLongTasks?: boolean;
@@ -168,6 +210,62 @@ export interface AutotelWebFullConfig {
    * When captureErrors is true (default), this configures rate limiting, suppression, etc.
    */
   errorTracking?: Omit<ErrorTrackingConfig, 'debug'>;
+
+  /**
+   * Report clicks that achieved nothing (`dead`) and clicks repeated in
+   * frustration (`rage`) as `app.widget.click.frustration` events.
+   *
+   * The one browser signal a tracer cannot produce for itself: a click that
+   * does nothing runs no code, so the trace is empty exactly where the user is
+   * stuck. Off by default — it installs a document-wide MutationObserver.
+   *
+   * @default false
+   */
+  captureFrustration?: boolean | Omit<FrustrationConfig, 'debug'>;
+
+  /**
+   * Report how far down each page anyone actually got, as a
+   * `browser.page_engagement` event on page hide and route change.
+   *
+   * @default false
+   */
+  captureEngagement?: boolean;
+
+  /**
+   * Keep a bounded trail of what happened before an error — clicks, console
+   * output, whatever you add via `addBreadcrumb` — and attach it to the
+   * exception as `exception.breadcrumbs`.
+   *
+   * @default false
+   */
+  breadcrumbs?:
+    | boolean
+    | (BreadcrumbsConfig & { console?: boolean; clicks?: boolean });
+
+  /**
+   * Export `console.*` output as OpenTelemetry log records, under the
+   * instrumentation scope `console`.
+   *
+   * Distinct from `breadcrumbs`: this feeds the log pipeline, breadcrumbs
+   * attach the same output to an exception for whoever reads the error.
+   * Enabling both is reasonable.
+   *
+   * Lean-mode only for now — it rides the hand-rolled OTLP transport in
+   * `span-exporter`, so it needs `endpoint` to be set.
+   *
+   * @default false
+   */
+  captureConsoleLogs?: boolean | ConsoleLogsConfig;
+
+  /**
+   * URL of a JSON file that can change capture settings without a release —
+   * sampling rate, which signals are on, which errors to suppress.
+   *
+   * Served from wherever the app already is; autotel has nothing to serve it
+   * from. The last good copy is cached and applied synchronously on the next
+   * visit, so a failed fetch changes nothing.
+   */
+  remoteConfigUrl?: string;
 
   /** Redact PII from error messages and stack traces before export. Preset or custom config. */
   attributeRedactor?:
@@ -233,7 +331,12 @@ export function initFull(config: AutotelWebFullConfig): void {
   }
 
   const service = config.service ?? 'browser';
-  const resource = resourceFromAttributes({ 'service.name': service });
+  // Canonical `browser.*` context, so a span can answer "only on mobile
+  // Safari?" without anyone re-deriving it from a user-agent string.
+  const resource = resourceFromAttributes({
+    'service.name': service,
+    ...browserResourceAttributes(),
+  });
 
   configureSession(config.session ?? {});
 
@@ -269,11 +372,13 @@ export function initFull(config: AutotelWebFullConfig): void {
     }
   }
 
+  // Read before the provider is built: a rate that only applies on the next
+  // visit is not much of a kill switch.
+  const remote = config.remoteConfigUrl ? cachedRemoteConfig() : undefined;
+  const sampleRate = remote?.sampleRate ?? config.sampleRate;
   const sampler =
     config.sampler ??
-    (config.sampleRate != null
-      ? createRatioSampler(config.sampleRate)
-      : undefined);
+    (sampleRate != null ? createSessionRatioSampler(sampleRate) : undefined);
 
   provider = new WebTracerProvider({
     resource,
@@ -331,6 +436,26 @@ export function initFull(config: AutotelWebFullConfig): void {
     originalFetch = globalThis.fetch.bind(globalThis);
   }
 
+  // Events and console output are log records, and the Web SDK here carries
+  // traces only. Borrow the hand-rolled OTLP transport for the log half —
+  // `signals: ['logs']` keeps it from exporting spans the SDK already sends.
+  if (config.endpoint !== undefined) {
+    setRawFetch(originalFetch);
+    configureExporter(service, config.endpoint, config.debug, {
+      signals: ['logs'],
+      // The same rate the trace provider samples on, hashed on the same session
+      // id — so a sampled visit keeps its spans, its events and its logs, and
+      // an unsampled one costs nothing on any signal.
+      //
+      // Skipped entirely when a custom `sampler` is supplied, because then the
+      // documented contract is that `sampleRate` is ignored. Honouring it here
+      // anyway would split the signals: an always-on sampler with `sampleRate:
+      // 0` would export spans and silently drop every event.
+      ...(config.sampler == null && sampleRate != null && { sampleRate }),
+    });
+    setEventSink(recordEvent);
+  }
+
   registerInstrumentations({
     instrumentations,
   });
@@ -363,6 +488,11 @@ export function initFull(config: AutotelWebFullConfig): void {
     setupErrorTracking({
       debug: config.debug ?? false,
       ...config.errorTracking,
+      // Remote rules are added to the local ones, never substituted for them.
+      suppressionRules: applyRemoteSuppression(
+        config.errorTracking?.suppressionRules,
+        remote,
+      ),
       ...(stringRedactor && { redactor: stringRedactor }),
     });
   }
@@ -378,6 +508,59 @@ export function initFull(config: AutotelWebFullConfig): void {
     setupLongTaskObserver({ debug: config.debug ?? false });
   }
 
+  // Refreshed behind the page, for the next visit.
+  if (config.remoteConfigUrl) {
+    void refreshRemoteConfig(config.remoteConfigUrl, {
+      fetchImpl: originalFetch,
+    });
+  }
+
+  const toggles = resolveCaptureToggles(
+    {
+      frustration:
+        config.captureFrustration !== undefined &&
+        config.captureFrustration !== false,
+      engagement: config.captureEngagement === true,
+    },
+    remote,
+  );
+
+  if (toggles.frustration) {
+    setupFrustrationSignals({
+      debug: config.debug ?? false,
+      ...(typeof config.captureFrustration === 'object'
+        ? config.captureFrustration
+        : {}),
+      ...(toggles.deadClicks === false && { deadClicks: false as const }),
+      ...(toggles.rage === false && { rage: false as const }),
+    });
+  }
+
+  if (toggles.engagement) {
+    setupEngagement({ debug: config.debug ?? false });
+  }
+
+  if (config.captureConsoleLogs) {
+    captureConsoleAsLogs({
+      ...(typeof config.captureConsoleLogs === 'object'
+        ? config.captureConsoleLogs
+        : {}),
+      ...(stringRedactor && { redactor: stringRedactor }),
+    });
+  }
+
+  if (config.breadcrumbs) {
+    const options = typeof config.breadcrumbs === 'object' ? config.breadcrumbs : {};
+    configureBreadcrumbs({
+      ...options,
+      ...(stringRedactor && { redactor: stringRedactor }),
+    });
+    collectBreadcrumbs({
+      console: options.console ?? true,
+      clicks: options.clicks ?? true,
+    });
+  }
+
   isFullInitialized = true;
   if (config.debug) {
     console.log('[autotel-web/full] Initialized', {
@@ -390,6 +573,11 @@ export function initFull(config: AutotelWebFullConfig): void {
       captureWebVitals: config.captureWebVitals !== false,
       captureLongTasks: config.captureLongTasks === true,
       userInteraction: config.userInteraction?.enabled ?? false,
+      captureFrustration: toggles.frustration,
+      captureEngagement: toggles.engagement,
+      breadcrumbs: Boolean(config.breadcrumbs),
+      captureConsoleLogs: Boolean(config.captureConsoleLogs),
+      sampleRate: sampleRate ?? 1,
     });
   }
 }
@@ -454,28 +642,6 @@ function fetchUrl(input: RequestInfo | URL): string {
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function createRatioSampler(ratio: number): Sampler {
-  return {
-    shouldSample(
-      _context,
-      _traceId,
-      _spanName,
-      _spanKind,
-      _attributes,
-      _links,
-    ) {
-      if (ratio >= 1) return { decision: SamplingDecision.RECORD_AND_SAMPLED };
-      if (ratio <= 0) return { decision: SamplingDecision.NOT_RECORD };
-      return Math.random() < ratio
-        ? { decision: SamplingDecision.RECORD_AND_SAMPLED }
-        : { decision: SamplingDecision.NOT_RECORD };
-    },
-    toString() {
-      return `RatioSampler(${ratio})`;
-    },
-  };
 }
 
 /** A value that settles later, whatever produced it. */

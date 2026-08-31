@@ -23,6 +23,7 @@ export {
   GEN_AI_OUTPUT_TYPE,
   GEN_AI_TOOL_TYPE,
   GEN_AI_METRIC,
+  CONTENT_ORIGINAL_SIZE_SUFFIX,
   genAiSpanName,
 } from './semconv.js';
 export type {
@@ -38,8 +39,10 @@ export type {
 export {
   GEN_AI_COST_ATTRIBUTE,
   MODEL_PRICING,
+  SERVER_TOOL_PRICING_PER_1K,
   estimateLLMCost,
   recordLLMCost,
+  unpricedServerTools,
 } from './cost.js';
 export type { ModelPricing, TokenUsage, EstimateCostOptions } from './cost.js';
 
@@ -80,6 +83,7 @@ export type {
 
 // --- Content + events ------------------------------------------------------
 export {
+  DEFAULT_MAX_CONTENT_BYTES,
   setGenAiContent,
   recordInferenceDetails,
   recordEvaluationResult,
@@ -96,6 +100,18 @@ export type {
   EvaluationResultEvent,
   GenAiOperationExceptionEvent,
 } from './events.js';
+
+// --- Content redaction + size limits ---------------------------------------
+export {
+  redactBinaryContent,
+  serializeWithinBudget,
+  truncateUtf8,
+} from './redaction.js';
+export type {
+  RedactBinaryOptions,
+  SerializeWithinBudgetResult,
+  TruncateResult,
+} from './redaction.js';
 
 // --- Streaming performance -------------------------------------------------
 export {

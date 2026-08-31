@@ -26,6 +26,13 @@ This document gives AI coding agents **before/after examples**, **when-to-use-wh
 | Name which arm a request took                                 | `experiment({ name, variant, expect? })` from `autotel`                     | A/B test, migration, cache on or off     |
 | Make a number comparable across requests                      | `bucket(value, boundaries)` from `autotel/analysis`                         | Duration, payload size, item count       |
 | Keep a trace the sampler would drop                           | `forceKeep()` from `autotel`, or `autotel.debug` baggage on the request     | Payments, audits, debugging a live user  |
+| Record which flag variant a request branched on               | `recordFeatureFlag()` from `autotel/feature-flags`                          | Rollouts, kill switches, experiments     |
+| Record every flag evaluation automatically                    | `autotelOpenFeatureHook()` from `autotel/feature-flags`                     | Any OpenFeature provider                 |
+| Find clicks that achieved nothing                             | `captureFrustration: true` in `initFull()` (`autotel-web/full`)             | Broken buttons, dead UI, rage clicks     |
+| Explain an error with what led to it                          | `breadcrumbs: true` + `addBreadcrumb()` from `autotel-web`                  | Browser exceptions with no reproduction  |
+| Measure how much of a page was read                           | `captureEngagement: true` in `initFull()`                                   | Content, landing pages, docs             |
+| Ship browser console output to a log backend                  | `captureConsoleLogs: true` in `initFull()`                                  | Loki, any OTLP logs pipeline             |
+| Change capture settings without a release                     | `remoteConfigUrl` in `initFull()`                                           | Sampling, noisy-error suppression        |
 
 **Rule of thumb**: If there is an HTTP request or a "job", create a span via `trace()` or framework middleware, and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents. For new event emission, prefer correlated logs over direct span events.
 
@@ -409,5 +416,11 @@ When adding Autotel support for a new framework (e.g. a new web framework):
 - [ ] Security decision points emit `securityEvent()` or use `withSecurity()`.
 - [ ] `createSecuritySignalProcessor()` registered in `init()` for zero-code HTTP signals.
 - [ ] PII in security events uses `hashIdentifier()`, never raw values.
+- [ ] Browser signals use canonical names (`app.widget.click`, `browser.web_vital`, `app.jank`, `session.start`), never homegrown ones.
+- [ ] Feature flags use `feature_flag.key` / `.result.value` and the `feature_flag.evaluation` event, never `feature_flag.<key>`.
+- [ ] Flags are recorded where the code **branches**, not where they are fetched — a flag evaluated and ignored explains nothing.
+- [ ] Browser sampling hashes `session.id`; per-span `Math.random()` keeps a tenth of every session and none of them whole.
+- [ ] GenAI content capture leaves redaction and the 200KB cap on; serialised attributes are never sliced at a byte offset.
+- [ ] Estimated numbers carry an evidence label (`autotel.evidence.cost` / `.tokens` / `.input`), so a guess is never read as an invoice.
 
 For more on architecture and config, see `ARCHITECTURE.md` and `CONFIGURATION.md`.

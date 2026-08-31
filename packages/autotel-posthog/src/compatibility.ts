@@ -15,6 +15,8 @@ import type {
   Span,
   SpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
+import { emitEvent } from 'autotel-web';
+import { recordFeatureFlag } from 'autotel/feature-flags';
 import { isDevelopment } from './dev-mode';
 import {
   isUsable,
@@ -50,8 +52,10 @@ export interface PostHogCompatibilityOptions {
   posthog?: PostHogLike | (() => PostHogLike | undefined);
 
   /**
-   * Flag keys to stamp on every span as `feature_flag.<key>`, so error rate and
-   * latency can be split by variant in whichever backend receives the spans.
+   * Flag keys to record on every span, using the canonical OpenTelemetry
+   * `feature_flag.*` attributes and one `feature_flag.evaluation` event each —
+   * so error rate and latency can be split by variant in whichever backend
+   * receives the spans, with no PostHog in the query path.
    *
    * Named explicitly rather than read wholesale: every flag is another
    * attribute on every span, and "all of them" is how an analytics convenience
@@ -157,10 +161,25 @@ export function posthogCompatibility(
         }
       };
 
-      fill('user.id', readDistinctId(posthog));
+      const distinctId = readDistinctId(posthog);
+      fill('user.id', distinctId);
 
       for (const key of options.featureFlags ?? []) {
-        fill(`feature_flag.${key}`, readFeatureFlag(posthog, key));
+        const value = readFeatureFlag(posthog, key);
+        // A flag PostHog cannot answer for is not an evaluation. Recording it
+        // as `false` would make "off" and "unknown" the same reading.
+        if (value === undefined) continue;
+        recordFeatureFlag(
+          {
+            setAttributes: (attributes) => span.setAttributes(attributes),
+            // A span processor holds a span, not a trace context, so it brings
+            // its own correlated-log seam rather than reaching for
+            // `Span.addEvent`. One event per flag: attributes hold a single
+            // evaluation and the second would overwrite the first.
+            track: emitEvent,
+          },
+          { key, value, provider: 'posthog', contextId: distinctId },
+        );
       }
     },
 

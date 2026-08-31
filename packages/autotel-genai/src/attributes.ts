@@ -14,6 +14,7 @@
  * ```
  */
 
+import { evidenceAttribute } from 'autotel/evidence';
 import {
   GEN_AI,
   type GenAiOperationName,
@@ -153,6 +154,16 @@ export interface GenAiUsageInput {
   costUsd?: number;
   /** Model id that has no pricing, set in place of a cost (autotel extension). */
   unpricedModel?: string;
+  /**
+   * Server-side tools whose per-call charge is missing from `costUsd` because
+   * no price table covers them (autotel extension).
+   */
+  unpricedServerTools?: string[];
+  /**
+   * Where the token counts came from. Recorded as `autotel.evidence.tokens`, so
+   * a locally estimated count is never read as one the provider reported.
+   */
+  tokenSource?: 'observed' | 'estimated';
 }
 
 export function genAiUsageAttributes(
@@ -170,6 +181,8 @@ export function genAiUsageAttributes(
   );
   set(attrs, GEN_AI.USAGE_COST_USD, input.costUsd);
   set(attrs, GEN_AI.USAGE_COST_UNPRICED_MODEL, input.unpricedModel);
+  set(attrs, GEN_AI.USAGE_COST_UNPRICED_TOOLS, input.unpricedServerTools);
+  set(attrs, evidenceAttribute('tokens'), input.tokenSource);
   // Same value, second name: backends split on which one they read, and a cost
   // that only lands under the name yours does not know is a cost you cannot see.
   set(attrs, GEN_AI.USAGE_COST, input.costUsd);
@@ -264,6 +277,12 @@ export function genAiMemoryAttributes(
 export interface GenAiWorkflowInput {
   workflowName?: string;
   promptName?: string;
+  /** Which version of the named prompt ran — number, or a registry's own id. */
+  promptVersion?: string | number;
+  /** The moving label the version was resolved through, e.g. `production`. */
+  promptLabel?: string;
+  /** Digest of the rendered template, where there is no registry to version it. */
+  promptHash?: string;
 }
 
 export function genAiWorkflowAttributes(
@@ -272,5 +291,8 @@ export function genAiWorkflowAttributes(
   const attrs: AttributeBuilder = new Map();
   set(attrs, GEN_AI.WORKFLOW_NAME, input.workflowName);
   set(attrs, GEN_AI.PROMPT_NAME, input.promptName);
+  set(attrs, GEN_AI.PROMPT_VERSION, input.promptVersion);
+  set(attrs, GEN_AI.PROMPT_LABEL, input.promptLabel);
+  set(attrs, GEN_AI.PROMPT_HASH, input.promptHash);
   return built(attrs);
 }

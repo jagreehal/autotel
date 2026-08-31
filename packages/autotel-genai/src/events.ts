@@ -22,7 +22,10 @@
  */
 
 import type { TraceContext } from 'autotel';
+import { evidenceAttribute } from 'autotel/evidence';
+import { redactBinaryContent, serializeWithinBudget } from './redaction.js';
 import {
+  CONTENT_ORIGINAL_SIZE_SUFFIX,
   GEN_AI,
   GEN_AI_EVENT,
   GEN_AI_EXT_EVENT,
@@ -30,46 +33,9 @@ import {
   type GenAiProviderName,
 } from './semconv.js';
 import type { UnknownRecord } from './values.js';
-import { asRecord, asString } from './values.js';
 
 /** Minimal sink: just what these helpers touch on a trace context. */
 export type GenAiContentSink = Pick<TraceContext, 'setAttributes' | 'track'>;
-
-/**
- * Recursively replace binary data with a base64 marker so it survives JSON
- * serialisation. `JSON.stringify(new Uint8Array([1,2]))` yields `{"0":1,"1":2}`
- * — useless and huge for multimodal (image/audio/file) content. This swaps any
- * typed array / `ArrayBuffer` for `{ "__type": "base64", data: "…" }`.
- */
-function toBase64(bytes: Uint8Array): string {
-  // Runtime-agnostic (Node + edge/Workers expose `btoa`); avoids `Buffer` so
-  // the bundle stays edge-safe. Chunked to keep the argument list bounded.
-  let binary = '';
-  const chunk = 0x80_00;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
-function replaceBinary(value: unknown): unknown {
-  if (value instanceof Uint8Array) {
-    return { __type: 'base64', data: toBase64(value) };
-  }
-  if (value instanceof ArrayBuffer) {
-    return { __type: 'base64', data: toBase64(new Uint8Array(value)) };
-  }
-  if (Array.isArray(value)) return value.map(replaceBinary);
-  const record = asRecord(value);
-  if (record) {
-    const out: UnknownRecord = {};
-    for (const [key, entry] of Object.entries(record)) {
-      out[key] = replaceBinary(entry);
-    }
-    return out;
-  }
-  return value;
-}
 
 /** A single content part within a message (text, tool_call, tool_call_response, …). */
 export interface GenAiMessagePart {
@@ -84,8 +50,41 @@ export interface GenAiMessage {
   [key: string]: unknown;
 }
 
-function serialize(value: unknown): string {
-  return asString(value) ?? JSON.stringify(replaceBinary(value));
+/**
+ * Cap on a single content attribute, in UTF-8 bytes. Chosen so a normal
+ * conversation always fits and a runaway one is cut here — where the loss can
+ * be declared — rather than by a collector, which drops it silently.
+ */
+export const DEFAULT_MAX_CONTENT_BYTES = 200_000;
+
+interface SerializedContent {
+  text: string;
+  /** A payload was replaced by a placeholder. */
+  redacted: boolean;
+  /** The text is a prefix of what was passed in. */
+  truncated: boolean;
+  /** UTF-8 byte size before truncation. */
+  originalBytes: number;
+}
+
+function serializeContent(
+  value: unknown,
+  settings?: ContentCaptureSettings,
+): SerializedContent {
+  let redactions = 0;
+  const source =
+    settings?.redactBinary === false
+      ? value
+      : redactBinaryContent(value, {
+          onRedact: () => {
+            redactions += 1;
+          },
+        });
+  const fitted = serializeWithinBudget(
+    source,
+    settings?.maxContentBytes ?? DEFAULT_MAX_CONTENT_BYTES,
+  );
+  return { ...fitted, redacted: redactions > 0 };
 }
 
 /**
@@ -99,6 +98,20 @@ export interface ContentCaptureSettings {
   recordInputs?: boolean;
   /** Capture output-side content (`gen_ai.output.messages`). */
   recordOutputs?: boolean;
+  /**
+   * Replace inline binary — buffers, data URLs, bare base64 — with a
+   * placeholder naming what was there. Defaults to `true`: one image in a
+   * prompt is megabytes of attribute that no backend will keep and no human
+   * will read, and the prompt around it is the part worth tracing.
+   *
+   * Turn it off only when the payload itself is the thing under investigation.
+   */
+  redactBinary?: boolean;
+  /**
+   * Cap each content attribute at this many UTF-8 bytes. Defaults to
+   * {@link DEFAULT_MAX_CONTENT_BYTES}; zero or less means no cap.
+   */
+  maxContentBytes?: number;
 }
 
 /** Assign `value` under `key` unless it's absent (undefined or empty array). */
@@ -128,19 +141,40 @@ export function setGenAiContent(
 ): void {
   const recordInputs = settings?.recordInputs ?? true;
   const recordOutputs = settings?.recordOutputs ?? true;
-  const attrs: Record<string, string> = {};
+  const attrs: Record<string, string | number> = {};
+  // What was lost, per side. Truncation outranks redaction: a placeholder
+  // still describes what stood there, a cut end describes nothing.
+  const lost: { input?: 'redacted' | 'truncated'; output?: 'redacted' | 'truncated' } = {};
+
+  const place = (
+    key: string,
+    value: unknown,
+    side: 'input' | 'output',
+  ): void => {
+    const result = serializeContent(value, settings);
+    attrs[key] = result.text;
+    if (result.truncated) {
+      attrs[key + CONTENT_ORIGINAL_SIZE_SUFFIX] = result.originalBytes;
+      lost[side] = 'truncated';
+    } else if (result.redacted && lost[side] === undefined) {
+      lost[side] = 'redacted';
+    }
+  };
+
   if (recordInputs && content.inputMessages !== undefined) {
-    attrs[GEN_AI.INPUT_MESSAGES] = serialize(content.inputMessages);
+    place(GEN_AI.INPUT_MESSAGES, content.inputMessages, 'input');
   }
   if (recordOutputs && content.outputMessages !== undefined) {
-    attrs[GEN_AI.OUTPUT_MESSAGES] = serialize(content.outputMessages);
+    place(GEN_AI.OUTPUT_MESSAGES, content.outputMessages, 'output');
   }
   if (recordInputs && content.systemInstructions !== undefined) {
-    attrs[GEN_AI.SYSTEM_INSTRUCTIONS] = serialize(content.systemInstructions);
+    place(GEN_AI.SYSTEM_INSTRUCTIONS, content.systemInstructions, 'input');
   }
   if (recordInputs && content.toolDefinitions !== undefined) {
-    attrs[GEN_AI.TOOL_DEFINITIONS] = serialize(content.toolDefinitions);
+    place(GEN_AI.TOOL_DEFINITIONS, content.toolDefinitions, 'input');
   }
+  if (lost.input) attrs[evidenceAttribute('input')] = lost.input;
+  if (lost.output) attrs[evidenceAttribute('output')] = lost.output;
   if (Object.keys(attrs).length > 0) ctx.setAttributes(attrs);
 }
 
@@ -167,7 +201,7 @@ export function recordModelWarnings(
   if (warnings.length === 0) return;
   ctx.track(GEN_AI_EXT_EVENT.CLIENT_WARNINGS, {
     'gen_ai.warnings.count': warnings.length,
-    'gen_ai.warnings': serialize(warnings),
+    'gen_ai.warnings': serializeContent(warnings).text,
   });
 }
 

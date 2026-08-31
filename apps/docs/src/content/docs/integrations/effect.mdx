@@ -1,0 +1,64 @@
+---
+title: Effect
+description: Bridge autotel and Effect v4 so Effect.withSpan spans export through autotel.
+---
+
+Effect v4 ships official OpenTelemetry support via `@effect/opentelemetry`. Autotel
+registers the global `TracerProvider` and handles export. **`autotel-effect`**
+connects the two so you do not copy the same layer wiring into every app.
+
+## Installation
+
+```bash
+npm install autotel autotel-effect effect @effect/opentelemetry
+```
+
+Effect v4 only (`^4.0.0-rc.112`).
+
+## Initialize autotel first
+
+```typescript
+// instrumentation.ts
+import { init } from 'autotel';
+
+init({
+  service: 'my-api',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+});
+```
+
+```bash
+tsx --import ./instrumentation.ts src/index.ts
+```
+
+## Provide the Effect layer
+
+```typescript
+import * as Effect from 'effect/Effect';
+import { layer } from 'autotel-effect';
+
+const AutotelEffect = layer({ serviceName: 'my-api' });
+
+await Effect.runPromise(
+  Effect.withSpan('my.operation')(Effect.log('hello')).pipe(
+    Effect.provide(AutotelEffect),
+  ),
+);
+```
+
+HTTP spans from autotel's `node:http` instrumentation become parents of domain
+spans from `Effect.withSpan`.
+
+## Unit tests
+
+Effect's default `Tracer` is an in-memory native tracer, so handler tests need no
+layer at all. Provide `layer(...)` with autotel's `createMemoryExporter()` only
+where you assert on exported spans.
+
+## Example
+
+[`example-effect`](https://github.com/jagreehal/autotel/tree/main/apps/example-effect)
+
+## Package
+
+[`autotel-effect`](https://github.com/jagreehal/autotel/tree/main/packages/autotel-effect)

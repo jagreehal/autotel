@@ -158,4 +158,54 @@ describe('genAiWorkflowAttributes', () => {
       'gen_ai.prompt.name': 'initial-router',
     });
   });
+
+  it('identifies which version of the prompt ran', () => {
+    expect(
+      genAiWorkflowAttributes({
+        promptName: 'initial-router',
+        promptVersion: 7,
+        promptLabel: 'production',
+        promptHash: 'sha256:abc123',
+      }),
+    ).toEqual({
+      'gen_ai.prompt.name': 'initial-router',
+      'gen_ai.prompt.version': 7,
+      'gen_ai.prompt.label': 'production',
+      'gen_ai.prompt.hash': 'sha256:abc123',
+    });
+  });
+
+  it('takes a string version for registries that do not number them', () => {
+    expect(genAiWorkflowAttributes({ promptVersion: 'v2.1.0' })).toEqual({
+      'gen_ai.prompt.version': 'v2.1.0',
+    });
+  });
+});
+
+describe('genAiUsageAttributes provenance', () => {
+  it('labels where the token counts came from', () => {
+    expect(
+      genAiUsageAttributes({ inputTokens: 10, tokenSource: 'estimated' }),
+    ).toEqual({
+      'gen_ai.usage.input_tokens': 10,
+      'autotel.evidence.tokens': 'estimated',
+    });
+  });
+
+  it('names the server tools missing from the cost', () => {
+    expect(
+      genAiUsageAttributes({
+        costUsd: 1,
+        unpricedServerTools: ['mystery_tool'],
+      }),
+    ).toMatchObject({
+      'gen_ai.usage.cost.unpriced_tools': ['mystery_tool'],
+    });
+  });
+
+  it('says nothing when nothing is missing', () => {
+    expect(genAiUsageAttributes({ inputTokens: 1 })).toEqual({
+      'gen_ai.usage.input_tokens': 1,
+    });
+  });
 });

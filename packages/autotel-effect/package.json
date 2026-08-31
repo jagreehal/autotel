@@ -1,0 +1,69 @@
+{
+  "name": "autotel-effect",
+  "version": "0.1.0",
+  "description": "Bridge autotel and Effect v4: Effect.withSpan spans export through autotel's global TracerProvider",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "autotel",
+    "effect",
+    "effect-ts",
+    "opentelemetry",
+    "otel",
+    "tracing",
+    "withSpan",
+    "observability"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-effect"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-effect#readme",
+  "peerDependencies": {
+    "@effect/opentelemetry": "^4.0.0-rc.112",
+    "autotel": "*",
+    "effect": "^4.0.0-rc.112"
+  },
+  "peerDependenciesMeta": {
+    "autotel": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@effect/opentelemetry": "4.0.0-rc.112",
+    "@types/node": "^26.1.2",
+    "autotel": "workspace:*",
+    "effect": "4.0.0-rc.112",
+    "rimraf": "^6.1.3",
+    "tsdown": "^0.22.14",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

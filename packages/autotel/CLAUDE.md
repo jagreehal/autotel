@@ -51,6 +51,32 @@ Package uses explicit exports (check `package.json` exports field) for tree-shak
   once per process, which capture surfaces the deployment observes at all
   (`autotel.coverage.observed` / `.unobserved`). Absence of a label means
   unknown — nothing here ever asserts completeness.
+- `autotel/feature-flags` - Flag evaluations under the canonical
+  `feature_flag.*` convention, plus the `feature_flag.evaluation` event.
+  `recordFeatureFlag()` records both: attributes so a single-flag span is
+  filterable without unpacking events, and one event per flag because
+  attributes hold only one — a second call overwrites the first. Record where
+  the code _reads_ a flag, not where it is fetched: a flag evaluated and
+  ignored explains nothing. Never invent `feature_flag.<key>`; keyed by flag
+  name it cannot be grouped across flags and no backend reads it.
+  `autotelOpenFeatureHook()` is the zero-config path — structurally typed
+  against the hook shape, so no `@openfeature/*` dependency reaches a bundle.
+  The event goes through `track` (correlated log) and **only** `track` — there
+  is no `Span.addEvent` fallback, because a fallback is how the Logs API
+  direction quietly becomes optional; a caller holding a raw span passes its
+  own `track` (in the browser, `emitEvent` from `autotel-web`), and
+  `autotelOpenFeatureHook` falls back to an actual `@opentelemetry/api-logs`
+  record. **Not** `emitCorrelatedEvent`: that helper prefers `Span.addEvent`
+  when the target has one, so routing through it lands the evaluation exactly
+  where no log or event pipeline will look — the failure the Logs API invariant
+  exists to prevent. `logs.getLogger` no-ops without a `LoggerProvider`, so the
+  fallback costs nothing in an app that exports no logs. Reasons are
+  case-normalised to the registry's lower snake case: a provider reporting
+  `TARGETING_MATCH` and one reporting `targeting_match` must not become two
+  buckets. Values stay typed — `feature_flag.result.value` permits a boolean or a
+  number, and stringifying one makes it uncomparable with the flag beside it.
+  Use `feature_flag.error.message`; the `feature_flag.evaluation.error.message`
+  spelling is deprecated.
 - And more (see package.json exports)
 
 ## Commands

@@ -7,16 +7,30 @@ function spanWith(
   attributes: Attributes = {},
   extra: Partial<ReadableSpan> = {},
 ): ReadableSpan {
+  const events: ReadableSpan['events'] = [];
   return {
     name: 'GET /checkout',
     attributes,
-    // A span is writable while it runs, and `setAttribute` is how identity is
-    // stamped at the start, so the double has to offer it.
+    // A span is writable while it runs, and this is how identity and flag
+    // evaluations are stamped at the start, so the double has to offer them.
     setAttribute(key: string, value: AttributeValue) {
       attributes[key] = value;
       return this;
     },
-    events: [],
+    setAttributes(next: Attributes) {
+      Object.assign(attributes, next);
+      return this;
+    },
+    addEvent(name: string, eventAttributes?: Attributes) {
+      events.push({
+        name,
+        attributes: eventAttributes,
+        time: [0, 0] as [number, number],
+        droppedAttributesCount: 0,
+      });
+      return this;
+    },
+    events,
     status: { code: 0 },
     ...extra,
   } as unknown as ReadableSpan;
@@ -253,7 +267,10 @@ describe('feature flags', () => {
       spanWith(),
     );
 
-    expect(span.attributes['feature_flag.new-checkout']).toBe('variant-b');
+    // Canonical keys, not `feature_flag.<key>`: a per-key attribute cannot be
+    // grouped across flags and no backend ships a panel that reads it.
+    expect(span.attributes['feature_flag.key']).toBe('new-checkout');
+    expect(span.attributes['feature_flag.result.value']).toBe('variant-b');
   });
 
   it('keeps a flag that evaluated to false', () => {
@@ -264,7 +281,10 @@ describe('feature flags', () => {
       spanWith(),
     );
 
-    expect(span.attributes['feature_flag.legacy-cart']).toBe(false);
+    expect(span.attributes['feature_flag.key']).toBe('legacy-cart');
+    // Kept as a boolean: the attribute permits one, and "false" the string is
+    // not comparable with the boolean a different provider would report.
+    expect(span.attributes['feature_flag.result.value']).toBe(false);
   });
 
   it('omits a flag PostHog has no opinion on', () => {

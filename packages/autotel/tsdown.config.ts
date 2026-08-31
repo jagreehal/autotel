@@ -54,6 +54,7 @@ export default defineConfig({
     'drain-pipeline': 'src/drain-pipeline.ts',
     enrichers: 'src/enrichers.ts',
     evidence: 'src/evidence.ts',
+    'feature-flags': 'src/feature-flags.ts',
     diagnostics: 'src/diagnostics/index.ts',
   },
   format: ['esm', 'cjs'], // Build both ESM and CJS formats

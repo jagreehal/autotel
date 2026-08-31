@@ -1,16 +1,16 @@
 /**
- * Web Vitals (LCP, INP, CLS, FCP, TTFB) capture for full mode
+ * Core Web Vitals (LCP, INP, CLS, FCP, TTFB).
  *
- * Uses the web-vitals library; reports metrics as attributes on a single
- * "web_vitals" span per page. Span is ended on pagehide or after a timeout.
+ * OpenTelemetry names this signal `browser.web_vital`, one event per metric, so
+ * that is what lands. The previous shape — every metric as an attribute on a
+ * single shared span held open until `pagehide` — could not be aggregated
+ * (a percentile over LCP means grouping by metric, not by span) and lost
+ * everything if the span never closed.
  */
 
-import { trace } from '@opentelemetry/api';
-import type { Span } from '@opentelemetry/api';
 import type { Metric } from 'web-vitals';
-
-const SPAN_NAME = 'web_vitals';
-const END_DELAY_MS = 60_000; // End span after 60s if pagehide didn't fire
+import { emitEvent } from './emit-event';
+import { AUTOTEL_WEB, WEB_EVENT } from './semconv';
 
 export interface WebVitalsConfig {
   /** Pass reportAllChanges to web-vitals (default: false for stability). */
@@ -18,39 +18,41 @@ export interface WebVitalsConfig {
   debug: boolean;
 }
 
-let webVitalsSpan: Span | null = null;
-let endTimeoutId: ReturnType<typeof setTimeout> | null = null;
-
-function endSpan(): void {
-  if (!webVitalsSpan) return;
-  try {
-    webVitalsSpan.end();
-  } finally {
-    webVitalsSpan = null;
-    if (endTimeoutId != null) {
-      clearTimeout(endTimeoutId);
-      endTimeoutId = null;
-    }
-  }
+/** The reported shape of a web vital — narrower than `Metric` so tests can call it. */
+export interface WebVitalReport {
+  name: string;
+  value: number;
+  rating: string;
+  /** Change since this metric was last reported. */
+  delta?: number;
+  /** Identifier shared by repeated reports of one measurement. */
+  id?: string;
 }
 
-function ensureSpanAndSetMetric(metric: Metric, config: WebVitalsConfig): void {
-  const tracer = trace.getTracer('autotel-web', '1.0.0');
-  if (!webVitalsSpan) {
-    webVitalsSpan = tracer.startSpan(SPAN_NAME);
-    window.addEventListener('pagehide', endSpan, { once: true });
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') endSpan();
-    });
-    endTimeoutId = setTimeout(endSpan, END_DELAY_MS);
+/**
+ * Emit one `browser.web_vital` event. Exported for tests and manual reporting.
+ *
+ * The name is lower-cased: the convention names these metrics `lcp`, `cls`,
+ * `inp`, and the `web-vitals` library reports them upper-cased. Forwarding its
+ * casing unchanged would make every query provider-specific.
+ */
+export function reportWebVital(metric: WebVitalReport, debug: boolean): void {
+  const attributes: Record<string, string | number> = {
+    [AUTOTEL_WEB.WEB_VITAL_NAME]: metric.name.toLowerCase(),
+    [AUTOTEL_WEB.WEB_VITAL_VALUE]: metric.value,
+    [AUTOTEL_WEB.WEB_VITAL_RATING]: metric.rating,
+  };
+  // Absent when a caller reports a metric by hand; always present from the
+  // `web-vitals` library, and both are needed to deduplicate repeat reports.
+  if (metric.delta !== undefined) {
+    attributes[AUTOTEL_WEB.WEB_VITAL_DELTA] = metric.delta;
   }
-  const name = metric.name;
-  const key = `web_vitals.${name.toLowerCase()}`;
-  webVitalsSpan.setAttribute(key, metric.value);
-  webVitalsSpan.setAttribute(`${key}.rating`, metric.rating);
-  if (config.debug) {
+  if (metric.id !== undefined) attributes[AUTOTEL_WEB.WEB_VITAL_ID] = metric.id;
+
+  emitEvent(WEB_EVENT.WEB_VITAL, attributes);
+  if (debug) {
     console.debug(
-      `[autotel-web] Web Vital ${name}:`,
+      `[autotel-web] browser.web_vital ${metric.name}:`,
       metric.value,
       metric.rating,
     );
@@ -64,16 +66,17 @@ export function setupWebVitals(config: WebVitalsConfig): void {
 
   import('web-vitals')
     .then(({ onCLS, onINP, onLCP, onFCP, onTTFB }) => {
-      const report = (metric: Metric) => ensureSpanAndSetMetric(metric, config);
+      const report = (metric: Metric) =>
+        reportWebVital(metric, config.debug ?? false);
       onCLS(report, opts);
       onINP(report, opts);
       onLCP(report, opts);
       onFCP(report, opts);
       onTTFB(report, opts);
     })
-    .catch((err) => {
+    .catch((error) => {
       if (config.debug) {
-        console.warn('[autotel-web] web-vitals failed to load:', err);
+        console.warn('[autotel-web] web-vitals failed to load:', error);
       }
     });
 }

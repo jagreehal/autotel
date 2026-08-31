@@ -1,6 +1,7 @@
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import type { ErrorTrackingConfig, ExceptionMechanism } from './types';
 import { buildExceptionList } from './exception-builder';
+import { readBreadcrumbs } from '../breadcrumbs';
 import { fingerprintFrames } from './fingerprint';
 import { RateLimiter } from './rate-limiter';
 import { isSuppressed } from './suppression';
@@ -99,6 +100,12 @@ function recordException(
     topException.stacktrace?.frames,
   );
 
+  // The trail leading in. An exception says where the code gave up; the steps
+  // before it say what the person was doing, which is the half that reproduces.
+  const breadcrumbs = readBreadcrumbs();
+  const trail =
+    breadcrumbs.length > 0 ? JSON.stringify(breadcrumbs) : undefined;
+
   const tracer = trace.getTracer('autotel-web', '1.0.0');
 
   // Record on active span or create new one
@@ -116,6 +123,7 @@ function recordException(
     activeSpan.setAttribute('exception.list', JSON.stringify(exceptionList));
     activeSpan.setAttribute('exception.fingerprint', fingerprint);
     activeSpan.setAttribute('error.source', mechanismType);
+    if (trail) activeSpan.setAttribute('exception.breadcrumbs', trail);
   } else {
     tracer.startActiveSpan('unhandled_error', (span) => {
       const normalizedError =
@@ -130,6 +138,7 @@ function recordException(
       span.setAttribute('exception.list', JSON.stringify(exceptionList));
       span.setAttribute('exception.fingerprint', fingerprint);
       span.setAttribute('error.source', mechanismType);
+      if (trail) span.setAttribute('exception.breadcrumbs', trail);
       span.end();
     });
   }

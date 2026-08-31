@@ -7,10 +7,24 @@
  * Both now share this.
  */
 const TRACES_PATH = '/v1/traces';
+const LOGS_PATH = '/v1/logs';
 
 export function normaliseOtlpEndpoint(endpoint: string): string {
   const trimmed = endpoint.replace(/\/+$/, '');
   return trimmed.endsWith(TRACES_PATH) ? trimmed : `${trimmed}${TRACES_PATH}`;
+}
+
+/** OTLP signals this package exports. */
+export type OtlpSignal = 'traces' | 'logs';
+
+/**
+ * The endpoint for one signal. Callers configure a single `endpoint`, which may
+ * already carry the traces path; the signal path is swapped rather than
+ * appended, so `https://host/v1/traces` still yields `https://host/v1/logs`.
+ */
+export function otlpEndpointFor(endpoint: string, signal: OtlpSignal): string {
+  const base = normaliseOtlpEndpoint(endpoint).slice(0, -TRACES_PATH.length);
+  return `${base}${signal === 'logs' ? LOGS_PATH : TRACES_PATH}`;
 }
 
 /**

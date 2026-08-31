@@ -18,7 +18,21 @@ exactly aligned with them.
   (`GEN_AI_PROVIDER`), token/output/tool types, metric names, and
   `genAiSpanName()` (joins the operation with the already-selected canonical
   identifier).
-- `src/cost.ts`: `MODEL_PRICING`, `estimateLLMCost`, `recordLLMCost`.
+- `src/cost.ts`: `MODEL_PRICING`, `SERVER_TOOL_PRICING_PER_1K`,
+  `estimateLLMCost`, `recordLLMCost`, `unpricedServerTools`.
+  Server-hosted tools are billed outside the token counts — an agent that
+  searches every step can spend more there than on tokens. `SERVER_TOOL_PRICING_PER_1K`
+  covers **only tools providers bill per call** (`web_search`, `file_search`);
+  the unit is the entry requirement. A tool billed per container session
+  (OpenAI's code interpreter) or by execution time (Anthropic's) has no per-call
+  price, and inventing one overstates a 100-call session by two orders of
+  magnitude — a confident wrong number is harder to catch than a missing one.
+  Such tools are **left out** of the figure, never guessed at zero, and named on
+  the span as `gen_ai.usage.cost.unpriced_tools`; a caller who knows their own
+  contract prices them via `ModelPricing.serverToolPer1K`. `cacheTokensExclusive` says whether the
+  provider reports cache tokens on top of `inputTokens` rather than inside it;
+  the default (inside) is what OpenAI and Anthropic do directly, and gateways
+  disagree. `tokenSource` labels `autotel.evidence.tokens`.
   `recordLLMCost` always labels `autotel.evidence.cost`: `estimated` when the
   price table answered, `unobservable` when it could not. A price-table figure
   and a provider-billed one are the same attribute; unlabelled, an estimate
@@ -27,8 +41,23 @@ exactly aligned with them.
 - `src/metrics.ts`: histogram buckets + `genAiMetricViews()`.
 - `src/attributes.ts`: typed builders → canonical attribute maps.
 - `src/events.ts`: opt-in content attrs (with `recordInputs`/`recordOutputs`
-  gating + base64-safe binary serialisation) + `inference.operation.details` /
+  gating, binary redaction and a size cap) + `inference.operation.details` /
   `evaluation.result` / `client.warnings` events (via `ctx.track`).
+  Content is **redacted, never inflated**: inline binary becomes
+  `[base64 image/png redacted]` rather than base64 text, because one multimodal
+  prompt serialised verbatim is a megabyte-scale attribute that collectors
+  truncate mid-string. Whatever survives is capped at
+  `DEFAULT_MAX_CONTENT_BYTES` (200KB). Both losses are declared — a cut
+  attribute gains `<key>.original_size` and the span is labelled
+  `autotel.evidence.input` / `.output` as `truncated` or `redacted`. Silent
+  loss is the failure mode; a placeholder that names what stood there is not.
+- `src/redaction.ts`: `redactBinaryContent()` / `truncateUtf8()`, pure and
+  backend-agnostic. Recognition is **contextual** and that is the whole design:
+  a bare base64-shaped string needs 1KB before it is suspected (a 100-char
+  alphanumeric run is far more likely a request id), 64 bytes under a key that
+  means binary or beside a `mediaType` / `format` hint, and an explicit `text/*`
+  media type suppresses redaction outright. Loosening those thresholds redacts
+  people's prompts.
 - `src/streaming.ts`: streaming-performance helpers (`createStreamTimer`,
   `computeStreamTiming`, `recordStreamTiming`): TTFC, throughput, inter-chunk
   distribution. `time_to_first_chunk` is spec; `time_to_finish` /
@@ -133,6 +162,12 @@ exactly aligned with them.
 - **Tree-shaking.** Keep subpath exports (`./cost`, `./metrics`, …) and explicit
   named exports in `index.ts`. No barrel `export *`.
 - **Core stays generic.** AI/LLM/GenAI code lives here, never back in `autotel`.
+- **The PostHog contract is a test, not a doc.** PostHog ingests plain OTLP and
+  builds its `$ai_*` events from canonical names server-side, so the
+  integration is an agreement about attribute names with no code in between.
+  `src/posthog-contract.test.ts` transcribes that agreement from `@posthog/ai`
+  and depends on nothing of PostHog's. Renaming or dropping a canonical
+  attribute breaks it there rather than in someone's dashboard.
 
 ## Commands
 

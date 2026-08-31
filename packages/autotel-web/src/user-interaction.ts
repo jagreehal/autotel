@@ -1,30 +1,65 @@
 /**
- * User interaction (click) spans for full mode
+ * Clicks.
  *
- * Uses event delegation: one listener, creates a short span per click on matching elements.
+ * OpenTelemetry already names this `app.widget.click`, with `app.widget.*` for
+ * what was clicked and `app.screen.*` for where. Those names were written for
+ * mobile, but a button is a widget and a route is a screen, so a browser click
+ * fits them exactly — and a dashboard built on them then covers web and mobile
+ * without knowing which it is looking at.
  */
 
-import { trace } from '@opentelemetry/api';
+import { emitEvent } from './emit-event';
+import { APP, AUTOTEL_WEB, WEB_EVENT } from './semconv';
 
 export interface UserInteractionConfig {
+  /** CSS selectors whose clicks are recorded. */
   selectors: string[];
   debug: boolean;
 }
 
-function matchesSelectors(element: Element, selectors: string[]): boolean {
-  return selectors.some((sel) => element.matches(sel));
+function closestMatch(
+  target: Element | null,
+  selectors: string[],
+): Element | undefined {
+  if (!target?.closest) return undefined;
+  for (const selector of selectors) {
+    const match = target.closest(selector);
+    if (match) return match;
+  }
+  return undefined;
 }
 
-function closestMatch(
-  element: Element | null,
-  selectors: string[],
-): Element | null {
-  let el: Element | null = element;
-  while (el) {
-    if (matchesSelectors(el, selectors)) return el;
-    el = el.parentElement;
+/**
+ * The name a human would use for this widget, in the order a human would pick
+ * one: what the app explicitly called it, then what a screen reader says, then
+ * the tag as a last resort.
+ */
+export function widgetName(element: Element): string {
+  return (
+    element.getAttribute('data-track') ??
+    element.getAttribute('aria-label') ??
+    element.tagName.toLowerCase()
+  );
+}
+
+/** Attributes describing a click on `element`, canonical names throughout. */
+export function clickAttributes(
+  element: Element,
+  event: { clientX?: number; clientY?: number },
+): Record<string, string | number> {
+  const attributes: Record<string, string | number> = {
+    [APP.WIDGET_NAME]: widgetName(element),
+    [AUTOTEL_WEB.WIDGET_TAG]: element.tagName.toLowerCase(),
+    [APP.SCREEN_NAME]: globalThis.location?.pathname ?? '',
+  };
+  if (element.id) attributes[APP.WIDGET_ID] = element.id;
+  if (typeof event.clientX === 'number') {
+    attributes[APP.SCREEN_COORDINATE_X] = event.clientX;
   }
-  return null;
+  if (typeof event.clientY === 'number') {
+    attributes[APP.SCREEN_COORDINATE_Y] = event.clientY;
+  }
+  return attributes;
 }
 
 export function setupUserInteractionInstrumentation(
@@ -32,37 +67,17 @@ export function setupUserInteractionInstrumentation(
 ): void {
   if (globalThis.document === undefined) return;
 
-  const tracer = trace.getTracer('autotel-web', '1.0.0');
-
   document.addEventListener(
     'click',
     (event: MouseEvent) => {
       // SAFETY: this listener is registered on document for click events, whose
       // target is the element clicked; closestMatch tolerates a detached node.
-      const target = event.target as Element;
-      const matched = closestMatch(target, config.selectors);
+      const matched = closestMatch(event.target as Element, config.selectors);
       if (!matched) return;
 
-      const tagName = matched.tagName.toLowerCase();
-      const name =
-        matched.getAttribute('data-track') ??
-        matched.getAttribute('aria-label') ??
-        tagName;
-      const spanName = `click: ${name}`;
-
-      const span = tracer.startSpan(spanName, {
-        attributes: {
-          'user.interaction.type': 'click',
-          'element.tag': tagName,
-          ...(matched.id && { 'element.id': matched.id }),
-          ...(matched.getAttribute('data-track') && {
-            'element.data_track': matched.getAttribute('data-track')!,
-          }),
-        },
-      });
-      span.end();
+      emitEvent(WEB_EVENT.WIDGET_CLICK, clickAttributes(matched, event));
       if (config.debug) {
-        console.debug('[autotel-web] user interaction span:', spanName);
+        console.debug('[autotel-web] app.widget.click:', widgetName(matched));
       }
     },
     { capture: true, passive: true },

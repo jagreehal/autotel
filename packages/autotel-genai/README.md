@@ -68,7 +68,7 @@ export const chat = traceGenAI({
 | **Cost**            | `autotel-genai/cost`      | `estimateLLMCost`, `recordLLMCost`, `MODEL_PRICING` (cache-read/write aware)                                                                                                                          |
 | **Metrics**         | `autotel-genai/metrics`   | `genAiMetricViews()` re-buckets the canonical histograms                                                                                                                                              |
 | **Attributes**      | `autotel-genai`           | typed builders → canonical attribute maps                                                                                                                                                             |
-| **Events**          | `autotel-genai/events`    | opt-in content + `inference.operation.details` / `evaluation.result`                                                                                                                                  |
+| **Events**          | `autotel-genai/events`    | opt-in content (binary redacted, size-capped) + `inference.operation.details` / `evaluation.result`                                                                                                   |
 | **Trace**           | `autotel-genai/trace`     | `traceGenAI()`, `recordGenAiResponse/Usage`                                                                                                                                                           |
 | **Guard**           | `autotel-genai/guard`     | inline cost/token/loop kill-switch: `createGenAiBudget`, `createGenAiGuard`, `parseGuardRules`                                                                                                        |
 | **Streaming**       | `autotel-genai/streaming` | TTFC, throughput, inter-chunk distribution: `createStreamTimer`, `recordStreamTiming`                                                                                                                 |
@@ -87,6 +87,36 @@ recordLLMCost(ctx, 'claude-sonnet-4', {
   cacheReadInputTokens: 3500, // priced at the cached rate
 });
 ```
+
+**Server-side tools are money too.** Web search, code interpreter and file
+search are billed per call, outside the token counts. An agent that searches on
+every step can spend more there than on tokens, and a cost built from tokens
+alone will never show it:
+
+```ts
+recordLLMCost(ctx, 'claude-sonnet-4', {
+  inputTokens: 4000,
+  serverToolCalls: { web_search: 12 }, // SERVER_TOOL_PRICING_PER_1K
+});
+```
+
+A tool with no price is left out of the figure rather than guessed at zero, and
+named on the span as `gen_ai.usage.cost.unpriced_tools` so the gap is visible.
+
+**Cache accounting.** By default cache reads are treated as a subset of
+`inputTokens` (what OpenAI and Anthropic report directly) and cache writes as
+additive. Gateways and normalised usage objects do not all agree; where yours
+reports cache tokens separately, say so — getting it backwards subtracts a pool
+that was never in the input, understating exactly the calls that cost most:
+
+```ts
+recordLLMCost(ctx, model, { ...usage, cacheTokensExclusive: true });
+```
+
+**Where the numbers came from.** `tokenSource: 'observed' | 'estimated'` labels
+the counts as `autotel.evidence.tokens`. A locally counted token and a
+provider-reported one are the same number on a span; unlabelled, a guess reads
+as an invoice.
 
 ### Metrics
 
@@ -170,8 +200,8 @@ throughput, and an inter-chunk gap distribution `{min,p10,median,avg,p90,max}`).
 
 ### Content capture & warnings
 
-`setGenAiContent` now gates input/output independently and base64-encodes binary
-(image/audio/file) parts instead of letting `JSON.stringify` corrupt them:
+`setGenAiContent` gates input and output independently, replaces inline binary
+with a placeholder, and caps what is left:
 
 ```ts
 import { setGenAiContent, recordModelWarnings } from 'autotel-genai';
@@ -184,6 +214,46 @@ setGenAiContent(
 
 recordModelWarnings(ctx, result.warnings); // surface provider warnings vendors only log
 ```
+
+**Binary is redacted, not recorded.** A multimodal prompt carries its images,
+audio and PDFs inline as base64. Serialised verbatim, one such call is a
+megabyte-scale span attribute that collectors truncate mid-string and nobody
+reads. The bytes were never the interesting part, so they are replaced by a
+placeholder that says what stood there:
+
+```jsonc
+// gen_ai.input.messages
+[
+  {
+    "role": "user",
+    "parts": [
+      { "type": "text", "content": "what is in this photo?" },
+      { "type": "input_image", "data": "[base64 image/png redacted]" },
+    ],
+  },
+]
+```
+
+Recognition is contextual: a bare alphanumeric string must be 1KB before it is
+suspected, but under a key that means binary (`data`, `image_url`,
+`inline_data`) or beside a `mediaType` / `format` hint, 64 bytes is enough. An
+explicit `text/*` media type settles it the other way and nothing is touched.
+
+Whatever survives is capped at `DEFAULT_MAX_CONTENT_BYTES` (200KB) per
+attribute. Both are declared rather than silent — a cut attribute gains
+`<attribute>.original_size` and the span is labelled `autotel.evidence.input =
+'truncated'` (or `'redacted'`), so a reader can tell a short prompt from a
+prompt you only kept the front of.
+
+```ts
+setGenAiContent(ctx, content, {
+  redactBinary: false, // only when the payload itself is under investigation
+  maxContentBytes: 0, // 0 or less: no cap
+});
+```
+
+`redactBinaryContent()` and `truncateUtf8()` are exported for payloads that
+never reach a span — an event body, a log line, your own exporter.
 
 ### Agents & tools
 
@@ -456,6 +526,60 @@ when you want Mastra's spans to be _autotel's_ spans — Mastra dispatches event
 synchronously, so they nest under the request span you already opened, reach
 every `init()` destination, pass through your `spanEnrichers` (including
 `langfuseCompatibility`), and get priced.
+
+### Prompt versions
+
+`gen_ai.prompt.name` alone cannot tell you which edit moved the numbers. Stamp
+the version too, and cost, latency and evaluation score become splittable by
+prompt change in whatever backend holds the spans:
+
+```ts
+traceGenAI({
+  provider: 'openai',
+  model: 'gpt-4o',
+  workflow: {
+    promptName: 'initial-router',
+    promptVersion: 7, // or your registry's own id
+    promptLabel: 'production',
+    promptHash: 'sha256:…', // when there is no registry to version it
+  },
+});
+```
+
+### Grouping traces into sessions
+
+A conversation is more than one trace. Two canonical attributes already carry
+that, and neither is GenAI-specific:
+
+- `gen_ai.conversation.id` — the thread this call belongs to.
+- `session.id` — the visit it happened in, set by autotel core's `setSession()`
+  or stamped on every browser span by `autotel-web`.
+
+Set them and total cost per session, traces per conversation, and
+session-level latency are ordinary queries. This is the same hierarchy vendor
+LLM-analytics products sell as `$ai_session_id`; here it is spec, so it works
+wherever the spans land.
+
+### Sending the same spans to PostHog
+
+PostHog ingests plain OTLP: `PostHogSpanProcessor` from `@posthog/ai/otel`
+forwards any span carrying `gen_ai.*` attributes and assembles its `$ai_*`
+event server-side. Because this package emits canonical names, no mapping layer
+is needed — add the processor and the spans you already have become LLM
+analytics:
+
+```ts
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { PostHogSpanProcessor } from '@posthog/ai/otel';
+
+const sdk = new NodeSDK({
+  spanProcessors: [new PostHogSpanProcessor({ projectToken: 'phc_…' })],
+});
+```
+
+`src/posthog-contract.test.ts` pins that agreement, so it cannot quietly stop
+being true. For the browser half — session, replay and person joined in both
+directions — see `autotel-posthog`.
 
 ## Semantic conventions
 

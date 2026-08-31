@@ -258,6 +258,11 @@
       "import": "./dist/drain-pipeline.js",
       "require": "./dist/drain-pipeline.cjs"
     },
+    "./feature-flags": {
+      "types": "./dist/feature-flags.d.ts",
+      "import": "./dist/feature-flags.js",
+      "require": "./dist/feature-flags.cjs"
+    },
     "./evidence": {
       "types": "./dist/evidence.d.ts",
       "import": "./dist/evidence.js",
