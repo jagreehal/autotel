@@ -22,7 +22,8 @@ const spans = (page: Page): Promise<RenderedSpan[]> =>
       const attributes: Record<string, string> = {};
       for (const row of entry.querySelectorAll('div.flex')) {
         const [key, value] = row.querySelectorAll('code');
-        if (key && value) attributes[key.textContent ?? ''] = value.textContent ?? '';
+        if (key && value)
+          attributes[key.textContent ?? ''] = value.textContent ?? '';
       }
       return {
         attributes,
@@ -115,7 +116,9 @@ test('a call made from inside a handler records what it ran under', async ({
   await page.click('button:text-is("restock")');
 
   await expect
-    .poll(async () => (await spanNamed(page, 'execute_tool search'))?.attributes)
+    .poll(
+      async () => (await spanNamed(page, 'execute_tool search'))?.attributes,
+    )
     .toMatchObject({
       'webmcp.execute.depth': '1',
       'webmcp.execute.parent': 'restock',
@@ -128,7 +131,9 @@ test('a call made from inside a handler records what it ran under', async ({
   // Exactly one consent span for two executions.
   const rendered = await spans(page);
   expect(rendered.filter((s) => s.name === 'webmcp.consent')).toHaveLength(1);
-  expect(rendered.filter((s) => s.name.startsWith('execute_tool '))).toHaveLength(2);
+  expect(
+    rendered.filter((s) => s.name.startsWith('execute_tool ')),
+  ).toHaveLength(2);
 });
 
 test('a handler swapped behind an unchanged descriptor goes unnoticed by default', async ({
@@ -138,7 +143,9 @@ test('a handler swapped behind an unchanged descriptor goes unnoticed by default
 
   await expect
     .poll(async () =>
-      (await spans(page)).filter((span) => span.name === 'webmcp.tool.register'),
+      (await spans(page)).filter(
+        (span) => span.name === 'webmcp.tool.register',
+      ),
     )
     .not.toHaveLength(0);
 

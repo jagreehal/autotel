@@ -214,11 +214,11 @@
     "@smithy/signature-v4": "^5.6.11",
     "@aws-sdk/credential-providers": "^3.1097.0",
     "@aws-crypto/sha256-js": "^5.2.0",
-    "@opentelemetry/otlp-transformer": "^0.221.0",
-    "@opentelemetry/sdk-trace-base": "^2.10.0",
-    "@opentelemetry/sdk-logs": "^0.221.0",
-    "@opentelemetry/sdk-metrics": "^2.10.0",
-    "@opentelemetry/core": "^2.10.0"
+    "@opentelemetry/otlp-transformer": "^0.222.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "@opentelemetry/sdk-logs": "^0.222.0",
+    "@opentelemetry/sdk-metrics": "^2.11.0",
+    "@opentelemetry/core": "^2.11.0"
   },
   "repository": {
     "type": "git",

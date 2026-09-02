@@ -124,7 +124,7 @@ All operations are automatically traced with OpenTelemetry!
      hook.type=post, hook.operation=save, hook.model=User, db.mongodb.collection=users
 
 ✓ mongoose.users.create                  35ms [mongoose]
-     db.system=mongoose, db.operation=create, db.mongodb.collection=users
+     db.system.name=mongoose, db.operation.name=create, db.mongodb.collection=users
 
 ✅ User created with ID: 6970e2e1b200e3eee674d2e4
 📊 Trace ID: 5bc53378d5ac334224e0635506bdf5ef
@@ -145,7 +145,7 @@ All operations are automatically traced with OpenTelemetry!
      hook.type=post, hook.operation=save, hook.model=User
 
 ✓ mongoose.users.save                    28ms [mongoose]
-     db.system=mongoose, db.operation=save, db.mongodb.collection=users
+     db.system.name=mongoose, db.operation.name=save, db.mongodb.collection=users
 
 ✅ User created with doc.save(): 6970e2e1b200e3eee674d2e9
 ✓ createUserWithSave                     28ms [app]
@@ -196,7 +196,7 @@ All operations are automatically traced with OpenTelemetry!
      hook.type=post, hook.operation=findOneAndUpdate, hook.model=User
 
 ✓ mongoose.users.findOneAndUpdate         5ms [mongoose]
-     db.system=mongoose, db.operation=findOneAndUpdate, db.mongodb.collection=users
+     db.system.name=mongoose, db.operation.name=findOneAndUpdate, db.mongodb.collection=users
 
 ✅ User updated
 ✓ updateUser                              5ms [app]
@@ -208,7 +208,7 @@ All operations are automatically traced with OpenTelemetry!
 
 📊 Getting user statistics
 ✓ mongoose.users.aggregate               18ms [mongoose]
-     db.system=mongoose, db.operation=aggregate, db.mongodb.collection=users
+     db.system.name=mongoose, db.operation.name=aggregate, db.mongodb.collection=users
 
 ✅ Retrieved stats for 31 users
 ✓ getUserStats                           18ms [app]
@@ -220,7 +220,7 @@ All operations are automatically traced with OpenTelemetry!
 
 📦 Bulk creating 3 posts for user 6970e2e1b200e3eee674d2e9
 ✓ mongoose.posts.insertMany               8ms [mongoose]
-     db.system=mongoose, db.operation=insertMany, db.mongodb.collection=posts
+     db.system.name=mongoose, db.operation.name=insertMany, db.mongodb.collection=posts
 
 ✅ Created 3 posts via insertMany
 ✓ createPostsBulk                         8ms [app]
@@ -228,7 +228,7 @@ All operations are automatically traced with OpenTelemetry!
 
 📦 Bulk updating 3 posts
 ✓ mongoose.posts.bulkWrite                7ms [mongoose]
-     db.system=mongoose, db.operation=bulkWrite, db.mongodb.collection=posts
+     db.system.name=mongoose, db.operation.name=bulkWrite, db.mongodb.collection=posts
 
 ✅ Bulk write: 3 modified
 ✓ bulkUpdatePosts                         8ms [app]
@@ -242,7 +242,7 @@ All operations are automatically traced with OpenTelemetry!
 # With replica set (port 27019):
 🔄 Transferring post 6970e353c0f9c386750fb9fc from 6970e352c0f9c386750fb9f5 to 6970e353c0f9c386750fb9f8
 ✓ mongoose.posts.findOneAndUpdate         2ms [mongoose]
-     db.system=mongoose, db.operation=findOneAndUpdate, db.mongodb.collection=posts
+     db.system.name=mongoose, db.operation.name=findOneAndUpdate, db.mongodb.collection=posts
 
   📝 Post "Getting Started with Mongoose" transferred
 ✅ Transfer completed in transaction
@@ -262,7 +262,7 @@ All operations are automatically traced with OpenTelemetry!
 
 🔍 Finding user (with error handling): nonexistent@example.com
 ✓ mongoose.users.findOne                  6ms [mongoose]
-     db.system=mongoose, db.operation=findOne, db.mongodb.collection=users
+     db.system.name=mongoose, db.operation.name=findOne, db.mongodb.collection=users
 
 ❌ Error recorded in span: User not found: nonexistent@example.com
 ✗ findUserOrFail                          6ms [app]
@@ -283,7 +283,7 @@ All operations are automatically traced with OpenTelemetry!
      hook.type=post, hook.operation=deleteOne, hook.model=Post
 
 ✓ mongoose.posts.deleteOne                1ms [mongoose]
-     db.system=mongoose, db.operation=deleteOne, db.mongodb.collection=posts
+     db.system.name=mongoose, db.operation.name=deleteOne, db.mongodb.collection=posts
 
 ✅ Post deleted
 ✓ deletePost                              1ms [app]
@@ -389,10 +389,10 @@ tsx src/index.ts
   "kind": "CLIENT",
   "instrumentationScope": { "name": "autotel-plugins/mongoose" },
   "attributes": {
-    "db.system": "mongoose",
-    "db.operation": "create",
+    "db.system.name": "mongoose",
+    "db.operation.name": "create",
     "db.mongodb.collection": "users",
-    "db.name": "myapp",
+    "db.namespace": "myapp",
     "net.peer.name": "localhost",
     "net.peer.port": 27017
   }
@@ -411,8 +411,8 @@ tsx src/index.ts
     "hook.operation": "save",
     "hook.model": "User",
     "db.mongodb.collection": "users",
-    "db.system": "mongoose",
-    "db.name": "myapp"
+    "db.system.name": "mongoose",
+    "db.namespace": "myapp"
   }
 }
 ```

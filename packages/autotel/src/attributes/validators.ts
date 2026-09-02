@@ -51,6 +51,8 @@ const DEPRECATED_ATTRIBUTES = new Map<string, string | null>([
   ['db.operation', 'db.operation.name'],
   ['db.statement', 'db.query.text'],
   ['db.system', 'db.system.name'],
+  ['rpc.system', 'rpc.system.name'],
+  ['messaging.operation', 'messaging.operation.type'],
   ['db.collection', 'db.collection.name'],
   ['db.instance.id', null],
   ['db.jdbc.driver_classname', null],

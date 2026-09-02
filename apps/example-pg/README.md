@@ -12,7 +12,7 @@ This example shows how to pair the official [`@opentelemetry/instrumentation-pg`
 ## What Gets Traced
 
 1. **Automatic pg spans** from the official instrumentation:
-   - `pg.connect` spans with `db.system=postgresql`
+   - `pg.connect` spans with `db.system.name=postgresql`
    - `pg.query` spans that include SQL text and bound parameters (when `enhancedDatabaseReporting` is enabled)
    - Connection attributes such as host, port, user, and database name
 2. **Manual traces (optional)**:

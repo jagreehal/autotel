@@ -438,6 +438,7 @@ export function createSecuritySignalProcessor(
 
     const key = readAttribute(span.attributes, [
       burst.keyAttribute,
+      'client.address',
       'http.client_ip',
     ]);
     if (typeof key !== 'string' || key.length === 0) return;

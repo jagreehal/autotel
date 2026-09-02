@@ -216,6 +216,7 @@ export class Event {
       }
       if (config.environment) {
         enriched['deployment.environment'] = config.environment;
+        enriched['deployment.environment.name'] = config.environment;
       }
     }
 

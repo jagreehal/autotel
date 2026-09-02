@@ -236,8 +236,8 @@ The application adds custom attributes to help with querying:
 
 **Database Operations:**
 
-- `db.system` - Database type (e.g., "postgresql")
-- `db.operation` - SQL operation (SELECT, INSERT, etc.)
+- `db.system.name` - Database type (e.g., "postgresql")
+- `db.operation.name` - SQL operation (SELECT, INSERT, etc.)
 - `db.table` - Table name
 - `db.query_time_ms` - Query execution time
 - `db.slow_query` - Boolean flag for slow queries

@@ -32,7 +32,9 @@ function getServiceName(span: TerminalSpanEvent): string {
 function getPeerService(span: TerminalSpanEvent): string | null {
   const attrs = span.attributes ?? {};
   const peerService =
+    stringAttr(attrs, 'service.peer.name') ??
     stringAttr(attrs, 'peer.service') ??
+    stringAttr(attrs, 'db.system.name') ??
     stringAttr(attrs, 'db.system') ??
     stringAttr(attrs, 'messaging.system') ??
     stringAttr(attrs, 'http.host');

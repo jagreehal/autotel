@@ -91,8 +91,8 @@ export function instrumentKV<K extends KVNamespace>(
               {
                 kind: SpanKind.CLIENT,
                 attributes: {
-                  'db.system': 'cloudflare-kv',
-                  'db.operation': 'get',
+                  'db.system.name': 'cloudflare-kv',
+                  'db.operation.name': 'get',
                   'db.namespace': name,
                   'db.key': key,
                   'db.cache_hit': options?.cacheTtl !== undefined,
@@ -138,8 +138,8 @@ export function instrumentKV<K extends KVNamespace>(
               {
                 kind: SpanKind.CLIENT,
                 attributes: {
-                  'db.system': 'cloudflare-kv',
-                  'db.operation': 'put',
+                  'db.system.name': 'cloudflare-kv',
+                  'db.operation.name': 'put',
                   'db.namespace': name,
                   'db.key': key,
                 },
@@ -177,8 +177,8 @@ export function instrumentKV<K extends KVNamespace>(
               {
                 kind: SpanKind.CLIENT,
                 attributes: {
-                  'db.system': 'cloudflare-kv',
-                  'db.operation': 'delete',
+                  'db.system.name': 'cloudflare-kv',
+                  'db.operation.name': 'delete',
                   'db.namespace': name,
                   'db.key': key,
                 },
@@ -217,8 +217,8 @@ export function instrumentKV<K extends KVNamespace>(
               {
                 kind: SpanKind.CLIENT,
                 attributes: {
-                  'db.system': 'cloudflare-kv',
-                  'db.operation': 'list',
+                  'db.system.name': 'cloudflare-kv',
+                  'db.operation.name': 'list',
                   'db.namespace': name,
                   'db.prefix': options?.prefix || undefined,
                   'db.limit': options?.limit || undefined,
@@ -282,8 +282,8 @@ export function instrumentR2<R extends R2Bucket>(
               {
                 kind: SpanKind.CLIENT,
                 attributes: {
-                  'db.system': 'cloudflare-r2',
-                  'db.operation': 'get',
+                  'db.system.name': 'cloudflare-r2',
+                  'db.operation.name': 'get',
                   'db.bucket': name,
                   'db.key': key,
                 },
@@ -347,8 +347,8 @@ export function instrumentR2<R extends R2Bucket>(
               {
                 kind: SpanKind.CLIENT,
                 attributes: {
-                  'db.system': 'cloudflare-r2',
-                  'db.operation': 'put',
+                  'db.system.name': 'cloudflare-r2',
+                  'db.operation.name': 'put',
                   'db.bucket': name,
                   'db.key': key,
                 },
@@ -388,8 +388,8 @@ export function instrumentR2<R extends R2Bucket>(
               {
                 kind: SpanKind.CLIENT,
                 attributes: {
-                  'db.system': 'cloudflare-r2',
-                  'db.operation': 'delete',
+                  'db.system.name': 'cloudflare-r2',
+                  'db.operation.name': 'delete',
                   'db.bucket': name,
                   'db.keys_count': keys.length,
                 },
@@ -427,8 +427,8 @@ export function instrumentR2<R extends R2Bucket>(
               {
                 kind: SpanKind.CLIENT,
                 attributes: {
-                  'db.system': 'cloudflare-r2',
-                  'db.operation': 'list',
+                  'db.system.name': 'cloudflare-r2',
+                  'db.operation.name': 'list',
                   'db.bucket': name,
                   'db.prefix': options?.prefix || undefined,
                   'db.limit': options?.limit || undefined,
@@ -520,12 +520,12 @@ export function instrumentD1<D extends D1Database>(
                         activeConfig?.dataSafety?.captureDbStatement ?? 'full';
                       const statement = sanitizeStatement(query, captureMode);
                       const attributes: Record<string, any> = {
-                        'db.system': 'cloudflare-d1',
-                        'db.operation': prop,
-                        'db.name': name,
+                        'db.system.name': 'cloudflare-d1',
+                        'db.operation.name': prop,
+                        'db.namespace': name,
                       };
                       if (statement !== undefined) {
-                        attributes['db.statement'] = statement;
+                        attributes['db.query.text'] = statement;
                       }
                       return tracer.startActiveSpan(
                         `D1 ${name}: ${prop}`,
@@ -584,12 +584,12 @@ export function instrumentD1<D extends D1Database>(
               activeConfig?.dataSafety?.captureDbStatement ?? 'full';
             const statement = sanitizeStatement(query, captureMode);
             const attributes: Record<string, any> = {
-              'db.system': 'cloudflare-d1',
-              'db.operation': 'exec',
-              'db.name': name,
+              'db.system.name': 'cloudflare-d1',
+              'db.operation.name': 'exec',
+              'db.namespace': name,
             };
             if (statement !== undefined) {
-              attributes['db.statement'] = statement;
+              attributes['db.query.text'] = statement;
             }
 
             return tracer.startActiveSpan(
@@ -663,7 +663,7 @@ export function instrumentServiceBinding<F extends Fetcher>(
             {
               kind: SpanKind.CLIENT,
               attributes: {
-                'rpc.system': 'cloudflare-service-binding',
+                'rpc.system.name': 'cloudflare-service-binding',
                 'rpc.service': name,
                 'http.request.method': request.method,
                 'url.full': request.url,

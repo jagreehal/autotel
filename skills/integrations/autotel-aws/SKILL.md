@@ -161,7 +161,7 @@ const getUser = traceDynamoDB({ operation: 'GetItem', table: 'users' })(
 );
 ```
 
-Auto-sets: `db.system` ('dynamodb'), `db.operation`, `db.name`, `aws.dynamodb.table_names`. Span name: `dynamodb.GetItem`.
+Auto-sets: `db.system.name` ('dynamodb'), `db.operation.name`, `db.namespace`, `aws.dynamodb.table_names`. Span name: `dynamodb.GetItem`.
 
 **SQS / SNS / Kinesis / Step Functions / EventBridge**. Follow the same `traceXxx({ operation, ... })` pattern via their respective subpaths (`autotel-aws/sqs`, `autotel-aws/sns`, etc.).
 

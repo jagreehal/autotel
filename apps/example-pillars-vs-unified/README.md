@@ -97,7 +97,7 @@ Three stores, none of which name `payment.provider`:
   "name": "POST /api/checkout",
   "durationMs": 142,
   "status": "ERROR",
-  "attributes": { "http.route": "/api/checkout", "http.status_code": 500 }
+  "attributes": { "http.route": "/api/checkout", "http.response.status_code": 500 }
 }
 
 Question: Which payment.provider failed for user_456?

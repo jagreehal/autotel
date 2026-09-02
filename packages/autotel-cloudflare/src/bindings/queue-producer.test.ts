@@ -63,7 +63,7 @@ describe('Queue Producer Binding Instrumentation', () => {
       expect(options.kind).toBe(SpanKind.PRODUCER);
       expect(options.attributes['messaging.system']).toBe('cloudflare-queues');
       expect(options.attributes['messaging.operation.type']).toBe('publish');
-      expect(options.attributes['messaging.operation']).toBe('send');
+      expect(options.attributes['messaging.operation.name']).toBe('send');
       expect(options.attributes['messaging.destination.name']).toBe('my-queue');
     });
 
@@ -156,7 +156,7 @@ describe('Queue Producer Binding Instrumentation', () => {
       expect(options.kind).toBe(SpanKind.PRODUCER);
       expect(options.attributes['messaging.system']).toBe('cloudflare-queues');
       expect(options.attributes['messaging.operation.type']).toBe('publish');
-      expect(options.attributes['messaging.operation']).toBe('sendBatch');
+      expect(options.attributes['messaging.operation.name']).toBe('sendBatch');
       expect(options.attributes['messaging.destination.name']).toBe('my-queue');
       expect(options.attributes['messaging.batch.message_count']).toBe(3);
     });

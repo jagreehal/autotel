@@ -25,8 +25,10 @@ export function inferResourceName(
   const attrs = span.attributes || {};
   const candidates = [
     attrs['service.name'],
+    attrs['service.peer.name'],
     attrs['peer.service'],
     attrs['http.host'],
+    attrs['db.system.name'],
     attrs['db.system'],
     attrs['messaging.system'],
     attrs['rpc.service'],
@@ -45,11 +47,16 @@ export function inferResourceType(
   attributes: SpanAttributes,
   name: string,
 ): ResourceType {
-  if (asString(attributes['db.system']) !== undefined) return 'database';
+  if (
+    asString(attributes['db.system.name']) !== undefined ||
+    asString(attributes['db.system']) !== undefined
+  )
+    return 'database';
   if (asString(attributes['cache.system']) !== undefined) return 'cache';
   if (asString(attributes['messaging.system']) !== undefined)
     return 'messaging';
   if (
+    asString(attributes['service.peer.name']) !== undefined ||
     asString(attributes['peer.service']) !== undefined ||
     asString(attributes['net.peer.name']) !== undefined ||
     asString(attributes['http.host']) !== undefined

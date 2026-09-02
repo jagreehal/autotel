@@ -85,7 +85,7 @@ export const SPAN_ATTRIBUTES = {
   URL_PATH: 'url.path',
   URL_QUERY: 'url.query',
   URL_FULL: 'url.full',
-  RPC_SYSTEM: 'rpc.system',
+  RPC_SYSTEM: 'rpc.system.name',
   RPC_METHOD: 'rpc.method',
   TANSTACK_TYPE: 'tanstack.type',
   TANSTACK_SERVER_FN_NAME: 'tanstack.server_function.name',

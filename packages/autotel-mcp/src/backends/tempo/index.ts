@@ -441,7 +441,9 @@ function resolveOtlpStatus(
   }
   // Positive success inference: a non-error HTTP code means the span completed
   // OK (error codes were already handled above).
-  const httpStatus = readNumericTag(tags['http.status_code']);
+  const httpStatus = readNumericTag(
+    tags['http.response.status_code'] ?? tags['http.status_code'],
+  );
   if (httpStatus !== undefined && httpStatus >= 100) {
     return 'OK';
   }

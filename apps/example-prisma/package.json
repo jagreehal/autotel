@@ -10,7 +10,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.79.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.80.0",
     "@prisma/adapter-better-sqlite3": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "@prisma/instrumentation": "^7.9.1",

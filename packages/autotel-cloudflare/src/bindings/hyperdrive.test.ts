@@ -71,8 +71,10 @@ describe('Hyperdrive Binding Instrumentation', () => {
       const [spanName, options] = mockTracer.startActiveSpan.mock.calls[0];
       expect(spanName).toBe('Hyperdrive my-db: connect');
       expect(options.kind).toBe(SpanKind.CLIENT);
-      expect(options.attributes['db.system']).toBe('cloudflare-hyperdrive');
-      expect(options.attributes['db.operation']).toBe('connect');
+      expect(options.attributes['db.system.name']).toBe(
+        'cloudflare-hyperdrive',
+      );
+      expect(options.attributes['db.operation.name']).toBe('connect');
       expect(options.attributes['server.address']).toBe('db.example.com');
       expect(options.attributes['server.port']).toBe(5432);
       expect(options.attributes['db.user']).toBe('user');

@@ -59,8 +59,8 @@ export async function tracebQuery<T>(
 
     try {
       span.setAttributes({
-        'db.system': dbSystem,
-        'db.operation': operation,
+        'db.system.name': dbSystem,
+        'db.operation.name': operation,
         ...attributes,
       });
 
@@ -288,23 +288,23 @@ export function instrumentDatabase<T extends object>(
 
         try {
           span.setAttributes({
-            'db.system': dbSystem,
-            'db.operation': operation,
+            'db.system.name': dbSystem,
+            'db.operation.name': operation,
           });
 
           if (dbName) {
-            span.setAttribute('db.name', dbName);
+            span.setAttribute('db.namespace', dbName);
           }
 
           if (table) {
-            span.setAttribute('db.sql.table', table);
+            span.setAttribute('db.collection.name', table);
           }
 
           // Try to extract query from arguments (common patterns)
           const query = extractQueryFromArgs(args);
           if (query) {
             span.setAttribute(
-              'db.statement',
+              'db.query.text',
               sanitizeQuery ? sanitizeSqlQuery(query) : query,
             );
           }

@@ -33,4 +33,4 @@ pnpm build              # Build package
 
 - ✅ **Always**: Use stable semconv constants, redact by default, match OTel MongoDB plugin API shape
 - ⚠️ **Ask first**: Adding new semconv attributes, changing default redactor preset
-- 🚫 **Never**: Use deprecated semconv (db.statement, db.system, net.peer.\*), disable redaction by default
+- 🚫 **Never**: Use deprecated semconv (db.statement, db.system.name, net.peer.\*), disable redaction by default

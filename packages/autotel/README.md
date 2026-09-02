@@ -1027,10 +1027,10 @@ export const processUser = withTracing({})((ctx) => async (user) => {
   // Warn on deprecated attributes
   safeSetAttributes(
     ctx,
-    { 'http.method': 'GET' }, // Deprecated!
+    { 'http.request.method': 'GET' }, // Deprecated!
     { guardrails: { warnDeprecated: true } },
   );
-  // Console: [autotel/attributes] Attribute "http.method" is deprecated. Use "http.request.method" instead.
+  // Console: [autotel/attributes] Attribute "http.request.method" is deprecated. Use "http.request.method" instead.
 });
 ```
 
@@ -1161,7 +1161,7 @@ export const publishOrder = traceProducer({
 **Automatic Span Attributes (OTel Semantic Conventions):**
 
 - `messaging.system` - The messaging system (kafka, sqs, rabbitmq, etc.)
-- `messaging.operation` - Always "publish" for producers
+- `messaging.operation.type` - Always "publish" for producers
 - `messaging.destination.name` - Topic/queue name
 - `messaging.message.id` - Extracted message ID (if configured)
 - `messaging.kafka.destination.partition` - Partition number (Kafka-specific)
@@ -1222,7 +1222,7 @@ export const processWithDLQ = traceConsumer({
 
 - `messaging.consumer.group` - Consumer group name
 - `messaging.batch.message_count` - Batch size (if batch mode)
-- `messaging.operation` - "receive" or "process"
+- `messaging.operation.type` - "receive" or "process"
 
 ### Consumer Lag Metrics
 
@@ -3022,8 +3022,8 @@ export function instrumentAxios(
     });
 
     // Follow OpenTelemetry semantic conventions
-    span.setAttribute('http.method', method);
-    span.setAttribute('http.url', url);
+    span.setAttribute('http.request.method', method);
+    span.setAttribute('url.full', url);
 
     if (captureHeaders && requestConfig.headers) {
       span.setAttribute(
@@ -3050,7 +3050,7 @@ export function instrumentAxios(
     (response: AxiosResponse) => {
       const span = (response.config as any).__span;
       if (span) {
-        span.setAttribute('http.status_code', response.status);
+        span.setAttribute('http.response.status_code', response.status);
 
         if (captureResponseBody && response.data) {
           span.setAttribute(
@@ -3068,7 +3068,7 @@ export function instrumentAxios(
       const span = error.config?.__span;
       if (span) {
         if (error.response) {
-          span.setAttribute('http.status_code', error.response.status);
+          span.setAttribute('http.response.status_code', error.response.status);
         }
         // Step 9: Finalize span on error (records exception)
         finalizeSpan(span, error);
@@ -3156,10 +3156,10 @@ Use standard attribute names from [OpenTelemetry Semantic Conventions](https://o
 
 ```typescript
 // ✅ Good - Standard conventions
-span.setAttribute('http.method', 'GET');
-span.setAttribute('http.status_code', 200);
-span.setAttribute('db.system', 'postgresql');
-span.setAttribute('db.operation', 'SELECT');
+span.setAttribute('http.request.method', 'GET');
+span.setAttribute('http.response.status_code', 200);
+span.setAttribute('db.system.name', 'postgresql');
+span.setAttribute('db.operation.name', 'SELECT');
 span.setAttribute('messaging.system', 'kafka');
 
 // ❌ Bad - Custom names

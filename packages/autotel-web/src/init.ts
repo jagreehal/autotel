@@ -441,9 +441,9 @@ function patchFetch(): void {
                 // Tag local spans with current baggage regardless of destination —
                 // this is our own telemetry and never leaves our collector.
                 ...getBaggageEntries(),
-                'http.method': method,
-                'http.url': url,
-                'http.status_code': response.status,
+                'http.request.method': method,
+                'url.full': url,
+                'http.response.status_code': response.status,
               },
             );
           }
@@ -466,8 +466,8 @@ function patchFetch(): void {
               endTime,
               {
                 ...getBaggageEntries(),
-                'http.method': method,
-                'http.url': url,
+                'http.request.method': method,
+                'url.full': url,
               },
             );
           }

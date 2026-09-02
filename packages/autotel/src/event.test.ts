@@ -476,6 +476,7 @@ describe('Events', () => {
             service: 'test-service',
             'service.version': '1.0.0',
             'deployment.environment': 'test',
+            'deployment.environment.name': 'test',
             jobId: 'job-123',
             // No traceId/spanId/correlationId - gracefully omitted
           },
@@ -703,6 +704,7 @@ describe('Events', () => {
             service: 'test-service',
             'service.version': undefined,
             'deployment.environment': undefined,
+            'deployment.environment.name': undefined,
             jobId: 'job-123',
             // No operation.name - gracefully omitted
           },

@@ -36,8 +36,8 @@ export function aggregateBySource(
   for (const trace of traces) {
     for (const span of trace.spans) {
       const attrs = span.attributes ?? {};
-      const filepath = attrs['code.filepath'];
-      const lineno = attrs['code.lineno'];
+      const filepath = attrs['code.file.path'] ?? attrs['code.filepath'];
+      const lineno = attrs['code.line.number'] ?? attrs['code.lineno'];
       if (typeof filepath !== 'string' || typeof lineno !== 'number') continue;
       const key = `${filepath}:${lineno}`;
       const existing = byKey.get(key);

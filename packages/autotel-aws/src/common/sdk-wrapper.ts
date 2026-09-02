@@ -60,7 +60,7 @@ export function wrapSDKClient<T extends Client<any, any, any, any>>(
                 }
                 if (responseMetadata.httpStatusCode) {
                   ctx.setAttribute(
-                    'http.status_code',
+                    'http.response.status_code',
                     responseMetadata.httpStatusCode,
                   );
                 }

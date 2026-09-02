@@ -55,12 +55,15 @@ describe('HttpInstrumented', () => {
     );
     expect(mockSpan.setAttributes).toHaveBeenCalledWith(
       expect.objectContaining({
-        'http.method': 'GET',
+        'http.request.method': 'GET',
         'service.name': 'api-client',
         'operation.name': 'api-client.getUser',
       }),
     );
-    expect(mockSpan.setAttribute).toHaveBeenCalledWith('http.status_code', 200);
+    expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+      'http.response.status_code',
+      200,
+    );
     expect(mockSpan.end).toHaveBeenCalled();
   });
 
@@ -155,9 +158,10 @@ describe('HttpInstrumented', () => {
     );
     expect(mockSpan.setAttributes).toHaveBeenCalledWith(
       expect.objectContaining({
-        'http.scheme': 'https',
-        'http.host': 'api.example.com',
-        'http.target': '/users/123?include=profile',
+        'url.scheme': 'https',
+        'server.address': 'api.example.com',
+        'url.path': '/users/123',
+        'url.query': 'include=profile',
       }),
     );
   });

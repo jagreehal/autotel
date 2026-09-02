@@ -199,7 +199,7 @@ const handler = createTracingServerHandler({
 
 ### Server Function Spans
 
-- `rpc.system` - "tanstack-start"
+- `rpc.system.name` - "tanstack-start"
 - `rpc.method` - Function name
 - `tanstack.server_function.name` - Function name
 - `tanstack.server_function.method` - HTTP method

@@ -91,7 +91,7 @@ export interface TraceSQSConfig {
  * Semantic attributes set automatically:
  * - `messaging.system` - 'aws_sqs'
  * - `messaging.destination.name` - Queue name
- * - `messaging.operation` - 'send' or 'receive'
+ * - `messaging.operation.type` - 'send' or 'receive'
  * - `aws.sqs.queue_url` - Full queue URL (if provided)
  *
  * Additional attributes you should set in your handler:

@@ -56,7 +56,14 @@ function getServiceFromSpan(span: SpanData, traceService: string): string {
  */
 function detectNodeType(span: SpanData): ServiceNode['nodeType'] {
   const attrs = span.attributes || {};
-  if (attrs['db.system'] || attrs['db.name'] || attrs['db.statement'])
+  if (
+    attrs['db.system.name'] ||
+    attrs['db.system'] ||
+    attrs['db.namespace'] ||
+    attrs['db.name'] ||
+    attrs['db.query.text'] ||
+    attrs['db.statement']
+  )
     return 'database';
   if (
     attrs['messaging.system'] ||
@@ -64,7 +71,12 @@ function detectNodeType(span: SpanData): ServiceNode['nodeType'] {
     attrs['messaging.url']
   )
     return 'messaging';
-  if (attrs['rpc.system'] || attrs['rpc.service'] || attrs['peer.service'])
+  if (
+    attrs['rpc.system.name'] ||
+    attrs['rpc.system'] ||
+    attrs['rpc.service'] ||
+    attrs['peer.service']
+  )
     return 'external';
   return 'service';
 }
@@ -157,6 +169,7 @@ export function buildServiceMap(traces: TraceData[]): BuildServiceMapResult {
             span.attributes,
             'peer.service',
             'http.host',
+            'db.system.name',
             'db.system',
             'net.peer.name',
             'rpc.service',

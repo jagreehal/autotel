@@ -80,7 +80,7 @@ export interface TraceSNSConfig {
  * Semantic attributes set automatically:
  * - `messaging.system` - 'aws_sns'
  * - `messaging.destination.name` - Topic ARN
- * - `messaging.operation` - 'publish'
+ * - `messaging.operation.type` - 'publish'
  *
  * Additional attributes you should set in your handler:
  * - `messaging.message.id` - Message ID from response

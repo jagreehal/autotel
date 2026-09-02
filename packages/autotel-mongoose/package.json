@@ -47,9 +47,9 @@
     "autotel": "*"
   },
   "devDependencies": {
-    "@opentelemetry/context-async-hooks": "^2.10.0",
-    "@opentelemetry/core": "^2.10.0",
-    "@opentelemetry/sdk-trace-node": "^2.10.0",
+    "@opentelemetry/context-async-hooks": "^2.11.0",
+    "@opentelemetry/core": "^2.11.0",
+    "@opentelemetry/sdk-trace-node": "^2.11.0",
     "@types/node": "^26.1.2",
     "autotel": "workspace:*",
     "kareem": "^3.3.0",

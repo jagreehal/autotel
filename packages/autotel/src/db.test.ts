@@ -49,12 +49,18 @@ describe('instrumentDatabase', () => {
     );
     expect(mockSpan.setAttributes).toHaveBeenCalledWith(
       expect.objectContaining({
-        'db.system': 'postgresql',
-        'db.operation': 'SELECT',
+        'db.system.name': 'postgresql',
+        'db.operation.name': 'SELECT',
       }),
     );
-    expect(mockSpan.setAttribute).toHaveBeenCalledWith('db.name', 'testdb');
-    expect(mockSpan.setAttribute).toHaveBeenCalledWith('db.sql.table', 'user');
+    expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+      'db.namespace',
+      'testdb',
+    );
+    expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+      'db.collection.name',
+      'user',
+    );
     expect(mockSpan.end).toHaveBeenCalled();
   });
 
@@ -243,8 +249,8 @@ describe('tracebQuery', () => {
     );
     expect(mockSpan.setAttributes).toHaveBeenCalledWith(
       expect.objectContaining({
-        'db.system': 'postgresql',
-        'db.operation': 'SELECT',
+        'db.system.name': 'postgresql',
+        'db.operation.name': 'SELECT',
         'db.statement': 'SELECT * FROM users',
       }),
     );
