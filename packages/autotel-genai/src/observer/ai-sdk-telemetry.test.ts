@@ -501,6 +501,64 @@ describe('autotelTelemetry — runtimeContext', () => {
     expect(chat.attributes[GEN_AI.CONVERSATION_ID]).toBe('s_456');
     expect(chat.attributes.tenant).toBeUndefined();
   });
+
+  // The SDK withholds runtimeContext from telemetry unless the call names each
+  // key in `telemetry.includeRuntimeContext`. When it does, `onStart` simply
+  // arrives without the field — and no conversation id can be stamped. Pinned
+  // so the mapping is never mistaken for something that works unconditionally.
+  it('records no conversation id when the SDK withheld runtimeContext', () => {
+    const t = autotelTelemetry({ tracer });
+    t.onStart({
+      callId: 'c8b',
+      operationId: 'ai.generateText',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+      functionId: 'support-agent',
+    });
+    t.onLanguageModelCallStart({ callId: 'c8b', modelId: 'gpt-4o' });
+    t.onLanguageModelCallEnd({ callId: 'c8b', modelId: 'gpt-4o' });
+    t.onEnd({ callId: 'c8b' });
+
+    const agent = one('invoke_agent support-agent');
+    expect(agent.attributes[GEN_AI.CONVERSATION_ID]).toBeUndefined();
+    expect(agent.attributes['user.id']).toBeUndefined();
+  });
+
+  // Every optional field explicitly `undefined` — the shape an SDK event has
+  // under `exactOptionalPropertyTypes`. Must type-check and must not stamp
+  // empty attributes.
+  it('tolerates optional fields explicitly set to undefined', () => {
+    const t = autotelTelemetry({ tracer });
+    t.onStart({
+      callId: 'c8c',
+      operationId: 'ai.generateText',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+      functionId: 'undef-agent',
+      runtimeContext: undefined,
+    });
+    t.onLanguageModelCallStart({
+      callId: 'c8c',
+      modelId: 'gpt-4o',
+      temperature: undefined,
+      messages: undefined,
+      recordInputs: undefined,
+    });
+    t.onLanguageModelCallEnd({
+      callId: 'c8c',
+      modelId: 'gpt-4o',
+      responseId: undefined,
+      finishReason: undefined,
+      usage: { inputTokens: 3, outputTokens: undefined },
+      performance: undefined,
+    });
+    t.onEnd({ callId: 'c8c' });
+
+    const chat = one('chat gpt-4o');
+    expect(chat.attributes[GEN_AI.USAGE_INPUT_TOKENS]).toBe(3);
+    expect(chat.attributes[GEN_AI.USAGE_OUTPUT_TOKENS]).toBeUndefined();
+    expect(chat.attributes[GEN_AI.RESPONSE_FINISH_REASONS]).toBeUndefined();
+  });
 });
 
 describe('autotelTelemetry — context runners', () => {

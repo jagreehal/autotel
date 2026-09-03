@@ -17,7 +17,6 @@
 'autotel-posthog': minor
 'autotel-tanstack': minor
 'autotel-terminal': minor
-'autotel-vscode': minor
 'autotel-web': minor
 ---
 

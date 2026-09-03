@@ -17,19 +17,24 @@ import { GEN_AI_OPERATION } from '../semconv.js';
 
 /** Every AI SDK token-usage field name we understand (v4 + v5, flat + nested). */
 export interface AiSdkUsageFields {
-  inputTokens?: number;
-  outputTokens?: number;
+  inputTokens?: number | undefined;
+  outputTokens?: number | undefined;
   /** v4 aliases. */
-  promptTokens?: number;
-  completionTokens?: number;
+  promptTokens?: number | undefined;
+  completionTokens?: number | undefined;
   /** Embedding usage. */
-  tokens?: number;
+  tokens?: number | undefined;
   /** Flat v5 detail fields. */
-  reasoningTokens?: number;
-  cachedInputTokens?: number;
+  reasoningTokens?: number | undefined;
+  cachedInputTokens?: number | undefined;
   /** Nested v5 detail fields. */
-  inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number };
-  outputTokenDetails?: { reasoningTokens?: number };
+  inputTokenDetails?:
+    | {
+        cacheReadTokens?: number | undefined;
+        cacheWriteTokens?: number | undefined;
+      }
+    | undefined;
+  outputTokenDetails?: { reasoningTokens?: number | undefined } | undefined;
 }
 
 /** Map any AI SDK usage fields to {@link TokenUsage}; `undefined` if all empty. */
