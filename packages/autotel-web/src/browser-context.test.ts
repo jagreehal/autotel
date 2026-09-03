@@ -25,6 +25,15 @@ describe('browserResourceAttributes', () => {
     ).toMatchObject({ 'browser.language': 'en-GB' });
   });
 
+  it('marks a webdriver-driven browser as synthetic', () => {
+    expect(
+      withNavigator({ webdriver: true }, browserResourceAttributes),
+    ).toMatchObject({ 'user_agent.synthetic.type': 'test' });
+    expect(
+      withNavigator({ webdriver: false }, browserResourceAttributes),
+    ).not.toHaveProperty('user_agent.synthetic.type');
+  });
+
   it('reports platform, mobile and brands from userAgentData', () => {
     const attrs = withNavigator(
       {

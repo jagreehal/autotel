@@ -17,6 +17,11 @@
       "types": "./dist/reporter.d.ts",
       "import": "./dist/reporter.js",
       "require": "./dist/reporter.cjs"
+    },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "import": "./dist/session.js",
+      "require": "./dist/session.cjs"
     }
   },
   "files": [

@@ -424,6 +424,8 @@ init({
 | `autotel-schema`              | Telemetry surface as a typed, versioned contract: declare, validate, diff for breaking changes                                       |
 | `autotel-agents`              | Coding-agent observability: turns Claude Code / opencode / Codex signals into a session model                                        |
 | `autotel-devtools`            | Local devtools widget and server                                                                                                     |
+| `autotel-web`                 | Browser SDK: trace propagation, browser spans, and the RUM signals a backend cannot derive for itself                                |
+| `autotel-playwright`          | Playwright fixture (one span per test) and `withBrowserSession()` for browser sessions outside tests                                 |
 
 Each package has a `CLAUDE.md` for local conventions.
 

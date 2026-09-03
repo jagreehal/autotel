@@ -102,6 +102,7 @@ built on the browser conventions works without knowing autotel exists.
 | a long task    | `app.jank` + `app.jank.threshold`                                         |
 | a session      | `session.id` / `session.previous_id`, `session.start` / `session.end`     |
 | the browser    | `browser.language`, `.platform`, `.mobile`, `.brands` (resource)          |
+| an automation  | `user_agent.synthetic.type` = `test` (resource)                           |
 | a feature flag | `feature_flag.*` + the `feature_flag.evaluation` event                    |
 
 `src/semconv.ts` is the source of truth and is pinned by a test — a typo in one
@@ -110,6 +111,12 @@ of these strings is invisible at runtime and silently empties a panel.
 Where the spec names an event but not its body, the fields are autotel
 extensions prefixed with the canonical event name (`browser.web_vital.value`),
 so they read as extensions and line up if the spec later lands.
+
+A page driven by Playwright, Puppeteer, Selenium or a browser agent built on
+one of them sets `navigator.webdriver`, and that becomes
+`user_agent.synthetic.type: 'test'` on the resource. Segment on it to keep
+automated sessions and people's sessions in separate panels: a headless run's
+web vitals, dead clicks and rage clicks describe the script, not a person.
 
 `user_agent.name` and friends are deliberately **not** set: deriving them needs
 a real user-agent database, every OTLP collector ships one, and a regex shipped

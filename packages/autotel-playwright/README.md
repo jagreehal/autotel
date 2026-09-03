@@ -121,6 +121,8 @@ test('user flow', async ({ page }) => {
 - **`expect`** - Re-exported from `@playwright/test`.
 - **`createGlobalSetup(opts?)`** - Returns an async function that calls `autotel.init(opts)` for use as `globalSetup`.
 - **`AUTOTEL_ATTRIBUTE_ANNOTATION`** - Annotation type string for custom span attributes (`key=value` in description).
+- **`withBrowserSession(context, run, options?)`** (`autotel-playwright/session`) - Runs `run` inside a `browser.session` span that records the session's CPU, heap, network bytes, pages and console errors. See [Browser sessions outside tests](#browser-sessions-outside-tests).
+- **`BROWSER_SESSION_ATTRIBUTES`** (`autotel-playwright/session`) - The attribute names that span carries.
 
 ### Optional: reporter (test + step spans from runner)
 
@@ -137,6 +139,57 @@ export default defineConfig({
 ```
 
 Reporter creates one span per test (`e2e:${title}`) and one per step (`step:${title}`) as children. For a single trace that includes **test → API** (worker), use the fixture only; the reporter adds a parallel view from the runner.
+
+## Browser sessions outside tests
+
+`withBrowserSession()` puts a span around a whole browser session and records
+what the session cost. It takes a Playwright `BrowserContext`, so it works for
+agents and scrapers driving a browser in production, not only for tests.
+
+```ts
+import { chromium } from 'playwright';
+import { init } from 'autotel';
+import { withBrowserSession } from 'autotel-playwright/session';
+
+init({ service: 'browser-agent' });
+
+const context = await (await chromium.launch()).newContext();
+
+await withBrowserSession(context, async ({ sessionId }) => {
+  const page = await context.newPage();
+  await page.goto('https://example.com');
+  // Anything started in here joins the session's trace, including work whose
+  // RPC or HTTP calls carry W3C trace context.
+});
+```
+
+One `browser.session` span per session, carrying:
+
+| attribute                        | what it answers                                         |
+| -------------------------------- | ------------------------------------------------------- |
+| `session.id`                     | your id, or the span id when you pass none              |
+| `browser.session.cpu.time`       | seconds of browser CPU, summed over the session's pages |
+| `browser.session.memory.usage`   | peak JS heap in bytes                                   |
+| `browser.session.network.io`     | bytes on the wire, headers and bodies, both directions  |
+| `browser.session.pages`          | pages the session opened                                |
+| `browser.session.console.errors` | console errors plus uncaught page exceptions            |
+
+Console output arrives as `browser.console` span events (`error` and `warning`
+by default, `consoleLevels` to widen), and every uncaught page exception is
+recorded on the span. CPU and heap come from CDP and so are Chromium-only;
+network, console and timing work on every browser Playwright drives.
+
+```ts
+await withBrowserSession(context, run, {
+  sessionId: myWorkflowId,
+  consoleLevels: ['error', 'warning', 'info'],
+  attributes: { 'workflow.name': 'checkout-audit' },
+});
+```
+
+Pair it with `context.tracing.start({ screenshots: true, snapshots: true })` and
+pass the trace path in `attributes` when you want a replay to open from the span
+at [trace.playwright.dev](https://trace.playwright.dev).
 
 ## Configuration and troubleshooting
 
