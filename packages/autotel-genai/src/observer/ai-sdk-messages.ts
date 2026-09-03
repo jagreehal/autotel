@@ -26,24 +26,24 @@ import type { GenAiMessage, GenAiMessagePart } from '../events.js';
 // assignable to them.
 
 export interface ModelMessageView {
-  role?: string;
-  content?: string | readonly ContentPartView[];
+  role?: string | undefined;
+  content?: string | readonly ContentPartView[] | undefined;
 }
 
 export interface ContentPartView {
-  type?: string;
+  type?: string | undefined;
   /** text / reasoning */
-  text?: string;
+  text?: string | undefined;
   /** tool-call */
-  toolCallId?: string;
-  toolName?: string;
-  input?: unknown;
+  toolCallId?: string | undefined;
+  toolName?: string | undefined;
+  input?: unknown | undefined;
   /** tool-result */
-  output?: unknown;
+  output?: unknown | undefined;
   /** image / file */
-  mediaType?: string;
+  mediaType?: string | undefined;
   /** image / file raw bytes — deliberately never inlined onto spans */
-  data?: unknown;
+  data?: unknown | undefined;
 }
 
 /** Result of converting an AI SDK prompt: messages plus split-out system parts. */

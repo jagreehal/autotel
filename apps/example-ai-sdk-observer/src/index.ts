@@ -12,6 +12,16 @@
  * reliability) with the `ollama` provider; they wrap the AI SDK's own functions,
  * so the telemetry lifecycle — and thus our integration — fires transparently.
  *
+ * Demo 5 covers the `ToolLoopAgent` path, where two things differ from the
+ * function calls above and are easy to get wrong:
+ *
+ *   - `telemetry` is a **constructor** setting, not a `.generate()` option;
+ *   - `runtimeContext` reaches telemetry only for keys named in
+ *     `includeRuntimeContext`, so `gen_ai.conversation.id` is silently absent
+ *     without it.
+ *
+ * Both are asserted, so this file fails loudly if either contract changes.
+ *
  * Prereqs: `ollama serve` running, `ollama pull llama3.2`, and (for Demo 4)
  * `ollama pull nomic-embed-text`.
  */
@@ -21,7 +31,8 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
-import { embed, registerTelemetry, stepCountIs, tool } from 'ai';
+import assert from 'node:assert/strict';
+import { ToolLoopAgent, embed, registerTelemetry, stepCountIs, tool } from 'ai';
 import { generateText, ollama, streamText } from 'ai-sdk-ollama';
 import { autotelTelemetry } from 'autotel-genai/observer';
 import { z } from 'zod';
@@ -102,6 +113,50 @@ async function main(): Promise<void> {
         `  pull it with: ollama pull ${EMBED_MODEL}`,
     );
   }
+
+  // --- Demo 5: ToolLoopAgent — telemetry on the constructor, session grouping -
+  exporter.reset();
+  console.log(`\n=== Demo 5 · ToolLoopAgent (agent + conversation id) ===`);
+  const supportAgent = new ToolLoopAgent({
+    model,
+    id: 'support-agent',
+    instructions: 'Answer in one short sentence.',
+    // On the agent, not on generate(). Passing this to .generate() is a type
+    // error; spreading it in type-checks but is dropped.
+    telemetry: {
+      functionId: 'support-agent',
+      // Without this, runtimeContext never reaches the telemetry integration
+      // and no gen_ai.conversation.id is recorded.
+      includeRuntimeContext: { sessionId: true },
+    },
+    // On the agent here; later ai 7.0.x also accepts runtimeContext per
+    // .generate() call, which is what you want when the session varies.
+    runtimeContext: { sessionId: 'session-42' },
+  });
+  const answer = await supportAgent.generate({
+    prompt: 'What does a trace exporter do?',
+  });
+  console.log('agent:', oneLine(answer.text));
+  const agentSpans = exporter.getFinishedSpans();
+  printTrace(agentSpans);
+
+  const invoke = agentSpans.find(
+    (s) => s.name === 'invoke_agent support-agent',
+  );
+  assert.ok(
+    invoke,
+    'expected an invoke_agent span named from telemetry.functionId',
+  );
+  for (const span of agentSpans) {
+    assert.equal(
+      span.attributes['gen_ai.conversation.id'],
+      'session-42',
+      `expected gen_ai.conversation.id on ${span.name} — is includeRuntimeContext set?`,
+    );
+  }
+  console.log(
+    '  ✓ invoke_agent named from functionId, conversation id on every span',
+  );
 
   await provider.shutdown();
 }

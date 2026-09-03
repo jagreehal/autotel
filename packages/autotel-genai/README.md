@@ -349,11 +349,35 @@ on every `chat` span:
 
 It is push-based and concurrency-safe (every event carries the SDK `callId`),
 and it pulls in **no** dependency on `ai`. The returned object satisfies the
-`Telemetry` interface structurally, so the snippet above type-checks as-is.
+`Telemetry` interface structurally, so the snippet above type-checks as-is —
+including under `exactOptionalPropertyTypes: true`.
 Embeddings open on `onEmbedStart` so span duration is the real model call.
-`runtimeContext.userId` / `sessionId` become `user.id` /
-`gen_ai.conversation.id`; other keys are dropped. `rerank` has no canonical
-`gen_ai` operation and is intentionally not mapped.
+`rerank` has no canonical `gen_ai` operation and is intentionally not mapped.
+
+**`ToolLoopAgent`.** Agents run the same lifecycle, but their telemetry settings
+live on the **constructor**, not on `.generate()`. Passing `telemetry` to
+`.generate()` is a type error, and spreading it in type-checks while doing
+nothing:
+
+```ts
+const agent = new ToolLoopAgent({
+  model,
+  id: 'support-agent',
+  telemetry: { functionId: 'support-agent' }, // names the invoke_agent span
+});
+```
+
+**Sessions need opting in.** `runtimeContext.userId` / `sessionId` become
+`user.id` / `gen_ai.conversation.id` and other keys are dropped — but the SDK
+withholds `runtimeContext` from telemetry entirely unless the call names each
+key. Without this there is no conversation id on the spans at all:
+
+```ts
+telemetry: {
+  functionId: 'support-agent',
+  includeRuntimeContext: { sessionId: true },
+}
+```
 
 **Nested traces.** It implements the SDK's `executeTool` / `executeLanguageModelCall`
 context runners, so a tool whose `execute` calls `generateText`. And the

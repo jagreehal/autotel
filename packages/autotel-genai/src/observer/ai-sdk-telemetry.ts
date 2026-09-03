@@ -32,13 +32,21 @@
  * dependency on `ai` / `@ai-sdk/*`. The returned object satisfies the AI SDK
  * `Telemetry` interface by structural compatibility (every event the SDK passes
  * is a superset of the fields read here), so `registerTelemetry(autotelTelemetry())`
- * type-checks without importing the interface.
+ * type-checks without importing the interface — including under
+ * `exactOptionalPropertyTypes: true`, which is why every optional field on the
+ * `*View` types below is written `?: T | undefined` rather than `?: T`.
  *
  * Scope: `generateText` / `streamText` (incl. tool loops and `output`),
- * `generateObject` / `streamObject`, and `embed` / `embedMany`. Embeddings
+ * `generateObject` / `streamObject`, and `embed` / `embedMany`. `ToolLoopAgent`
+ * runs through the same lifecycle, but its telemetry settings live on the
+ * constructor (`new ToolLoopAgent({ telemetry: { functionId } })`), not on
+ * `.generate()`. Embeddings
  * open on `onEmbedStart` so duration is real. `userId` / `sessionId` on
  * `runtimeContext` become `user.id` / `gen_ai.conversation.id`; leftover
- * keys are dropped. A tool's nested `generateText` and the provider's own
+ * keys are dropped. Note that the SDK withholds `runtimeContext` from telemetry
+ * unless the call opts each key in — `telemetry: { includeRuntimeContext: {
+ * sessionId: true } }` — so without that, nothing arrives here to map. A tool's
+ * nested `generateText` and the provider's own
  * HTTP spans parent correctly via the `executeTool` / `executeLanguageModelCall`
  * context runners. `rerank` has no canonical `gen_ai` operation in the v1.42.0
  * registry and is intentionally not mapped.
@@ -88,93 +96,96 @@ import { asString, readProperty } from '../values.js';
 interface OperationStartEvent {
   callId: string;
   /** e.g. `'ai.generateText'`, `'ai.streamText'`, `'ai.embed'`. */
-  operationId?: string;
-  provider?: string;
-  modelId?: string;
+  operationId?: string | undefined;
+  provider?: string | undefined;
+  modelId?: string | undefined;
   /** From telemetry settings — used as the agent name. */
-  functionId?: string;
+  functionId?: string | undefined;
   /**
    * Call-level context already filtered by the SDK. Only `userId` and
    * `sessionId` are recorded (`user.id`, `gen_ai.conversation.id`).
    */
-  runtimeContext?: Record<string, unknown>;
+  runtimeContext?: Record<string, unknown> | undefined;
 }
 
 interface LanguageModelCallStartEventView {
   callId: string;
-  provider?: string;
-  modelId?: string;
-  temperature?: number;
-  maxOutputTokens?: number;
-  topP?: number;
-  topK?: number;
-  frequencyPenalty?: number;
-  presencePenalty?: number;
-  stopSequences?: string[];
-  seed?: number;
+  provider?: string | undefined;
+  modelId?: string | undefined;
+  temperature?: number | undefined;
+  maxOutputTokens?: number | undefined;
+  topP?: number | undefined;
+  topK?: number | undefined;
+  frequencyPenalty?: number | undefined;
+  presencePenalty?: number | undefined;
+  stopSequences?: string[] | undefined;
+  seed?: number | undefined;
   /** Standardized prompt messages (when content capture is on). */
-  messages?: readonly ModelMessageView[];
+  messages?: readonly ModelMessageView[] | undefined;
   /** Whether the SDK call permits recording inputs (default true). */
-  recordInputs?: boolean;
+  recordInputs?: boolean | undefined;
 }
 
 interface LanguageModelCallEndEventView {
   callId: string;
-  modelId?: string;
-  responseId?: string;
-  finishReason?: string;
-  usage?: AiSdkUsageFields;
+  modelId?: string | undefined;
+  responseId?: string | undefined;
+  finishReason?: string | undefined;
+  usage?: AiSdkUsageFields | undefined;
   /** Output content parts (when content capture is on). */
-  content?: readonly ContentPartView[];
+  content?: readonly ContentPartView[] | undefined;
   /** Whether the SDK call permits recording outputs (default true). */
-  recordOutputs?: boolean;
-  performance?: {
-    responseTimeMs?: number;
-    effectiveOutputTokensPerSecond?: number;
-    timeToFirstOutputMs?: number;
-  };
+  recordOutputs?: boolean | undefined;
+  performance?:
+    | {
+        responseTimeMs?: number | undefined;
+        effectiveOutputTokensPerSecond?: number | undefined;
+        timeToFirstOutputMs?: number | undefined;
+      }
+    | undefined;
 }
 
 interface ToolCallView {
-  toolCallId?: string;
-  toolName?: string;
-  input?: unknown;
+  toolCallId?: string | undefined;
+  toolName?: string | undefined;
+  input?: unknown | undefined;
 }
 
 interface ToolExecutionStartEventView {
   callId: string;
   toolCall: ToolCallView;
-  recordInputs?: boolean;
+  recordInputs?: boolean | undefined;
 }
 
 interface ToolOutputView {
-  type?: string;
-  output?: unknown;
-  error?: unknown;
+  type?: string | undefined;
+  output?: unknown | undefined;
+  error?: unknown | undefined;
 }
 
 interface ToolExecutionEndEventView {
   callId: string;
   toolCall: ToolCallView;
   toolOutput: ToolOutputView;
-  recordOutputs?: boolean;
+  recordOutputs?: boolean | undefined;
 }
 
 interface ObjectStepStartEventView {
   callId: string;
-  provider?: string;
-  modelId?: string;
+  provider?: string | undefined;
+  modelId?: string | undefined;
 }
 
 interface ObjectStepEndEventView {
   callId: string;
-  finishReason?: string;
-  response?: { id?: string; modelId?: string };
-  usage?: AiSdkUsageFields;
-  objectText?: string;
+  finishReason?: string | undefined;
+  response?:
+    { id?: string | undefined; modelId?: string | undefined } | undefined;
+  usage?: AiSdkUsageFields | undefined;
+  objectText?: string | undefined;
   /** Whether the SDK call permits recording outputs (default true). */
-  recordOutputs?: boolean;
-  msToFirstChunk?: number;
+  recordOutputs?: boolean | undefined;
+  msToFirstChunk?: number | undefined;
 }
 
 interface OperationEndEventView {
@@ -183,22 +194,22 @@ interface OperationEndEventView {
 
 interface AbortEventView {
   callId: string;
-  reason?: unknown;
+  reason?: unknown | undefined;
 }
 
 interface EmbeddingModelCallStartEventView {
   callId: string;
-  embedCallId?: string;
-  provider?: string;
-  modelId?: string;
+  embedCallId?: string | undefined;
+  provider?: string | undefined;
+  modelId?: string | undefined;
 }
 
 interface EmbeddingModelCallEndEventView {
   callId: string;
-  embedCallId?: string;
-  provider?: string;
-  modelId?: string;
-  usage?: { tokens?: number };
+  embedCallId?: string | undefined;
+  provider?: string | undefined;
+  modelId?: string | undefined;
+  usage?: { tokens?: number | undefined } | undefined;
 }
 
 /**
