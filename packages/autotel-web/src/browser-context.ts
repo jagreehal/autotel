@@ -11,7 +11,7 @@
  * be wrong in a way nobody could correct without a release.
  */
 
-import { BROWSER } from './semconv';
+import { BROWSER, USER_AGENT } from './semconv';
 
 interface UserAgentBrand {
   brand: string;
@@ -39,6 +39,14 @@ export function browserResourceAttributes(): BrowserResourceAttributes {
   const attributes: BrowserResourceAttributes = {};
   const { language } = navigator;
   if (language) attributes[BROWSER.LANGUAGE] = language;
+
+  // Stated by the platform, not inferred: Playwright, Puppeteer, Selenium and
+  // every browser agent built on them set it. Without the flag their sessions
+  // land in the same dashboards as people's, and a headless run's vitals and
+  // dead clicks are not a human's.
+  if ((navigator as Navigator & { webdriver?: boolean }).webdriver === true) {
+    attributes[USER_AGENT.SYNTHETIC_TYPE] = 'test';
+  }
 
   // Chromium-only; absent in Safari and Firefox, where it stays absent rather
   // than being inferred.

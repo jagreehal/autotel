@@ -4,7 +4,11 @@ import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 export default defineConfig({
   outExtensions: tsupCompatOutExtensions,
   tsconfig: 'tsconfig.build.json',
-  entry: { index: 'src/index.ts', reporter: 'src/reporter.ts' },
+  entry: {
+    index: 'src/index.ts',
+    reporter: 'src/reporter.ts',
+    session: 'src/session.ts',
+  },
   format: ['esm', 'cjs'],
   dts: true,
   sourcemap: false,

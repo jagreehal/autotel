@@ -39,7 +39,10 @@ rather than a nice-to-have.
 - `src/session.ts`: `session.id` / `session.previous_id`, plus optional
   `session.start` / `session.end`. A session another SDK owns (`id` provider)
   emits no lifecycle events — claiming it began when we first asked is a guess.
-- `src/browser-context.ts`: `browser.*` resource attributes. `user_agent.*` is
+- `src/browser-context.ts`: `browser.*` resource attributes, plus
+  `user_agent.synthetic.type: 'test'` when `navigator.webdriver` is set — the
+  platform states that outright, so no inference is involved, and it keeps
+  automated sessions separable from people's. The rest of `user_agent.*` is
   deliberately unset: deriving it needs a real UA database, every collector
   ships one, and a regex shipped to every visitor is wrong in a way nobody can
   fix without a release.
