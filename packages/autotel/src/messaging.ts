@@ -1727,7 +1727,6 @@ function setProducerAttributes(
   ctx.setAttribute('messaging.system', config.system);
   ctx.setAttribute('messaging.operation.name', 'publish');
   ctx.setAttribute('messaging.operation.type', 'send');
-  ctx.setAttribute('messaging.operation', 'publish');
   ctx.setAttribute('messaging.destination.name', config.destination);
 
   // Set system-specific destination attribute
@@ -1791,10 +1790,6 @@ function setConsumerAttributes(
   );
   ctx.setAttribute(
     'messaging.operation.type',
-    config.batchMode ? 'receive' : 'process',
-  );
-  ctx.setAttribute(
-    'messaging.operation',
     config.batchMode ? 'receive' : 'process',
   );
   ctx.setAttribute('messaging.destination.name', config.destination);

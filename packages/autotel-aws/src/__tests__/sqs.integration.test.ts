@@ -104,7 +104,7 @@ describe.skipIf(!isLocalStackAvailable)('SQS Integration Tests', () => {
       const sendSpan = spans.find((s) => s.name === 'sqs.send');
       expect(sendSpan).toBeDefined();
       expect(sendSpan?.attributes['messaging.system']).toBe('aws_sqs');
-      expect(sendSpan?.attributes['messaging.operation']).toBe('send');
+      expect(sendSpan?.attributes['messaging.operation.type']).toBe('send');
     });
 
     it('should send batch messages', async () => {

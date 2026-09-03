@@ -173,7 +173,12 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
         }
         case 'api_error': {
           event.errorMessage = str(attrs, 'error', 'error.message', 'message');
-          event.statusCode = num(attrs, 'status_code', 'http.status_code');
+          event.statusCode = num(
+            attrs,
+            'status_code',
+            'http.response.status_code',
+            'http.status_code',
+          );
           event.durationMs = num(attrs, 'duration_ms');
           break;
         }

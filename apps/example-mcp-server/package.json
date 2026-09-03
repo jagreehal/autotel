@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
-    "@opentelemetry/sdk-trace-base": "^2.10.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
     "autotel": "workspace:*",
     "autotel-mcp-instrumentation": "workspace:*",
     "zod": "4.4.3"

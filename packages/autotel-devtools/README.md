@@ -237,7 +237,7 @@ against everything it has kept, rather than only what is on screen.
 ```
 service = api AND duration > 100
 name CONTAINS checkout
-http.status_code = 500
+http.response.status_code = 500
 service IN [api, web, worker]
 name REGEXP "^GET /users/[0-9]+$"
 severity_number >= 17          # logs: error and above

@@ -31,7 +31,9 @@ function getStatusCodeFromSpans(
   spans: TerminalSpanEvent[],
 ): number | undefined {
   for (const span of spans) {
-    const code = span.attributes?.['http.status_code'];
+    const code =
+      span.attributes?.['http.response.status_code'] ??
+      span.attributes?.['http.status_code'];
     if (typeof code === 'number') return code;
     if (typeof code === 'string') {
       const n = Number(code);

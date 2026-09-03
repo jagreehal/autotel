@@ -15,7 +15,7 @@
  *   operation: 'GetItem',
  *   table: 'users'
  * })(ctx => async (userId: string) => {
- *   ctx.setAttribute('db.statement', 'GetItem WHERE id = :id');
+ *   ctx.setAttribute('db.query.text', 'GetItem WHERE id = :id');
  *   return await dynamodb.send(new GetItemCommand({
  *     TableName: 'users',
  *     Key: { id: { S: userId } }
@@ -63,7 +63,7 @@ export interface TraceDynamoDBConfig {
 
   /**
    * DynamoDB table name.
-   * Sets `db.name` and `aws.dynamodb.table_names` attributes.
+   * Sets `db.namespace` and `aws.dynamodb.table_names` attributes.
    */
   table: string;
 }
@@ -79,9 +79,9 @@ export interface TraceDynamoDBConfig {
  *
  * @remarks
  * Semantic attributes set automatically:
- * - `db.system` - 'dynamodb'
- * - `db.operation` - The operation name (GetItem, PutItem, etc.)
- * - `db.name` - Table name
+ * - `db.system.name` - 'dynamodb'
+ * - `db.operation.name` - The operation name (GetItem, PutItem, etc.)
+ * - `db.namespace` - Table name
  * - `aws.dynamodb.table_names` - Array containing the table name
  *
  * Additional attributes you should set in your handler:

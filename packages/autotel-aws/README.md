@@ -674,18 +674,18 @@ All instrumentation follows [OpenTelemetry AWS Semantic Conventions](https://ope
 
 **AWS SDK:**
 
-- `rpc.system` (aws-api), `rpc.service`, `rpc.method`
-- `aws.request_id`, `http.status_code`
+- `rpc.system.name` (aws-api), `rpc.service`, `rpc.method`
+- `aws.request_id`, `http.response.status_code`
 
 **Messaging (SQS/SNS/Kinesis):**
 
 - `messaging.system`, `messaging.destination.name`
-- `messaging.operation`, `messaging.message.id`
+- `messaging.operation.type`, `messaging.message.id`
 - `messaging.batch.message_count` (for batch operations)
 
 **Database (DynamoDB):**
 
-- `db.system`, `db.operation`, `db.name`
+- `db.system.name`, `db.operation.name`, `db.namespace`
 - `aws.dynamodb.table_names`
 
 **Step Functions:**

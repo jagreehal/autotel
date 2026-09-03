@@ -231,7 +231,7 @@ autotel-mongoose uses stable OTel semconv:
 ```typescript
 // Deprecated (do not use in custom code alongside this package)
 'db.statement'; // use db.query.text
-'db.system'; // use db.system.name
+'db.system.name'; // use db.system.name
 'net.peer.name'; // use server.address
 'net.peer.port'; // use server.port
 ```

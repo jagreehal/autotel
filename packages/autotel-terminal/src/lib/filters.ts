@@ -28,7 +28,7 @@ function getRoute(span: TerminalSpanEvent): string | undefined {
 
 function getStatusCode(span: TerminalSpanEvent): number | undefined {
   const attrs = span.attributes ?? {};
-  const code = attrs['http.status_code'];
+  const code = attrs['http.response.status_code'] ?? attrs['http.status_code'];
   if (typeof code === 'number') return code;
   if (typeof code === 'string') {
     const n = Number(code);

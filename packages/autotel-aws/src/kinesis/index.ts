@@ -89,7 +89,7 @@ export interface TraceKinesisConfig {
  * Semantic attributes set automatically:
  * - `messaging.system` - 'aws_kinesis'
  * - `messaging.destination.name` - Stream name
- * - `messaging.operation` - 'put' or 'get'
+ * - `messaging.operation.type` - 'put' or 'get'
  * - `aws.kinesis.shard_id` - Shard ID (if provided)
  *
  * Additional attributes you should set in your handler:

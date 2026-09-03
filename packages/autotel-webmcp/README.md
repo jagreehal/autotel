@@ -61,26 +61,25 @@ Named for the GenAI convention, so a trace list reads as the tools that ran —
 `execute_tool checkout` — rather than one repeated string. Filter on
 `gen_ai.tool.name` or `webmcp.tool.name`, which carry the name as an attribute.
 
-
-| Attribute                                     | Meaning                                                                  |
-| --------------------------------------------- | ------------------------------------------------------------------------ |
-| `gen_ai.tool.name` / `webmcp.tool.name`       | Tool name                                                                |
-| `gen_ai.operation.name`                       | `execute_tool`                                                           |
-| `mcp.tool.arguments.size`                     | UTF-8 input size, recorded without capturing content                     |
-| `mcp.tool.result.size`                        | UTF-8 result size, recorded without capturing content                    |
-| `gen_ai.tool.call.arguments` / `webmcp.input` | Arguments the agent sent, when payload capture is enabled                |
-| `gen_ai.tool.call.result` / `webmcp.result`   | **The exact string the agent received**, when payload capture is enabled |
-| `webmcp.result.type`                          | The handler's return type before serialisation                           |
-| `webmcp.result.bytes`                         | What the result costs in the agent's context                             |
-| `webmcp.result.envelope`                      | The result is an MCP `{ content: [...] }` wrapper                        |
-| `webmcp.result.substituted`                   | The browser replaced an empty result                                     |
-| `webmcp.execute.seq`                          | Order of this call in the installation (1, 2, 3…)                        |
-| `webmcp.execute.depth`                        | How many executions were already in flight when this one began           |
-| `webmcp.execute.parent`                       | The innermost of them, when there was one                                |
-| `webmcp.tool.descriptor`                      | Fingerprint from the last register of this name                          |
-| `webmcp.result.refused` / `webmcp.result.refusal` | Known library refusal (`confirm` or `unavailable`), not a handler error |
-| `error.type`                                  | The handler threw or rejected: the error's name                          |
-| `webmcp.error.message`                        | **Why it failed**, when payload capture is enabled                        |
+| Attribute                                         | Meaning                                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------------ |
+| `gen_ai.tool.name` / `webmcp.tool.name`           | Tool name                                                                |
+| `gen_ai.operation.name`                           | `execute_tool`                                                           |
+| `mcp.tool.arguments.size`                         | UTF-8 input size, recorded without capturing content                     |
+| `mcp.tool.result.size`                            | UTF-8 result size, recorded without capturing content                    |
+| `gen_ai.tool.call.arguments` / `webmcp.input`     | Arguments the agent sent, when payload capture is enabled                |
+| `gen_ai.tool.call.result` / `webmcp.result`       | **The exact string the agent received**, when payload capture is enabled |
+| `webmcp.result.type`                              | The handler's return type before serialisation                           |
+| `webmcp.result.bytes`                             | What the result costs in the agent's context                             |
+| `webmcp.result.envelope`                          | The result is an MCP `{ content: [...] }` wrapper                        |
+| `webmcp.result.substituted`                       | The browser replaced an empty result                                     |
+| `webmcp.execute.seq`                              | Order of this call in the installation (1, 2, 3…)                        |
+| `webmcp.execute.depth`                            | How many executions were already in flight when this one began           |
+| `webmcp.execute.parent`                           | The innermost of them, when there was one                                |
+| `webmcp.tool.descriptor`                          | Fingerprint from the last register of this name                          |
+| `webmcp.result.refused` / `webmcp.result.refusal` | Known library refusal (`confirm` or `unavailable`), not a handler error  |
+| `error.type`                                      | The handler threw or rejected: the error's name                          |
+| `webmcp.error.message`                            | **Why it failed**, when payload capture is enabled                       |
 
 The last two are the counterpart of `annotations.dropped`. Chrome replaces a
 thrown error with a generic `UnknownError` before the agent sees it, so the
@@ -107,14 +106,14 @@ user is already logged into, so the moment a human approves an action is the
 only checkpoint there is — and this package cannot see it: it patches
 `registerTool`, and the dialogue is your UI.
 
-| Attribute                               | Meaning                                                    |
-| --------------------------------------- | ---------------------------------------------------------- |
-| `webmcp.consent.shown`                  | The label the human read                                    |
-| `webmcp.consent.resolved`               | The tool that will actually run                             |
-| `webmcp.consent.mismatch`               | Those two are not the same string                           |
-| `webmcp.consent.granted`                | Whether the human said yes                                  |
-| `webmcp.tool.descriptor`                | Fingerprint registered for the resolved tool at that moment |
-| `webmcp.consent.arguments`              | The arguments approved, when payload capture is enabled     |
+| Attribute                  | Meaning                                                     |
+| -------------------------- | ----------------------------------------------------------- |
+| `webmcp.consent.shown`     | The label the human read                                    |
+| `webmcp.consent.resolved`  | The tool that will actually run                             |
+| `webmcp.consent.mismatch`  | Those two are not the same string                           |
+| `webmcp.consent.granted`   | Whether the human said yes                                  |
+| `webmcp.tool.descriptor`   | Fingerprint registered for the resolved tool at that moment |
+| `webmcp.consent.arguments` | The arguments approved, when payload capture is enabled     |
 
 ```ts
 const webmcp = instrumentWebMCP({ span });

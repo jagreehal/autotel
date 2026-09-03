@@ -82,11 +82,11 @@ function markAsInstrumented<T>(client: T): T {
  *
  * @remarks
  * Semantic attributes set automatically:
- * - `rpc.system` - 'aws-api'
+ * - `rpc.system.name` - 'aws-api'
  * - `rpc.service` - AWS service name (e.g., 'S3', 'DynamoDB')
  * - `rpc.method` - Operation name (e.g., 'GetObject', 'PutItem')
  * - `aws.request_id` - AWS request ID from response
- * - `http.status_code` - HTTP status code
+ * - `http.response.status_code` - HTTP status code
  *
  * @see https://opentelemetry.io/docs/specs/semconv/cloud-providers/aws-sdk/
  */

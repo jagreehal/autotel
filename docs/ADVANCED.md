@@ -202,7 +202,7 @@ For **KafkaJS `eachBatch`**, use `withBatchConsumer` from `autotel-plugins/kafka
 - `ctx.getTraceHeaders()` returns `{ traceparent, tracestate? }` for header injection
 - `ctx.recordDLQ(dlqName, reason)` for dead-letter queue tracking
 - Supports lag metrics via `lagMetrics.getCurrentOffset` / `getEndOffset`
-- Automatic semantic attributes: `messaging.system`, `messaging.destination.name`, `messaging.operation`, `messaging.consumer.group`
+- Automatic semantic attributes: `messaging.system`, `messaging.destination.name`, `messaging.operation.type`, `messaging.consumer.group`
 
 ## Experiments and Cohorts
 

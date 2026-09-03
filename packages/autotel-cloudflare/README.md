@@ -49,7 +49,7 @@ This is real output from [`apps/cloudflare-example`](../../apps/cloudflare-examp
 • GET /orders
   • order.price            order.id=ORD-1 order.total=120
     • order.subtotal       order.subtotal=100
-      • KV MY_KV: get       db.system=cloudflare-kv db.operation=get   ← autotel-instrumented
+      • KV MY_KV: get       db.system.name=cloudflare-kv db.operation.name=get   ← autotel-instrumented
     • order.total          order.total=120
   • user.create            user.duplicate=true
     • db.checkDuplicate

@@ -44,13 +44,14 @@ When updating, be specific and actionable. Prefer short, targeted notes.
 
 ## Quick Reference
 
-| Command        | Description                              |
-| -------------- | ---------------------------------------- |
-| `pnpm build`   | Build all packages                       |
-| `pnpm test`    | Run all tests                            |
-| `pnpm lint`    | Lint all packages                        |
-| `pnpm format`  | Format with Prettier                     |
-| `pnpm quality` | Build + lint + format + typecheck + test |
+| Command                    | Description                                          |
+| -------------------------- | ---------------------------------------------------- |
+| `pnpm build`               | Build all packages                                   |
+| `pnpm test`                | Run all tests                                        |
+| `pnpm lint`                | Lint all packages                                    |
+| `pnpm format`              | Format with Prettier                                 |
+| `pnpm quality`             | Build + lint + format + typecheck + test             |
+| `pnpm check-semconv-drift` | Check telemetry name tables against upstream semconv |
 
 **Agent Skills:** Skills live at the repo root under `skills/`, grouped into `core/`, `frameworks/`, `integrations/`, and `extending/` (build-your-own on the public extension points). They follow the open [Agent Skills specification](https://agentskills.io/specification). The [skills CLI](https://github.com/vercel-labs/skills) discovers `skills/<category>/<name>/SKILL.md` at the repo root, so consumers add them by name (`npx skills add jagreehal/autotel --skill autotel-tanstack`). Skills no longer ship inside the npm package tarballs; the repo-root layout is the single source of truth.
 

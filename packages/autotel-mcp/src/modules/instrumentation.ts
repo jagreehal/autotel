@@ -33,8 +33,11 @@ export function scoreSpan(
   }
 
   if (
+    !('http.request.method' in span.tags) &&
     !('http.method' in span.tags) &&
+    !('rpc.system.name' in span.tags) &&
     !('rpc.system' in span.tags) &&
+    !('db.system.name' in span.tags) &&
     !('db.system' in span.tags)
   ) {
     findings.push('no semantic convention tags found');

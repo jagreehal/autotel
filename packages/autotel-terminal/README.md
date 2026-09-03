@@ -16,7 +16,7 @@ If you need a **standalone, multi-signal TUI** that receives OTLP/Zipkin/Prometh
 - ✅ **Trace-first UI** : Recent traces list; open a trace to see its span tree (parent/child)
 - ✅ **Real-time streaming** : Spans appear as they complete; optional pause/resume
 - ✅ **Search** : Filter by span name (`/`); combine with error-only filter (`e`)
-- ✅ **Span details** : Key attributes first (e.g. `http.route`, `db.operation`); full list + waterfall for selected trace
+- ✅ **Span details** : Key attributes first (e.g. `http.route`, `db.operation.name`); full list + waterfall for selected trace
 - ✅ **Relative time & errors** : "2s ago" labels; error badge and new-error indicator
 - ✅ **Help overlay** : `?` shows all shortcuts
 - ✅ **Simple setup** : Add `StreamingSpanProcessor` to autotel and call `renderTerminal()`
@@ -234,7 +234,7 @@ The right panel shows detailed information for the selected span:
 - Name, status, duration (with "Nx avg" when slower than average for that span name)
 - Trace ID, Span ID, Parent Span ID
 - Span kind (INTERNAL, SERVER, CLIENT, etc.)
-- **Key attributes** (http.route, db.operation, code.function, etc.) first
+- **Key attributes** (http.route, db.operation.name, code.function, etc.) first
 - Remaining attributes
 - **Waterfall** for the selected trace (when a trace is open): horizontal bars by duration
 
@@ -484,7 +484,7 @@ logStream.emit({
   attributes: {
     'service.name': 'my-service',
     'http.route': '/users/:id',
-    'http.status_code': 200,
+    'http.response.status_code': 200,
   },
 });
 ```
@@ -520,7 +520,7 @@ When testing the dashboard (e.g. with `example-terminal` or your app), you can v
 - **Errors** : Press `e` for error-only filter; traces with failed spans show an error badge
 - **Help** : Press `?` to see all shortcuts
 - **Waterfall** : With a trace open, the details panel shows a simple duration waterfall
-- **Key attributes** : In span details, `http.route`, `db.operation`, `code.function`, etc. appear first
+- **Key attributes** : In span details, `http.route`, `db.operation.name`, `code.function`, etc. appear first
 
 ## Examples
 

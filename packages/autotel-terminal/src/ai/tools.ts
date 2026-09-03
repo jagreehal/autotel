@@ -163,11 +163,11 @@ export function createTelemetryTools(
             attrs: Object.fromEntries(
               Object.entries(s.attributes ?? {}).filter(([k]) =>
                 [
-                  'http.method',
+                  'http.request.method',
                   'http.route',
-                  'http.status_code',
-                  'db.operation',
-                  'db.system',
+                  'http.response.status_code',
+                  'db.operation.name',
+                  'db.system.name',
                   'service.name',
                   'error.message',
                   'error.type',

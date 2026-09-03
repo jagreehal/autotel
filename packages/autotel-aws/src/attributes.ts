@@ -94,14 +94,14 @@ export function buildSDKAttributes(metadata: {
   cfId?: string;
 }): Record<string, string | number> {
   return {
-    'rpc.system': 'aws-api',
+    'rpc.system.name': 'aws-api',
     [AWS_ATTRS.AWS_SERVICE]: metadata.service,
     [AWS_ATTRS.AWS_OPERATION]: metadata.operation,
     ...(metadata.requestId && {
       [AWS_ATTRS.AWS_REQUEST_ID]: metadata.requestId,
     }),
     ...(metadata.httpStatusCode && {
-      'http.status_code': metadata.httpStatusCode,
+      'http.response.status_code': metadata.httpStatusCode,
     }),
     ...(metadata.extendedRequestId && {
       [AWS_ATTRS.AWS_EXTENDED_REQUEST_ID]: metadata.extendedRequestId,
@@ -121,9 +121,9 @@ export function buildDynamoDBAttributes(operation: {
   consumedCapacity?: number;
 }): Record<string, string | number | string[]> {
   return {
-    'db.system': 'dynamodb',
-    'db.operation': operation.operation,
-    'db.name': operation.tableName,
+    'db.system.name': 'dynamodb',
+    'db.operation.name': operation.operation,
+    'db.namespace': operation.tableName,
     [AWS_ATTRS.DDB_TABLE_NAMES]: [operation.tableName],
     ...(operation.consumedCapacity !== undefined && {
       [AWS_ATTRS.DDB_CONSUMED_CAPACITY]: operation.consumedCapacity,
@@ -162,7 +162,7 @@ export function buildSQSAttributes(operation: {
   return {
     'messaging.system': 'aws_sqs',
     [AWS_ATTRS.SQS_QUEUE_NAME]: operation.queueName,
-    'messaging.operation': operation.operation,
+    'messaging.operation.type': operation.operation,
     ...(operation.queueUrl && {
       [AWS_ATTRS.SQS_QUEUE_URL]: operation.queueUrl,
     }),
@@ -182,7 +182,7 @@ export function buildSNSAttributes(operation: {
   return {
     'messaging.system': 'aws_sns',
     [AWS_ATTRS.SNS_TOPIC_ARN]: operation.topicArn,
-    'messaging.operation': 'publish',
+    'messaging.operation.type': 'publish',
     ...(operation.messageId && {
       [AWS_ATTRS.SNS_MESSAGE_ID]: operation.messageId,
     }),
@@ -200,7 +200,7 @@ export function buildKinesisAttributes(operation: {
   return {
     'messaging.system': 'aws_kinesis',
     [AWS_ATTRS.KINESIS_STREAM_NAME]: operation.streamName,
-    'messaging.operation': operation.operation,
+    'messaging.operation.type': operation.operation,
     ...(operation.shardId && {
       [AWS_ATTRS.KINESIS_SHARD_ID]: operation.shardId,
     }),

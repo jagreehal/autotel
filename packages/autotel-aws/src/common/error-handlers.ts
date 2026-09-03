@@ -76,7 +76,7 @@ export function extractErrorAttributes(
   }
 
   if (awsError.$metadata?.httpStatusCode) {
-    attrs['http.status_code'] = awsError.$metadata.httpStatusCode;
+    attrs['http.response.status_code'] = awsError.$metadata.httpStatusCode;
   }
 
   return attrs;

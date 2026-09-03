@@ -297,7 +297,7 @@ const handler = instrument({
   key: 'custom-name',
   fn: async (request: Request) => new Response('OK'),
   attributesFromArgs: ([request]) => ({
-    'http.method': request.method,
+    'http.request.method': request.method,
   }),
 });
 

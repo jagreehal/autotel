@@ -51,7 +51,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/instrumentation": "^0.221.0",
+    "@opentelemetry/instrumentation": "^0.222.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "autotel": "workspace:*"
   },
@@ -60,7 +60,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@opentelemetry/core": "^2.10.0",
+    "@opentelemetry/core": "^2.11.0",
     "@types/node": "^26.1.2",
     "@typescript-eslint/eslint-plugin": "^8.65.0",
     "@typescript-eslint/parser": "^8.65.0",

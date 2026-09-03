@@ -29,7 +29,7 @@ describe('types', () => {
     });
 
     it('should have RPC semantic convention attributes', () => {
-      expect(SPAN_ATTRIBUTES.RPC_SYSTEM).toBe('rpc.system');
+      expect(SPAN_ATTRIBUTES.RPC_SYSTEM).toBe('rpc.system.name');
       expect(SPAN_ATTRIBUTES.RPC_METHOD).toBe('rpc.method');
     });
 

@@ -164,6 +164,6 @@ describe('init() baggage propagation', () => {
       string | number | boolean
     >;
     expect(attrs['tenant.id']).toBe('acme');
-    expect(attrs['http.url']).toBe('https://analytics.google.com/c');
+    expect(attrs['url.full']).toBe('https://analytics.google.com/c');
   });
 });

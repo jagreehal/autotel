@@ -28,8 +28,8 @@ export function instrumentHyperdrive<T extends Hyperdrive>(
             const tracer = workerTracer('autotel-edge');
 
             const attributes: Record<string, string | number> = {
-              'db.system': 'cloudflare-hyperdrive',
-              'db.operation': 'connect',
+              'db.system.name': 'cloudflare-hyperdrive',
+              'db.operation.name': 'connect',
             };
 
             // Extract connection info safely (never record password)

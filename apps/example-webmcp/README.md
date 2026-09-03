@@ -6,12 +6,12 @@ shows the span each call produces.
 The demo tools are built around the four things that go wrong quietly when you
 ship WebMCP tools:
 
-| Tool             | What it shows                                                                                 |
-| ---------------- | --------------------------------------------------------------------------------------------- |
-| `search`         | Chrome keeps two annotations and discards the rest. `webmcp.annotations.dropped` names them.  |
-| `clear_cart`     | An empty return becomes _Operation succeeded_, so the agent reads a message you never wrote.  |
-| `describe_order` | Chrome does not unwrap an MCP `{ content: [...] }` envelope. The agent gets the wrapper.      |
-| `checkout`       | A failure normalised into prose still records `error.type`, because `isErrorResult` spots it. |
+| Tool             | What it shows                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| `search`         | Chrome keeps two annotations and discards the rest. `webmcp.annotations.dropped` names them.                   |
+| `clear_cart`     | An empty return becomes _Operation succeeded_, so the agent reads a message you never wrote.                   |
+| `describe_order` | Chrome does not unwrap an MCP `{ content: [...] }` envelope. The agent gets the wrapper.                       |
+| `checkout`       | A failure normalised into prose still records `error.type`, because `isErrorResult` spots it.                  |
 | `restock`        | Calls `search` from inside its handler: one consent, two executions, and `webmcp.execute.depth` on the second. |
 
 ## The consent moment

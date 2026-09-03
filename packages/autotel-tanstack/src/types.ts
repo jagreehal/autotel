@@ -165,7 +165,7 @@ export const SPAN_ATTRIBUTES = {
   URL_FULL: 'url.full',
 
   // RPC semantic conventions (for server functions)
-  RPC_SYSTEM: 'rpc.system',
+  RPC_SYSTEM: 'rpc.system.name',
   RPC_METHOD: 'rpc.method',
 
   // TanStack-specific attributes

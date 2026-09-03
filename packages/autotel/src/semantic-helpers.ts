@@ -256,14 +256,14 @@ export function traceDB<TArgs extends unknown[], TReturn>(
   const configure = (ctx: TraceContext) => {
     // Emit current stable names plus legacy aliases for dashboard compatibility.
     ctx.setAttribute('db.system.name', config.system);
-    ctx.setAttribute('db.system', config.system);
+    ctx.setAttribute('db.system.name', config.system);
     if (config.operation) {
       ctx.setAttribute('db.operation.name', config.operation);
-      ctx.setAttribute('db.operation', config.operation);
+      ctx.setAttribute('db.operation.name', config.operation);
     }
     if (config.database) {
       ctx.setAttribute('db.namespace', config.database);
-      ctx.setAttribute('db.name', config.database);
+      ctx.setAttribute('db.namespace', config.database);
     }
     if (config.collection) {
       ctx.setAttribute('db.collection.name', config.collection);
@@ -517,7 +517,6 @@ export function traceMessaging<TArgs extends unknown[], TReturn>(
     if (config.operation) {
       ctx.setAttribute('messaging.operation.name', config.operation);
       ctx.setAttribute('messaging.operation.type', operationType);
-      ctx.setAttribute('messaging.operation', config.operation);
     }
     if (config.destination) {
       ctx.setAttribute('messaging.destination.name', config.destination);

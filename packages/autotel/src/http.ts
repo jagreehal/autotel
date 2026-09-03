@@ -131,8 +131,8 @@ export function HttpInstrumented(options: HttpInstrumentedOptions = {}) {
 
                 try {
                   span.setAttributes({
-                    'http.method': method,
-                    'http.url': url || 'unknown',
+                    'http.request.method': method,
+                    'url.full': url || 'unknown',
                     'service.name': serviceName,
                     'operation.name': `${serviceName}.${methodName}`,
                   });
@@ -140,9 +140,10 @@ export function HttpInstrumented(options: HttpInstrumentedOptions = {}) {
                   if (url) {
                     const urlObj = parseUrl(url);
                     span.setAttributes({
-                      'http.scheme': urlObj.protocol,
-                      'http.host': urlObj.host,
-                      'http.target': urlObj.path,
+                      'url.scheme': urlObj.protocol,
+                      'server.address': urlObj.host,
+                      'url.path': urlObj.path,
+                      ...(urlObj.query ? { 'url.query': urlObj.query } : {}),
                     });
                   }
 
@@ -157,7 +158,7 @@ export function HttpInstrumented(options: HttpInstrumentedOptions = {}) {
                   // Extract status code from response
                   const statusCode = extractStatusCode(result);
                   if (statusCode) {
-                    span.setAttribute('http.status_code', statusCode);
+                    span.setAttribute('http.response.status_code', statusCode);
 
                     if (statusCode >= 400) {
                       span.setStatus({
@@ -300,6 +301,7 @@ interface UrlParts {
   protocol: string;
   host: string;
   path: string;
+  query: string;
 }
 
 function parseUrl(url: string): UrlParts {
@@ -308,13 +310,16 @@ function parseUrl(url: string): UrlParts {
     return {
       protocol: urlObj.protocol.replace(':', ''),
       host: urlObj.host,
-      path: urlObj.pathname + urlObj.search,
+      path: urlObj.pathname,
+      // `url.query` carries the string without its leading `?`.
+      query: urlObj.search.replace(/^\?/, ''),
     };
   } catch {
     return {
       protocol: 'http',
       host: 'unknown',
       path: url,
+      query: '',
     };
   }
 }

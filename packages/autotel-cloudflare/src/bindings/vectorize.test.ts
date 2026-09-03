@@ -71,8 +71,8 @@ describe('Vectorize Binding Instrumentation', () => {
         expect.objectContaining({
           kind: SpanKind.CLIENT,
           attributes: expect.objectContaining({
-            'db.system': 'cloudflare-vectorize',
-            'db.operation': 'query',
+            'db.system.name': 'cloudflare-vectorize',
+            'db.operation.name': 'query',
             'db.collection.name': 'my-index',
             'db.vectorize.top_k': 5,
           }),
@@ -130,8 +130,8 @@ describe('Vectorize Binding Instrumentation', () => {
         expect.objectContaining({
           kind: SpanKind.CLIENT,
           attributes: expect.objectContaining({
-            'db.system': 'cloudflare-vectorize',
-            'db.operation': 'insert',
+            'db.system.name': 'cloudflare-vectorize',
+            'db.operation.name': 'insert',
             'db.collection.name': 'my-index',
             'db.vectorize.vectors_count': 2,
           }),
@@ -165,8 +165,8 @@ describe('Vectorize Binding Instrumentation', () => {
         expect.objectContaining({
           kind: SpanKind.CLIENT,
           attributes: expect.objectContaining({
-            'db.system': 'cloudflare-vectorize',
-            'db.operation': 'upsert',
+            'db.system.name': 'cloudflare-vectorize',
+            'db.operation.name': 'upsert',
             'db.collection.name': 'my-index',
             'db.vectorize.vectors_count': 3,
           }),
@@ -195,8 +195,8 @@ describe('Vectorize Binding Instrumentation', () => {
         expect.objectContaining({
           kind: SpanKind.CLIENT,
           attributes: expect.objectContaining({
-            'db.system': 'cloudflare-vectorize',
-            'db.operation': 'deleteByIds',
+            'db.system.name': 'cloudflare-vectorize',
+            'db.operation.name': 'deleteByIds',
             'db.collection.name': 'my-index',
           }),
         }),
@@ -224,8 +224,8 @@ describe('Vectorize Binding Instrumentation', () => {
         expect.objectContaining({
           kind: SpanKind.CLIENT,
           attributes: expect.objectContaining({
-            'db.system': 'cloudflare-vectorize',
-            'db.operation': 'describe',
+            'db.system.name': 'cloudflare-vectorize',
+            'db.operation.name': 'describe',
             'db.collection.name': 'my-index',
           }),
         }),

@@ -148,7 +148,7 @@ export const FeatureFlagAttributes = {
 export const MessagingAttributes = {
   system: 'messaging.system' as const,
   destination: 'messaging.destination.name' as const,
-  operation: 'messaging.operation' as const,
+  operation: 'messaging.operation.type' as const,
   messageId: 'messaging.message.id' as const,
   conversationId: 'messaging.conversation_id' as const,
   batchMessageCount: 'messaging.batch.message_count' as const,
@@ -159,7 +159,7 @@ export const MessagingAttributes = {
 // canonical `gen_ai.*` namespace (these legacy `gen.ai.*` keys were non-spec).
 
 export const RPCAttributes = {
-  system: 'rpc.system' as const,
+  system: 'rpc.system.name' as const,
   service: 'rpc.service' as const,
   method: 'rpc.method' as const,
   grpcStatusCode: 'rpc.grpc.status_code' as const,

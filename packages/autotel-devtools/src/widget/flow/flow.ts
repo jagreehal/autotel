@@ -88,6 +88,7 @@ function isLlmSpan(attrs: JsonObject): boolean {
 
 function isDbSpan(attrs: JsonObject): boolean {
   return (
+    attrs['db.system.name'] != null ||
     attrs['db.system'] != null ||
     attrs['db.statement'] != null ||
     attrs['db.query.text'] != null
@@ -135,7 +136,9 @@ export function classifySpan(span: SpanData): RoleResult {
   }
   if (isDbSpan(attrs)) {
     const name =
+      asString(attrs['db.operation.name']) ??
       asString(attrs['db.operation']) ??
+      asString(attrs['db.system.name']) ??
       asString(attrs['db.system']) ??
       cleanName(span.name);
     return { role: 'db', label: name };

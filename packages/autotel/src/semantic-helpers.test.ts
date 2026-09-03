@@ -33,11 +33,11 @@ describe('Semantic Helpers', () => {
       expect(spans).toHaveLength(1);
 
       const span = spans[0]!;
-      expect(span.attributes['db.system']).toBe('postgresql');
       expect(span.attributes['db.system.name']).toBe('postgresql');
-      expect(span.attributes['db.operation']).toBe('SELECT');
+      expect(span.attributes['db.system.name']).toBe('postgresql');
       expect(span.attributes['db.operation.name']).toBe('SELECT');
-      expect(span.attributes['db.name']).toBe('app_db');
+      expect(span.attributes['db.operation.name']).toBe('SELECT');
+      expect(span.attributes['db.namespace']).toBe('app_db');
       expect(span.attributes['db.namespace']).toBe('app_db');
       expect(span.attributes['db.collection.name']).toBe('users');
       expect(span.name).toBe('SELECT users');
@@ -63,9 +63,9 @@ describe('Semantic Helpers', () => {
 
       const spans = collector.getSpans();
       const span = spans[0]!;
-      expect(span.attributes['db.system']).toBe('mongodb');
-      expect(span.attributes['db.operation']).toBeUndefined();
-      expect(span.attributes['db.name']).toBeUndefined();
+      expect(span.attributes['db.system.name']).toBe('mongodb');
+      expect(span.attributes['db.operation.name']).toBeUndefined();
+      expect(span.attributes['db.namespace']).toBeUndefined();
     });
 
     it('should support custom attributes', async () => {
@@ -81,7 +81,7 @@ describe('Semantic Helpers', () => {
 
       const spans = collector.getSpans();
       const span = spans[0]!;
-      expect(span.attributes['db.system']).toBe('redis');
+      expect(span.attributes['db.system.name']).toBe('redis');
       expect(span.attributes['db.redis.ttl']).toBe(3600);
     });
   });
@@ -172,7 +172,6 @@ describe('Semantic Helpers', () => {
 
       const span = spans[0]!;
       expect(span.attributes['messaging.system']).toBe('kafka');
-      expect(span.attributes['messaging.operation']).toBe('publish');
       expect(span.attributes['messaging.operation.name']).toBe('publish');
       expect(span.attributes['messaging.operation.type']).toBe('send');
       expect(span.attributes['messaging.destination.name']).toBe('user-events');
@@ -190,7 +189,7 @@ describe('Semantic Helpers', () => {
       const spans = collector.getSpans();
       const span = spans[0]!;
       expect(span.attributes['messaging.system']).toBe('rabbitmq');
-      expect(span.attributes['messaging.operation']).toBeUndefined();
+      expect(span.attributes['messaging.operation.type']).toBeUndefined();
       expect(span.attributes['messaging.destination.name']).toBeUndefined();
     });
 
@@ -205,7 +204,7 @@ describe('Semantic Helpers', () => {
 
       const spans = collector.getSpans();
       const span = spans[0]!;
-      expect(span.attributes['messaging.operation']).toBe('receive');
+      expect(span.attributes['messaging.operation.type']).toBe('receive');
     });
 
     it('should support custom attributes', async () => {
@@ -234,7 +233,7 @@ describe('Semantic Helpers', () => {
         system: 'postgresql',
         operation: 'SELECT',
         attributes: {
-          'db.operation': 'CUSTOM_OPERATION', // Override default
+          'db.operation.name': 'CUSTOM_OPERATION', // Override default
         },
       })((_ctx) => async () => ({ rows: [] }));
 
@@ -243,7 +242,7 @@ describe('Semantic Helpers', () => {
       const spans = collector.getSpans();
       const span = spans[0]!;
       // Custom attribute should win
-      expect(span.attributes['db.operation']).toBe('CUSTOM_OPERATION');
+      expect(span.attributes['db.operation.name']).toBe('CUSTOM_OPERATION');
     });
   });
 });

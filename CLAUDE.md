@@ -31,6 +31,7 @@ pnpm test               # Run all tests
 pnpm lint               # Lint all packages
 pnpm format             # Format with Prettier
 pnpm quality            # Full quality check (build + lint + format + type-check + test)
+pnpm check-semconv-drift # Check telemetry name tables against upstream semconv
 pnpm changeset          # Create a changeset
 ```
 

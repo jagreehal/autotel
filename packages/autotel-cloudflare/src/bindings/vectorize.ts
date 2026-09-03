@@ -42,8 +42,8 @@ export function instrumentVectorize<T extends VectorizeIndex>(
             const tracer = workerTracer('autotel-edge');
 
             const attributes: Record<string, string | number> = {
-              'db.system': 'cloudflare-vectorize',
-              'db.operation': operation,
+              'db.system.name': 'cloudflare-vectorize',
+              'db.operation.name': operation,
               'db.collection.name': name,
             };
 

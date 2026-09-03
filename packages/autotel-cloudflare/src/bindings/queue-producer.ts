@@ -34,7 +34,7 @@ export function instrumentQueueProducer<T extends Queue>(
                 attributes: {
                   'messaging.system': 'cloudflare-queues',
                   'messaging.operation.type': 'publish',
-                  'messaging.operation': 'send',
+                  'messaging.operation.name': 'send',
                   'messaging.destination.name': name,
                 },
               },
@@ -78,7 +78,7 @@ export function instrumentQueueProducer<T extends Queue>(
                 attributes: {
                   'messaging.system': 'cloudflare-queues',
                   'messaging.operation.type': 'publish',
-                  'messaging.operation': 'sendBatch',
+                  'messaging.operation.name': 'sendBatch',
                   'messaging.destination.name': name,
                   'messaging.batch.message_count': Array.isArray(messages)
                     ? messages.length

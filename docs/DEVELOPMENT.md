@@ -42,7 +42,7 @@ pnpm type-check         # TypeScript type checking
 ### Quality Check
 
 ```bash
-pnpm quality            # Runs: build + build-storybook + lint + format + type-check + test + test:integration + check-exports-map
+pnpm quality            # Runs: build + build-storybook + lint + format + type-check + test + test:integration + check-exports-map + check-semconv-drift
 ```
 
 `check-exports-map` compares every package's `exports` map against what the
@@ -55,6 +55,25 @@ pnpm check-exports-map
 pnpm bundle-size          # compare dist sizes against bundle-size-baseline.json
 pnpm bundle-size:update   # accept intentional growth, then commit the baseline
 ```
+
+`check-semconv-drift` checks every dotted name in the hand-maintained name
+tables (`semconv.ts`, `attrs.ts`, `attributes.ts`, `semantic-conventions.ts`,
+`validation-attributes.ts`) against the registry `@opentelemetry/semantic-conventions`
+already ships, plus `scripts/semconv-genai-registry.json` for the `gen_ai.*` and
+`mcp.*` names that live in the separate GenAI registry. It reports a name that is
+unknown upstream, one upstream has deprecated in favour of another, and one we
+declared as ours that upstream has since defined itself.
+
+```bash
+pnpm check-semconv-drift
+node scripts/check-semconv-drift.mjs --self-test   # exercise the checker itself
+node scripts/check-semconv-drift.mjs --update      # adopt current names as declared
+```
+
+Names we own live in `scripts/semconv-extensions.json`, one line each with the
+reason. Adding a new one is a deliberate edit a reviewer sees on the diff. Refresh
+the GenAI snapshot with `--update-genai <path-to-semantic-conventions-genai>` when
+that registry publishes a new version.
 
 ### Running Examples
 

@@ -227,6 +227,8 @@ export async function initInstrumentation(
         [ATTR_SERVICE_NAME]: config.serviceName,
         [ATTR_SERVICE_VERSION]: config.serviceVersion || '1.0.0',
         'deployment.environment': config.deploymentEnvironment || 'development',
+        'deployment.environment.name':
+          config.deploymentEnvironment || 'development',
         ...customResourceAttributes, // Merge custom resource attributes
       }),
     );
@@ -235,6 +237,8 @@ export async function initInstrumentation(
       [ATTR_SERVICE_NAME]: config.serviceName,
       [ATTR_SERVICE_VERSION]: config.serviceVersion || '1.0.0',
       'deployment.environment': config.deploymentEnvironment || 'development',
+      'deployment.environment.name':
+        config.deploymentEnvironment || 'development',
       ...customResourceAttributes, // Merge custom resource attributes
     });
   }

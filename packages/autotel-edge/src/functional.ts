@@ -70,7 +70,7 @@ const MAX_ERROR_MESSAGE_LENGTH = 500;
  * @example
  * ```typescript
  * const handler = trace(async function fetch(req: Request) {
- *   getActiveTraceContext()?.setAttribute('http.method', req.method);
+ *   getActiveTraceContext()?.setAttribute('http.request.method', req.method);
  *   return fetch(req);
  * });
  * ```

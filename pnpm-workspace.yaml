@@ -4,6 +4,30 @@ packages:
   - 'examples/*'
   - 'docs'
 
+# pnpm 11 refuses to run a dependency's install scripts unless it is named here,
+# and treats an unlisted one as an error rather than a warning. True for native
+# bindings, downloaded binaries and platform builds that do not work unpacked.
+# False for the three whose script only prints a funding banner or reports the
+# install home: nothing in the repo needs either to run.
+allowBuilds:
+  '@prisma/engines': true
+  '@scarf/scarf': false
+  '@swc/core': true
+  '@vscode/vsce-sign': true
+  better-sqlite3: true
+  core-js: false
+  core-js-pure: false
+  dtrace-provider: true
+  esbuild: true
+  keytar: true
+  mongodb-memory-server: true
+  msgpackr-extract: true
+  prisma: true
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true
+  workerd: true
+
 # Release-age gate: only install versions at least this old (minutes). Set to
 # 3 days to match the `ncu --cooldown 3` dependency-update policy.
 minimumReleaseAge: 4320
@@ -14,10 +38,34 @@ minimumReleaseAge: 4320
 # `webmcpable` is the library autotel-webmcp instruments; its refusal strings
 # are matched by text, so the drift test in autotel-webmcp has to run against
 # the version that is actually out, not the one from three days ago.
+# `@opentelemetry/*` is excluded because tracking the official OTel libraries is
+# the point of this repo: a semconv rename or an SDK fix has to be reachable the
+# day it ships, not three days later. scripts/check-semconv-drift.mjs is what
+# catches an upstream change here, and it can only see the version we install.
 minimumReleaseAgeExclude:
+  - '@opentelemetry/*'
   - webmcpable
   - ai
   - ai-sdk-ollama
   - ollama
   - '@ai-sdk/*'
   - '@langfuse/*'
+
+# Moved out of package.json's `pnpm` field, which pnpm 11 no longer reads.
+#
+# Only what lived under `pnpm.overrides` belongs here. The root `overrides` key
+# is npm's, pnpm has always ignored it, and moving its `vite: >=7.1.11 <8` here
+# would apply it for the first time: it caps vite below 8, and both apps/docs
+# (astro) and apps/example-tanstack-start (which asks for `vite: ^8`) resolve
+# vite 8 and fail to build without it.
+overrides:
+  typescript: 6.0.3
+
+peerDependencyRules:
+  allowedVersions:
+    typescript: '6'
+    eslint: '10'
+    '@langchain/core': 0.3.80
+    '@opentelemetry/exporter-trace-otlp-proto': 0.216.0
+    '@effect/platform': 0.94.4
+    ink: '7'

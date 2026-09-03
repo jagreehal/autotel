@@ -48,7 +48,9 @@ export function inferErrorStatusFromTags(
     return 'ERROR';
   }
 
-  const httpStatus = readNumericTag(tags['http.status_code']);
+  const httpStatus = readNumericTag(
+    tags['http.response.status_code'] ?? tags['http.status_code'],
+  );
   if (httpStatus !== undefined && httpStatus >= 500) {
     return 'ERROR';
   }
