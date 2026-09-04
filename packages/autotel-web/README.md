@@ -1087,25 +1087,76 @@ console.log('Denial reason:', reason);
 
 ### Sentry
 
-autotel-web and Sentry can coexist. Both will instrument fetch/XHR.
+autotel-web and Sentry both instrument `fetch` and XHR, and both inject
+`traceparent` only when the header is absent, so neither clobbers the other.
+Which one's header goes out depends on the transport:
 
-**Recommendation:** Initialize Sentry first, then autotel-web.
+**For `fetch`, the SDK initialized last wins.** Patching wraps what is already
+there, so the last wrapper installed is the outermost, runs first, and its
+header is the one the server sees.
+
+**For XHR, do not rely on order.** Both SDKs inject during `send()` rather than
+by wrapping a function, and the outcome depends on their internal ordering
+rather than on when you called `init()`. That can leave your `fetch` calls and
+your XHR calls in different traces. If Sentry is meant to own propagation, say
+so explicitly with `instrumentFetch: false` and `instrumentXHR: false` rather
+than depending on initialization order.
+
+**Recommended: autotel-web owns the trace.** Initialize Sentry first, then
+autotel-web. Your backend joins the autotel-web browser trace, which is the one
+whose spans reach your collector.
 
 ```typescript
 import * as Sentry from '@sentry/browser';
 import { init } from 'autotel-web';
 
-// 1. Initialize Sentry first
-Sentry.init({
-  dsn: 'YOUR_SENTRY_DSN',
-  tracesSampleRate: 1.0,
-});
+// 1. Sentry first, so its fetch wrapper ends up on the inside
+Sentry.init({ dsn: 'YOUR_SENTRY_DSN' });
 
-// 2. Then initialize autotel-web
+// 2. autotel-web last, so its traceparent is the one that goes out
 init({ service: 'my-app' });
 ```
 
-Sentry's instrumentation typically preserves existing `traceparent` headers, so both should work together.
+Do not set `propagateTraceparent` here. Sentry's wrapper runs second, finds
+autotel-web's header already in place and leaves it alone, so the option
+changes nothing. Sentry's own trace stays separate from the backend trace; its
+errors still carry `sentry-trace`, and Sentry links them to its own frontend
+trace.
+
+**Alternative: Sentry owns the trace.** Take autotel-web out of the header
+business entirely, which is the only way to get both transports on Sentry's
+trace:
+
+```typescript
+init({ service: 'my-app', instrumentFetch: false, instrumentXHR: false });
+
+Sentry.init({
+  dsn: 'YOUR_SENTRY_DSN',
+  integrations: [Sentry.browserTracingIntegration()],
+  tracesSampleRate: 1.0,
+  propagateTraceparent: true,
+});
+```
+
+autotel-web keeps recording its RUM signals either way; it just stops writing
+the header.
+
+`propagateTraceparent` also stands on its own, with no autotel-web in the page
+at all: paired with `browserTracingIntegration()`, a Sentry browser or mobile
+SDK links to any OpenTelemetry backend. Sentry supports the option across the
+browser JavaScript SDKs and their framework guides, the mobile SDKs, and .NET.
+Framework SDKs such as Next.js and Remix enable browser tracing for you; plain
+`@sentry/browser` does not.
+
+Whenever Sentry propagates, watch the sampling decision the header carries. A
+`parentbased_*` sampler on the backend honours whatever the frontend decided,
+and `parentbased_always_on` is the OpenTelemetry default, so a tail-based
+sampler in your collector never sees the spans it exists to judge. Set
+`OTEL_TRACES_SAMPLER=always_on` on the backend to take that decision back.
+
+See [Sentry with OTel](https://docs.sentry.io/concepts/otlp/sentry-with-otel/)
+for the current SDK list, and
+[autotel-sentry](../autotel-sentry/README.md) for the Node side.
 
 ### Datadog RUM
 

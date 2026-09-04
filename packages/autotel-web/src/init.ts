@@ -184,6 +184,7 @@ let originalFetch: typeof window.fetch | undefined;
 let originalXHROpen: typeof XMLHttpRequest.prototype.open | undefined;
 let originalXHRSetRequestHeader:
   typeof XMLHttpRequest.prototype.setRequestHeader | undefined;
+let originalXHRSend: typeof XMLHttpRequest.prototype.send | undefined;
 
 /**
  * Initialize autotel-web
@@ -350,8 +351,15 @@ function patchFetch(): void {
           ? input.toString()
           : input.url;
 
-    // Create headers object
-    const headers = new Headers(init?.headers);
+    // Create headers object.
+    //
+    // `init.headers` replaces a Request's own headers, per the fetch spec, so
+    // fall back to the Request's when the caller passed none. Building from
+    // `init?.headers` alone dropped every header on `fetch(new Request(url,
+    // { headers }))`, authorization included.
+    const headers = new Headers(
+      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+    );
 
     // Only inject if traceparent doesn't already exist
     let injectedTraceparent: string | undefined;
@@ -487,10 +495,13 @@ function patchXMLHttpRequest(): void {
   // This allows tests to set up mocks before calling init()
   originalXHROpen = XMLHttpRequest.prototype.open;
   originalXHRSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+  originalXHRSend = XMLHttpRequest.prototype.send;
 
   // Track which XHR instances have traceparent / baggage set
   const xhrHasTraceparent = new WeakSet<XMLHttpRequest>();
   const xhrHasBaggage = new WeakSet<XMLHttpRequest>();
+  // The URL each instance was opened with, for the privacy and origin checks.
+  const xhrUrl = new WeakMap<XMLHttpRequest, string>();
 
   // Patch setRequestHeader to track manual traceparent headers
   XMLHttpRequest.prototype.setRequestHeader = function (
@@ -500,11 +511,15 @@ function patchXMLHttpRequest(): void {
     if (name.toLowerCase() === 'traceparent') {
       xhrHasTraceparent.add(this);
     }
+    if (name.toLowerCase() === 'baggage') {
+      xhrHasBaggage.add(this);
+    }
     // originalXHRSetRequestHeader is always defined here because patchXMLHttpRequest() sets it before patching
     return originalXHRSetRequestHeader!.call(this, name, value);
   };
 
-  // Patch open to inject traceparent after headers are ready
+  // Patch open only to remember the URL and reset per-request state.
+  // Injection happens in send().
   XMLHttpRequest.prototype.open = function (
     method: string,
     url: string | URL,
@@ -512,121 +527,114 @@ function patchXMLHttpRequest(): void {
     username?: string | null,
     password?: string | null,
   ): void {
-    // Call original open
+    // Reset before calling through, not after.
+    //
+    // open() empties the request headers, so the markers saying this instance
+    // already carries one have to go with them, or a reused instance sends
+    // every request after the first bare. They have to go *first* because
+    // open() fires the OPENED readystatechange before it returns: an app
+    // handler that calls setRequestHeader('traceparent') there marks the
+    // instance during this call, and clearing afterwards would throw that away
+    // and let send() append a second value, producing a comma-joined header no
+    // backend can parse.
+    xhrHasTraceparent.delete(this);
+    xhrHasBaggage.delete(this);
+    xhrUrl.set(this, typeof url === 'string' ? url : url.toString());
+
     // originalXHROpen is always defined here because patchXMLHttpRequest() sets it before patching
-    const result = originalXHROpen!.call(
-      this,
-      method,
-      url,
-      async,
-      username,
-      password,
-    );
+    return originalXHROpen!.call(this, method, url, async, username, password);
+  };
 
-    // Convert URL to string for logging and privacy checks
-    const urlStr = typeof url === 'string' ? url : url.toString();
+  /**
+   * Inject on send(), not on a readystatechange handler.
+   *
+   * `open()` fires the OPENED readystatechange before it returns, so a handler
+   * assigned afterwards never sees that state and never injected anything. An
+   * app assigning its own `xhr.onreadystatechange` would also have replaced
+   * ours. send() has neither problem: the request is still OPENED so headers
+   * are writable, every manual setRequestHeader call has already been seen, and
+   * nothing of the caller's is overwritten.
+   */
+  XMLHttpRequest.prototype.send = function (
+    body?: Document | XMLHttpRequestBodyInit | null,
+  ): void {
+    const urlStr = xhrUrl.get(this) ?? '';
 
-    // Listen for readyState change to inject header at the right time
-    const xhr = this;
-    const originalOnReadyStateChange = xhr.onreadystatechange;
-
-    xhr.onreadystatechange = function (event: Event) {
-      // OPENED state (1) - headers can now be set
-      if (xhr.readyState === XMLHttpRequest.OPENED) {
-        // Only inject if not already set
-        if (!xhrHasTraceparent.has(xhr)) {
-          // Check privacy controls
-          if (
-            privacyManager &&
-            !privacyManager.shouldInjectTraceparent(urlStr)
-          ) {
-            if (config?.debug) {
-              const reason = getDenialReason(privacyManager, urlStr);
-              console.log(
-                '[autotel-web] Skipped traceparent on XHR (privacy):',
-                urlStr,
-                reason,
-              );
-            }
-          } else {
-            // Inject traceparent header
-            try {
-              const traceparent = createTraceparent();
-              // originalXHRSetRequestHeader is always defined here because patchXMLHttpRequest() sets it before patching
-              originalXHRSetRequestHeader!.call(
-                xhr,
-                'traceparent',
-                traceparent,
-              );
-
-              if (config?.debug) {
-                console.log(
-                  '[autotel-web] Injected traceparent on XHR:',
-                  urlStr,
-                  traceparent,
-                );
-              }
-            } catch (error) {
-              // Silently ignore if setRequestHeader fails
-              if (config?.debug) {
-                console.warn(
-                  '[autotel-web] Failed to inject traceparent on XHR:',
-                  error,
-                );
-              }
-            }
-          }
+    if (!xhrHasTraceparent.has(this)) {
+      if (privacyManager && !privacyManager.shouldInjectTraceparent(urlStr)) {
+        if (config?.debug) {
+          const reason = getDenialReason(privacyManager, urlStr);
+          console.log(
+            '[autotel-web] Skipped traceparent on XHR (privacy):',
+            urlStr,
+            reason,
+          );
         }
+      } else {
+        try {
+          const traceparent = createTraceparent();
+          // originalXHRSetRequestHeader is always defined here because patchXMLHttpRequest() sets it before patching
+          originalXHRSetRequestHeader!.call(this, 'traceparent', traceparent);
+          xhrHasTraceparent.add(this);
 
-        // Inject W3C baggage header (independent of traceparent).
-        // Fail-closed by origin and a strict subset of where traceparent goes.
-        if (hasBaggage() && !xhrHasBaggage.has(xhr)) {
-          const privacyAllows =
-            !privacyManager || privacyManager.shouldInjectTraceparent(urlStr);
-          if (
-            privacyAllows &&
-            isBaggageDestinationAllowed(
+          if (config?.debug) {
+            console.log(
+              '[autotel-web] Injected traceparent on XHR:',
               urlStr,
-              window.location.origin,
-              config?.baggage?.allowedOrigins,
-            )
-          ) {
-            const baggageHeader = getBaggageHeader();
-            if (baggageHeader) {
-              try {
-                originalXHRSetRequestHeader!.call(
-                  xhr,
-                  'baggage',
-                  baggageHeader,
-                );
-                xhrHasBaggage.add(xhr);
-                if (config?.debug) {
-                  console.log(
-                    '[autotel-web] Injected baggage on XHR:',
-                    urlStr,
-                    baggageHeader,
-                  );
-                }
-              } catch (error) {
-                if (config?.debug) {
-                  console.warn(
-                    '[autotel-web] Failed to inject baggage on XHR:',
-                    error,
-                  );
-                }
-              }
+              traceparent,
+            );
+          }
+        } catch (error) {
+          // Silently ignore if setRequestHeader fails
+          if (config?.debug) {
+            console.warn(
+              '[autotel-web] Failed to inject traceparent on XHR:',
+              error,
+            );
+          }
+        }
+      }
+    }
+
+    // Inject W3C baggage header (independent of traceparent).
+    // Fail-closed by origin and a strict subset of where traceparent goes.
+    if (hasBaggage() && !xhrHasBaggage.has(this)) {
+      const privacyAllows =
+        !privacyManager || privacyManager.shouldInjectTraceparent(urlStr);
+      if (
+        privacyAllows &&
+        isBaggageDestinationAllowed(
+          urlStr,
+          window.location.origin,
+          config?.baggage?.allowedOrigins,
+        )
+      ) {
+        const baggageHeader = getBaggageHeader();
+        if (baggageHeader) {
+          try {
+            originalXHRSetRequestHeader!.call(this, 'baggage', baggageHeader);
+            xhrHasBaggage.add(this);
+            if (config?.debug) {
+              console.log(
+                '[autotel-web] Injected baggage on XHR:',
+                urlStr,
+                baggageHeader,
+              );
+            }
+          } catch (error) {
+            if (config?.debug) {
+              console.warn(
+                '[autotel-web] Failed to inject baggage on XHR:',
+                error,
+              );
             }
           }
         }
       }
+    }
 
-      // Call original handler if it exists
-      if (originalOnReadyStateChange) {
-        return originalOnReadyStateChange.call(xhr, event);
-      }
-    };
-
-    return result;
+    // originalXHRSend is always defined here because patchXMLHttpRequest() sets it before patching
+    return originalXHRSend!.call(this, body);
   };
 }
 
@@ -720,6 +728,10 @@ export function resetForTesting(): void {
     if (originalXHRSetRequestHeader) {
       XMLHttpRequest.prototype.setRequestHeader = originalXHRSetRequestHeader;
       originalXHRSetRequestHeader = undefined;
+    }
+    if (originalXHRSend) {
+      XMLHttpRequest.prototype.send = originalXHRSend;
+      originalXHRSend = undefined;
     }
   }
 }

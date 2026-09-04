@@ -1,12 +1,14 @@
 ---
 title: Sentry
-description: Send Autotel (OpenTelemetry) traces to Sentry over OTLP, and link every Sentry error to the active trace.
+description: Send Autotel (OpenTelemetry) traces to Sentry over OTLP.
 ---
 
 `autotel-sentry` sends Autotel traces to Sentry over OTLP. It parses a Sentry
-DSN into the OTLP endpoint and auth headers that Autotel's `init()` expects, and
-installs a Sentry event processor that attaches the active OTel `trace_id` and
-`span_id` to every error, so errors and traces line up in the Sentry UI.
+DSN into the OTLP endpoint and auth headers that Autotel's `init()` expects.
+
+That is the whole package. Errors line up with traces on their own:
+`@sentry/node` reads the active OpenTelemetry span when it builds an event, so
+a captured error already carries the right `trace_id` and `span_id`.
 
 > [!NOTE]
 > Earlier versions used a `SentrySpanProcessor` / `SentryPropagator` bridge built
@@ -17,8 +19,9 @@ installs a Sentry event processor that attaches the active OTel `trace_id` and
 ## Prerequisites
 
 - Node.js 22+
-- `@sentry/node` >= 10.47.0 (exposes `getGlobalScope`)
-- `autotel` as a peer dependency
+- `autotel`
+- `@sentry/node`, to capture the errors. `autotel-sentry` calls no Sentry API
+  and declares no dependency on it.
 
 ## Installation
 
@@ -31,7 +34,7 @@ npm install autotel autotel-sentry @sentry/node
 ```typescript
 import * as Sentry from '@sentry/node';
 import { init } from 'autotel';
-import { linkSentryErrors, sentryOtlpConfig } from 'autotel-sentry';
+import { sentryOtlpConfig } from 'autotel-sentry';
 
 const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
@@ -40,9 +43,6 @@ Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
 
 // 2. Initialize Autotel. It owns OTel and exports traces to Sentry's OTLP endpoint.
 init({ service: 'my-app', endpoint: config.endpoint, headers: config.headers });
-
-// 3. Link Sentry errors to the active OTel trace.
-linkSentryErrors(Sentry);
 ```
 
 `skipOpenTelemetrySetup: true` is required. Sentry SDK v8+ registers its own OTel
@@ -65,17 +65,50 @@ const config = sentryOtlpConfig(
 // config.headers  auth headers (pass to Autotel init as `headers`)
 ```
 
-### `linkSentryErrors(sentry: SentryLinkable): void`
+## Linking a Sentry browser SDK
 
-Installs a global Sentry event processor that reads the active OTel span from
-`@opentelemetry/api` and merges `trace_id` and `span_id` into every outgoing
-Sentry event's `contexts.trace`. Call it once, after both `Sentry.init()` and
-`init()`. `@sentry/node` >= 10.47.0 satisfies the `SentryLinkable` interface.
+A Sentry SDK in the browser or a mobile app generates its own trace ids and does
+not send W3C `traceparent` by default, so your frontend and your Autotel backend
+end up in two unconnected traces. Turn on `propagateTraceparent`, and enable
+browser tracing so something actually instruments the requests:
+
+```typescript
+Sentry.init({
+  dsn: 'YOUR_DSN',
+  // Plain @sentry/browser does not auto-enable this. Without it nothing
+  // instruments fetch/XHR and no header is attached, whatever
+  // propagateTraceparent says. Framework SDKs enable it for you.
+  integrations: [Sentry.browserTracingIntegration()],
+  tracesSampleRate: 1.0,
+  propagateTraceparent: true,
+});
+```
+
+The header carries the frontend's sampling decision, and a `parentbased_*`
+sampler honours it. `parentbased_always_on` is the OpenTelemetry default, so
+your backend stops deciding for itself and a tail-based sampler in your
+collector never sees the spans it is meant to judge. Set
+`OTEL_TRACES_SAMPLER=always_on` on the backend to take that decision back.
+
+If `autotel-web` is also on the page, only one of them can own the header. Both
+inject `traceparent` only when it is absent, so whichever is initialized last
+wraps the other and wins for `fetch`. XHR does not follow that rule, because
+both SDKs inject during `send()` rather than by wrapping. So when Sentry is
+meant to own propagation, set both `instrumentFetch: false` and
+`instrumentXHR: false` on `autotel-web` rather than relying on initialization
+order; otherwise `fetch` and XHR can land in different traces.
+
+## Migrating from `linkSentryErrors`
+
+Removed in 0.7.0. Delete the call and its import; nothing replaces it.
+`@sentry/node` reads the active OpenTelemetry span when it builds an event, so
+errors keep landing on the right trace without it. The `SentryLinkable` type is
+gone too.
 
 ## Examples
 
 - [`example-sentry`](https://github.com/jagreehal/autotel/tree/main/apps/example-sentry):
-  the Autotel + Sentry OTLP bridge with linked traces and errors.
+  traces and logs over OTLP, with captured errors on the active trace.
 
 ## See also
 
