@@ -63,8 +63,40 @@ jobs:
         env:
           NODE_ENV: test
 
+  mongoose-integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install pnpm
+        run: corepack prepare pnpm@latest --activate
+
+      - name: Start MongoDB
+        uses: supercharge/mongodb-github-action@1.12.1
+        with:
+          mongodb-version: '8.0'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Mongoose integration tests
+        # Through turbo, so the workspace packages it imports are built first.
+        # `pnpm --filter ... run` calls the script directly and skips that.
+        run: pnpm turbo run test:integration --filter=autotel-mongoose
+        env:
+          # Against the server above, rather than downloading an in-memory one.
+          MONGO_TEST_URI: mongodb://127.0.0.1:27017
+
   dependabot-auto-merge:
-    needs: build-and-test
+    needs: [build-and-test, mongoose-integration]
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]' && github.event_name == 'pull_request'
     steps:

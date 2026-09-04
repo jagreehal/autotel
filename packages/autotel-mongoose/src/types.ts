@@ -49,8 +49,22 @@ export interface InstrumentMongooseConfig {
   /** Capture collection names in spans (default: true). */
   captureCollectionName?: boolean;
 
-  /** Instrument Schema hooks — pre/post save, validate, etc. (default: false). */
-  instrumentHooks?: boolean;
+  /**
+   * Instrument Schema hooks — pre/post save, validate, etc. Default: `false`.
+   *
+   * `true` traces every hook the application registers. Pass a selector to
+   * narrow it by hook name, which is the same shape `customMethods` uses:
+   *
+   * ```ts
+   * instrumentHooks: ['save', 'validate']      // only these
+   * instrumentHooks: { exclude: ['init'] }     // everything else
+   * ```
+   *
+   * Worth narrowing for `init`: it fires once per document a query hydrates,
+   * so a find returning 500 documents emits 500 spans, while `save` and
+   * `validate` fire once per operation.
+   */
+  instrumentHooks?: MethodSelector;
 
   /**
    * Serializer for db.query.text attribute.
@@ -186,7 +200,7 @@ export interface ResolvedConfig {
   peerPort: number;
   tracerName: string;
   captureCollectionName: boolean;
-  instrumentHooks: boolean;
+  instrumentHooks: MethodSelector;
   dbStatementSerializer:
     | ((operation: string, payload: SerializerPayload) => string | undefined)
     | false;

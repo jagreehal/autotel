@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import {
   NodeTracerProvider,
   InMemorySpanExporter,
@@ -15,11 +14,12 @@ import {
   ATTR_DB_OPERATION_NAME,
 } from './constants';
 import type { InstrumentMongooseConfig } from './types';
-import { canListenOnLoopback } from './test-support';
+import { canListenOnLoopback, startMongo } from './test-support';
+import type { TestMongo } from './test-support';
 
 const supportsLocalServer = await canListenOnLoopback();
 
-let mongod: MongoMemoryServer | undefined;
+let mongod: TestMongo | undefined;
 let exporter: InMemorySpanExporter;
 let provider: NodeTracerProvider;
 let uri: string;
@@ -36,8 +36,8 @@ beforeAll(async () => {
     return;
   }
 
-  mongod = await MongoMemoryServer.create();
-  uri = mongod.getUri();
+  mongod = await startMongo('custom_methods');
+  uri = mongod.uri;
 });
 
 afterAll(async () => {
