@@ -3,7 +3,6 @@
  *
  * Demonstrates:
  * - sentryOtlpConfig() builds OTLP endpoint/headers from DSN
- * - linkSentryErrors() links Sentry errors to active OTel traces
  * - Autotel exports traces directly to Sentry's OTLP endpoint
  *
  * Run: pnpm start
@@ -12,15 +11,16 @@
 
 import 'dotenv/config';
 import * as Sentry from '@sentry/node';
-import { init, shutdown, span, trace, getActiveTraceContext } from 'autotel';
+import { init, shutdown, span, getActiveTraceContext } from 'autotel';
 import { createBuiltinLogger } from 'autotel/logger';
-import { linkSentryErrors, sentryOtlpConfig } from 'autotel-sentry';
+import { sentryOtlpConfig } from 'autotel-sentry';
 
 // Build OTLP config from DSN — extracts endpoint and auth headers.
 const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 const log = createBuiltinLogger('example-sentry');
 
-// Sentry handles errors only — let Autotel own the OTel setup.
+// Sentry handles errors only — let Autotel own the OTel setup. Sentry reads
+// the active OTel span itself, so captured errors land on the right trace.
 Sentry.init({
   dsn: config.dsn,
   skipOpenTelemetrySetup: true,
@@ -34,9 +34,6 @@ init({
   logs: true,
   debug: !!process.env.AUTOTEL_DEBUG,
 });
-
-// Link Sentry errors to active OTel traces.
-linkSentryErrors(Sentry);
 
 async function main() {
   await span('example-sentry-demo', async () => {
@@ -58,7 +55,7 @@ async function main() {
     }
 
     log.info({ demo: true }, 'trace finished');
-  })();
+  });
 
   await Sentry.flush(5000);
   await shutdown();

@@ -43,11 +43,13 @@ Every command that reads telemetry needs a backend. Pick one and reuse it:
 
 Hosted vendors (traces only — `capabilities` will report metrics and logs unsupported):
 
-| Backend          | Flags                                                                    | Credentials (environment only)                                                      |
-| ---------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| Pydantic Logfire | `--backend logfire [--logfire-base-url https://logfire-eu.pydantic.dev]` | `LOGFIRE_READ_TOKEN` (must be **read**-scope; a write token is rejected)            |
-| Datadog APM      | `--backend datadog [--datadog-site datadoghq.eu]`                        | `DD_API_KEY` **and** `DD_APP_KEY` (an application key is separate from the API key) |
-| SigNoz           | `--backend signoz --signoz-base-url https://signoz.example.com`          | `SIGNOZ_API_KEY` (omit for an unauthenticated self-hosted instance)                 |
+| Backend          | Flags                                                                    | Credentials (environment only)                                           |
+| ---------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Pydantic Logfire | `--backend logfire [--logfire-base-url https://logfire-eu.pydantic.dev]` | `LOGFIRE_READ_TOKEN` (must be **read**-scope; a write token is rejected) |
+| Datadog APM      | `--backend datadog [--datadog-site datadoghq.eu]`                        | `DD_API_KEY` **and** `DD_APP_KEY` (both required; see below)             |
+| SigNoz           | `--backend signoz --signoz-base-url https://signoz.example.com`          | `SIGNOZ_API_KEY` (omit for an unauthenticated self-hosted instance)      |
+
+Datadog needs two keys because it splits credentials by direction. The API key writes telemetry in; the application key reads it back out, scoped `apm_read`. An `.env` copied from a service that exports to Datadog carries the API key alone, so `DD_APP_KEY` is the one that goes missing. `autotel health` names it rather than returning an empty result. A 403 means the keys reached Datadog and it refused them: either `DD_SITE` does not match the org, or the application key lacks `apm_read`.
 
 Credentials are read from the environment and never accepted as flags — argv is visible to anything that can list the process table. Never ask the user to paste a key into the chat; ask them to export it.
 

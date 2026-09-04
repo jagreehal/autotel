@@ -1,20 +1,18 @@
 # example-sentry
 
-Demonstrates Autotel exporting OpenTelemetry traces and logs directly to Sentry's OTLP ingestion endpoint, with Sentry error capture linked to active traces.
+Demonstrates Autotel exporting OpenTelemetry traces and logs directly to Sentry's OTLP ingestion endpoint, with captured errors landing on the active trace.
 
 ## How it works
 
 ```
 Autotel (OTel SDK) ──OTLP──> Sentry (traces + logs)
-Sentry SDK ─────────────────> Sentry (errors)
-         ↑
-   linkSentryErrors() attaches trace_id/span_id
+Sentry SDK ─────────────────> Sentry (errors, on the active trace)
 ```
 
 1. `sentryOtlpConfig(dsn)` parses your Sentry DSN into an OTLP endpoint and auth headers
 2. Sentry SDK is initialized with `skipOpenTelemetrySetup: true` so Autotel owns the OTel setup
 3. Autotel exports traces via OTLP to Sentry's ingestion endpoint
-4. `linkSentryErrors(Sentry)` installs a global event processor that attaches the active OTel `trace_id` and `span_id` to every Sentry error event
+4. `@sentry/node` reads the active OTel span when it builds an event, so captured errors carry the right `trace_id` and `span_id` with no extra wiring
 
 ## Setup
 
@@ -77,7 +75,7 @@ AUTOTEL_DEBUG=1 pnpm start
 ## Key code
 
 ```typescript
-import { sentryOtlpConfig, linkSentryErrors } from 'autotel-sentry';
+import { sentryOtlpConfig } from 'autotel-sentry';
 
 const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
@@ -87,11 +85,10 @@ init({
   endpoint: config.endpoint,
   headers: config.headers,
 });
-linkSentryErrors(Sentry);
 ```
 
 ## References
 
-- [autotel-sentry](../../packages/autotel-sentry): the helpers used in this example
+- [autotel-sentry](../../packages/autotel-sentry): the DSN helper used in this example
 - [Sentry OTLP Integration spec](https://develop.sentry.dev/sdk/telemetry/traces/otlp/)
 - [Sentry OTLP docs](https://docs.sentry.io/concepts/otlp/)

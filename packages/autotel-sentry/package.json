@@ -1,7 +1,7 @@
 {
   "name": "autotel-sentry",
   "version": "0.6.0",
-  "description": "Bridge OpenTelemetry (Autotel) traces to Sentry via SpanProcessor and Propagator",
+  "description": "Build Sentry's OTLP endpoint and auth headers from a Sentry DSN",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -24,17 +24,6 @@
     "lint": "eslint src",
     "test": "vitest run",
     "clean": "rimraf dist"
-  },
-  "dependencies": {
-    "@opentelemetry/api": "^1.9.1"
-  },
-  "peerDependencies": {
-    "@sentry/node": ">=10.68.0"
-  },
-  "peerDependenciesMeta": {
-    "@sentry/node": {
-      "optional": false
-    }
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

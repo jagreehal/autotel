@@ -540,6 +540,89 @@ init(
 );
 ```
 
+## Querying Datadog Back
+
+Everything above sends telemetry to Datadog. Reading it back, from
+`autotel-mcp` or the `autotel` CLI, takes a second credential.
+
+### Two keys, two directions
+
+Datadog splits its credentials by direction:
+
+| Credential      | Header               | What it does                                        | Where to get it                           |
+| --------------- | -------------------- | --------------------------------------------------- | ----------------------------------------- |
+| API key         | `DD-API-KEY`         | Writes telemetry in. This is the one `init()` uses. | Organization Settings -> API Keys         |
+| Application key | `DD-APPLICATION-KEY` | Reads telemetry back out.                           | Organization Settings -> Application Keys |
+
+Every read endpoint, `/api/v2/apm/services` and `/api/v2/spans/events` among
+them, requires both headers. Scope the application key `apm_read`.
+
+An app that only exports to Datadog needs the API key alone, so a working
+`.env` from an exporting service usually lacks the application key. Add it:
+
+```bash
+export DD_API_KEY=...          # already set if you export to Datadog
+export DD_APP_KEY=...          # add this to query
+export DD_SITE=datadoghq.eu    # bare site, defaults to datadoghq.com
+```
+
+Both keys come from the environment. Neither has a flag form, because `argv` is
+readable by any process that can list the process table.
+
+### Verify the pair
+
+```bash
+AUTOTEL_BACKEND=datadog AUTOTEL_TRANSPORT=http npx autotel-mcp &
+curl -s localhost:3000/health
+```
+
+A healthy backend counts the services it found:
+
+```json
+{
+  "status": "healthy",
+  "detail": "12 services available",
+  "signals": {
+    "traces": "available",
+    "metrics": "unsupported",
+    "logs": "unsupported"
+  }
+}
+```
+
+To check the credentials alone, ask Datadog directly:
+
+```bash
+# API key: 200 means valid
+curl -s -o /dev/null -w '%{http_code}\n' \
+  "https://api.$DD_SITE/api/v1/validate" -H "DD-API-KEY: $DD_API_KEY"
+
+# Both keys together: 200 means the pair can read APM
+curl -s -o /dev/null -w '%{http_code}\n' \
+  "https://api.$DD_SITE/api/v2/apm/services?filter%5Benv%5D=*" \
+  -H "DD-API-KEY: $DD_API_KEY" -H "DD-APPLICATION-KEY: $DD_APP_KEY"
+```
+
+### Reading the failures
+
+| Symptom                                     | Cause                                                                                                                                                                                             |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Datadog application key missing`           | `DD_APP_KEY` unset. The health check names it rather than returning an empty result.                                                                                                              |
+| 403 from `/api/v1/validate`                 | The API key is revoked, or belongs to a different site. Datadog answers an invalid key and a missing key identically, so compare against a deliberately wrong key to confirm you reached the API. |
+| 403 from `/api/v2/apm/services`             | The API key validates but the application key does not carry `apm_read`, or the two keys belong to different orgs.                                                                                |
+| Healthy, but a service you expect is absent | The exporter is not landing spans. Check the write path before you suspect the query.                                                                                                             |
+
+A dead API key fails silently on the write side. Datadog drops unauthorized
+OTLP payloads without telling the exporter, so a service that reports no export
+errors can still be sending nothing.
+
+### Traces only
+
+The Datadog backend serves traces. `capabilities()` reports `metrics` and
+`logs` as `unsupported`, so those tools never register and an agent reads
+"unsupported" instead of guessing from an empty list. Datadog exposes metrics
+and logs through separate APIs that this backend does not call.
+
 ## Migration from pino-datadog-transport
 
 If you're currently using `pino-datadog-transport`, Autotel provides a superior alternative with traces and automatic correlation.

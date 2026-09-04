@@ -258,6 +258,38 @@ Query an existing Jaeger instance. Traces only (metrics and logs unsupported by 
 
 ```bash
 AUTOTEL_BACKEND=jaeger JAEGER_BASE_URL=http://localhost:16686 npx autotel-mcp
+```
+
+### Datadog
+
+Query Datadog APM. Traces only, because the spans API carries no metrics or logs.
+
+Datadog splits its credentials by direction. An API key writes telemetry in. An
+application key reads it back out, and every query here sends both:
+
+```bash
+export DD_API_KEY=...          # Organization Settings -> API Keys
+export DD_APP_KEY=...          # Organization Settings -> Application Keys, scoped apm_read
+export DD_SITE=datadoghq.eu    # bare site, defaults to datadoghq.com
+
+AUTOTEL_BACKEND=datadog npx autotel-mcp
+```
+
+An app that already exports to Datadog holds the API key alone. Add the
+application key before this server can read those traces back.
+
+Check the pair before you debug anything else:
+
+```bash
+AUTOTEL_BACKEND=datadog AUTOTEL_TRANSPORT=http npx autotel-mcp &
+curl -s localhost:3000/health
+```
+
+A healthy response counts the services Datadog returned and reports `traces:
+available` with metrics and logs `unsupported`. A missing application key fails
+the health check and names the variable, so you never read an empty result as
+"no data". HTTP 403 means Datadog accepted the request and refused it: check
+that `DD_SITE` matches the org and that the application key carries `apm_read`.
 
 ## Offline cache and snapshots
 
@@ -269,7 +301,6 @@ Collector schema and semantic-convention tools can run in CI or air-gapped envir
   Override cache directory (default: `.autotel-cache` in current working directory).
 
 Bundled snapshots ship under `fixtures/upstream/` and include a baseline collector version/component catalog plus semantic-convention namespace data.
-```
 
 ## Configuration
 
