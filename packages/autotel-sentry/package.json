@@ -1,6 +1,6 @@
 {
   "name": "autotel-sentry",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Build Sentry's OTLP endpoint and auth headers from a Sentry DSN",
   "type": "module",
   "main": "./dist/index.js",
