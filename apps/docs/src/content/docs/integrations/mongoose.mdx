@@ -31,28 +31,66 @@ await User.findOne({ email: 'alice@example.com' }).exec();
 // Span: "find users" with db.query.text (PII redacted)
 ```
 
+`instrumentMongoose()` is safe to call more than once. Mongoose's `Model` and
+`Query` prototypes are shared by every `new mongoose.Mongoose()`, so a second
+call recognises what the first installed and leaves it alone: one span per
+operation either way.
+
+Methods Mongoose implements with other methods produce one span, not one per
+delegation: `findById` traces as `findById`, without a nested `findOne` for the
+same round trip. A query a hook issues is a separate round trip and keeps its
+own span.
+
 ## Hook Instrumentation
+
+Off by default. Enable it and the hooks your schemas register get their own
+spans, named after the operation that ran: `mongoose.users.pre.save`.
 
 ```typescript
 instrumentMongoose(mongoose, { instrumentHooks: true });
 
 userSchema.pre('save', async function () {
   this.set('name', this.get('name')?.trim());
-  // Pre/post hooks get their own spans
+  // Span: mongoose.users.pre.save
 });
 ```
 
+Mongoose's own hooks stay out of the way, so a schema using `timestamps`,
+subdocuments or virtuals emits spans only for the hooks you wrote.
+
+Pass a selector to choose which hooks to trace, the same shape `customMethods`
+takes:
+
+```typescript
+instrumentMongoose(mongoose, {
+  instrumentHooks: ['save', 'validate'], // only these
+});
+
+instrumentMongoose(mongoose, {
+  instrumentHooks: { exclude: ['init'] }, // everything else
+});
+```
+
+Reach for that with `init`, which runs once for every document a query
+hydrates, where `save` and `validate` run once per operation. A find returning
+500 documents means 500 `post.init` spans.
+
+Selection works a hook at a time whichever way you register. Both
+`pre(['save', 'validate'], fn)` and `pre(/^find/, fn)` are selected and named
+per operation, so a `find` gets `pre.find` and a `findOne` gets `pre.findOne`.
+Excluding a hook only stops the span; your handler still runs.
+
 ## Configuration
 
-| Option                  | Default     | Description                |
-| ----------------------- | ----------- | -------------------------- |
-| `dbName`                | —           | Database name              |
-| `peerName`              | —           | MongoDB host               |
-| `peerPort`              | —           | MongoDB port               |
-| `captureCollectionName` | `true`      | Include collection in span |
-| `instrumentHooks`       | `false`     | Wrap pre/post hooks        |
-| `dbStatementSerializer` | built-in    | Custom query serializer    |
-| `statementRedactor`     | `'default'` | PII redaction preset       |
+| Option                  | Default     | Description                            |
+| ----------------------- | ----------- | -------------------------------------- |
+| `dbName`                | —           | Database name                          |
+| `peerName`              | —           | MongoDB host                           |
+| `peerPort`              | —           | MongoDB port                           |
+| `captureCollectionName` | `true`      | Include collection in span             |
+| `instrumentHooks`       | `false`     | Trace schema hooks; accepts a selector |
+| `dbStatementSerializer` | built-in    | Custom query serializer                |
+| `statementRedactor`     | `'default'` | PII redaction preset                   |
 
 ## Examples
 

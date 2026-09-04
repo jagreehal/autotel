@@ -84,6 +84,31 @@ function setMarker(
 const WRAPPED_HOOK_FLAG = '__autotelWrappedHook' as const;
 const WRAPPED_METHOD_FLAG = '__autotelWrappedMethod' as const;
 const MODEL_PATCHED_FLAG = '__autotelModelPatched' as const;
+/**
+ * Set on the replacement autotel installs over a Mongoose prototype method.
+ *
+ * `Model`, `Query.prototype` and `Model.prototype` come from the mongoose
+ * module, so every `new mongoose.Mongoose()` shares them. The
+ * already-instrumented guard sits on the Mongoose instance, which cannot see
+ * that: instrumenting a second instance wrapped the same methods again, and one
+ * `find()` then opened a span per layer.
+ */
+const PATCHED_PROTOTYPE_FLAG = '__autotelPatchedPrototype' as const;
+
+/**
+ * True while a traced Model method is building its query.
+ *
+ * Several Mongoose methods are written in terms of another one:
+ * `findById` calls `findOne`, `findByIdAndUpdate` calls `findOneAndUpdate`.
+ * Both ends are public API and both are traced, so one `findById()` opened two
+ * spans for one round trip — the delegate nested inside its caller.
+ *
+ * The delegation happens synchronously while the outer method assembles the
+ * Query, so the window this flag covers is exactly that call and nothing else.
+ * A query a hook or callback starts later runs outside it and is traced in full,
+ * which is the distinction a "suppress any nested query" rule would lose.
+ */
+let buildingQuery = false;
 const PROXIED_COLLECTION_FLAG = '__autotelProxiedCollection' as const;
 
 /**
@@ -354,9 +379,15 @@ function wrapQueryReturningMethod(
   captureStatement: StatementCaptureFn,
 ): void {
   const original = asFunction(target[methodName]);
-  if (!original) return;
+  if (!original || hasMarker(original, PATCHED_PROTOTYPE_FLAG)) return;
 
   target[methodName] = function instrumented(this: any, ...args: any[]): any {
+    // Reached from inside another traced method rather than from application
+    // code: the caller's span already describes this round trip.
+    if (buildingQuery) {
+      return original.apply(this, args);
+    }
+
     const collectionName = getCollectionName(this);
     const modelName = getModelName(this);
     const span = createSpan(
@@ -370,7 +401,13 @@ function wrapQueryReturningMethod(
     const finalize = createSpanFinalizer(span);
     return runWithSpan(span, () => {
       try {
-        const result = original.apply(this, args);
+        buildingQuery = true;
+        let result: unknown;
+        try {
+          result = original.apply(this, args);
+        } finally {
+          buildingQuery = false;
+        }
 
         // Extract the query payload from the returned Query before it executes.
         const query = asRecord(result);
@@ -402,6 +439,7 @@ function wrapQueryReturningMethod(
       }
     });
   };
+  setMarker(target[methodName], PATCHED_PROTOTYPE_FLAG);
 }
 
 /**
@@ -504,7 +542,7 @@ function wrapInstanceMethod(
   captureStatement: StatementCaptureFn,
 ): void {
   const original = asFunction(target[methodName]);
-  if (!original) return;
+  if (!original || hasMarker(original, PATCHED_PROTOTYPE_FLAG)) return;
 
   target[methodName] = function instrumented(this: any, ...args: any[]): any {
     const collectionName = getCollectionName(this);
@@ -548,6 +586,7 @@ function wrapInstanceMethod(
       }
     });
   };
+  setMarker(target[methodName], PATCHED_PROTOTYPE_FLAG);
 }
 
 // ---------------------------------------------------------------------------
@@ -559,7 +598,7 @@ function wrapInstanceMethod(
  */
 function wrapChainableMethod(target: any, methodName: string): void {
   const original = asFunction(target[methodName]);
-  if (!original) return;
+  if (!original || hasMarker(original, PATCHED_PROTOTYPE_FLAG)) return;
 
   target[methodName] = function captureContext(this: any, ...args: any[]): any {
     const currentSpan = getActiveSpan();
@@ -573,6 +612,7 @@ function wrapChainableMethod(target: any, methodName: string): void {
 
     return result;
   };
+  setMarker(target[methodName], PATCHED_PROTOTYPE_FLAG);
 }
 
 // ---------------------------------------------------------------------------
@@ -599,11 +639,39 @@ function patchSchemaHooks(
 
   const originalPre = asFunction(Schema.prototype.pre);
   if (originalPre) {
-    Schema.prototype.pre = function (hookName: string, ...args: any[]): any {
+    Schema.prototype.pre = function (
+      hookName: string | RegExp | string[],
+      ...args: any[]
+    ): any {
+      // `pre(['save', 'validate'], fn)` registers one handler for several
+      // hooks. Left whole, the array reached the span name verbatim
+      // (`pre.save,validate`) and the selector could not match any single
+      // entry. Splitting it here registers each hook the way Mongoose would,
+      // so both name and selector see one operation at a time.
+      if (Array.isArray(hookName)) {
+        let result: any;
+        for (const singleName of hookName) {
+          result = callFunction(
+            Schema.prototype.pre as (...a: never[]) => unknown,
+            this,
+            [singleName, ...args],
+          );
+        }
+        return result;
+      }
+
       const handler = asFunction(args[0]) ?? asFunction(args[1]) ?? null;
 
-      // Only wrap user-defined hooks, skip Mongoose internals
-      if (handler && !isMongooseInternalHook(handler)) {
+      // A RegExp covers whichever operations match, so it cannot be selected
+      // until one runs; `wrapHookHandler` applies the selector per call.
+      const selectable = typeof hookName !== 'string';
+
+      // Only wrap user-defined hooks the selector allows, skip Mongoose internals
+      if (
+        handler &&
+        (selectable || selectorAllows(config.instrumentHooks, hookName)) &&
+        !isMongooseInternalHook(handler)
+      ) {
         const wrapped = wrapHookHandler(
           handler,
           hookName,
@@ -624,11 +692,39 @@ function patchSchemaHooks(
 
   const originalPost = asFunction(Schema.prototype.post);
   if (originalPost) {
-    Schema.prototype.post = function (hookName: string, ...args: any[]): any {
+    Schema.prototype.post = function (
+      hookName: string | RegExp | string[],
+      ...args: any[]
+    ): any {
+      // `post(['save', 'validate'], fn)` registers one handler for several
+      // hooks. Left whole, the array reached the span name verbatim
+      // (`post.save,validate`) and the selector could not match any single
+      // entry. Splitting it here registers each hook the way Mongoose would,
+      // so both name and selector see one operation at a time.
+      if (Array.isArray(hookName)) {
+        let result: any;
+        for (const singleName of hookName) {
+          result = callFunction(
+            Schema.prototype.post as (...a: never[]) => unknown,
+            this,
+            [singleName, ...args],
+          );
+        }
+        return result;
+      }
+
       const handler = asFunction(args[0]) ?? asFunction(args[1]) ?? null;
 
-      // Only wrap user-defined hooks, skip Mongoose internals
-      if (handler && !isMongooseInternalHook(handler)) {
+      // A RegExp covers whichever operations match, so it cannot be selected
+      // until one runs; `wrapHookHandler` applies the selector per call.
+      const selectable = typeof hookName !== 'string';
+
+      // Only wrap user-defined hooks the selector allows, skip Mongoose internals
+      if (
+        handler &&
+        (selectable || selectorAllows(config.instrumentHooks, hookName)) &&
+        !isMongooseInternalHook(handler)
+      ) {
         const wrapped = wrapHookHandler(
           handler,
           hookName,
@@ -661,27 +757,37 @@ function patchSchemaHooks(
 function isMongooseInternalHook(handler: unknown): boolean {
   if (!isFunction(handler)) return false;
 
-  const funcName = asString(readProperty(handler, 'name')) ?? '';
+  // Read `name` off the function directly. `readProperty` goes through
+  // `asRecord`, which requires `typeof value === 'object'` and so answers
+  // `undefined` for every function, leaving `funcName` empty and every rule
+  // below unreachable. Mongoose's own plugin hooks then reached
+  // `wrapHookHandler`, and a `post('init')` on a schema produced two spans per
+  // hydrated document: the application's and Mongoose's.
+  const funcName = asString((handler as { name?: unknown }).name) ?? '';
 
-  // Skip private/internal methods (starting with _ or $)
-  if (funcName.startsWith('_') || funcName.startsWith('$')) {
-    return true;
-  }
-
-  // Skip known Mongoose internal hook patterns by name
-  const mongooseInternalNamePatterns = [
-    'shardingPlugin',
-    'mongooseInternalHook',
-    'noop',
-    'wrapped',
-    'bound ',
-    'timestampsPreSave',
-    'timestampsPreUpdate',
+  // Mongoose's own hook handlers, taken from its `.pre(...)` / `.post(...)`
+  // registrations in `lib/`, so this list is checkable against the dependency
+  // rather than guessed at. Anything Mongoose registers anonymously is left to
+  // the source-pattern check below.
+  //
+  // Matched as prefixes and deliberately specific. A substring match on a
+  // generic word, or a rule treating any `_`-prefixed name as internal, also
+  // swallows application hooks: losing an application span is a worse failure
+  // than tracing one hook of Mongoose's. autotel's own wrapper is recognised
+  // by its marker in `wrapHookHandler`, so it needs no name rule here.
+  const mongooseInternalNamePrefixes = [
+    'shardingPlugin', // lib/plugins/sharding.js
+    'saveSubdocs', // lib/plugins/saveSubdocs.js
+    'trackTransaction', // lib/plugins/trackTransaction.js
+    'timestampsPre', // lib/helpers/timestamps, on save
+    '_setTimestampsOnUpdate', // the same, on every update-shaped hook
+    'virtualPreInit', // lib/schema.js, on init
     'handleTimestampOption',
+    'mongooseInternalHook',
   ];
 
   if (
-    mongooseInternalNamePatterns.some((pattern) => funcName.includes(pattern))
+    mongooseInternalNamePrefixes.some((prefix) => funcName.startsWith(prefix))
   ) {
     return true;
   }
@@ -712,6 +818,26 @@ function isMongooseInternalHook(handler: unknown): boolean {
 }
 
 /**
+ * The hook name to put in a span.
+ *
+ * `Schema.prototype.pre`/`post` accept a string, an array of strings, or a
+ * RegExp. Arrays are split at registration (see `patchSchemaHooks`), so only a
+ * RegExp reaches here — and one registration then covers several operations:
+ * `pre(/^find/)` runs for `find`, `findOne`, `findOneAndUpdate` and more. The
+ * registration argument cannot name the operation that actually ran, but a
+ * Query knows its own `op`, so ask it first and fall back to the pattern's
+ * source. Naming every one of them `pre./^find/` told you a hook ran and
+ * nothing else.
+ */
+function resolveHookName(hookName: string | RegExp, self: unknown): string {
+  if (typeof hookName === 'string') {
+    return hookName;
+  }
+  const op = asString(readProperty(self, 'op'));
+  return op ?? hookName.source;
+}
+
+/**
  * Wraps a hook handler to trace its execution.
  * Handles both callback-style (with next) and promise-style hooks.
  *
@@ -720,7 +846,7 @@ function isMongooseInternalHook(handler: unknown): boolean {
  */
 export function wrapHookHandler(
   handler: any,
-  hookName: string,
+  hookName: string | RegExp,
   hookType: 'pre' | 'post',
   tracer: Tracer,
   config: ResolvedConfig,
@@ -734,7 +860,7 @@ export function wrapHookHandler(
     return handler;
   }
 
-  const startHookSpan = (self: any) => {
+  const startHookSpan = (self: any, resolvedName: string) => {
     let modelName: string | undefined;
     let collectionName: string | undefined;
 
@@ -752,12 +878,12 @@ export function wrapHookHandler(
     }
 
     const spanName = collectionName
-      ? `mongoose.${collectionName}.${hookType}.${hookName}`
-      : `mongoose.hook.${hookType}.${hookName}`;
+      ? `mongoose.${collectionName}.${hookType}.${resolvedName}`
+      : `mongoose.hook.${hookType}.${resolvedName}`;
 
     const span = tracer.startSpan(spanName, { kind: SpanKind.INTERNAL });
     span.setAttribute('hook.type', hookType);
-    span.setAttribute('hook.operation', hookName);
+    span.setAttribute('hook.operation', resolvedName);
     if (modelName) {
       span.setAttribute('hook.model', modelName);
     }
@@ -819,7 +945,20 @@ export function wrapHookHandler(
     // hook's own span. Used to fence off the span's context when we hand
     // control back to Kareem via `next()` below.
     const parentContext = context.active();
-    const span = startHookSpan(this);
+
+    // A string registration was selected at registration time. A RegExp one
+    // could not be: it covers whichever operations match, so the selector is
+    // applied here, where the operation is known. Skipping means calling the
+    // handler untouched, with no span and no change in behaviour.
+    const resolvedName = resolveHookName(hookName, this);
+    if (
+      typeof hookName !== 'string' &&
+      !selectorAllows(config.instrumentHooks, resolvedName)
+    ) {
+      return callFunction(handler, this, runtimeArgs);
+    }
+
+    const span = startHookSpan(this, resolvedName);
 
     // Whether this invocation is callback-style is decided at *call* time, and
     // `next` — by Mongoose convention — is always the handler's *last* declared
@@ -1419,7 +1558,7 @@ export function instrumentMongoose(
   });
 
   // Patch Schema hooks only if enabled
-  if (m.Schema && finalConfig.instrumentHooks) {
+  if (m.Schema && finalConfig.instrumentHooks !== false) {
     patchSchemaHooks(m.Schema, tracer, finalConfig);
   }
 

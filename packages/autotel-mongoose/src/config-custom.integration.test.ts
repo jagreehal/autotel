@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import {
   InMemorySpanExporter,
@@ -8,10 +7,11 @@ import {
 } from '@opentelemetry/sdk-trace-node';
 import { instrumentMongoose } from './instrumentation';
 import { ATTR_DB_QUERY_TEXT, ATTR_DB_OPERATION_NAME } from './constants';
-import { canListenOnLoopback } from './test-support';
+import { canListenOnLoopback, startMongo } from './test-support';
+import type { TestMongo } from './test-support';
 import type { SerializerPayload } from './types';
 
-let mongod: MongoMemoryServer | undefined;
+let mongod: TestMongo | undefined;
 let exporter: InMemorySpanExporter;
 let provider: NodeTracerProvider;
 
@@ -35,7 +35,7 @@ beforeAll(async () => {
     return;
   }
 
-  mongod = await MongoMemoryServer.create();
+  mongod = await startMongo('config_custom');
 
   // Custom serializer that only outputs the operation + condition keys
   instrumentMongoose(mongoose, {
@@ -46,7 +46,7 @@ beforeAll(async () => {
     statementRedactor: false, // Disable redaction for this test
   });
 
-  await mongoose.connect(mongod.getUri());
+  await mongoose.connect(mongod.uri);
   User = mongoose.model('User', userSchema);
 });
 

@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-node';
 import { instrumentMongoose } from './instrumentation';
-import { canListenOnLoopback } from './test-support';
+import { canListenOnLoopback, startMongo } from './test-support';
+import type { TestMongo } from './test-support';
 import {
   ATTR_DB_QUERY_TEXT,
   ATTR_DB_OPERATION_NAME,
@@ -16,7 +16,7 @@ import {
   DB_SYSTEM_NAME_VALUE_MONGODB,
 } from './constants';
 
-let mongod: MongoMemoryServer | undefined;
+let mongod: TestMongo | undefined;
 let exporter: InMemorySpanExporter;
 let provider: NodeTracerProvider;
 
@@ -49,8 +49,8 @@ beforeAll(async () => {
   }
 
   // Start in-memory MongoDB
-  mongod = await MongoMemoryServer.create();
-  const uri = mongod.getUri();
+  mongod = await startMongo('instrumentation');
+  const uri = mongod.uri;
 
   // Instrument BEFORE connecting
   instrumentMongoose(mongoose);
@@ -207,5 +207,97 @@ describe('instrumentMongoose integration', () => {
     );
     // Stable convention: "operation collection"
     expect(span!.name).toBe('findOne users');
+  });
+});
+
+describe('instrumenting more than once', () => {
+  if (!supportsLocalServer) {
+    it.skip('skips when the environment cannot open local TCP ports', () => {});
+    return;
+  }
+
+  it('opens one span per operation however often instrumentMongoose runs', async () => {
+    // `Model`, `Query.prototype` and `Model.prototype` come from the mongoose
+    // module, so every `new mongoose.Mongoose()` shares them. An app with two
+    // init paths, or a suite building an instance per case, therefore patched
+    // the same methods repeatedly, and one find() opened a span per layer.
+    const counts: number[] = [];
+
+    for (const round of [1, 2, 3]) {
+      const instance = new mongoose.Mongoose();
+      instrumentMongoose(instance, { instrumentHooks: true });
+      await instance.connect(mongod!.uri);
+
+      const schema = new instance.Schema({ value: Number });
+      const Model = instance.model(`RepeatInstrumentation${round}`, schema);
+      await Model.create({ value: round });
+
+      exporter.reset();
+      await Model.find({});
+      counts.push(
+        exporter
+          .getFinishedSpans()
+          .filter((span) => span.name.startsWith('find ')).length,
+      );
+
+      await Model.deleteMany({});
+      await instance.disconnect();
+    }
+
+    expect(counts).toEqual([1, 1, 1]);
+  });
+});
+
+describe('methods Mongoose implements with other methods', () => {
+  if (!supportsLocalServer) {
+    it.skip('skips when the environment cannot open local TCP ports', () => {});
+    return;
+  }
+
+  it('opens one span for findById, not one per delegation', async () => {
+    // `Model.findById` calls `Model.findOne`. Both are public API and both are
+    // traced, so one round trip used to arrive as two spans, the delegate
+    // nested inside its caller.
+    const created = await User.create({
+      name: 'Delegation',
+      email: 'delegation@example.com',
+      age: 30,
+    });
+
+    exporter.reset();
+    await User.findById(created._id);
+
+    const names = exporter.getFinishedSpans().map((span) => span.name);
+    expect(names).toEqual(['findById users']);
+  });
+
+  it('keeps the span for a query a hook issues', async () => {
+    // The delegate is built while the caller assembles its Query. A query that
+    // starts later, from a hook, is a separate round trip and keeps its span —
+    // the distinction a blunt "suppress nested queries" rule would lose.
+    const instance = new mongoose.Mongoose();
+    instrumentMongoose(instance, { instrumentHooks: true });
+    await instance.connect(mongod!.uri);
+
+    const Counter = instance.model(
+      'DelegationCounter',
+      new instance.Schema({ n: Number }),
+    );
+    const schema = new instance.Schema({ value: Number });
+    schema.pre('save', async function () {
+      await Counter.countDocuments({});
+    });
+    const Model = instance.model('DelegationHost', schema);
+
+    exporter.reset();
+    await new Model({ value: 1 }).save();
+
+    const names = exporter.getFinishedSpans().map((span) => span.name);
+    expect(names).toContain('countDocuments delegationcounters');
+    expect(names).toContain('save delegationhosts');
+
+    await Model.deleteMany({});
+    await Counter.deleteMany({});
+    await instance.disconnect();
   });
 });

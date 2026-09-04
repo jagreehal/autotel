@@ -57,6 +57,16 @@ await mongoose.connect(process.env.MONGODB_URI!);
 await User.findOne({ email: 'alice@example.com' }).exec();
 ```
 
+`instrumentMongoose()` is safe to call more than once. Mongoose's `Model` and
+`Query` prototypes are shared by every `new mongoose.Mongoose()`, so a second
+call recognises what the first installed and leaves it alone: one span per
+operation either way.
+
+Methods Mongoose implements with other methods produce one span, not one per
+delegation: `findById` traces as `findById`, without a nested `findOne` for the
+same round trip. A query a hook issues is a separate round trip and keeps its
+own span.
+
 ## Hook Instrumentation
 
 Schema hook instrumentation is optional and disabled by default.
@@ -79,6 +89,25 @@ userSchema.pre('save', async function () {
   this.set('name', this.get('name')?.trim());
 });
 ```
+
+Spans are named after the operation that ran (`mongoose.users.pre.save`), and
+Mongoose's own hooks stay out of the way: a schema using `timestamps`,
+subdocuments or virtuals emits spans only for the hooks you wrote.
+
+To limit span volume, pass an include list or an `{ include?, exclude? }`
+selector. For example, `init` runs once for every hydrated document, so a find
+returning 500 documents means 500 spans:
+
+```typescript
+instrumentMongoose(mongoose, {
+  instrumentHooks: { exclude: ['init'] },
+});
+```
+
+Selection works a hook at a time whichever way you register. Both
+`pre(['save', 'validate'], fn)` and `pre(/^find/, fn)` are selected and named
+per operation, so a `find` gets `pre.find` and a `findOne` gets `pre.findOne`.
+Excluding a hook only stops the span; the handler still runs.
 
 ## Custom Statics, Methods & Query Helpers
 
