@@ -1,5 +1,12 @@
 # @jagreehal/example-devtools
 
+## 1.0.40
+
+### Patch Changes
+
+- Updated dependencies [e142ad8]
+  - autotel-web@1.15.1
+
 ## 1.0.39
 
 ### Patch Changes

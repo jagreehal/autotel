@@ -1,5 +1,12 @@
 # autotel-posthog
 
+## 7.0.1
+
+### Patch Changes
+
+- Updated dependencies [e142ad8]
+  - autotel-web@1.15.1
+
 ## 7.0.0
 
 ### Minor Changes

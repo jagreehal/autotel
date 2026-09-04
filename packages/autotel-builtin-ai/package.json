@@ -28,7 +28,7 @@
     "type-check": "tsc --noEmit"
   },
   "peerDependencies": {
-    "autotel-web": "^1.15.0"
+    "autotel-web": "^1.15.1"
   },
   "keywords": [
     "chrome",
