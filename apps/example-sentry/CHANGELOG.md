@@ -1,5 +1,12 @@
 # @jagreehal/example-sentry
 
+## 0.1.65
+
+### Patch Changes
+
+- Updated dependencies [10c3f93]
+  - autotel@7.6.0
+
 ## 0.1.64
 
 ### Patch Changes

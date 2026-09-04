@@ -1,5 +1,15 @@
 # @jagreehal/example-agent-gates
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [10c3f93]
+- Updated dependencies [3de7576]
+  - autotel@7.6.0
+  - autotel-genai@0.10.0
+  - autotel-subscribers@56.0.0
+
 ## 1.0.3
 
 ### Patch Changes

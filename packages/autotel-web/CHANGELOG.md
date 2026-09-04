@@ -1,5 +1,60 @@
 # autotel-web
 
+## 1.15.0
+
+### Minor Changes
+
+- dbd968d: Observe a browser session, and tell automated sessions apart from people's.
+
+  `withBrowserSession()` (`autotel-playwright/session`) wraps a Playwright
+  `BrowserContext` in one `browser.session` span and records what the session
+  cost: `browser.session.cpu.time`, `.memory.usage`, `.network.io`, `.pages` and
+  `.console.errors`, with console output as `browser.console` events and every
+  uncaught page exception on the span. It takes a `BrowserContext` rather than a
+  test fixture, so agents and scrapers driving a browser in production get the
+  same view, exported to whatever backend `init()` already points at. The span is
+  active for the callback, so work started inside it joins the trace.
+
+  `autotel-web` now sets `user_agent.synthetic.type: 'test'` on the resource when
+  `navigator.webdriver` is set, which every browser automation framework does.
+  Segment on it to keep automated sessions in their own panels.
+
+- 10c3f93: Track the current OpenTelemetry releases: SDK 2.11.0, experimental 0.222.0,
+  auto-instrumentations 0.80.0.
+
+  Spans now carry the current names for the attributes OpenTelemetry has renamed,
+  so they line up with every other OTel producer:
+
+  | before                | now                         |
+  | --------------------- | --------------------------- |
+  | `http.method`         | `http.request.method`       |
+  | `http.status_code`    | `http.response.status_code` |
+  | `http.url`            | `url.full`                  |
+  | `http.scheme`         | `url.scheme`                |
+  | `http.host`           | `server.address`            |
+  | `http.target`         | `url.path` (+ `url.query`)  |
+  | `db.system`           | `db.system.name`            |
+  | `db.operation`        | `db.operation.name`         |
+  | `db.name`             | `db.namespace`              |
+  | `db.statement`        | `db.query.text`             |
+  | `db.sql.table`        | `db.collection.name`        |
+  | `rpc.system`          | `rpc.system.name`           |
+  | `messaging.operation` | `messaging.operation.type`  |
+
+  This covers `autotel`, `autotel-aws`, `autotel-cloudflare`, `autotel-tanstack`
+  and `autotel-web`. Queries, dashboards and alerts pinned to the previous
+  spellings should move to the new ones. `deployment.environment` now ships
+  alongside `deployment.environment.name` everywhere, matching what `init()`
+  already did.
+
+  Everything that reads spans — `autotel-devtools`, `autotel-terminal`,
+  `autotel-mcp`, `autotel-agents`, `autotel-audit`, `autotel-vscode`,
+  `autotel-cli` — accepts both spellings, so existing traces keep rendering,
+  filtering and aggregating as they did.
+
+  `rpc.service` is unchanged. `autotel-drizzle` and `autotel-plugins` keep their
+  `'legacy'` semconv mode exactly as documented.
+
 ## 1.14.1
 
 ### Patch Changes

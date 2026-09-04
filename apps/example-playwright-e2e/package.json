@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-playwright-e2e",
-  "version": "1.0.64",
+  "version": "1.0.65",
   "private": true,
   "type": "module",
   "scripts": {
