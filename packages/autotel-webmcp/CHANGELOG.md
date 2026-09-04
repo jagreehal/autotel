@@ -1,5 +1,13 @@
 # autotel-webmcp
 
+## 2.0.0
+
+### Patch Changes
+
+- Updated dependencies [dbd968d]
+- Updated dependencies [10c3f93]
+  - autotel-web@1.15.0
+
 ## 1.0.0
 
 ### Patch Changes

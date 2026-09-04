@@ -1,6 +1,6 @@
 {
   "name": "autotel-langfuse",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Send autotel's canonical gen_ai.* spans to Langfuse over plain OTLP, with no Langfuse SDK required",
   "type": "module",
   "sideEffects": false,
