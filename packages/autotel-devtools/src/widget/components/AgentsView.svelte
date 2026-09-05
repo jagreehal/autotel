@@ -25,6 +25,7 @@
     Blocks,
     Webhook,
     Scissors,
+    Gauge,
   } from '@lucide/svelte';
   import {
     sortedAgentSessionsSignal,
@@ -38,7 +39,11 @@
     formatTimestamp,
     redact,
   } from '../utils';
-  import type { AgentEvent, AgentSession } from 'autotel-agents';
+  import type {
+    AgentEvent,
+    AgentSession,
+    UsageBreakdown,
+  } from 'autotel-agents';
   import CopyButton from './CopyButton.svelte';
 
   const launchCommand = 'npx autotel-devtools claude';
@@ -64,6 +69,14 @@
     return Object.entries(record)
       .filter(([, n]) => n > 0)
       .sort((a, b) => b[1] - a[1]);
+  }
+
+  // Breakdowns are sorted by spend, not by name: the expensive slice is the one
+  // worth reading first, and it is rarely the alphabetical one.
+  function usage(
+    record: Record<string, UsageBreakdown>,
+  ): [string, UsageBreakdown][] {
+    return Object.entries(record).sort((a, b) => b[1].costUsd - a[1].costUsd);
   }
 
   function eventLabel(e: AgentEvent): string {
@@ -95,6 +108,12 @@
       const tok = (e.inputTokens ?? 0) + (e.outputTokens ?? 0);
       if (tok > 0) parts.push(`${formatNumber(tok)} tok`);
       if (e.durationMs) parts.push(formatDuration(e.durationMs));
+      // What drove the call, when the agent says: a request at high effort or
+      // from a named skill reads differently from the same cost without them.
+      if (e.effort) parts.push(e.effort);
+      if (e.speed) parts.push(e.speed);
+      if (e.skillName) parts.push(`skill:${e.skillName}`);
+      if (e.agentName) parts.push(`agent:${e.agentName}`);
     } else if (e.type === 'tool_result') {
       if (e.tool?.isMcp && e.tool.mcpServer)
         parts.push(`mcp:${e.tool.mcpServer}`);
@@ -259,9 +278,22 @@
       {#each entries(agg.skills) as [name, n] (name)}
         {@render chip(Sparkles, `${name} ${n}`, 'text-fuchsia-600')}
       {/each}
-      {#each entries(agg.models) as [model, n] (model)}
+      {#each usage(agg.byEffort) as [effort, u] (effort)}
+        {@render chip(Gauge, `${effort} ${cost(u.costUsd)}`, 'text-amber-600')}
+      {/each}
+      {#each usage(agg.bySkill) as [name, u] (name)}
+        {@render chip(
+          Sparkles,
+          `${name} ${cost(u.costUsd)}`,
+          'text-fuchsia-600',
+        )}
+      {/each}
+      {#each usage(agg.byAgent) as [name, u] (name)}
+        {@render chip(Bot, `${name} ${cost(u.costUsd)}`, 'text-violet-600')}
+      {/each}
+      {#each usage(agg.byModel) as [model, u] (model)}
         <span class="px-2 py-1 bg-subtle rounded-md text-fg-muted font-mono"
-          >{model} ×{n}</span
+          >{model} ×{u.requests} {cost(u.costUsd)}</span
         >
       {/each}
     </div>

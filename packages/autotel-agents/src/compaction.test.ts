@@ -73,7 +73,7 @@ function tool(
     timestamp,
     tool: { name, category, isMcp: false },
     attributes: {},
-  } as AgentEvent;
+  };
 }
 
 describe('contextTokens', () => {

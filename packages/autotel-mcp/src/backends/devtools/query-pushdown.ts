@@ -12,6 +12,7 @@
  * different spans satisfy different predicates.
  */
 
+import { tagKind } from '../../lib/values';
 import type { TagValue, TraceSearchQuery } from '../../types';
 
 export function compileTraceQuery(query: TraceSearchQuery): string {
@@ -30,9 +31,12 @@ export function compileTraceQuery(query: TraceSearchQuery): string {
 
 /** A value as query-language source: numbers and booleans bare, text quoted. */
 function literal(value: TagValue): string {
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  if (typeof value === 'boolean') return String(value);
-  return quote(String(value));
+  // `tagKind` reports `number` only for a finite one, so an infinity or a NaN
+  // falls through to the quoted form rather than emitting bare `Infinity`.
+  const kind = tagKind(value);
+  return kind === 'number' || kind === 'boolean'
+    ? String(value)
+    : quote(String(value));
 }
 
 /**
