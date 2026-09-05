@@ -1,5 +1,12 @@
 # autotel-pact
 
+## 22.0.1
+
+### Patch Changes
+
+- Updated dependencies [cb05004]
+  - autotel@7.6.1
+
 ## 22.0.0
 
 ### Patch Changes

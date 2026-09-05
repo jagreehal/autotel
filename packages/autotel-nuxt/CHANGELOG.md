@@ -1,5 +1,13 @@
 # autotel-nuxt
 
+## 14.0.1
+
+### Patch Changes
+
+- Updated dependencies [cb05004]
+  - autotel@7.6.1
+  - autotel-adapters@2.0.17
+
 ## 14.0.0
 
 ### Patch Changes

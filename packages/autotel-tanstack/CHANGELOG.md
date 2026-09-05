@@ -1,5 +1,13 @@
 # autotel-tanstack
 
+## 1.14.1
+
+### Patch Changes
+
+- Updated dependencies [cb05004]
+  - autotel@7.6.1
+  - autotel-adapters@2.0.17
+
 ## 1.14.0
 
 ### Minor Changes
