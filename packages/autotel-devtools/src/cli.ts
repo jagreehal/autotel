@@ -195,9 +195,11 @@ function parseBytes(value: string | undefined): number | undefined {
     .match(/^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)?$/);
   if (!match) return undefined;
   const factors = { b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3 };
-  return Math.floor(
-    Number(match[1]) * factors[(match[2] as keyof typeof factors) || 'b'],
-  );
+  // SAFETY: group 2 of the pattern matches only the unit alternatives spelled
+  // out above, lower-cased before it gets here, so it is a key of `factors`.
+  // An absent group falls back to bytes.
+  const unit = (match[2] as keyof typeof factors) || 'b';
+  return Math.floor(Number(match[1]) * factors[unit]);
 }
 
 function parsePort(value: string): number {
@@ -312,12 +314,14 @@ async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
 // receiver for a live local view. HTTP/protobuf remains the most portable
 // Claude Code configuration; the same receiver also accepts OTLP/gRPC.
 // session.id kept on metrics so metric-only signals join their session.
-function buildAgentEnv(
-  uiBase: string,
-  logPrompts: boolean,
-): Record<string, string> {
-  const env: Record<string, string> = {
+function buildAgentEnv(uiBase: string, logPrompts: boolean) {
+  const env = {
     CLAUDE_CODE_ENABLE_TELEMETRY: '1',
+    // Spans are beta-gated. Without this the interaction → llm_request → tool
+    // hierarchy, and the sub-agent tree `parent_agent_id` draws inside it, is
+    // never emitted — metrics and logs cannot reconstruct either.
+    CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: '1',
+    OTEL_TRACES_EXPORTER: 'otlp',
     OTEL_METRICS_EXPORTER: 'otlp',
     OTEL_LOGS_EXPORTER: 'otlp',
     OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
@@ -327,8 +331,7 @@ function buildAgentEnv(
     OTEL_METRICS_INCLUDE_SESSION_ID: 'true',
   };
   // Private by default: prompt *text* only flows when explicitly opted in.
-  if (logPrompts) env.OTEL_LOG_USER_PROMPTS = '1';
-  return env;
+  return logPrompts ? { ...env, OTEL_LOG_USER_PROMPTS: '1' } : env;
 }
 
 function printEnvBlock(env: Record<string, string>): void {
@@ -427,6 +430,8 @@ async function runClaudeSubcommand(argv: string[]): Promise<void> {
   process.on('SIGTERM', shutdown);
 
   child.on('error', (err) => {
+    // SAFETY: this is `spawn`'s own error callback, and the errors Node raises
+    // there are system errors carrying `code` — the shape ErrnoException names.
     const reason =
       (err as NodeJS.ErrnoException).code === 'ENOENT'
         ? `'claude' not found on PATH. Install Claude Code, or run the receiver alone with 'npx autotel-devtools' and point claude at ${receiver.uiBase} using --print-env.`

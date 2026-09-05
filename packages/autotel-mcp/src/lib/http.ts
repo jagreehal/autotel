@@ -78,7 +78,7 @@ export async function jsonGet<T>(url: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       accept: 'application/json',
-      ...(init?.headers ?? {}),
+      ...init?.headers,
     },
   });
   return parseOrThrow<T>(response, url);
@@ -98,7 +98,7 @@ export async function jsonPost<T>(
       accept: 'application/json',
       'content-type': 'application/json',
       ...headers,
-      ...(init?.headers ?? {}),
+      ...init?.headers,
     },
     body: JSON.stringify(body),
   });

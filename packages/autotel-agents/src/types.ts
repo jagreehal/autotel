@@ -74,6 +74,7 @@ export type AgentEventType =
   | 'user_prompt'
   | 'api_request'
   | 'api_error'
+  | 'api_refusal'
   | 'tool_result'
   | 'tool_decision'
   | 'mcp_connection'
@@ -116,6 +117,12 @@ export interface AgentEvent {
   rawEventName: string;
   timestamp: number;
   model?: string;
+  /**
+   * The prompt this event belongs to (`prompt.id`). Every event a single user
+   * prompt produces carries the same one, which is what makes a long session
+   * splittable by the thing that caused the work rather than by session alone.
+   */
+  promptId?: string;
 
   // api_request
   costUsd?: number;
@@ -137,6 +144,18 @@ export interface AgentEvent {
    */
   contextLineageId?: string;
   durationMs?: number;
+  /** Reasoning effort the request ran at (`low` / `medium` / `high`). */
+  effort?: string;
+  /** Serving speed tier the request ran at. */
+  speed?: string;
+  /**
+   * Sub-agent that issued the request (`agent.name`). Distinct from the `Task`
+   * tool call that spawned it: this is on the sub-agent's own requests, so cost
+   * and tokens attribute to the delegate that spent them.
+   */
+  agentName?: string;
+  /** Skill that drove the request (`skill.name`). */
+  skillName?: string;
 
   // tool_result / tool_decision
   tool?: ToolRef;
@@ -211,6 +230,20 @@ export interface ToolUsage {
 }
 
 /**
+ * Cost and tokens for one slice of a session — one model, one effort level, one
+ * skill, one sub-agent. The same shape for every dimension, so a breakdown is
+ * read the same way whatever it is keyed by.
+ */
+export interface UsageBreakdown {
+  requests: number;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
+/**
  * Running totals for a session. Kept indefinitely even as the raw `timeline`
  * is ring-buffered, so headline numbers never drift. Per the source-of-truth
  * rule, cost/token totals come from `api_request` *events* only — the
@@ -226,6 +259,8 @@ export interface AgentSessionRollup {
   cacheCreationTokens: number;
   apiRequests: number;
   apiErrors: number;
+  /** Requests the model declined. Billed like any other call, but no output. */
+  apiRefusals: number;
   prompts: number;
   toolCalls: number;
   accepted: number;
@@ -236,8 +271,20 @@ export interface AgentSessionRollup {
   commits: number;
   pullRequests: number;
   activeTimeSeconds: number;
-  /** model id → api_request count. */
-  models: Record<string, number>;
+  /** model id → what that model cost and consumed. */
+  byModel: Record<string, UsageBreakdown>;
+  /** effort level → what running at it cost and consumed. */
+  byEffort: Record<string, UsageBreakdown>;
+  /** skill name → what the work it drove cost and consumed. */
+  bySkill: Record<string, UsageBreakdown>;
+  /** sub-agent name → what the delegate it names cost and consumed. */
+  byAgent: Record<string, UsageBreakdown>;
+  /**
+   * `prompt.id` → what answering that one prompt cost and consumed. Kept in the
+   * rollup rather than derived from `timeline`, which is ring-buffered: the
+   * spend of a prompt has to outlive the events that made it up.
+   */
+  byPrompt: Record<string, UsageBreakdown>;
   /** tool name → usage. */
   tools: Record<string, ToolUsage>;
   /** tool category → call count (file/shell/subagent/skill/mcp/…). */

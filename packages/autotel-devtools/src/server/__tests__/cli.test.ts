@@ -15,6 +15,19 @@ describe('CLI', () => {
     proc = null;
   });
 
+  it('wires Claude Code for all three signals with --print-env', async () => {
+    const output = await runCli(['claude', '--print-env']);
+    // Metrics and logs alone leave the span hierarchy — interaction → llm_request
+    // → tool, and the sub-agent tree under it — unrequested and unrecorded.
+    expect(output).toContain('export CLAUDE_CODE_ENABLE_TELEMETRY=1');
+    expect(output).toContain('export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1');
+    expect(output).toContain('export OTEL_TRACES_EXPORTER=otlp');
+    expect(output).toContain('export OTEL_METRICS_EXPORTER=otlp');
+    expect(output).toContain('export OTEL_LOGS_EXPORTER=otlp');
+    // Prompt text stays out unless it is asked for.
+    expect(output).not.toContain('OTEL_LOG_USER_PROMPTS');
+  });
+
   it('prints help with --help', async () => {
     const output = await runCli(['--help']);
     expect(output).toContain('autotel-devtools');

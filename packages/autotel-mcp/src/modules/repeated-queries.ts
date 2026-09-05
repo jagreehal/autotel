@@ -1,3 +1,4 @@
+import { nonEmptyString } from '../lib/values';
 import type { SpanRecord, TraceRecord } from '../types';
 
 export interface RepeatedQuery {
@@ -16,8 +17,7 @@ export interface RepeatedQueriesResult {
 }
 
 function tagString(span: SpanRecord, key: string): string | undefined {
-  const value = span.tags[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  return nonEmptyString(span.tags[key]);
 }
 
 /**

@@ -158,22 +158,21 @@ export function toTraceSearchQuery(input: TraceQueryInput): TraceSearchQuery {
   if (input.maxDurationMs !== undefined)
     query.maxDurationMs = input.maxDurationMs;
   if (input.genAiSystem !== undefined) {
-    query.tags = { ...(query.tags ?? {}), 'gen_ai.system': input.genAiSystem };
+    query.tags = { ...query.tags, 'gen_ai.system': input.genAiSystem };
   }
   if (input.genAiRequestModel !== undefined) {
     query.tags = {
-      ...(query.tags ?? {}),
+      ...query.tags,
       'gen_ai.request.model': input.genAiRequestModel,
     };
   }
   if (input.genAiResponseModel !== undefined) {
     query.tags = {
-      ...(query.tags ?? {}),
+      ...query.tags,
       'gen_ai.response.model': input.genAiResponseModel,
     };
   }
-  if (input.tags !== undefined)
-    query.tags = { ...(query.tags ?? {}), ...input.tags };
+  if (input.tags !== undefined) query.tags = { ...query.tags, ...input.tags };
   if (input.filters !== undefined)
     query.filters = sanitizeFilters(input.filters);
   return query;
