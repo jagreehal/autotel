@@ -1,4 +1,4 @@
-import { init, flush, shutdown, withTracing } from 'autotel';
+import { init, flush, shutdown, trace, ctx } from 'autotel';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
 import {
@@ -16,7 +16,7 @@ async function main() {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
 
-  // 1. Deterministic Trace IDs — consistent trace IDs from external seeds
+  // 1. Deterministic trace IDs: same seed → same 128-bit ID
   const traceId = await createDeterministicTraceId('order_456');
   console.log(
     '  Deterministic trace ID from "order_456":',
@@ -29,9 +29,8 @@ async function main() {
   }
   console.log('  ✓ Same seed produces same ID');
 
-  // 2. Metadata flattening — nested objects → dot-notation attributes
-  //    (keys are prefixed with "metadata." by default)
-  const handler = withTracing({ name: 'metadata.flatten' })((ctx) => () => {
+  // 2. Metadata flattening: nested objects → "metadata." dot-notation keys
+  const handler = trace('metadata.flatten', () => {
     ctx.setAttributes(
       flattenMetadata({
         user: { id: '42', tier: 'premium' },

@@ -1,11 +1,11 @@
-import { init, getRequestLogger, flush, shutdown, withTracing } from 'autotel';
+import { init, getRequestLogger, flush, shutdown, trace, ctx } from 'autotel';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
 
 const exporter = new InMemorySpanExporter();
 
 async function main() {
-  console.log('=== Chapter 4: Request Context — getRequestLogger() ===\n');
+  console.log('=== Chapter 4: Request Context: getRequestLogger() ===\n');
 
   init({
     service: 'book-04',
@@ -18,9 +18,9 @@ async function main() {
   // console.log('Order:', orderId);
 
   // After: one coherent snapshot per request
-
-  const handleCheckout = withTracing({ name: 'checkout.handle' })(
-    (ctx) => async (userId: string, cartItems: number) => {
+  const handleCheckout = trace(
+    'checkout.handle',
+    async (userId: string, cartItems: number) => {
       const log = getRequestLogger(ctx);
 
       log.set({ user: { id: userId }, cart: { items: cartItems } });

@@ -23,9 +23,10 @@ const consoleSubscriber = new ConsoleSubscriber();
 async function main() {
   console.log('=== Chapter 30: Subscribers & Output Adapters ===\n');
 
-  // Subscribers plug into init() — every track() call fans out to all of
-  // them. Swap ConsoleSubscriber for PostHogSubscriber, MixpanelSubscriber,
-  // SlackSubscriber, WebhookSubscriber, ... without touching call sites.
+  // Subscribers plug into init(): each track() call fans out to all of
+  // them. Swap ConsoleSubscriber for MixpanelSubscriber, SlackSubscriber,
+  // WebhookSubscriber, or PostHogSubscriber (from autotel-posthog/subscriber)
+  // without touching call sites.
   init({
     service: 'book-30',
     spanProcessors: [new SimpleSpanProcessor(exporter)],
@@ -35,7 +36,7 @@ async function main() {
   track('user.signed_up', { 'user.id': '42', 'user.tier': 'premium' });
   track('order.placed', { 'order.id': 'ord_123', 'order.total': 2999 });
 
-  // Events are queued asynchronously; shutdown() drains the queue.
+  // track() queues events; shutdown() drains the queue.
   await flush();
   await shutdown();
 

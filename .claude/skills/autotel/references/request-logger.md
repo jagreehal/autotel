@@ -5,11 +5,12 @@
 Creates a request-scoped logger that writes to the active span. All fields accumulate on the span and ship as one wide event when the span completes.
 
 ```typescript
-import { withTracing, getRequestLogger } from 'autotel';
+import { trace, getRequestLogger } from 'autotel';
 
-export const handleOrder = withTracing({})(
-  (ctx) => async (req: OrderRequest) => {
-    const log = getRequestLogger(ctx);
+export const handleOrder = trace(
+  'order.handle',
+  async (req: OrderRequest) => {
+    const log = getRequestLogger();
 
     log.set({ feature: 'checkout', tier: req.user.tier });
 

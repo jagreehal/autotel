@@ -1,6 +1,6 @@
 // "Is checkout up?" has no answer you can act on. "Did 99.9% of checkouts
-// succeed this month?" does. Pick the user action, pick the target, and let the
-// error budget carry the argument about whether to ship on Friday.
+// succeed this month?" does. Pick the user action, pick the target, and use the
+// error budget when you decide whether to ship on Friday.
 
 import { createSloTracker } from 'autotel/slo';
 

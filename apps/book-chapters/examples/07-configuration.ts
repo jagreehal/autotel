@@ -1,4 +1,4 @@
-import { init, instrument, flush, shutdown } from 'autotel';
+import { init, trace, flush, shutdown } from 'autotel';
 import { getConfig } from 'autotel/config';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
@@ -12,7 +12,7 @@ import { SimpleSpanProcessor } from 'autotel/processors';
 //   OTEL_TRACES_SAMPLER(_ARG)      sampling strategy
 // Precedence: init() args > autotel.yaml > env vars > defaults.
 
-// Env vars must be set BEFORE init() — it reads them once.
+// Env vars must be set BEFORE init(); it reads them once.
 process.env.OTEL_SERVICE_NAME = 'service-name-from-env';
 process.env.OTEL_RESOURCE_ATTRIBUTES =
   'team.name=platform,deployment.region=eu-west-1';
@@ -27,7 +27,7 @@ async function main() {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
 
-  const ping = instrument({ key: 'config.ping', fn: () => 'pong' });
+  const ping = trace('config.ping', () => 'pong');
   console.log('  config.ping →', ping());
 
   await flush();

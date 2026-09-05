@@ -3,7 +3,9 @@ import {
   flush,
   shutdown,
   AttributeRedactingProcessor,
-  withTracing,
+  forceKeep,
+  trace,
+  ctx,
 } from 'autotel';
 import { AdaptiveSampler } from 'autotel/sampling';
 import { InMemorySpanExporter } from 'autotel/exporters';
@@ -14,10 +16,10 @@ const exporter = new InMemorySpanExporter();
 async function main() {
   console.log('=== Chapter 46: Sampling & PII Redaction ===\n');
 
-  // AdaptiveSampler: sample a fraction of normal traffic, but keep
-  // every error and every slow request.
+  // AdaptiveSampler: sample a fraction of normal traffic, keep every
+  // error and every slow request. Demo rate 1.0 so the span always exports.
   const sampler = new AdaptiveSampler({
-    baselineSampleRate: 1.0, // demo: keep everything; production: ~0.1
+    baselineSampleRate: 1.0, // production: ~0.1
     alwaysSampleErrors: true,
     slowThresholdMs: 1000,
   });
@@ -31,22 +33,22 @@ async function main() {
 
   init({ service: 'book-46', sampler, spanProcessors: [redacting] });
 
-  const lookupUser = withTracing({ name: 'user.lookup' })(
-    (ctx) => (email: string) => {
-      ctx.setAttribute('user.email', email);
-      ctx.setAttribute('payment.card', '4111 1111 1111 1111');
-      ctx.setAttribute('user.plan', 'premium');
-      return 'found';
-    },
-  );
+  const lookupUser = trace('user.lookup', (email: string) => {
+    // Keep this span whatever the baseline roll decides (payments, audits).
+    forceKeep();
+    ctx.setAttribute('user.email', email);
+    ctx.setAttribute('payment.card', '4111 1111 1111 1111');
+    ctx.setAttribute('user.plan', 'premium');
+    return 'found';
+  });
   lookupUser('alice@example.com');
 
   await flush();
   const spans = exporter.getFinishedSpans();
   console.log(`  Spans exported: ${spans.length}`);
   const attrs = spans[0]?.attributes ?? {};
-  for (const [k, v] of Object.entries(attrs)) {
-    console.log(`    ${k}: ${v}`);
+  for (const key of ['user.email', 'payment.card', 'user.plan'] as const) {
+    console.log(`    ${key}: ${attrs[key]}`);
   }
 
   // Prove the redactor scrubbed the PII before export
@@ -59,7 +61,11 @@ async function main() {
   if (attrs['user.plan'] !== 'premium') {
     throw new Error('Non-PII attribute should pass through untouched');
   }
+  if (attrs['autotel.sampling.tail.keep'] !== true) {
+    throw new Error('forceKeep() should mark the span for tail keep');
+  }
   console.log('\n✓ PII redacted at export; non-PII attributes untouched');
+  console.log('✓ forceKeep() marked autotel.sampling.tail.keep');
   console.log('✓ AdaptiveSampler installed via init({ sampler })');
 
   await shutdown();

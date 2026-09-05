@@ -1,7 +1,7 @@
 // The build takes nine minutes and everyone has a theory about which job is to
 // blame. A pipeline is a request that happens to run for nine minutes. Give the
-// run a root span, give each job a child, and the critical path shows up as the
-// widest bar in the same waterfall you already read.
+// run a root span, give each job a child, and you read the critical path as the
+// widest bar in the same waterfall you already use.
 
 import { span, withTracing } from 'autotel';
 import { createTraceCollector } from 'autotel/testing';

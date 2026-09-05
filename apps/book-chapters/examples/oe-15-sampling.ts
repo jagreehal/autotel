@@ -46,7 +46,7 @@ console.log(
   `  2 fixed rate           ${keptFixed}/400 kept, and 400 is now unknowable`,
 );
 
-// --- 3. Record the rate, and the count becomes recoverable. -----------------
+// --- 3. Record the rate so you can recover the count. -----------------------
 // autotel writes this to every sampled span, so COUNT * rate estimates the
 // population you dropped.
 const estimate = keptFixed * fixed.sampleRate();

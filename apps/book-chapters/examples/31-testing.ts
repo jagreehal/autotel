@@ -1,11 +1,11 @@
-import { instrument, withTracing } from 'autotel';
+import { trace, withTracing } from 'autotel';
 import { createTraceCollector } from 'autotel/testing';
 
 async function main() {
   console.log('=== Chapter 31: Testing ===\n');
 
-  // createTraceCollector() swaps in an in-memory tracer — no init(),
-  // no exporter, no flush. Spans are captured synchronously.
+  // createTraceCollector() swaps in an in-memory tracer: no init(),
+  // exporter, or flush. The collector captures spans before the call returns.
   const collector = createTraceCollector();
 
   const double = withTracing({ name: 'test-operation' })(
@@ -16,7 +16,7 @@ async function main() {
   );
   console.log('  double(21) →', double(21));
 
-  // expectSpan(name) — exactly one matching span or it throws
+  // expectSpan(name): exactly one matching span or it throws
   const span = collector.expectSpan('test-operation');
   if (span.attributes['input'] !== 21) {
     throw new Error(
@@ -25,16 +25,13 @@ async function main() {
   }
   console.log('  ✓ expectSpan("test-operation") found span with input=21');
 
-  // expectSpan(criteria) — match on name + attributes
+  // expectSpan(criteria): match on name + attributes
   collector.expectSpan({ name: 'test-operation', attributes: { input: 21 } });
   console.log('  ✓ expectSpan({ name, attributes }) matched');
 
   // getSpansByName / getRootSpans / getDescendants for structure assertions.
   // Calling double() inside makes test-operation a child of parent-operation.
-  const parent = instrument({
-    key: 'parent-operation',
-    fn: () => double(2),
-  });
+  const parent = trace('parent-operation', () => double(2));
   parent();
 
   if (collector.getSpansByName('test-operation').length !== 2) {
@@ -52,7 +49,7 @@ async function main() {
   console.log('  ✓ parent-operation → test-operation parent/child recorded');
 
   // For test runners, autotel-vitest builds on these primitives:
-  //   test() wraps each test in an OTel span, step() adds child spans,
+  //   test() wraps each test in an OTel span,
   //   assertNoErrors() verifies clean traces.
 }
 

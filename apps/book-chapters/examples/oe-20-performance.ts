@@ -1,6 +1,6 @@
 // "It feels faster" does not survive code review. Put the deployment on the
 // span, run the same operation before and after, and compare the two
-// populations instead of arguing about them.
+// populations.
 
 import { withTracing } from 'autotel';
 import { createTraceCollector } from 'autotel/testing';
@@ -32,8 +32,7 @@ const before = mean('before', 'checkout.duration_ms');
 const after = mean('after', 'checkout.duration_ms');
 if (after >= before) throw new Error('The change did not reduce latency');
 
-// Latency says the change worked. The row count says why, which is the part
-// that survives review.
+// Latency shows the change worked. The row count on the same span shows why.
 const rowsBefore = mean('before', 'db.rows_returned');
 const rowsAfter = mean('after', 'db.rows_returned');
 

@@ -1,4 +1,4 @@
-import { init, withBaggage, flush, shutdown, withTracing } from 'autotel';
+import { init, withBaggage, flush, shutdown, trace, ctx } from 'autotel';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
 
@@ -12,39 +12,35 @@ async function main() {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
 
-  // Downstream service: reads baggage from context — no arguments were
-  // passed between the services, the context carried the values.
-  const serviceB = withTracing({ name: 'service-b.handle' })(
-    (ctx) => async () => {
-      const tenantId = ctx.getBaggage('tenant.id');
-      const userId = ctx.getBaggage('user.id');
-      if (!tenantId || !userId) {
-        throw new Error('Baggage did not propagate to service-b');
-      }
-      ctx.setAttribute('tenant.id', tenantId);
-      ctx.setAttribute('user.id', userId);
-      console.log(
-        `  service-b read baggage: tenant.id=${tenantId}, user.id=${userId}`,
-      );
-    },
-  );
+  // Downstream service: reads baggage from context. No arguments were
+  // passed between the services; the context carried the values.
+  const serviceB = trace('service-b.handle', async () => {
+    const tenantId = ctx.getBaggage('tenant.id');
+    const userId = ctx.getBaggage('user.id');
+    if (!tenantId || !userId) {
+      throw new Error('Baggage did not propagate to service-b');
+    }
+    ctx.setAttribute('tenant.id', tenantId);
+    ctx.setAttribute('user.id', userId);
+    console.log(
+      `  service-b read baggage: tenant.id=${tenantId}, user.id=${userId}`,
+    );
+  });
 
   // Upstream service: sets baggage, then calls downstream inside fn.
-  const serviceA = withTracing({ name: 'service-a.handle' })(
-    (ctx) => async () => {
-      ctx.setAttribute('service', 'auth-service');
-      await withBaggage({
-        baggage: {
-          'tenant.id': 'tenant_acme',
-          'user.id': 'user_42',
-        },
-        fn: async () => {
-          console.log('  service-a set baggage: tenant.id=tenant_acme');
-          await serviceB();
-        },
-      });
-    },
-  );
+  const serviceA = trace('service-a.handle', async () => {
+    ctx.setAttribute('service', 'auth-service');
+    await withBaggage({
+      baggage: {
+        'tenant.id': 'tenant_acme',
+        'user.id': 'user_42',
+      },
+      fn: async () => {
+        console.log('  service-a set baggage: tenant.id=tenant_acme');
+        await serviceB();
+      },
+    });
+  });
 
   await serviceA();
   await flush();

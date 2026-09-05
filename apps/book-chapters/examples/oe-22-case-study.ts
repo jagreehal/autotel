@@ -4,8 +4,8 @@
 // three on one trace and a single query tells you whether the change earned its
 // place.
 //
-// This streams from a real model, so the latency below is measured rather than
-// asserted. Some runs miss the bar. That is what the SLO is for.
+// This streams from a real model. You measure latency; you do not assert it.
+// Some runs miss the bar. That is what the SLO is for.
 
 import { withTracing } from 'autotel';
 import { createSloTracker } from 'autotel/slo';
@@ -84,8 +84,8 @@ const firstTokenMs =
 resolution.record(resolved ? 'good' : 'bad');
 firstToken.record(firstTokenMs <= FIRST_TOKEN_BAR_MS ? 'good' : 'bad');
 
-// The assertion is that all three constraints were measured, not that all three
-// passed. A run that misses the latency bar still has to show its evidence.
+// Assert that all three constraints were measured, not that all three passed.
+// A run that misses the latency bar still has to show its evidence.
 if (
   resolution.snapshot().sli === undefined ||
   firstToken.snapshot().sli === undefined ||

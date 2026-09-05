@@ -1,6 +1,6 @@
 import {
   init,
-  instrument,
+  trace,
   getRequestLogger,
   createStructuredError,
   parseError,
@@ -21,12 +21,9 @@ async function main() {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
 
-  // Functional API
-  const greet = instrument({
-    key: 'greeting.create',
-    fn: (name: string) => `Hello, ${name}!`,
-  });
-  console.log('  instrument({ key, fn }) →', greet('Autotel'));
+  // Functional API: wrap a reusable function
+  const greet = trace('greeting.create', (name: string) => `Hello, ${name}!`);
+  console.log('  trace(name, fn) →', greet('Autotel'));
 
   // Factory pattern with context
   const greetWithCtx = withTracing({ name: 'greeting.contextual' })(

@@ -4,7 +4,8 @@ import {
   parseError,
   flush,
   shutdown,
-  withTracing,
+  trace,
+  ctx,
 } from 'autotel';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
@@ -19,8 +20,8 @@ async function main() {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
 
-  // Creating structured errors with rich context
-  const findUser = withTracing({ name: 'user.find' })((ctx) => (id: string) => {
+  // Structured errors carry machine-parseable context
+  const findUser = trace('user.find', (id: string) => {
     ctx.setAttribute('user.id', id);
     if (id === 'missing') {
       throw createStructuredError({

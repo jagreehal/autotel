@@ -19,7 +19,7 @@ if (!model) {
 const exporter = collectGenAiSpans('oe-21');
 
 // The evaluation belongs to your operation. The token usage belongs to the
-// model call underneath it. The trace is what joins them.
+// model call underneath it. The trace joins them.
 const answerPolicyQuestion = withTracing({ name: 'support.answer' })(
   (ctx) => async () => {
     const result = await generateText({
@@ -30,12 +30,12 @@ const answerPolicyQuestion = withTracing({ name: 'support.answer' })(
       telemetry: { functionId: 'refund-policy' },
     });
 
-    // Grade one testable fact rather than the whole answer: a useful reply
-    // states the 30-day window, because that is what the customer has to know
-    // to act. Scoring the refusal instead means writing a regex for every way
-    // a model can say no, and grading your own regex is not an evaluation. A
-    // production evaluator is a rubric or a judge model; what matters here is
-    // that its verdict lands on the trace next to the tokens it cost.
+    // Grade one testable fact: a useful reply states the 30-day window, because
+    // that is what the customer has to know to act. Scoring the refusal means
+    // writing a regex for every way a model can say no, and grading your own
+    // regex is not an evaluation. A production evaluator is a rubric or a judge
+    // model; what matters here is that its verdict lands on the trace next to
+    // the tokens it cost.
     const citedWindow = /\b30[\s-]?(day|days)?\b/i.test(result.text);
 
     recordEvaluationResult(ctx, {
@@ -72,6 +72,4 @@ console.log(
 );
 console.log(`  refund_policy_accuracy: ${citedWindow ? 'pass' : 'fail'}`);
 console.log(`  it said: ${text.replace(/\s+/g, ' ').trim().slice(0, 88)}`);
-console.log(
-  '  a wrong answer bills the same as a right one, which is the point',
-);
+console.log('  a wrong answer bills the same as a right one');

@@ -1,7 +1,7 @@
 // You declared that POST /checkout takes a non-empty items array. Production
-// sends an empty one. Chapter 2 calls this the crossing-over point, where the
-// contract you wrote meets traffic you did not write. Record the field path and
-// the issue code. Leave the rejected value out of telemetry.
+// sends an empty one. Chapter 2 calls this the crossing-over point: the contract
+// you wrote meets traffic you did not write. Record the field path and the
+// issue code. Leave the rejected value out of telemetry.
 
 import { parseError, withTracing } from 'autotel';
 import { createTraceCollector } from 'autotel/testing';
