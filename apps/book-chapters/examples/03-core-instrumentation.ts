@@ -1,4 +1,12 @@
-import { init, span, instrument, flush, shutdown, withTracing } from 'autotel';
+import {
+  init,
+  trace,
+  span,
+  instrument,
+  flush,
+  shutdown,
+  withTracing,
+} from 'autotel';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
 
@@ -13,12 +21,12 @@ async function main() {
   });
 
   // 1. Reusable named function
-  const getUser = instrument({
-    key: 'user.get',
-    fn: async (id: string) => ({ id, name: 'Alice' }),
-  });
+  const getUser = trace('user.get', async (id: string) => ({
+    id,
+    name: 'Alice',
+  }));
   const user = await getUser('123');
-  console.log('  instrument({ key, fn }) →', user);
+  console.log('  trace(name, fn) →', user);
 
   // 2. Factory pattern with context access
   const createUser = withTracing({ name: 'user.create' })(
@@ -31,20 +39,26 @@ async function main() {
   const created = await createUser({ name: 'Bob' });
   console.log('  withTracing({})((ctx)=>fn) →', created);
 
-  // 3. Explicit naming
-  const namedOp = instrument({
-    key: 'process-payment',
-    fn: (amount: number) => `Paid $${amount}`,
-  });
-  console.log('  instrument({ key, fn }) →', namedOp(100));
+  // 3. Explicit naming (same form as 1; second demo of stable names)
+  const namedOp = trace(
+    'process-payment',
+    (amount: number) => `Paid $${amount}`,
+  );
+  console.log('  trace(name, fn) →', namedOp(100));
 
-  // 4. span() — inline span around any expression
+  // 4. span() runs a one-off inline span
   const computed = span('compute-value', () => 1 + 2 + 3);
   console.log('  span() →', computed);
 
-  // 5. instrument() — explicit config (passes a functions map)
-  const traced = instrument({ functions: { double: (x: number) => x * 2 } });
-  console.log('  instrument() →', traced.double(21));
+  // 5. instrument({ key, fn }) is the options form; functions map wraps each key
+  const keyed = instrument({
+    key: 'keyed.double',
+    fn: (x: number) => x * 2,
+  });
+  console.log('  instrument({ key, fn }) →', keyed(21));
+
+  const mapped = instrument({ functions: { double: (x: number) => x * 2 } });
+  console.log('  instrument({ functions }) →', mapped.double(21));
 
   await flush();
   const spans = exporter.getFinishedSpans();

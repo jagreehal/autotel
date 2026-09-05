@@ -11,7 +11,8 @@ This document gives AI coding agents **before/after examples**, **when-to-use-wh
 | Wrap an async function with a span                            | `trace(fn)` or `span('Name', fn)`                                           | Handlers, use-case functions, workers    |
 | Wrap with explicit name/key                                   | `trace('checkout', fn)` or `instrument({ key: 'checkout', fn })`            | When name inference is unreliable        |
 | Run named work now with span context                          | `trace.run('checkout', async (ctx) => { ctx.setAttribute(...); ... })`      | One-off operations, run right here       |
-| Reusable handler with explicit context                        | `withTracing({})((ctx) => async (args) => { ctx.setAttribute(...); ... })`  | When a wrapped function needs context    |
+| Read the active span inside a traced body                     | ambient `ctx` import: `ctx.setAttribute(...)`, `ctx.track(...)`             | Attributes from any depth, no plumbing   |
+| Reusable handler with an explicit context argument            | `withTracing({})((ctx) => async (args) => { ctx.setAttribute(...); ... })`  | Wrappers that need the handle passed in  |
 | One snapshot per request (attributes + correlated log events) | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()` | HTTP request handlers, background jobs   |
 | Throw an error with why/fix/link                              | `createStructuredError({ message, why?, fix?, link?, status?, cause? })`    | API routes, services, validation         |
 | Show API error in UI (client)                                 | `parseError(caught)` → use `message`, `why`, `fix`, `link`                  | Toasts, error banners, forms             |
@@ -56,11 +57,12 @@ export async function postCheckout(req: Request, res: Response) {
 **After (span + request-scoped context):**
 
 ```typescript
-import { trace, withTracing, getRequestLogger } from 'autotel';
+import { trace, getRequestLogger } from 'autotel';
 
-export const postCheckout = withTracing({})(
-  (ctx) => async (req: Request, res: Response) => {
-    const log = getRequestLogger(ctx);
+export const postCheckout = trace(
+  'checkout.post',
+  async (req: Request, res: Response) => {
+    const log = getRequestLogger();
     const user = await getAuth(req);
     log.set({ user: { id: user.id } });
 
@@ -175,10 +177,10 @@ export default defineEventHandler(async (event) => {
 **After (with span + request logger):**
 
 ```typescript
-import { trace, withTracing, getRequestLogger } from 'autotel';
+import { trace, getRequestLogger } from 'autotel';
 
-export default withTracing({})((ctx) => async (event) => {
-  const log = getRequestLogger(ctx);
+export default trace('checkout.handle', async (event) => {
+  const log = getRequestLogger();
   const user = await requireAuth(event);
   log.set({ user: { id: user.id } });
 
@@ -201,7 +203,7 @@ If the framework attaches the event to an existing span, use `getRequestLogger()
 **Before:**
 
 ```typescript
-export const postLogin = withTracing({})((ctx) => async (req, res) => {
+export const postLogin = trace('auth.login', async (req, res) => {
   const { email, password } = req.body;
   const user = await findUser(email);
   if (!user || !(await verifyPassword(user, password))) {
@@ -214,10 +216,10 @@ export const postLogin = withTracing({})((ctx) => async (req, res) => {
 **After:**
 
 ```typescript
-import { trace, withTracing } from 'autotel';
+import { trace } from 'autotel';
 import { securityEvent, hashIdentifier } from 'autotel-audit';
 
-export const postLogin = withTracing({})((ctx) => async (req, res) => {
+export const postLogin = trace('auth.login', async (req, res) => {
   const { email, password } = req.body;
   const user = await findUser(email);
   if (!user || !(await verifyPassword(user, password))) {
@@ -312,15 +314,15 @@ app.post('/api/checkout', async (c) => {
 
 ```typescript
 import Fastify from 'fastify';
-import { init, trace, withTracing, getRequestLogger } from 'autotel';
+import { init, trace, getRequestLogger } from 'autotel';
 
 init({ service: 'my-api' });
 
 // Register middleware that creates a span per request (see example app).
 // In route handler:
 app.post('/api/checkout', async (request, reply) => {
-  return withTracing({})((ctx) => async () => {
-    const log = getRequestLogger(ctx);
+  return trace('checkout.route', async () => {
+    const log = getRequestLogger();
     log.set({ route: 'checkout' });
     const result = await handleCheckout(request);
     log.emitNow();
@@ -354,13 +356,13 @@ See `docs/SECURITY-OBSERVABILITY.md` and the published guide at `integrations/se
 ### Generic Node HTTP
 
 ```typescript
-import { init, trace, withTracing, getRequestLogger } from 'autotel';
+import { init, trace, getRequestLogger } from 'autotel';
 
 init({ service: 'my-api' });
 
 server.on('request', (req, res) => {
-  withTracing({})((ctx) => async () => {
-    const log = getRequestLogger(ctx);
+  trace('http.request', async () => {
+    const log = getRequestLogger();
     log.set({ method: req.method, path: req.url });
     try {
       const result = await handleRequest(req, res);

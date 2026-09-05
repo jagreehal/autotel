@@ -22,7 +22,7 @@ async function main() {
   })((ctx) => (id: string) => {
     ctx.setAttribute('db.collection.name', 'users');
     ctx.setAttribute('db.operation.name', 'SELECT');
-    console.log('  ✓ DB span — SELECT from users');
+    console.log('  ✓ DB span: SELECT from users');
     return { id, name: 'Alice' };
   })('42');
 
@@ -34,13 +34,13 @@ async function main() {
   })((ctx) => () => {
     ctx.setAttribute('db.collection.name', 'orders');
     ctx.setAttribute('db.operation.name', 'INSERT');
-    console.log('  ✓ DB span — INSERT into orders');
+    console.log('  ✓ DB span: INSERT into orders');
   })();
 
   console.log('\n  Database packages also available:');
-  console.log('    autotel-drizzle  — instrumentDrizzle()');
+  console.log('    autotel-drizzle:  instrumentDrizzle()');
   console.log(
-    '    autotel-mongoose — instrumentMongoose() (with PII redaction)',
+    '    autotel-mongoose: instrumentMongoose() (with PII redaction)',
   );
 
   await flush();

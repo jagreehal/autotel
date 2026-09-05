@@ -33,15 +33,16 @@ Philosophy: "Write once, observe everywhere" - instrument once, stream to any OT
 ## Tracing API
 
 ```typescript
-import { trace, withTracing, span } from 'autotel';
+import { trace, ctx, span } from 'autotel';
 
-// Context form (receives ctx for attributes)
-export const createUser = withTracing({})((ctx) => async (data) => {
+// trace(name, fn) wraps a reusable function under a stable span name
+export const createUser = trace('user.create', async (data) => {
+  // The ambient ctx reads the active span from anywhere inside a traced body
   ctx.setAttribute('user.id', data.id);
   return await db.users.create(data);
 });
 
-// Direct pattern (no ctx needed)
+// trace(fn) infers the name from the function or const
 export const getUser = trace(async (id) => {
   return await db.users.findById(id);
 });
@@ -52,14 +53,22 @@ span('db.insert', async () => {
 });
 ```
 
+`ctx` is a live view of the active span, not a value captured at import time.
+Read it inside a traced body and it answers from that span; read it with
+nothing traced and every member is `undefined`, so it never throws.
+
+`withTracing({ name })((ctx) => fn)` hands the context in as an argument
+instead. Both forms are supported: prefer the ambient `ctx` in application
+code, and the factory when a wrapper needs an explicit context handle.
+
 ### Recording Errors
 
 **Default: throw, don't catch.** `trace()` records status, exception, and structured attributes when the wrapped function rejects.
 
 ```typescript
-import { withTracing, createStructuredError } from 'autotel';
+import { trace, createStructuredError } from 'autotel';
 
-export const charge = withTracing({})((ctx) => async (cart) => {
+export const charge = trace('cart.charge', async (cart) => {
   if (!cart.items.length) {
     throw createStructuredError({
       message: 'Cart is empty',
@@ -96,10 +105,11 @@ return trace.run(name, async (ctx) => {
 ### Request Logger
 
 ```typescript
-import { withTracing, getRequestLogger } from 'autotel';
+import { trace, getRequestLogger } from 'autotel';
 
-export const handleOrder = withTracing({})((ctx) => async (req) => {
-  const log = getRequestLogger(ctx);
+// getRequestLogger() with no args reads the active span
+export const handleOrder = trace('order.handle', async (req) => {
+  const log = getRequestLogger();
   log.set({ feature: 'checkout', tier: req.user.tier });
 
   const cart = await loadCart(req.cartId);
@@ -120,10 +130,10 @@ export const handleOrder = withTracing({})((ctx) => async (req) => {
 ### Event Tracking
 
 ```typescript
-import { withTracing, getEventQueue } from 'autotel';
+import { trace, ctx, getEventQueue } from 'autotel';
 
 // Inside a traced body — use ctx.track for ergonomic, ctx-bound emission:
-export const signup = withTracing({})((ctx) => async (data) => {
+export const signup = trace('user.signup', async (data) => {
   ctx.track('user.signup', { userId: data.id, plan: data.plan });
   return await db.users.create(data);
 });
@@ -139,10 +149,10 @@ await getEventQueue()?.flush();
 ### Experiments and Cohorts
 
 ```typescript
-import { experiment, getRequestLogger, withTracing } from 'autotel';
+import { experiment, getRequestLogger, trace } from 'autotel';
 import { bucket } from 'autotel/analysis';
 
-export const checkout = withTracing({})((ctx) => async (order) => {
+export const checkout = trace('checkout', async (order) => {
   // Names the guess: stamps experiment.name / .variant / .expectation on the
   // active span and puts the first two in baggage, so child spans and the
   // services behind this one carry the same answer.
@@ -154,7 +164,7 @@ export const checkout = withTracing({})((ctx) => async (order) => {
 
   // compareCohorts skips fields whose values never repeat, so bucket numbers
   // at instrumentation time. Non-finite values give 'unknown'.
-  getRequestLogger(ctx).set({
+  getRequestLogger().set({
     'payload.size_bucket': bucket(order.bytes, [1024, 65_536]),
   });
 
@@ -380,7 +390,8 @@ init({
 ### Tracing
 
 - MUST: Use `trace()`, `span()`, `instrument()` to wrap business logic
-- MUST: Use the context form `withTracing({})((ctx) => ...)` when setting attributes. `trace(fn)` wraps `fn` itself, so it never hands you a `ctx`
+- MUST: Reach the span through the ambient `ctx` import when setting attributes. It resolves the active span at property access, so it works at any depth inside a traced body
+- SHOULD: Use `trace(name, fn)` for reusable business logic, and `withTracing({ name })((ctx) => fn)` only when a wrapper needs the context as an argument
 - SHOULD: Let trace names infer from const/function names
 - NEVER: Manually start/end spans for app logic (SDK glue only)
 

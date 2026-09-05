@@ -42,8 +42,8 @@ if (failures.length !== 2 || failures.some((value) => value !== 'bank-beta')) {
 }
 
 console.log(
-  'OE 1: no dashboard for it, and the recorded fields answered anyway',
+  'OE 1: no dashboard for this failure; grouping recorded fields isolates bank-beta',
 );
 console.log(
-  `  ${failures.length} of ${requests.length} checkouts failed, and both ran through bank-beta`,
+  `  ${failures.length} of ${requests.length} checkouts failed, both through bank-beta`,
 );

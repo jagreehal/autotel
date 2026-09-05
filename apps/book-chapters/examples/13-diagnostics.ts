@@ -1,4 +1,4 @@
-import { init, flush, shutdown, withTracing } from 'autotel';
+import { init, flush, shutdown, trace, ctx } from 'autotel';
 import { captureConsole } from 'autotel/diagnostics';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
@@ -15,20 +15,18 @@ async function main() {
   });
 
   // captureConsole() bridges console.* into telemetry without patching
-  // console — it subscribes to Node's diagnostics_channel. With
+  // console; it subscribes to Node's diagnostics_channel. With
   // target: 'span-event', captured calls land on the active span.
   const stopCapture = captureConsole({ target: 'span-event' });
 
-  const handleRequest = withTracing({ name: 'request.handle' })(
-    (ctx) => (userId: string) => {
-      ctx.setAttribute('user.id', userId);
-      // Node publishes this raw argument-array shape for console.warn. Publishing
-      // it here keeps the example deterministic under the tsx loader, which
-      // replaces Node's console implementation.
-      channel('console.warn').publish(['cache miss for user', userId]);
-      return 'ok';
-    },
-  );
+  const handleRequest = trace('request.handle', (userId: string) => {
+    ctx.setAttribute('user.id', userId);
+    // Node publishes this raw argument-array shape for console.warn. Publishing
+    // it here keeps the example deterministic under the tsx loader, which
+    // replaces Node's console implementation.
+    channel('console.warn').publish(['cache miss for user', userId]);
+    return 'ok';
+  });
   handleRequest('user_42');
 
   stopCapture();

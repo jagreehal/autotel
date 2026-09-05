@@ -51,12 +51,13 @@ Records a structured error onto a trace context (sets status, exception, and att
 
 ```typescript
 import {
-  withTracing,
+  trace,
+  ctx,
   recordStructuredError,
   createStructuredError,
 } from 'autotel';
 
-export const processPayment = withTracing({})((ctx) => async (req) => {
+export const processPayment = trace('payment.process', async (req) => {
   try {
     return await stripe.charges.create(req);
   } catch (err) {

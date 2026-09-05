@@ -40,10 +40,11 @@ export async function createUser(data: CreateUserData) {
 }
 
 // After
-import { withTracing } from 'autotel';
+import { trace, ctx } from 'autotel';
 
-export const createUser = withTracing({})(
-  (ctx) => async (data: CreateUserData) => {
+export const createUser = trace(
+  'user.create',
+  async (data: CreateUserData) => {
     ctx.setAttributes({ 'user.email': data.email });
     const user = await db.users.create(data);
     ctx.setAttribute('user.id', user.id);
@@ -55,11 +56,12 @@ export const createUser = withTracing({})(
 ### Step 2: Add request logger for richer context
 
 ```typescript
-import { withTracing, getRequestLogger } from 'autotel';
+import { trace, getRequestLogger } from 'autotel';
 
-export const createUser = withTracing({})(
-  (ctx) => async (data: CreateUserData) => {
-    const log = getRequestLogger(ctx);
+export const createUser = trace(
+  'user.create',
+  async (data: CreateUserData) => {
+    const log = getRequestLogger();
     log.set({ feature: 'signup', plan: data.plan });
 
     const user = await db.users.create(data);
@@ -73,11 +75,12 @@ export const createUser = withTracing({})(
 ### Step 3: Add structured errors
 
 ```typescript
-import { withTracing, getRequestLogger, createStructuredError } from 'autotel';
+import { trace, getRequestLogger, createStructuredError } from 'autotel';
 
-export const createUser = withTracing({})(
-  (ctx) => async (data: CreateUserData) => {
-    const log = getRequestLogger(ctx);
+export const createUser = trace(
+  'user.create',
+  async (data: CreateUserData) => {
+    const log = getRequestLogger();
     log.set({ feature: 'signup', plan: data.plan });
 
     const existing = await db.users.findByEmail(data.email);

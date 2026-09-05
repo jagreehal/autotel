@@ -26,7 +26,7 @@ async function main() {
   requestCounter.add(1, { method: 'GET', path: '/api/users' });
   requestCounter.add(1, { method: 'POST', path: '/api/orders' });
   requestCounter.add(1, { method: 'GET', path: '/api/users' });
-  console.log('  ✓ Counter "http.requests" — 3 requests recorded');
+  console.log('  ✓ Counter "http.requests": 3 requests recorded');
 
   // Create a histogram
   const latencyHistogram = createHistogram('http.request.duration', {
@@ -36,7 +36,7 @@ async function main() {
   latencyHistogram.record(42, { method: 'GET' });
   latencyHistogram.record(156, { method: 'POST' });
   latencyHistogram.record(28, { method: 'GET' });
-  console.log('  ✓ Histogram "http.request.duration" — 3 records');
+  console.log('  ✓ Histogram "http.request.duration": 3 records');
 
   // getMeter() exposes the underlying OTel Meter for instrument types
   // that have no helper, e.g. an UpDownCounter for gauge-like values
@@ -46,7 +46,7 @@ async function main() {
   });
   queueDepth.add(5);
   queueDepth.add(-2);
-  console.log('  ✓ UpDownCounter "queue.depth" — now at 3');
+  console.log('  ✓ UpDownCounter "queue.depth": now at 3');
 
   await flush();
   await shutdown();

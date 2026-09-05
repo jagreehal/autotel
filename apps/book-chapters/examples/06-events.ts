@@ -12,13 +12,13 @@ async function main() {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
 
-  // track() — fire-and-forget product/analytics events
+  // track(): fire-and-forget product/analytics events
   track('user.signed_up', {
     'user.id': 'user_42',
     'user.tier': 'premium',
     'signup.source': 'referral',
   });
-  console.log('  ✓ track() — user.signed_up');
+  console.log('  ✓ track() user.signed_up');
 
   track('order.placed', {
     'order.id': 'ord_123',
@@ -26,14 +26,14 @@ async function main() {
     'order.currency': 'USD',
     'order.items': 3,
   });
-  console.log('  ✓ track() — order.placed');
+  console.log('  ✓ track() order.placed');
 
   track('payment.completed', {
     'payment.method': 'card',
     'payment.amount': 2999,
     'payment.status': 'success',
   });
-  console.log('  ✓ track() — payment.completed');
+  console.log('  ✓ track() payment.completed');
 
   await flush();
   const spans = exporter.getFinishedSpans();
@@ -41,7 +41,7 @@ async function main() {
 
   await shutdown();
   console.log(
-    '\n✓ Events emitted. Events are queued asynchronously and processed by subscribers.',
+    '\n✓ Events emitted. Events queue asynchronously; subscribers process them.',
   );
 }
 

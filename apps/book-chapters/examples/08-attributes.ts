@@ -5,7 +5,8 @@ import {
   safeSetAttributes,
   flush,
   shutdown,
-  withTracing,
+  trace,
+  ctx,
 } from 'autotel';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
@@ -20,21 +21,21 @@ async function main() {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
 
-  const demo = withTracing({ name: 'attributes.demo' })((ctx) => () => {
-    // 1. Key builders — one attribute, semconv-correct key, typed value
+  const demo = trace('attributes.demo', () => {
+    // 1. Key builders: one attribute, semconv-correct key, typed value
     ctx.setAttributes(attrs.user.id('user_42'));
     ctx.setAttributes(attrs.session.id('sess_123'));
 
-    // 2. Object builder — many user.* attributes in one call
+    // 2. Object builder: many user.* attributes in one call
     safeSetAttributes(
       ctx,
       attrs.user.data({ name: 'Alice', roles: ['admin'] }),
     );
 
-    // 3. Attacher — builds AND safely sets in one call
+    // 3. Attacher: builds and safely sets in one call
     setUser(ctx, { hash: 'u_9f8e7d6c' });
 
-    // 4. Guardrails — PII policy applied before values hit the span
+    // 4. Guardrails: PII policy applied before values hit the span
     safeSetAttributes(
       ctx,
       { 'user.email': 'alice@example.com' },

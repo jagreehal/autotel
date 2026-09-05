@@ -127,10 +127,8 @@ export interface Policy {
  *
  * The spec mandates RE2 for cross-implementation consistency; Node's `RegExp`
  * backtracks, so an untrusted log body plus a pathological pattern is a DoS.
- * Capping input bounds the damage without pulling in an RE2 binding.
- *
- * ponytail: length cap instead of a real RE2 engine — swap in a linear-time
- * matcher if policies ever run against fully untrusted patterns.
+ * Capping input bounds the damage without pulling in an RE2 binding. Swap in a
+ * linear-time matcher if policies ever run against fully untrusted patterns.
  */
 export const MAX_MATCH_LENGTH = 4096;
 
