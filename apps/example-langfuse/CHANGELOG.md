@@ -1,5 +1,13 @@
 # @jagreehal/example-langfuse
 
+## 0.0.23
+
+### Patch Changes
+
+- Updated dependencies [cb05004]
+  - autotel@7.6.1
+  - autotel-genai@0.10.1
+
 ## 0.0.22
 
 ### Patch Changes
