@@ -93,6 +93,18 @@ pnpm test:dist          # Built ESM smoke test + widget raw/gzip budgets
 - **Full-page only.** It carries no chart code and was still 146.4 kB gzip against the embedded bundle's 145 kB. Revisit when something else gets cheaper, not by raising the budget.
 - Captured payloads are masked behind a reveal toggle and scrubbed by the shared `redact()` in `widget/utils.ts` — the same one `AgentsView` uses. Opting into capture is not opting into display.
 
+## WebMCP tools (the viewer as an agent-callable API)
+
+- `src/widget/webmcp.ts` registers five read-only tools on `document.modelContext`, over the same `query-client` functions the panel uses. `Widget.svelte` mounts them in an effect and unmounts on teardown.
+- **No library, no runtime dependency**, the way `autotel-webmcp` instruments the same API. One `AbortController` owns every registration, because aborting the signal passed to `registerTool` is how the platform withdraws a tool — there is no `unregister`.
+- **`toToolResult` is where Chrome's measured behaviour is compensated for**, and it is the only place that should be: a non-string result is serialised, `undefined` becomes an empty result rather than the literal nine characters, and a throw becomes readable text because Chrome discards the message for a generic `UnknownError`. Do not add a second copy of these rules in a handler.
+- **Results are projected, never passed through.** A `TraceData` is a whole span tree, and a page of them is context the agent pays for and does not read — the same problem `autotel-webmcp` records as `webmcp.result.bytes`. Each tool returns the columns its list view shows, row counts are capped at `MAX_LIMIT` whatever is asked for, and `autotel_get_trace` is the way to spans.
+- **Failures are returned, not thrown.** `explain()` maps `query-client`'s status union onto a sentence naming the fix — correct the query, start the receiver, retry. Keep new tools on that path rather than letting one throw.
+- **A JSON Schema is a description, not a validator.** Nothing in the browser enforces `required`, so a handler that needs an argument checks for it and says so. `autotel_get_trace` is the pattern.
+- **Full-page only, on both levers.** The `mode` gate in `Widget.svelte` is the runtime rule: the embedded widget is a guest in someone else's page, where `document.modelContext` belongs to that page, and devtools tools there would change what its agent sees and show up in its own WebMCP tab. `LEAN_MODULES` in `vite.widget.config.ts` is the build rule, resolving `webmcp.ts` to `webmcp.lean.ts` so tool definitions the gate guarantees will never run are not in the embedded bundle at all. Adding a module to that list is how anything else earns the same treatment.
+- **`webmcp.lean.ts` is typed as `typeof devtoolsTools`**, so a change to the real signature fails `tsc` rather than surfacing as a broken embedded build. `registry.lean.ts` predates that trick; copy it into any new stub.
+- **Tested through the `webmcpable/testing` double** (a devDependency — nothing from it ships), which reproduces Chrome's measured behaviour: `executeTool` takes a JSON string, `inputSchema` comes back as one. Test tools the way an agent calls them — by name, through `modelContext` — not by calling the handlers.
+
 ## Derived views and the working set
 
 - **Nothing derived reads `tracesSignal` directly.** Service Map, Flow, Security, Resources, GenAI and Errors fold over `windowedTracesSignal` / `windowedErrorGroupsSignal`, which prefer the **store-backed working set** (`workingSet.svelte.ts`) and fall back to the live tail only when the server is unreachable. Reading the raw signal reintroduces the bug this replaced: a view describing the last hundred traces while the toolbar names an hour.

@@ -177,6 +177,7 @@ process. Point them at the bound port, or free the original.
 - ✅ Resources view (derived from telemetry)
 - ✅ GenAI run summaries + narrated walkthrough
 - ✅ **Agents view**: observe coding agents (Claude Code, opencode), with cost split by model, effort, skill, sub-agent and prompt
+- ✅ **WebMCP tools**: the full-page viewer offers its stored telemetry to an agent driving the page (see below)
 - ✅ Global time window shared by every tab
 - ✅ Live tail that freezes while you read, with a "N new" pill to catch up
 - ✅ Configurable telemetry limits (env vars)
@@ -327,6 +328,32 @@ The same store backs `autotel-mcp`'s `devtools` backend, so `autotel diagnose`,
 ```bash
 autotel diagnose errors --backend devtools --devtools-base-url http://localhost:4318
 ```
+
+### Asking an in-page agent
+
+The full-page viewer also registers itself as a set of [WebMCP](https://github.com/webmachinelearning/webmcp)
+tools, so an AI agent driving the browser can read the same telemetry without a
+CLI, an API key or a screenshot. Open the viewer in a browser that supports
+WebMCP and the tools are there:
+
+| Tool                       | Answers                                                           |
+| -------------------------- | ----------------------------------------------------------------- |
+| `autotel_query_traces`     | Search traces — one row each: name, service, status, duration     |
+| `autotel_get_trace`        | Every span of one trace, by id                                    |
+| `autotel_list_errors`      | What is failing, grouped by fingerprint                           |
+| `autotel_query_logs`       | Search log records, with the trace id when there is one           |
+| `autotel_webmcp_inventory` | The page's own WebMCP tool surface, including dropped annotations |
+
+They take the [query language](#querying) above, so "show me failing checkouts
+over 500ms" reaches the agent as `status = ERROR name contains checkout duration > 500`.
+Results are projected down to the columns the panel lists and capped per call,
+because a page of full span trees is mostly context the agent pays for and does
+not read.
+
+Read-only, and **full-page only**: the embedded widget is a guest in someone
+else's page, where `document.modelContext` belongs to that page. Registered
+against the browser's WebMCP API directly, with no runtime dependency; in a
+browser without WebMCP nothing is registered.
 
 ## Configuration
 

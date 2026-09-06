@@ -2298,6 +2298,9 @@ importers:
       vitest-mock-extended:
         specifier: ^5.1.0
         version: 5.1.0(typescript@6.0.3)(vitest@4.1.10)
+      webmcpable:
+        specifier: ^0.5.0
+        version: 0.5.0(@playwright/test@1.62.0)(effect@4.0.0-rc.112)(react@19.2.8)(svelte@5.56.8(@typescript-eslint/types@8.65.0))(vue@3.5.40(typescript@6.0.3))
 
   packages/autotel-drizzle:
     dependencies:
@@ -18893,6 +18896,27 @@ packages:
 
   webmcp-types@0.1.5:
     resolution: {integrity: sha512-QAfuzNJ+hiY2JLpPbD/6xZruLQlsqtWUDqQCRruqD0dbtZHDg6IUZ2K0zctlRokwuscGlr47i6hKv8mQPSQLhw==}
+
+  webmcpable@0.5.0:
+    resolution: {integrity: sha512-gXIrdfDqjHhHp5W4LljOUiab14J18Ct5o/viAkTC7RP1UiY2IJjhxAvq00DtfUw6kTz3EYgxbBZeDvBym05PlA==}
+    hasBin: true
+    peerDependencies:
+      '@playwright/test': '>=1.40'
+      effect: ^4.0.0-rc
+      react: '>=18'
+      svelte: '>=5'
+      vue: '>=3.4'
+    peerDependenciesMeta:
+      '@playwright/test':
+        optional: true
+      effect:
+        optional: true
+      react:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
 
   webpack-virtual-modules@0.6.2:
     resolution: {integrity: sha512-66/V2i5hQanC51vBQKPH4aI8NMAcBW59FVBs+rC7eGHupMyfn34q7rZIE+ETlJ+XTevqfUhVVBgSUNSW2flEUQ==}
@@ -37661,6 +37685,16 @@ snapshots:
   webidl-conversions@8.0.1: {}
 
   webmcp-types@0.1.5: {}
+
+  webmcpable@0.5.0(@playwright/test@1.62.0)(effect@4.0.0-rc.112)(react@19.2.8)(svelte@5.56.8(@typescript-eslint/types@8.65.0))(vue@3.5.40(typescript@6.0.3)):
+    dependencies:
+      webmcp-types: 0.1.5
+    optionalDependencies:
+      '@playwright/test': 1.62.0
+      effect: 4.0.0-rc.112
+      react: 19.2.8
+      svelte: 5.56.8(@typescript-eslint/types@8.65.0)
+      vue: 3.5.40(typescript@6.0.3)
 
   webpack-virtual-modules@0.6.2: {}
 
