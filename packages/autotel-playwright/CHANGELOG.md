@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [cb05004]
+  - autotel@7.6.1
+
 ## 0.5.0
 
 ### Minor Changes

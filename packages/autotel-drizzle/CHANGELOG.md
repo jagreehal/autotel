@@ -1,5 +1,12 @@
 # autotel-drizzle
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [cb05004]
+  - autotel@7.6.1
+
 ## 0.2.0
 
 ### Minor Changes

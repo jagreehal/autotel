@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 56.0.1
+
+### Patch Changes
+
+- Updated dependencies [cb05004]
+  - autotel@7.6.1
+
 ## 56.0.0
 
 ### Patch Changes
