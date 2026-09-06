@@ -1,6 +1,65 @@
 import { z } from 'zod';
 import { parseCliArgs, type ParsedArgs } from './cli-args';
 
+/**
+ * A comma-separated hostname list, e.g. `autotel.example.com,localhost`.
+ * Empty means "localhost only", which the HTTP entry reads as the built-in
+ * localhost guards.
+ *
+ * Hostnames, not URLs. Both guards parse the hostname out of the incoming
+ * `Host` / `Origin` header and compare that, so `https://app.example.com`
+ * matches nothing an origin of `https://app.example.com` can produce — the
+ * header yields `app.example.com`. Left alone that reads as a 403 at request
+ * time with no clue which entry is at fault, and the natural next move is to
+ * widen the list further. Refusing it here names the entry instead.
+ *
+ * Case is normalised, because a hostname is case-insensitive and URL parsing
+ * has already lowercased the one in the header: an entry left capitalised would
+ * match nothing at all. A scheme is not, and neither is a port — dropping
+ * either would grant `http://` access to someone who wrote `https://` and
+ * believed the scheme was enforced. These guards check neither, and quietly
+ * rewriting the input would suggest they do.
+ */
+function invalidHostname(entry: string): string | undefined {
+  if (entry.includes('://')) return 'remove the scheme';
+  if (entry.includes('/')) return 'remove the path';
+  // A bracketed IPv6 literal is a hostname; `[::1]:3000` is not.
+  const portPart = entry.startsWith('[')
+    ? entry.slice(entry.indexOf(']') + 1)
+    : entry;
+  if (portPart.includes(':')) return 'remove the port';
+  return undefined;
+}
+
+const hostnameList = z
+  .string()
+  .default('')
+  .transform((value) =>
+    value
+      .split(',')
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean),
+  )
+  .superRefine((entries, ctx) => {
+    for (const entry of entries) {
+      const problem = invalidHostname(entry);
+      if (problem === undefined) continue;
+      ctx.addIssue({
+        code: 'custom',
+        message: `"${entry}" is not a hostname — ${problem}. These guards compare the hostname from the Host/Origin header and check neither scheme nor port.`,
+      });
+    }
+  });
+
+/**
+ * A setting the operator got wrong, as opposed to a crash. The entry point
+ * prints the message on its own: a stack trace points into this file, which is
+ * not where the mistake is, and buries the line that says what to change.
+ */
+export class ConfigError extends Error {
+  override readonly name = 'ConfigError';
+}
+
 const configSchema = z.object({
   backend: z
     .enum([
@@ -27,6 +86,16 @@ const configSchema = z.object({
     .describe('stdio or http (Streamable HTTP)'),
   port: z.coerce.number().default(3000),
   host: z.string().default('127.0.0.1'),
+  // The `Host` and `Origin` guards the spec requires default to localhost,
+  // which is right for a server on your laptop and wrong the moment one is
+  // hosted: a request for `autotel.example.com` is then answered with 403
+  // before it reaches a tool. Naming the hostnames is how you say the server
+  // is reachable under them on purpose.
+  allowedHosts: hostnameList,
+  // Client origins, not your own hostname: a browser MCP client sends the
+  // origin it runs on. Non-browser clients send none and always pass. Named by
+  // hostname — `app.example.com`, never `https://app.example.com`.
+  allowedOrigins: hostnameList,
   collectorPort: z.coerce.number().default(4318),
   persist: z.string().optional(),
   retentionMs: z.coerce.number().optional(),
@@ -81,7 +150,7 @@ export function resolveConfig(
 ): AppConfig {
   const { overrides, errors, warnings } = parsed;
   if (errors.length > 0) {
-    throw new Error(`invalid arguments:\n  ${errors.join('\n  ')}`);
+    throw new ConfigError(`invalid arguments:\n  ${errors.join('\n  ')}`);
   }
   // Reported here rather than by the CLI so an embedder passing argv hears
   // about a flag we ignored too. Never fatal — see parseCliArgs.
@@ -97,6 +166,8 @@ export function resolveConfig(
     transport: read('AUTOTEL_TRANSPORT'),
     port: read('AUTOTEL_PORT'),
     host: read('AUTOTEL_HOST'),
+    allowedHosts: read('AUTOTEL_ALLOWED_HOSTS'),
+    allowedOrigins: read('AUTOTEL_ALLOWED_ORIGINS'),
     collectorPort: read('AUTOTEL_COLLECTOR_PORT'),
     persist: read('AUTOTEL_PERSIST'),
     retentionMs: read('AUTOTEL_RETENTION_MS'),
@@ -118,7 +189,18 @@ export function resolveConfig(
     signozApiKey: env.SIGNOZ_API_KEY,
   };
 
-  const config = configSchema.parse(raw);
+  const result = configSchema.safeParse(raw);
+  if (!result.success) {
+    // A ZodError stringifies to a JSON dump, which buries the one line the
+    // operator needs behind the machinery that produced it. Every issue here
+    // is about one named setting, so say that.
+    const problems = result.error.issues.map((issue) => {
+      const setting = issue.path.join('.');
+      return setting === '' ? issue.message : `${setting}: ${issue.message}`;
+    });
+    throw new ConfigError(`invalid configuration:\n  ${problems.join('\n  ')}`);
+  }
+  const config = result.data;
 
   // Default retention: 1h in-memory, 24h persistent
   if (config.retentionMs === undefined) {

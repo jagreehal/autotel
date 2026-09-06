@@ -309,23 +309,25 @@ everything.
 
 ### Flags and environment variables
 
-| Flag               | Variable                 | Default                                       | Description                           |
-| ------------------ | ------------------------ | --------------------------------------------- | ------------------------------------- |
-| `-b, --backend`    | `AUTOTEL_BACKEND`        | `collector`                                   | Backend: `collector`, `jaeger`, …     |
-| `-t, --transport`  | `AUTOTEL_TRANSPORT`      | `stdio`                                       | MCP transport: `stdio` or `http`      |
-| `-p, --port`       | `AUTOTEL_PORT`           | `3000`                                        | MCP HTTP port                         |
-| `-H, --host`       | `AUTOTEL_HOST`           | `127.0.0.1`                                   | MCP HTTP bind address                 |
-| `--collector-port` | `AUTOTEL_COLLECTOR_PORT` | `4318`                                        | OTLP receiver port                    |
-| `--persist`        | `AUTOTEL_PERSIST`        | —                                             | libsql file path (omit for in-memory) |
-| `--retention-ms`   | `AUTOTEL_RETENTION_MS`   | `3600000` (1h mem) / `86400000` (24h persist) | Data retention                        |
-| `--max-traces`     | `AUTOTEL_MAX_TRACES`     | `10000`                                       | Max traces before eviction            |
-| `--fixture`        | `AUTOTEL_FIXTURE_PATH`   | `./fixtures/telemetry.json`                   | Fixture backend data                  |
-| `--jaeger-url`     | `JAEGER_BASE_URL`        | `http://localhost:16686`                      | Jaeger API URL                        |
-| `--devtools-url`   | `DEVTOOLS_BASE_URL`      | `http://localhost:4318`                       | autotel-devtools URL                  |
-| `--tempo-url`      | `TEMPO_BASE_URL`         | `http://localhost:3200`                       | Tempo URL                             |
-| `--prometheus-url` | `PROMETHEUS_BASE_URL`    | `http://localhost:9090`                       | Prometheus URL                        |
-| `--loki-url`       | `LOKI_BASE_URL`          | `http://localhost:3100`                       | Loki URL                              |
-| `--datadog-site`   | `DD_SITE`                | `datadoghq.com`                               | Datadog region                        |
+| Flag                | Variable                  | Default                                       | Description                                     |
+| ------------------- | ------------------------- | --------------------------------------------- | ----------------------------------------------- |
+| `-b, --backend`     | `AUTOTEL_BACKEND`         | `collector`                                   | Backend: `collector`, `jaeger`, …               |
+| `-t, --transport`   | `AUTOTEL_TRANSPORT`       | `stdio`                                       | MCP transport: `stdio` or `http`                |
+| `-p, --port`        | `AUTOTEL_PORT`            | `3000`                                        | MCP HTTP port                                   |
+| `--allowed-hosts`   | `AUTOTEL_ALLOWED_HOSTS`   | localhost only                                | Hostnames the HTTP endpoint answers for         |
+| `--allowed-origins` | `AUTOTEL_ALLOWED_ORIGINS` | localhost only                                | Hostnames of browser origins allowed to call it |
+| `-H, --host`        | `AUTOTEL_HOST`            | `127.0.0.1`                                   | MCP HTTP bind address                           |
+| `--collector-port`  | `AUTOTEL_COLLECTOR_PORT`  | `4318`                                        | OTLP receiver port                              |
+| `--persist`         | `AUTOTEL_PERSIST`         | —                                             | libsql file path (omit for in-memory)           |
+| `--retention-ms`    | `AUTOTEL_RETENTION_MS`    | `3600000` (1h mem) / `86400000` (24h persist) | Data retention                                  |
+| `--max-traces`      | `AUTOTEL_MAX_TRACES`      | `10000`                                       | Max traces before eviction                      |
+| `--fixture`         | `AUTOTEL_FIXTURE_PATH`    | `./fixtures/telemetry.json`                   | Fixture backend data                            |
+| `--jaeger-url`      | `JAEGER_BASE_URL`         | `http://localhost:16686`                      | Jaeger API URL                                  |
+| `--devtools-url`    | `DEVTOOLS_BASE_URL`       | `http://localhost:4318`                       | autotel-devtools URL                            |
+| `--tempo-url`       | `TEMPO_BASE_URL`          | `http://localhost:3200`                       | Tempo URL                                       |
+| `--prometheus-url`  | `PROMETHEUS_BASE_URL`     | `http://localhost:9090`                       | Prometheus URL                                  |
+| `--loki-url`        | `LOKI_BASE_URL`           | `http://localhost:3100`                       | Loki URL                                        |
+| `--datadog-site`    | `DD_SITE`                 | `datadoghq.com`                               | Datadog region                                  |
 
 Credentials have no flag form. `argv` is readable by any process that can list
 the process table, so `LOGFIRE_READ_TOKEN`, `DD_API_KEY`, `DD_APP_KEY` and
@@ -369,6 +371,37 @@ npx autotel-mcp --transport http --port 3000
 The endpoint validates the `Origin` and `Host` headers against localhost, which
 the spec requires of any local server: binding to `127.0.0.1` is not on its own
 a defence, because a page on any origin can post to it.
+
+Hosting it under a real hostname means saying so, or that same guard answers
+every request with `403` before it reaches a tool:
+
+```bash
+autotel-mcp --transport http --host 0.0.0.0 \
+  --allowed-hosts autotel.example.com
+```
+
+`--allowed-origins` is the browser half, and takes the origins your clients run
+on rather than your own hostname; a non-browser client sends no `Origin` and
+always passes.
+
+Naming hosts **replaces** the localhost default rather than adding to it, so
+`localhost` and `127.0.0.1` stop answering unless you name them too. Add them
+when a health check or a local client still needs in:
+
+```bash
+autotel-mcp --transport http --host 0.0.0.0 \
+  --allowed-hosts autotel.example.com,localhost,127.0.0.1
+```
+
+Both flags take **hostnames** — `app.example.com`, not `https://app.example.com`.
+Each guard parses the hostname out of the header it checks and compares that, so
+an entry carrying a scheme or port could never match one; such an entry is
+refused at startup rather than turning into a 403 nobody can trace. Neither
+guard checks the scheme or the port, which is why neither is quietly stripped
+for you.
+
+Neither flag adds authentication — this server has none, so put it behind
+something that does.
 
 Then configure your MCP client with:
 

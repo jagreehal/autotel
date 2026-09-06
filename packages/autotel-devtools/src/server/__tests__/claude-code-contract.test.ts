@@ -42,7 +42,9 @@ describe('Claude Code OTLP contract (recorded fixture)', () => {
     expect(rollup.outputTokens).toBeGreaterThan(0);
     expect(rollup.costUsd).toBeGreaterThan(0);
     // The fixture was recorded on Opus 4.8.
-    expect(Object.keys(rollup.models)).toContain('claude-opus-4-8');
+    expect(Object.keys(rollup.byModel)).toContain('claude-opus-4-8');
+    // The fixture's requests carry cost, so the per-model slice carries it too.
+    expect(rollup.byModel['claude-opus-4-8'].costUsd).toBeGreaterThan(0);
     expect(rollup.prompts).toBe(1); // one user_prompt
   });
 

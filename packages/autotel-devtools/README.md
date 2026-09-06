@@ -176,7 +176,7 @@ process. Point them at the bound port, or free the original.
 - ✅ Service map visualization
 - ✅ Resources view (derived from telemetry)
 - ✅ GenAI run summaries + narrated walkthrough
-- ✅ **Agents view**: observe coding agents (Claude Code, opencode) from their OTel metrics + log events
+- ✅ **Agents view**: observe coding agents (Claude Code, opencode), with cost split by model, effort, skill, sub-agent and prompt
 - ✅ Global time window shared by every tab
 - ✅ Live tail that freezes while you read, with a "N new" pill to catch up
 - ✅ Configurable telemetry limits (env vars)
@@ -202,10 +202,11 @@ on top of the per-span detail:
 
 ### Agents: observe Claude Code (and other coding agents)
 
-Coding agents like **Claude Code** emit OpenTelemetry **metrics and log events**
-(no traces). The **Agents** tab reconstructs them into a session-centric view.
-Powered by the [`autotel-agents`](../autotel-agents) package, which also handles
-opencode and is one adapter away from Codex.
+Coding agents like **Claude Code** emit OpenTelemetry **metrics and log events**.
+The **Agents** tab reconstructs them into a session-centric view, and splits the
+spend by model, effort, skill, sub-agent and prompt. Powered by the
+[`autotel-agents`](../autotel-agents) package, which also handles opencode and is
+one adapter away from Codex.
 
 One command starts the receiver _and_ launches Claude Code wired to it:
 
@@ -214,9 +215,11 @@ npx autotel-devtools claude
 ```
 
 This sets the telemetry env for a live local view: OTLP **`http/protobuf`**, 1s
-export intervals, and `session.id` kept on metrics. The receiver also accepts
-standard OTLP/gRPC on `:4317`. Then open the UI
-and switch to **Agents**.
+export intervals, and `session.id` kept on metrics. It also turns on Claude
+Code's span hierarchy — `claude_code.interaction` → `llm_request` / `tool`, with
+the sub-agent tree on `parent_agent_id` — which lands in the **Traces** tab. The
+receiver also accepts standard OTLP/gRPC on `:4317`. Then open the UI and switch
+to **Agents**.
 
 - `--print-env`: print the env block instead of launching (for managed-settings
   / MDM / VS Code), e.g. `npx autotel-devtools claude --print-env`.

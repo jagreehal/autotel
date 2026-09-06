@@ -79,7 +79,7 @@ pnpm test:dist          # Built ESM smoke test + widget raw/gzip budgets
 
 ## Coding-agent observability (Agents tab)
 
-- Claude Code / opencode emit OTel **metrics + log events** (no traces). `src/server/otlp.ts` `parseOtlpMetrics` (data points, Sum/Gauge/Histogram) and `parseOtlpAgentEvents` decode them; `src/server/otlp-proto.ts` METRICS_PROTO decodes data points too, for protobuf parity.
+- Claude Code / opencode emit OTel **metrics + log events**, and Claude Code additionally emits **spans** under `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` (which `autotel-devtools claude` sets). Spans land in the normal trace store and render in the Traces tab; the Agents tab's session model is built from the metrics and events only, so a call is never counted twice. `src/server/otlp.ts` `parseOtlpMetrics` (data points, Sum/Gauge/Histogram) and `parseOtlpAgentEvents` decode them; `src/server/otlp-proto.ts` METRICS_PROTO decodes data points too, for protobuf parity.
 - The server folds them into an `AgentSessionStore` via the **`autotel-agents`** package (workspace dep) and broadcasts `agents` over WS (full-state, like `errors`). The widget renders them in `AgentsView.svelte` (`src/widget/components/`); store signals live in `store.svelte.ts` (`agentSessionsSignal`, `selectedAgentSession…`, `agentAggregateSignal`).
 - `autotel-agents` is browser-safe (no `node:*`); all session reduction logic lives there, not in the widget. Add a new agent (e.g. Codex) by adding one adapter in that package: no devtools change.
 - Test data: `src/widget/components/__fixtures__/agents.ts` builds realistic sessions through the real reducers (used by `AgentsView.stories.ts` + `__tests__/AgentsView.test.ts`).

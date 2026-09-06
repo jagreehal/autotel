@@ -28,6 +28,8 @@ export const CLAUDE_CODE_EVENT_CONTRACT = {
     'assistant_response', // plaintext response — privacy-gated, not a rollup fact
     'hook_registered', // startup registration noise
     'hook_execution_start', // paired with hook_execution_complete (which we model)
+    'permission_mode_changed', // UI mode, not work the session did
+    'auth', // login/logout lifecycle, not spend or tool use
   ],
 } as const;
 

@@ -5,6 +5,13 @@ export type SpanStatusCode = 'OK' | 'ERROR' | 'UNSET';
 
 export type TagValue = string | number | boolean;
 
+/**
+ * A span's attributes. The keys are whatever the instrumentation emitted, so
+ * this is an open dictionary on purpose: naming it once says that, rather than
+ * each signature re-deciding it.
+ */
+export type Tags = Record<string, TagValue>;
+
 // Filter system
 export type FilterOperator =
   | 'equals'

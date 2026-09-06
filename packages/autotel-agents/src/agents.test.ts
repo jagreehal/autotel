@@ -7,6 +7,7 @@ import {
   parseToolName,
   summarizeSessions,
 } from './index';
+import { CLAUDE_CODE_KNOWN_EVENT_NAMES } from './adapters/claude-code';
 import type {
   AgentRawEvent,
   AgentSessionStore,
@@ -37,7 +38,7 @@ function metric(
     dataPoints: points.map((p) => ({
       value: p.value,
       timestamp: 2000,
-      attributes: { 'session.id': SESSION, ...(p.attrs ?? {}) },
+      attributes: { 'session.id': SESSION, ...p.attrs },
     })),
     resource: {},
     scope: { name: 'com.anthropic.claude_code' },
@@ -140,7 +141,7 @@ describe('api_request events', () => {
     expect(s.rollup.inputTokens).toBe(1000);
     expect(s.rollup.outputTokens).toBe(500);
     expect(s.rollup.cacheReadTokens).toBe(200);
-    expect(s.rollup.models['claude-sonnet-4-6']).toBe(1);
+    expect(s.rollup.byModel['claude-sonnet-4-6'].requests).toBe(1);
     expect(s.timeline[0]?.costSource).toBe('reported');
   });
 
@@ -411,7 +412,7 @@ describe('summarizeSessions', () => {
     const agg = summarizeSessions(store.values());
     expect(agg.sessions).toBe(1);
     expect(agg.costUsd).toBeCloseTo(1);
-    expect(agg.models['opus']).toBe(1);
+    expect(agg.byModel['opus'].requests).toBe(1);
     expect(agg.mcpServers['github']).toBe(1);
   });
 });
@@ -499,5 +500,215 @@ describe('runtime environment (mcp / plugin / hook events)', () => {
     expect(agg.mcpConnections['ctx7']?.connected).toBe(true);
     expect(agg.plugins['ctx7']).toBeDefined();
     expect(agg.hooks.cancelled).toBe(1);
+  });
+});
+
+// ── Per-prompt, per-skill, per-agent and per-effort attribution ─────────────
+// Claude Code now stamps `prompt.id`, `agent.name`, `skill.name`, `effort` and
+// `speed` on api_request (and the cost/token metrics). Without them a session
+// is one undifferentiated bill; with them it splits by what actually drove the
+// spend. See https://code.claude.com/docs/en/monitoring-usage.
+
+function apiRequest(attrs: Attributes): AgentRawEvent {
+  return event('claude_code.api_request', {
+    model: 'claude-opus-5',
+    input_tokens: 10,
+    output_tokens: 5,
+    cache_read_tokens: 100,
+    cache_creation_tokens: 20,
+    cost_usd: 0.25,
+    ...attrs,
+  });
+}
+
+function ingest(...records: AgentRawEvent[]): AgentSessionStore {
+  const store: AgentSessionStore = new Map();
+  for (const record of records) ingestEventRecord(store, record);
+  return store;
+}
+
+function only(store: AgentSessionStore) {
+  return [...store.values()][0];
+}
+
+describe('prompt correlation', () => {
+  it('carries prompt.id onto every event, whatever its type', () => {
+    const store = ingest(
+      apiRequest({ 'prompt.id': 'p-1' }),
+      event('claude_code.user_prompt', {
+        'prompt.id': 'p-1',
+        prompt_length: 12,
+      }),
+    );
+    const ids = only(store).timeline.map((e) => e.promptId);
+    expect(ids).toEqual(['p-1', 'p-1']);
+  });
+
+  it('leaves promptId undefined when the agent does not send one', () => {
+    expect(only(ingest(apiRequest({}))).timeline[0].promptId).toBeUndefined();
+  });
+});
+
+describe('usage breakdowns', () => {
+  it('splits cost and tokens by model', () => {
+    const store = ingest(
+      apiRequest({ model: 'claude-opus-5' }),
+      apiRequest({ model: 'claude-opus-5' }),
+      apiRequest({ model: 'claude-haiku-4-5', cost_usd: 0.01 }),
+    );
+    const { byModel } = only(store).rollup;
+    expect(byModel['claude-opus-5']).toEqual({
+      requests: 2,
+      costUsd: 0.5,
+      inputTokens: 20,
+      outputTokens: 10,
+      cacheReadTokens: 200,
+      cacheCreationTokens: 40,
+    });
+    expect(byModel['claude-haiku-4-5'].costUsd).toBeCloseTo(0.01);
+  });
+
+  it('splits by effort, skill and sub-agent name', () => {
+    const store = ingest(
+      apiRequest({ effort: 'high', 'skill.name': 'tdd' }),
+      apiRequest({ effort: 'medium', 'agent.name': 'Explore' }),
+    );
+    const { byEffort, bySkill, byAgent } = only(store).rollup;
+    expect(byEffort['high'].costUsd).toBeCloseTo(0.25);
+    expect(byEffort['medium'].requests).toBe(1);
+    expect(bySkill['tdd'].costUsd).toBeCloseTo(0.25);
+    expect(byAgent['Explore'].requests).toBe(1);
+    // A request naming no skill is not filed under one.
+    expect(Object.keys(bySkill)).toEqual(['tdd']);
+  });
+
+  it('reads effort and speed onto the event', () => {
+    const e = only(ingest(apiRequest({ effort: 'high', speed: 'fast' })))
+      .timeline[0];
+    expect(e.effort).toBe('high');
+    expect(e.speed).toBe('fast');
+  });
+
+  it('sums per-model usage across sessions', () => {
+    const store = ingest(apiRequest({}));
+    ingestEventRecord(store, {
+      ...apiRequest({}),
+      attributes: { ...apiRequest({}).attributes, 'session.id': 'sess-2' },
+    });
+    const agg = summarizeSessions(store.values());
+    expect(agg.byModel['claude-opus-5'].requests).toBe(2);
+    expect(agg.byModel['claude-opus-5'].costUsd).toBeCloseTo(0.5);
+  });
+});
+
+describe('api_refusal', () => {
+  it('counts a refusal without charging it as an error', () => {
+    const store = ingest(
+      event('claude_code.api_refusal', { model: 'claude-opus-5' }),
+    );
+    const { rollup } = only(store);
+    expect(rollup.apiRefusals).toBe(1);
+    expect(rollup.apiErrors).toBe(0);
+    expect(only(store).timeline[0].type).toBe('api_refusal');
+  });
+});
+
+describe('event-name contract', () => {
+  it('knows the events Claude Code emits that this package does not model', () => {
+    // Documented but deliberately unmodelled: listing them is what keeps the
+    // drift guard meaningful — an event in neither list is one to triage.
+    for (const name of ['api_refusal', 'permission_mode_changed', 'auth']) {
+      expect(CLAUDE_CODE_KNOWN_EVENT_NAMES.has(name)).toBe(true);
+    }
+  });
+});
+
+// ── Untrusted keys ─────────────────────────────────────────────────────────
+// Every breakdown is keyed by a value that arrived over the wire. A key like
+// `__proto__` or `constructor` names a property every object already has, so a
+// bucket that inherits from Object.prototype reads one back instead of missing,
+// then writes the tally onto the prototype — corrupting every object in the
+// process and recording nothing.
+
+describe('buckets keyed by wire values', () => {
+  const HOSTILE = ['__proto__', 'constructor', 'toString'];
+
+  it('files a hostile model name as an ordinary key', () => {
+    for (const name of HOSTILE) {
+      const store = ingest(apiRequest({ model: name }));
+      const { byModel } = only(store).rollup;
+      expect(Object.keys(byModel)).toEqual([name]);
+      expect(byModel[name].requests).toBe(1);
+      expect(byModel[name].costUsd).toBeCloseTo(0.25);
+    }
+  });
+
+  it('leaves Object.prototype alone', () => {
+    ingest(
+      apiRequest({
+        model: '__proto__',
+        effort: '__proto__',
+        'skill.name': '__proto__',
+        'agent.name': '__proto__',
+        'prompt.id': '__proto__',
+      }),
+      event('claude_code.tool_result', {
+        tool_name: '__proto__',
+        success: true,
+      }),
+      event('claude_code.mcp_server_connection', {
+        server_name: '__proto__',
+        status: 'connected',
+      }),
+      event('claude_code.plugin_loaded', { 'plugin.name': '__proto__' }),
+    );
+    // `in` walks the prototype chain, which is the thing under test: a
+    // polluted Object.prototype makes every plain object answer to these.
+    for (const field of ['requests', 'costUsd', 'count', 'connects', 'name']) {
+      expect(field in {}).toBe(false);
+    }
+  });
+
+  it('survives a hostile key in the cross-session aggregate', () => {
+    const store = ingest(apiRequest({ model: '__proto__' }));
+    const agg = summarizeSessions(store.values());
+    expect(agg.byModel['__proto__'].requests).toBe(1);
+    expect('requests' in {}).toBe(false);
+  });
+});
+
+describe('per-prompt spend', () => {
+  it('keeps a prompt total that outlives the timeline', () => {
+    const store = ingest(
+      apiRequest({ 'prompt.id': 'p-1' }),
+      apiRequest({ 'prompt.id': 'p-1' }),
+      apiRequest({ 'prompt.id': 'p-2' }),
+    );
+    const { byPrompt } = only(store).rollup;
+    expect(byPrompt['p-1'].requests).toBe(2);
+    expect(byPrompt['p-1'].costUsd).toBeCloseTo(0.5);
+    expect(byPrompt['p-2'].requests).toBe(1);
+  });
+
+  it('does not invent a prompt for a request that names none', () => {
+    expect(Object.keys(only(ingest(apiRequest({}))).rollup.byPrompt)).toEqual(
+      [],
+    );
+  });
+});
+
+describe('aggregate breakdowns', () => {
+  it('sums effort, skill and agent across sessions, like model', () => {
+    const store = ingest(
+      apiRequest({
+        effort: 'high',
+        'skill.name': 'tdd',
+        'agent.name': 'Explore',
+      }),
+    );
+    const agg = summarizeSessions(store.values());
+    expect(agg.byEffort['high'].requests).toBe(1);
+    expect(agg.bySkill['tdd'].costUsd).toBeCloseTo(0.25);
+    expect(agg.byAgent['Explore'].requests).toBe(1);
   });
 });

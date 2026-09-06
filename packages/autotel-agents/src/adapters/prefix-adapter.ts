@@ -39,6 +39,7 @@ const EVENT_SUFFIXES = new Map<string, AgentEventType>([
   ['user_prompt', 'user_prompt'],
   ['api_request', 'api_request'],
   ['api_error', 'api_error'],
+  ['api_refusal', 'api_refusal'],
   ['tool_result', 'tool_result'],
   ['tool_decision', 'tool_decision'],
   ['mcp_server_connection', 'mcp_connection'],
@@ -134,8 +135,23 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
         rawEventName: rawName,
         timestamp: record.timestamp,
         model: str(attrs, 'model'),
+        promptId: str(attrs, 'prompt.id'),
         attributes: record.attributes,
       };
+
+      // Attribution rides on every request-shaped event: what drove the call,
+      // and how it was run. Reading it once here keeps the per-case blocks to
+      // the fields that genuinely differ between them.
+      if (
+        type === 'api_request' ||
+        type === 'api_error' ||
+        type === 'api_refusal'
+      ) {
+        event.effort = str(attrs, 'effort');
+        event.speed = str(attrs, 'speed');
+        event.agentName = str(attrs, 'agent.name');
+        event.skillName = str(attrs, 'skill.name');
+      }
 
       switch (type) {
         case 'api_request': {
@@ -169,6 +185,10 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
             event.costUsd = reported;
             event.costSource = 'reported';
           }
+          break;
+        }
+        case 'api_refusal': {
+          event.durationMs = num(attrs, 'duration_ms');
           break;
         }
         case 'api_error': {

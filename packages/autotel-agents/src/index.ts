@@ -24,6 +24,7 @@ export type {
   CostSource,
   AgentEvent,
   ToolUsage,
+  UsageBreakdown,
   McpConnectionInfo,
   PluginInfo,
   HookStats,

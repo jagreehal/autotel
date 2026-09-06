@@ -1,4 +1,4 @@
-import type { SpanRecord, TagValue, TraceRecord } from '../types';
+import type { SpanRecord, Tags, TagValue, TraceRecord } from '../types';
 
 export interface CompactSpan extends SpanRecord {
   tags: Record<string, TagValue>;
@@ -23,7 +23,7 @@ export interface CompactTraceResult {
  * process identity. They are a property of the trace, not of any one span, and
  * repeating them per span is what makes a 200-span trace unreadable.
  */
-function hoistResource(spans: SpanRecord[]): Record<string, TagValue> {
+function hoistResource(spans: SpanRecord[]): Tags {
   const [first, ...rest] = spans;
   if (first === undefined) return {};
 

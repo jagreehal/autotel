@@ -1,14 +1,16 @@
 import { createServer, type ServerResponse } from 'node:http';
 import {
+  hostHeaderValidation,
   localhostHostValidation,
   localhostOriginValidation,
+  originValidation,
   toNodeHandler,
 } from '@modelcontextprotocol/node';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { createApp, type App } from './app';
 import { helpText, parseCliArgs } from './cli-args';
-import { resolveConfig } from './config';
+import { ConfigError, resolveConfig } from './config';
 import { VERSION } from './version';
 
 async function main() {
@@ -65,8 +67,19 @@ async function main() {
   // local HTTP server: a page on any origin can otherwise reach a server bound
   // to 127.0.0.1. Both answer rejected requests themselves and return false,
   // so nothing may touch the response afterwards.
-  const checkHost = localhostHostValidation();
-  const checkOrigin = localhostOriginValidation();
+  //
+  // A hosted server needs its own hostname named, or the Host guard refuses
+  // every real request before it reaches a tool. The localhost default stands
+  // until somebody says otherwise, so a laptop keeps the guard it had.
+  const { allowedHosts, allowedOrigins } = app.config;
+  const checkHost =
+    allowedHosts.length > 0
+      ? hostHeaderValidation(allowedHosts)
+      : localhostHostValidation();
+  const checkOrigin =
+    allowedOrigins.length > 0
+      ? originValidation(allowedOrigins)
+      : localhostOriginValidation();
 
   const httpServer = createServer(async (req, res) => {
     try {
@@ -102,8 +115,18 @@ async function main() {
       `autotel-mcp HTTP server on ${host}:${port} (MCP ${app.protocolVersion}; ` +
         `${app.legacyProtocolVersion} clients served too)`,
     );
-    console.error(`  POST http://${host}:${port}/mcp`);
-    console.error(`  GET  http://${host}:${port}/health`);
+    // Naming hosts replaces the localhost default rather than adding to it, so
+    // the bind address printed above stops answering. Say so here: otherwise
+    // the first thing anyone tries is a curl at 127.0.0.1 and a 403 that reads
+    // like the server is broken.
+    const reachableHost = allowedHosts[0] ?? host;
+    console.error(`  POST http://${reachableHost}:${port}/mcp`);
+    console.error(`  GET  http://${reachableHost}:${port}/health`);
+    if (allowedHosts.length > 0) {
+      console.error(
+        `  Host header must be one of: ${allowedHosts.join(', ')} — localhost is not, unless named`,
+      );
+    }
     if (app.config.backend === 'collector') {
       console.error(`OTLP receiver on ${host}:${app.config.collectorPort}`);
     }
@@ -146,6 +169,13 @@ async function handleHealth(app: App, res: ServerResponse): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error('Fatal:', err);
+  // A settings mistake gets its message and nothing else; the stack points at
+  // the parser, not at the line the operator has to change. Anything else is a
+  // crash, and its stack is the useful part.
+  if (err instanceof ConfigError) {
+    console.error(err.message);
+  } else {
+    console.error('Fatal:', err);
+  }
   process.exit(1);
 });

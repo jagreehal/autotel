@@ -31,6 +31,7 @@ import type {
   PluginInfo,
   ToolCategory,
   ToolUsage,
+  UsageBreakdown,
 } from './types';
 
 export const DEFAULT_TIMELINE_LIMIT = 500;
@@ -47,6 +48,33 @@ function emptyToolCategories(): Record<ToolCategory, number> {
   ) as Record<ToolCategory, number>;
 }
 
+/**
+ * A record whose keys come from telemetry. Every key here arrived over the
+ * wire — a model id, a tool name, a skill — and `__proto__`, `constructor` and
+ * `toString` are all legal strings. On an ordinary `{}` they name inherited
+ * properties, so a lookup finds one instead of `undefined`, the `??=` never
+ * fires, and the tally lands on `Object.prototype`: every object in the process
+ * is corrupted and the value is recorded nowhere. A null prototype has nothing
+ * to inherit, so such a key is just a key.
+ */
+function wireKeyed<T>(): Record<string, T> {
+  // SAFETY: Object.create(null) is typed `any`. The object it returns has no
+  // prototype and no own properties, so every key it will ever answer to is one
+  // this module puts there, of type T — which is what the Record says.
+  return Object.create(null) as Record<string, T>;
+}
+
+function emptyUsage(): UsageBreakdown {
+  return {
+    requests: 0,
+    costUsd: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+  };
+}
+
 function emptyRollup(): AgentSessionRollup {
   return {
     costUsd: 0,
@@ -58,6 +86,7 @@ function emptyRollup(): AgentSessionRollup {
     cacheCreationTokens: 0,
     apiRequests: 0,
     apiErrors: 0,
+    apiRefusals: 0,
     prompts: 0,
     toolCalls: 0,
     accepted: 0,
@@ -67,16 +96,20 @@ function emptyRollup(): AgentSessionRollup {
     commits: 0,
     pullRequests: 0,
     activeTimeSeconds: 0,
-    models: {},
-    tools: {},
+    byModel: wireKeyed(),
+    byEffort: wireKeyed(),
+    bySkill: wireKeyed(),
+    byAgent: wireKeyed(),
+    byPrompt: wireKeyed(),
+    tools: wireKeyed(),
     toolCategories: emptyToolCategories(),
-    subAgents: {},
-    skills: {},
-    mcpConnections: {},
-    plugins: {},
+    subAgents: wireKeyed(),
+    skills: wireKeyed(),
+    mcpConnections: wireKeyed(),
+    plugins: wireKeyed(),
     hooks: { runs: 0, blocked: 0, errored: 0, cancelled: 0 },
     contextHighWaterTokens: 0,
-    contextState: {},
+    contextState: wireKeyed(),
     compactions: [],
   };
 }
@@ -92,7 +125,7 @@ function createSession(
     firstSeen: timestamp,
     lastSeen: timestamp,
     eventCount: 0,
-    metricState: {},
+    metricState: wireKeyed(),
     rollup: emptyRollup(),
     timeline: [],
   };
@@ -144,6 +177,26 @@ function bumpTool(rollup: AgentSessionRollup, event: AgentEvent): ToolUsage {
   return existing;
 }
 
+/**
+ * Add one request's cost and tokens to the slice `key` names. A dimension the
+ * request does not carry files nothing: an absent `skill.name` means the work
+ * had no skill behind it, which is not the same as a skill called "unknown".
+ */
+function bumpUsage(
+  bucket: Record<string, UsageBreakdown>,
+  key: string | undefined,
+  event: AgentEvent,
+): void {
+  if (!key) return;
+  const usage = (bucket[key] ??= emptyUsage());
+  usage.requests += 1;
+  usage.costUsd += event.costUsd ?? 0;
+  usage.inputTokens += event.inputTokens ?? 0;
+  usage.outputTokens += event.outputTokens ?? 0;
+  usage.cacheReadTokens += event.cacheReadTokens ?? 0;
+  usage.cacheCreationTokens += event.cacheCreationTokens ?? 0;
+}
+
 /** Count a tool against its category and (for sub-agents/skills) its named bucket. */
 function tallyToolKind(rollup: AgentSessionRollup, event: AgentEvent): void {
   const ref = event.tool;
@@ -182,13 +235,21 @@ export function foldEvent(
           rollup.costEstimatedUsd += event.costUsd;
         else rollup.costReportedUsd += event.costUsd;
       }
-      if (event.model)
-        rollup.models[event.model] = (rollup.models[event.model] ?? 0) + 1;
+      bumpUsage(rollup.byModel, event.model, event);
+      bumpUsage(rollup.byEffort, event.effort, event);
+      bumpUsage(rollup.bySkill, event.skillName, event);
+      bumpUsage(rollup.byAgent, event.agentName, event);
+      bumpUsage(rollup.byPrompt, event.promptId, event);
       foldContextReset(rollup, event);
       break;
     }
     case 'api_error':
       rollup.apiErrors += 1;
+      break;
+    case 'api_refusal':
+      // A refusal is a completed call that produced no answer. Counting it as
+      // an error would put a working model in the failure column.
+      rollup.apiRefusals += 1;
       break;
     case 'user_prompt':
       rollup.prompts += 1;
@@ -408,7 +469,10 @@ export interface AgentAggregate {
   apiErrors: number;
   accepted: number;
   rejected: number;
-  models: Record<string, number>;
+  byModel: Record<string, UsageBreakdown>;
+  byEffort: Record<string, UsageBreakdown>;
+  bySkill: Record<string, UsageBreakdown>;
+  byAgent: Record<string, UsageBreakdown>;
   /** tool name → call count, MCP and built-in together. */
   tools: Record<string, number>;
   /** tool category → call count. */
@@ -427,6 +491,22 @@ export interface AgentAggregate {
   hooks: HookStats;
 }
 
+/** Add one session's slices of a dimension into the cross-session totals. */
+function mergeUsage(
+  into: Record<string, UsageBreakdown>,
+  from: Record<string, UsageBreakdown>,
+): void {
+  for (const [key, usage] of Object.entries(from)) {
+    const total = (into[key] ??= emptyUsage());
+    total.requests += usage.requests;
+    total.costUsd += usage.costUsd;
+    total.inputTokens += usage.inputTokens;
+    total.outputTokens += usage.outputTokens;
+    total.cacheReadTokens += usage.cacheReadTokens;
+    total.cacheCreationTokens += usage.cacheCreationTokens;
+  }
+}
+
 export function summarizeSessions(
   sessions: Iterable<AgentSession>,
 ): AgentAggregate {
@@ -439,14 +519,17 @@ export function summarizeSessions(
     apiErrors: 0,
     accepted: 0,
     rejected: 0,
-    models: {},
-    tools: {},
+    byModel: wireKeyed(),
+    byEffort: wireKeyed(),
+    bySkill: wireKeyed(),
+    byAgent: wireKeyed(),
+    tools: wireKeyed(),
     toolCategories: emptyToolCategories(),
-    mcpServers: {},
-    subAgents: {},
-    skills: {},
-    mcpConnections: {},
-    plugins: {},
+    mcpServers: wireKeyed(),
+    subAgents: wireKeyed(),
+    skills: wireKeyed(),
+    mcpConnections: wireKeyed(),
+    plugins: wireKeyed(),
     hooks: { runs: 0, blocked: 0, errored: 0, cancelled: 0 },
   };
   for (const session of sessions) {
@@ -459,9 +542,10 @@ export function summarizeSessions(
     agg.apiErrors += rollup.apiErrors;
     agg.accepted += rollup.accepted;
     agg.rejected += rollup.rejected;
-    for (const [model, count] of Object.entries(rollup.models)) {
-      agg.models[model] = (agg.models[model] ?? 0) + count;
-    }
+    mergeUsage(agg.byModel, rollup.byModel);
+    mergeUsage(agg.byEffort, rollup.byEffort);
+    mergeUsage(agg.bySkill, rollup.bySkill);
+    mergeUsage(agg.byAgent, rollup.byAgent);
     for (const usage of Object.values(rollup.tools)) {
       agg.tools[usage.name] = (agg.tools[usage.name] ?? 0) + usage.count;
       if (usage.isMcp && usage.mcpServer) {

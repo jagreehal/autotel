@@ -11,6 +11,18 @@ describe('loadConfig', () => {
     expect(config.collectorPort).toBe(4318);
   });
 
+  it('leaves the host guards on localhost until hostnames are named', () => {
+    expect(loadConfig([], {}).allowedHosts).toEqual([]);
+    const config = loadConfig(
+      ['--allowed-hosts', 'autotel.example.com, localhost'],
+      {
+        AUTOTEL_ALLOWED_ORIGINS: 'app.example.com',
+      },
+    );
+    expect(config.allowedHosts).toEqual(['autotel.example.com', 'localhost']);
+    expect(config.allowedOrigins).toEqual(['app.example.com']);
+  });
+
   it('reads the environment', () => {
     const config = loadConfig([], {
       AUTOTEL_TRANSPORT: 'http',

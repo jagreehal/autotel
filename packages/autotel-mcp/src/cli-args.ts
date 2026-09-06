@@ -26,6 +26,8 @@ export const VALUE_FLAGS = new Map<string, string>([
   ['-p', 'AUTOTEL_PORT'],
   ['--host', 'AUTOTEL_HOST'],
   ['-H', 'AUTOTEL_HOST'],
+  ['--allowed-hosts', 'AUTOTEL_ALLOWED_HOSTS'],
+  ['--allowed-origins', 'AUTOTEL_ALLOWED_ORIGINS'],
   ['--collector-port', 'AUTOTEL_COLLECTOR_PORT'],
   ['--persist', 'AUTOTEL_PERSIST'],
   ['--retention-ms', 'AUTOTEL_RETENTION_MS'],
@@ -137,6 +139,13 @@ Options:
   -p, --port <port>          MCP HTTP port, default 3000        [AUTOTEL_PORT]
   -H, --host <host>          MCP HTTP bind address, default 127.0.0.1
                                                                [AUTOTEL_HOST]
+      --allowed-hosts <list> Comma-separated hostnames the HTTP endpoint
+                             answers for, no scheme or port, default
+                             localhost only          [AUTOTEL_ALLOWED_HOSTS]
+      --allowed-origins <l>  Comma-separated hostnames of browser origins
+                             allowed to call it (app.example.com, not
+                             https://app.example.com), default localhost
+                             only                  [AUTOTEL_ALLOWED_ORIGINS]
       --collector-port <n>   OTLP receiver port, default 4318
                                                      [AUTOTEL_COLLECTOR_PORT]
       --persist <path>       libsql file; omit to stay in memory

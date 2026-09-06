@@ -8,10 +8,12 @@
  *   - MCP tools are `mcp__<server>__<tool>`
  *   - the rest are built-in file / shell / search / web / todo tools
  *
- * CC's native telemetry does NOT include tool *arguments*, so the specific
- * sub-agent type or skill name usually isn't present — we read them defensively
- * in case a future agent version (or another agent) adds them, and otherwise
- * fall back to the category count.
+ * A tool call does not carry its own arguments, so the sub-agent type or skill
+ * name is often absent here — they are read defensively and fall back to the
+ * category count. The named attribution instead arrives on the *requests* the
+ * sub-agent or skill goes on to make (`agent.name` / `skill.name` on
+ * `api_request`), which is what the `byAgent` / `bySkill` breakdowns are built
+ * from: that is where the cost is, too.
  */
 
 import { str } from './attrs';

@@ -97,19 +97,21 @@ Tools are registered per backend capability. Agents only see tools the backend c
 
 ## Environment Variables
 
-| Variable                        | Default                  | Purpose                                                                                 |
-| ------------------------------- | ------------------------ | --------------------------------------------------------------------------------------- |
-| `AUTOTEL_BACKEND`               | `collector`              | `collector` / `jaeger` / `tempo` / `prometheus` / `loki` / `stack` / `auto` / `fixture` |
-| `AUTOTEL_TRANSPORT`             | `stdio`                  | `stdio` / `http`                                                                        |
-| `AUTOTEL_PORT` / `AUTOTEL_HOST` | `3000` / `127.0.0.1`     | HTTP bind                                                                               |
-| `AUTOTEL_COLLECTOR_PORT`        | `4318`                   | OTLP receiver port (collector backend)                                                  |
-| `AUTOTEL_PERSIST`               | —                        | libsql file path (persistent collector storage)                                         |
-| `AUTOTEL_RETENTION_MS`          | `3600000` / `86400000`   | Data retention (in-memory / persistent)                                                 |
-| `JAEGER_BASE_URL`               | `http://localhost:16686` | Jaeger backend                                                                          |
-| `TEMPO_BASE_URL`                | `http://localhost:3200`  | Tempo backend                                                                           |
-| `PROMETHEUS_BASE_URL`           | `http://localhost:9090`  | Prometheus backend                                                                      |
-| `LOKI_BASE_URL`                 | `http://localhost:3100`  | Loki backend                                                                            |
-| `AUTOTEL_LLM_PRICES_JSON`       | —                        | Path to custom model pricing JSON                                                       |
+| Variable                        | Default                  | Purpose                                                                                     |
+| ------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------- |
+| `AUTOTEL_BACKEND`               | `collector`              | `collector` / `jaeger` / `tempo` / `prometheus` / `loki` / `stack` / `auto` / `fixture`     |
+| `AUTOTEL_TRANSPORT`             | `stdio`                  | `stdio` / `http`                                                                            |
+| `AUTOTEL_PORT` / `AUTOTEL_HOST` | `3000` / `127.0.0.1`     | HTTP bind                                                                                   |
+| `AUTOTEL_ALLOWED_HOSTS`         | localhost only           | Hostnames the HTTP endpoint answers for (no scheme or port; replaces the localhost default) |
+| `AUTOTEL_ALLOWED_ORIGINS`       | localhost only           | Hostnames of browser origins allowed to call it (`app.example.com`)                         |
+| `AUTOTEL_COLLECTOR_PORT`        | `4318`                   | OTLP receiver port (collector backend)                                                      |
+| `AUTOTEL_PERSIST`               | —                        | libsql file path (persistent collector storage)                                             |
+| `AUTOTEL_RETENTION_MS`          | `3600000` / `86400000`   | Data retention (in-memory / persistent)                                                     |
+| `JAEGER_BASE_URL`               | `http://localhost:16686` | Jaeger backend                                                                              |
+| `TEMPO_BASE_URL`                | `http://localhost:3200`  | Tempo backend                                                                               |
+| `PROMETHEUS_BASE_URL`           | `http://localhost:9090`  | Prometheus backend                                                                          |
+| `LOKI_BASE_URL`                 | `http://localhost:3100`  | Loki backend                                                                                |
+| `AUTOTEL_LLM_PRICES_JSON`       | —                        | Path to custom model pricing JSON                                                           |
 
 ## LLM Cost Attribution
 

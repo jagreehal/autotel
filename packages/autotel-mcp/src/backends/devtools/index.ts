@@ -197,8 +197,8 @@ export class DevtoolsBackend implements TelemetryBackend {
         if (cursor) body.cursor = cursor;
         if (
           pushDownWindow &&
-          typeof query.startTimeUnixMs === 'number' &&
-          typeof query.endTimeUnixMs === 'number'
+          query.startTimeUnixMs !== undefined &&
+          query.endTimeUnixMs !== undefined
         ) {
           body.window = {
             start: query.startTimeUnixMs,
@@ -438,8 +438,8 @@ export class DevtoolsBackend implements TelemetryBackend {
   ): Promise<MetricSeries[]> {
     const body: Record<string, unknown> = { name };
     if (
-      typeof query?.startTimeUnixMs === 'number' &&
-      typeof query?.endTimeUnixMs === 'number'
+      query?.startTimeUnixMs !== undefined &&
+      query?.endTimeUnixMs !== undefined
     ) {
       body.window = { start: query.startTimeUnixMs, end: query.endTimeUnixMs };
     }

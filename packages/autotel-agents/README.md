@@ -8,7 +8,9 @@ It turns a stream of decoded OTLP records into a session-centric model you can r
 
 ## Why this exists
 
-Coding agents don't emit traces. They emit **metrics** (`*.token.usage`, `*.cost.usage`, `*.lines_of_code.count`, …) and **log events** (`api_request`, `tool_result`, `tool_decision`, `user_prompt`, `api_error`). opencode deliberately mirrors Claude Code's contract under an `opencode.` prefix, so one adapter shape covers many agents.
+Coding agents report their work as **metrics** (`*.token.usage`, `*.cost.usage`, `*.lines_of_code.count`, …) and **log events** (`api_request`, `tool_result`, `tool_decision`, `user_prompt`, `api_error`, `api_refusal`). This package models those two. Claude Code also emits **spans** behind `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` — `claude_code.interaction` → `llm_request` / `tool`, with a sub-agent tree hanging off `parent_agent_id`. `autotel-devtools` requests and renders those in its Traces tab; the session model here is not built from them, because the same cost and tokens arrive on the events and counting both would double every bill.
+
+opencode deliberately mirrors Claude Code's contract under an `opencode.` prefix, so one adapter shape covers many agents.
 
 ## Model
 
