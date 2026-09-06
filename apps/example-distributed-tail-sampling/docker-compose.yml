@@ -1,0 +1,14 @@
+services:
+  otelcol:
+    image: otel/opentelemetry-collector-contrib:0.157.0
+    container_name: tail-sampling-otelcol
+    command: ['--config=/etc/otelcol/config.yaml']
+    # The image runs as uid 10001, which cannot write to a bind mount the
+    # daemon created as root. Root is fine for a local demo that only writes
+    # ./out; a real deployment ships the traces to a backend instead.
+    user: '0:0'
+    volumes:
+      - ./otelcol.yaml:/etc/otelcol/config.yaml:ro
+      - ./out:/out
+    ports:
+      - '4318:4318'

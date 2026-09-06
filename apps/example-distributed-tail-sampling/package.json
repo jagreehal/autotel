@@ -1,0 +1,19 @@
+{
+  "name": "example-distributed-tail-sampling",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Why tail sampling has to live in the collector once more than one service is involved",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "start:in-process": "IN_PROCESS_SAMPLING=1 tsx src/index.ts"
+  },
+  "dependencies": {
+    "autotel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.1",
+    "typescript": "^6.0.3"
+  }
+}

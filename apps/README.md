@@ -248,6 +248,31 @@ docker compose logs otelcol | tail -20
 
 **See:** [example-collector-pipeline/README.md](./example-collector-pipeline/README.md) for the annotated config.
 
+### Distributed Tail Sampling Example
+
+Three services and one failure, sampled twice: once in each process, once in the
+collector. Shows why the decision has to move once more than one service is
+involved:
+
+```bash
+cd apps/example-distributed-tail-sampling
+docker compose up -d   # collector on :4318
+pnpm install
+pnpm start             # the collector decides  -> whole traces stored
+pnpm start:in-process  # each service decides   -> orphan spans stored
+```
+
+**What it does:**
+
+- Fails in `inventory-service` and swallows it in `checkout-service`, so the two
+  upstream services look healthy from inside their own processes
+- Prints the spans the collector actually stored, grouped by trace
+- Shows the in-process run storing the error with the trace cut off it
+- Shows `tail_sampling` keeping the whole trace on the same traffic
+- Covers where the buffering cost lands, and when in-process sampling is enough
+
+**See:** [example-distributed-tail-sampling/README.md](./example-distributed-tail-sampling/README.md) for the walkthrough.
+
 ### GenAI Metrics Example
 
 Derives the canonical GenAI metrics from `gen_ai.*` spans, so cost and latency

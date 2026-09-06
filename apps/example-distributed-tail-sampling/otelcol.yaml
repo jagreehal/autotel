@@ -1,0 +1,54 @@
+# The collector is the only place that ever sees a whole trace.
+#
+# Every service exports its spans here. `tail_sampling` groups them by trace ID,
+# waits for the trace to finish, then applies one decision to all of them: if any
+# span in the trace failed, keep the trace; otherwise drop it.
+#
+# An SDK-side tail sampler cannot do this. It sees the spans one process
+# produced and nothing else, so "did anything in this trace fail?" is a question
+# it has no way to answer.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  tail_sampling:
+    # How long to hold a trace's spans before deciding. Anything arriving after
+    # this is judged on its own, so it needs to exceed the slowest trace you
+    # care about plus the SDKs' batch delay.
+    decision_wait: 5s
+    num_traces: 1000
+    policies:
+      # Evaluated against every span in the trace, and the verdict applies to
+      # every span in the trace. This one line is the whole point of the
+      # example: a failure in inventory-service saves api-gateway's span too.
+      - name: keep-traces-containing-an-error
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+
+  batch:
+    timeout: 1s
+
+exporters:
+  # Stands in for a real backend. src/index.ts reads this back and prints what
+  # survived, grouped by trace.
+  file:
+    path: /out/traces.json
+
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [tail_sampling, batch]
+      exporters: [file, debug]
+
+  telemetry:
+    logs:
+      level: info
