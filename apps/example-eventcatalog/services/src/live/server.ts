@@ -5,6 +5,10 @@
 //   GET /snapshot.json     → current ArchitectureSnapshot
 //   GET /drift.json        → current drift report (computed against the static catalog)
 //   GET /events            → SSE: streams live events as they fire
+//   GET /map               → the catalog topology, live: a marker crosses an
+//                            edge when that event actually fires. Rebuilt per
+//                            request from the running snapshot, so an event
+//                            first seen a minute ago has an edge to move along.
 //
 // No Express, no socket.io — just Node's http module + SSE.
 
@@ -18,8 +22,10 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import type { ArchitectureSnapshotSubscriber } from 'autotel-subscribers/architecture-snapshot';
 import {
+  buildLiveMap,
   diffCatalogAgainstSnapshot,
   readCatalogState,
+  renderLiveMapHtml,
   renderMarkdown,
   type DriftReport,
 } from 'autotel-eventcatalog';
@@ -79,6 +85,8 @@ export async function startLiveServer(
           return sendJson(res, await readCatalogEvents());
         case '/events':
           return handleSse(req, res, stream);
+        case '/map':
+          return sendHtml(res, await renderLiveMap(snapshot));
         case '/demo/trigger-drift':
           return handleControl(req, res, controls?.triggerDrift);
         case '/demo/clear-drift':
@@ -98,6 +106,29 @@ export async function startLiveServer(
   return async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   };
+}
+
+/**
+ * Build the live map against the snapshot as it stands right now.
+ *
+ * Rebuilt per request rather than once at boot: the demo's drift trigger makes
+ * a new event appear mid-run, and a map built at startup would have no edge for
+ * it — the marker would have nowhere to travel and the page would look broken
+ * at exactly the moment it has something to say.
+ */
+async function renderLiveMap(
+  snapshot: ArchitectureSnapshotSubscriber,
+): Promise<string> {
+  const catalog = await readCatalogState(CATALOG_PATH);
+  const map = buildLiveMap(snapshot.toSnapshot(), catalog);
+  return renderLiveMapHtml(map, {
+    mode: 'live',
+    liveUrl: '/events',
+    // The SSE frames here are named `track`; a `message` listener would never
+    // fire and the page would claim to be live while sitting still.
+    liveEventName: 'track',
+    title: 'E-Commerce — catalog, live',
+  });
 }
 
 async function computeDrift(

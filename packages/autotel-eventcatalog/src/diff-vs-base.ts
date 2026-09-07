@@ -155,8 +155,8 @@ function diffStringList(base: string[], head: string[]) {
   const baseSet = new Set(base);
   const headSet = new Set(head);
   return {
-    added: head.filter((s) => !baseSet.has(s)).sort(),
-    removed: base.filter((s) => !headSet.has(s)).sort(),
+    added: head.filter((s) => !baseSet.has(s)).toSorted(),
+    removed: base.filter((s) => !headSet.has(s)).toSorted(),
   };
 }
 

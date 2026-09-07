@@ -15,7 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { REPORT_SPEC, renderJson, type JsonReportEnvelope } from './report';
@@ -26,8 +26,8 @@ import { countDriftReport } from './diff';
 import type { DriftReport } from './diff';
 import type { DriftDelta } from './diff-vs-base';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const SCHEMAS = join(HERE, '..', 'schemas');
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const SCHEMAS = path.join(HERE, '..', 'schemas');
 
 type JsonSchema = {
   required?: string[];
@@ -152,8 +152,8 @@ function validate(
   }
 
   if (schema.items && Array.isArray(data)) {
-    for (let i = 0; i < data.length; i++) {
-      errors.push(...validate(data[i], schema.items, defs, `${path}[${i}]`));
+    for (const [i, item] of data.entries()) {
+      errors.push(...validate(item, schema.items, defs, `${path}[${i}]`));
     }
   }
 
@@ -161,7 +161,7 @@ function validate(
 }
 
 function loadSchema(name: string): JsonSchema {
-  return JSON.parse(readFileSync(join(SCHEMAS, name), 'utf8'));
+  return JSON.parse(readFileSync(path.join(SCHEMAS, name), 'utf8'));
 }
 
 // ─── Fixtures ──────────────────────────────────────────────
@@ -245,7 +245,7 @@ describe('drift report JSON envelope (autotel-eventcatalog-report/v0.2.0)', () =
     // message: "You changed the published contract."
     const json = renderJson({ mode: 'all', report: driftyReport });
     const golden = readFileSync(
-      join(HERE, '__fixtures__', 'drift-report-all.golden.json'),
+      path.join(HERE, '__fixtures__', 'drift-report-all.golden.json'),
       'utf8',
     );
     // Goldens are written with a trailing newline (POSIX convention); the
@@ -309,7 +309,7 @@ describe('drift summary JSON (autotel-eventcatalog-drift-summary/v0.2.0)', () =>
     const summary = buildSummary('all', emptyReport);
     const json = JSON.stringify(summary, null, 2);
     const golden = readFileSync(
-      join(HERE, '__fixtures__', 'drift-summary-clean.golden.json'),
+      path.join(HERE, '__fixtures__', 'drift-summary-clean.golden.json'),
       'utf8',
     );
     expect(json).toBe(golden.trimEnd());
@@ -319,7 +319,7 @@ describe('drift summary JSON (autotel-eventcatalog-drift-summary/v0.2.0)', () =>
     const summary = buildSummary('all', driftyReport);
     const json = JSON.stringify(summary, null, 2);
     const golden = readFileSync(
-      join(HERE, '__fixtures__', 'drift-summary-drifty.golden.json'),
+      path.join(HERE, '__fixtures__', 'drift-summary-drifty.golden.json'),
       'utf8',
     );
     expect(json).toBe(golden.trimEnd());
@@ -361,7 +361,7 @@ describe('stamp summary JSON (autotel-eventcatalog-stamp-summary/v0.1.0)', () =>
     const summary = buildStampSummary({ updates: [], skips: [] }, false);
     const json = JSON.stringify(summary, null, 2);
     const golden = readFileSync(
-      join(HERE, '__fixtures__', 'stamp-summary-noop.golden.json'),
+      path.join(HERE, '__fixtures__', 'stamp-summary-noop.golden.json'),
       'utf8',
     );
     expect(json).toBe(golden.trimEnd());

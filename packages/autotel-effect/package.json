@@ -58,6 +58,8 @@
   },
   "devDependencies": {
     "@effect/opentelemetry": "4.0.0-rc.112",
+    "@opentelemetry/api-logs": "^0.222.0",
+    "@opentelemetry/sdk-logs": "^0.222.0",
     "@types/node": "^26.1.2",
     "autotel": "workspace:*",
     "effect": "4.0.0-rc.112",
@@ -65,5 +67,8 @@
     "tsdown": "^0.22.14",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@opentelemetry/api-logs": "^0.222.0"
   }
 }

@@ -13,13 +13,14 @@ the code actually does at runtime.
 > on what channel. This package reads that snapshot and compares it to
 > your catalog.
 
-Three tools:
+Four tools:
 
 | Command        | Mode      | What it does                                                                                                                                                                              |
 | -------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`drift`**    | read-only | Diffs the catalog against a snapshot. Reports findings as Markdown, JSON, or plain text. The PR check that catches "you added an event but forgot to document it."                        |
 | **`generate`** | write     | Scaffolds EventCatalog resources from a snapshot: services, events, channels, inferred JSON Schemas, and producer↔event↔channel relationships.                                            |
 | **`stamp`**    | write     | Writes a runtime evidence block (counts, last-seen, field paths) into each event's `index.mdx` between idempotent markers. Keeps the static catalog page reflecting production behaviour. |
+| **`map`**      | write     | Renders the catalog topology as one self-contained HTML file where every arrow says whether the runtime actually crossed it. Static, replay, or live.                                     |
 
 Both share inputs: an autotel snapshot JSON file and an EventCatalog
 directory. Both ship a versioned JSON summary you can gate CI on. The
@@ -34,7 +35,9 @@ To keep the scope tight:
   [`autotel-subscribers`'s `ArchitectureSnapshotSubscriber`](../autotel-subscribers).
   This package only consumes them.
 - **Does not run any web server or dashboard.** Live dashboards live in
-  example apps. This package is a CLI plus library plus action.
+  example apps. This package is a CLI plus library plus action. `map --mode live`
+  emits a page that _connects to_ an SSE endpoint you already serve; it does not
+  serve one.
 - **Does not infer drift contracts from payload samples during `drift`.**
   Field-path drift is set-difference on dotted paths. Type/value drift is
   checked only against declared schema constraints. (`generate` can scaffold
@@ -43,6 +46,106 @@ To keep the scope tight:
 - **Does not modify catalog files outside the stamp markers.** Everything
   the `stamp` command writes is between `<!-- autotel:stamp-start -->`
   and `<!-- autotel:stamp-end -->`. Outside those markers is yours.
+
+## `map`: the diagram that knows what ran
+
+A catalog diagram draws every arrow the same way. A relationship four teams
+believe in and one that has not carried a message since March look identical,
+and no amount of reading the picture tells you which is which.
+
+`map` renders the same topology with the snapshot joined in:
+
+```bash
+autotel-eventcatalog map \
+  --snapshot ./services/test/snapshot.json \
+  --catalog ./catalog \
+  --output ./catalog-map.html
+```
+
+```
+13 observed, 2 declared-but-never-seen, 2 undocumented, 5 asserted (mode: static)
+```
+
+One self-contained HTML file — no build step, no CDN, no dependencies — where:
+
+- **observed** — a real `track()` call crossed this edge. Stroke weight scales
+  with volume.
+- **declared, never seen** — the catalog says this happens; this run never saw
+  it. Drawn dashed and grey, and it never moves in any mode. **The stillness is
+  the finding.**
+- **ran, not in the catalog** — it happened and nobody wrote it down.
+- **consumer asserted** — see below.
+
+### Three modes, because motion is a claim
+
+| `--mode` | What moves                                                           | Use for                           |
+| -------- | -------------------------------------------------------------------- | --------------------------------- |
+| `static` | Nothing. Weight and dash carry the message.                          | Commit it; read it in a PR        |
+| `replay` | Markers cross observed edges at a rate drawn from the snapshot count | A file that shows relative volume |
+| `live`   | A marker crosses an edge when that event actually fires              | A wall screen, a demo             |
+
+```bash
+autotel-eventcatalog map --snapshot snap.json --catalog ./catalog \
+  --output map.html --mode live --live-url /events --live-event track
+```
+
+Live mode subscribes to an SSE endpoint you serve and keys each frame's `name`
+against the edges it belongs to. `--live-event` names the SSE event to listen
+for; the default is `message`, so a server that writes `event: track` needs it
+set or the page sits silently claiming to be live.
+
+### Telling a rename from two problems
+
+`normaliseEventId` absorbs case and `._-`, so `payment.succeeded` does not match
+a catalog `PaymentCaptured`. The drift report then shows two findings — one
+event observed but undocumented, one documented but never observed — that are
+really one event under two names. Reporting a rename as two unrelated problems
+is the fastest way for a team to stop believing the tool.
+
+`map` and `drift` both pair them up and say so:
+
+```
+## Possible renames
+
+- `recommendation.created` is probably `RecommendationGenerated` renamed
+  (83% similar) — rename one side, or document it as a new event.
+```
+
+Both findings stay listed. A suggestion is a question for a human, not a fact
+about the system: on the day a rename is _not_ what happened, one of those two
+findings is a real removal, and collapsing them would hide it.
+
+### Testing the live page
+
+`pnpm test` covers the model and the generated artifact. The page's own
+behaviour is covered separately, in Chromium:
+
+```bash
+pnpm test:browser
+```
+
+Those tests install a controllable `EventSource` before the page script runs,
+deliver exact frames, and read the resulting DOM — what a frame credits, what an
+unknown producer does to the counters, whether a never-seen edge stays still.
+Asserting on the emitted JavaScript instead would only prove the lines were
+typed, which is what let every live defect through.
+
+### The honesty rule
+
+Two things are kept apart on purpose:
+
+- **liveness** — catalog vs snapshot presence.
+- **evidence** — whether the runtime _could_ have seen it. A producer writes the
+  event, so `produces` and `publishes-to` edges carry `observed` evidence. **A
+  consumer edge is always `asserted`**, however busy the event is: a producer's
+  telemetry proves an event fired and can never prove anyone received it.
+  Asserted edges move with a _hollow_ marker.
+
+Collapsing those into one axis is how a diagram ends up implying it watched
+something it only read. `map` will not do that, and a unit test holds the line.
+
+Consumption becomes observable once consumers are instrumented too; until then
+the picture says which half it knows.
 
 ## Install
 

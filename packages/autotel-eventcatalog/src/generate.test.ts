@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import path from 'node:path';
 import utils from '@eventcatalog/sdk';
 import {
   buildGenerateSummary,
@@ -59,7 +59,7 @@ describe('inferJsonSchemaFromObservation', () => {
 describe('generateCatalogFromSnapshot', () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'autotel-generate-'));
+    dir = await mkdtemp(path.join(tmpdir(), 'autotel-generate-'));
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });

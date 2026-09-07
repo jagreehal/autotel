@@ -9,3 +9,5 @@ catalog/node_modules
 *.log
 .DS_Store
 ___/
+catalog-map.html
+catalog-map-drift.html

@@ -19,13 +19,13 @@ import {
   writeFileSync,
   mkdirSync,
 } from 'node:fs';
-import { join, dirname } from 'node:path';
+import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { ARCHITECTURE_SNAPSHOT_SPEC } from 'autotel-subscribers/architecture-snapshot';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const CLI = join(HERE, '..', 'dist', 'cli.js');
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const CLI = path.join(HERE, '..', 'dist', 'cli.js');
 
 type CliResult = {
   exitCode: number;
@@ -56,8 +56,8 @@ function buildFixture(opts: {
   /** Catalog events to write as <root>/events/<id>/index.mdx files. */
   catalogEvents: Array<{ id: string; declaredFields?: string[] }>;
 }) {
-  const root = mkdtempSync(join(tmpdir(), 'autotel-cli-e2e-'));
-  const catalogPath = join(root, 'catalog');
+  const root = mkdtempSync(path.join(tmpdir(), 'autotel-cli-e2e-'));
+  const catalogPath = path.join(root, 'catalog');
   mkdirSync(catalogPath, { recursive: true });
 
   const snapshot = {
@@ -81,16 +81,16 @@ function buildFixture(opts: {
       ]),
     ),
   };
-  const snapshotPath = join(root, 'snapshot.json');
+  const snapshotPath = path.join(root, 'snapshot.json');
   writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
 
   for (const ev of opts.catalogEvents) {
-    const dir = join(catalogPath, 'events', ev.id);
+    const dir = path.join(catalogPath, 'events', ev.id);
     mkdirSync(dir, { recursive: true });
     const frontmatter = ev.declaredFields
       ? `---\nid: ${ev.id}\nversion: 1.0.0\nschemaPath: schema.json\n---\n`
       : `---\nid: ${ev.id}\nversion: 1.0.0\n---\n`;
-    writeFileSync(join(dir, 'index.mdx'), frontmatter + '\n## Overview\n');
+    writeFileSync(path.join(dir, 'index.mdx'), frontmatter + '\n## Overview\n');
     if (ev.declaredFields) {
       const schema = {
         type: 'object',
@@ -98,7 +98,10 @@ function buildFixture(opts: {
           ev.declaredFields.map((f) => [f, { type: 'string' }]),
         ),
       };
-      writeFileSync(join(dir, 'schema.json'), JSON.stringify(schema, null, 2));
+      writeFileSync(
+        path.join(dir, 'schema.json'),
+        JSON.stringify(schema, null, 2),
+      );
     }
   }
 
@@ -248,7 +251,7 @@ describe('cli e2e; stamp', () => {
       events: { 'order.placed': { fields: ['orderId'] } },
       catalogEvents: [{ id: 'OrderPlaced' }],
     });
-    const summaryPath = join(root, 'stamp-summary.json');
+    const summaryPath = path.join(root, 'stamp-summary.json');
 
     const res = runCli([
       'stamp',
@@ -304,7 +307,7 @@ describe('cli e2e; stamp', () => {
     runCli(['stamp', '--snapshot', snapshotPath, '--catalog', catalogPath]);
 
     // Second stamp with identical input is a no-op.
-    const summaryPath = join(root, 'stamp-summary-2.json');
+    const summaryPath = path.join(root, 'stamp-summary-2.json');
     const res = runCli([
       'stamp',
       '--snapshot',
@@ -395,7 +398,7 @@ describe('cli e2e; top-level', () => {
 
 describe('cli e2e; --register-renderer', () => {
   function writeRendererModule(dir: string, body: string): string {
-    const file = join(dir, 'custom-renderer.mjs');
+    const file = path.join(dir, 'custom-renderer.mjs');
     writeFileSync(file, body, 'utf8');
     return file;
   }
@@ -468,7 +471,7 @@ describe('cli e2e; --register-renderer', () => {
     });
     const res = runCli([
       '--register-renderer',
-      join(root, 'nope.mjs'),
+      path.join(root, 'nope.mjs'),
       'drift',
       '--snapshot',
       snapshotPath,

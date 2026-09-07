@@ -240,18 +240,18 @@ export function diffCatalogAgainstSnapshot(
     snapshotGeneratedAt: snapshot.generatedAt,
     snapshotService: snapshot.service,
     events: {
-      observedButUndocumented: observedButUndocumented.sort(),
-      documentedButUnseen: documentedButUnseen.sort(),
-      fieldDrift: fieldDrift.sort((a, b) => a.event.localeCompare(b.event)),
-      typeDrift: typeDrift.sort((a, b) =>
+      observedButUndocumented: observedButUndocumented.toSorted(),
+      documentedButUnseen: documentedButUnseen.toSorted(),
+      fieldDrift: fieldDrift.toSorted((a, b) => a.event.localeCompare(b.event)),
+      typeDrift: typeDrift.toSorted((a, b) =>
         `${a.event}.${a.path}`.localeCompare(`${b.event}.${b.path}`),
       ),
-      valueDrift: valueDrift.sort((a, b) =>
+      valueDrift: valueDrift.toSorted((a, b) =>
         `${a.event}.${a.path}`.localeCompare(`${b.event}.${b.path}`),
       ),
     },
-    services: { observedButUndocumented: undocumentedServices.sort() },
-    channels: { observedButUndocumented: undocumentedChannels.sort() },
+    services: { observedButUndocumented: undocumentedServices.toSorted() },
+    channels: { observedButUndocumented: undocumentedChannels.toSorted() },
   };
 }
 
@@ -268,7 +268,13 @@ function expandDeclaredTypes(declared: string[]): Set<string> {
   return accepts;
 }
 
-function normaliseEventId(id: string): string {
+/**
+ * Catalog event IDs are PascalCase ("OrderPlaced"); `track()` names are dotted
+ * ("order.placed"). Exported because the live map has to decide "observed" the
+ * same way the drift report decides "seen" — two copies of this rule would
+ * drift, and the map would animate an edge the drift report calls unseen.
+ */
+export function normaliseEventId(id: string): string {
   // "order.placed" -> "orderplaced", "OrderPlaced" -> "orderplaced".
   return id.toLowerCase().replaceAll(/[._\-\s]/g, '');
 }

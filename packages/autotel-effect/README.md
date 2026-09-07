@@ -75,7 +75,36 @@ appLayer.pipe(Layer.provideMerge(layer({ serviceName: 'my-api' })));
 
 HTTP spans from autotel's `node:http` instrumentation become parents of domain spans from `Effect.withSpan`.
 
-### 3. Unit tests: provide nothing
+### 3. Logs come with it
+
+One `layer()` call bridges both signals. `Effect.log*` becomes an OpenTelemetry
+**log record** (so it reaches any OTLP log backend, including autotel-devtools)
+plus a trace-correlated structured line on stdout — no second layer to remember:
+
+```typescript
+const AutotelEffect = layer({ serviceName: 'my-api' }); // spans + logs
+```
+
+Pass `logs: false` for spans only, or an options object to configure the
+logger. Log annotations become log metadata, and failure causes are logged as
+`err`:
+
+```typescript
+Effect.log('charged').pipe(Effect.annotateLogs({ 'order.id': 'o-1' }));
+// {"level":"info","msg":"charged","order.id":"o-1","traceId":"...","spanId":"..."}
+```
+
+Errors keep their stack: a `Cause` passed to `Effect.logError` (or an `Error`
+in the message parts) is logged as `err` rather than stringified into `msg`.
+
+Options: `mergeWithExisting: true` keeps Effect's console logger alongside this
+one; `level` sets the stdout minimum level (default `'info'` — leave it there
+and `Effect.logDebug` never reaches stdout even when Effect's own minimum level
+allows it); `pretty: true` swaps JSON for human-readable stdout; `console: false`
+drops the stdout line and emits only the log record — use it when
+`captureConsole()` is on, or every Effect log is reported twice.
+
+### 4. Unit tests: provide nothing
 
 Effect's default `Tracer` is already an in-memory native tracer, so handler tests
 need no layer at all — `Effect.withSpan` runs and exports nowhere:

@@ -23,6 +23,41 @@ flowchart LR
 
 ---
 
+## See the catalog know what ran
+
+The catalog draws every arrow the same way. `map` draws them by what the runtime
+actually did:
+
+```bash
+pnpm catalog:map          # static — commit it, read it in a PR
+pnpm catalog:map:replay   # markers move at a rate drawn from observed counts
+pnpm catalog:map:drift    # a run where the picture has something to say
+```
+
+`catalog:map:drift` uses `services/test/snapshot-drifted.json` — the same system
+one release later, where the recommendations path went quiet and a cancellation
+path appeared that nobody documented:
+
+```
+13 observed, 2 declared-but-never-seen, 2 undocumented, 5 asserted
+```
+
+Recommendations Service reads **0 seen** with a dashed grey edge that never
+moves, and `order.cancelled` arrives in orange. Neither is visible in the
+catalog alone.
+
+For the live version, start the demo and open **<http://localhost:4000/map>**:
+
+```bash
+REPLAY_PATH=services/test/demo.jsonl pnpm services:live
+```
+
+A marker crosses an edge the moment that event fires. Consumer edges move with a
+_hollow_ marker, because the producer's telemetry proves the event fired and
+cannot prove anyone received it.
+
+---
+
 ## The problem this solves
 
 EventCatalog goes stale. An engineer adds an event in code and forgets to update

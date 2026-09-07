@@ -5,6 +5,7 @@ import type { DriftReport } from '../diff';
 import { hasDrift } from '../diff';
 import type { DriftDelta, DriftEntries } from '../diff-vs-base';
 import type { Renderer } from './types';
+import { describeSuggestion, suggestRenames } from '../suggest';
 
 export function renderMarkdown(report: DriftReport): string {
   const lines: string[] = [
@@ -45,6 +46,30 @@ export function renderMarkdown(report: DriftReport): string {
       lines.push(`- \`${name}\``);
     }
     lines.push('');
+  }
+
+  // Placed straight after the two lists it reconciles: a reader who has just
+  // seen the same event twice under different names gets the explanation
+  // before they open a ticket for each half.
+  const suggestions = suggestRenames(report);
+  if (suggestions.length > 0) {
+    lines.push(
+      '## Possible renames',
+      '',
+      'Each pairing appears above as two findings — one event observed but',
+      'undocumented, one documented but never observed. They may be the same',
+      'event under two names.',
+      '',
+    );
+    for (const suggestion of suggestions) {
+      lines.push(`- ${describeSuggestion(suggestion)}`);
+    }
+    lines.push(
+      '',
+      'Both findings are still listed above, because on the day a rename is',
+      'not what happened, one of them is a real removal.',
+      '',
+    );
   }
 
   if (report.events.fieldDrift.length > 0) {

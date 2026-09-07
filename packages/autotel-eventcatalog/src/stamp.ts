@@ -110,21 +110,22 @@ export function buildStampBlock(obs: EventObservation): string {
     '<strong>Observed in autotel snapshot</strong>',
     '',
   ];
-  const facts: string[] = [];
-  facts.push(`**Volume**: ${obs.observedCount.toLocaleString()} events`);
-  facts.push(`**Last seen**: ${formatTimestamp(obs.lastSeen)}`);
-  if (obs.producer) facts.push(`**Producer**: ${obs.producer}`);
-  if (obs.channel) facts.push(`**Channel**: \`${obs.channel}\``);
+  const facts: string[] = [
+    `**Volume**: ${obs.observedCount.toLocaleString()} events`,
+    `**Last seen**: ${formatTimestamp(obs.lastSeen)}`,
+    ...(obs.producer ? [`**Producer**: ${obs.producer}`] : []),
+    ...(obs.channel ? [`**Channel**: \`${obs.channel}\``] : []),
+  ];
   lines.push(facts.join(' · '));
   if (obs.fieldPaths.length > 0) {
-    lines.push('');
     lines.push(
+      '',
       `**Field paths observed**: ${obs.fieldPaths.map((p) => `\`${p}\``).join(', ')}`,
     );
   }
   if (obs.sampleTraceIds.length > 0) {
-    lines.push('');
     lines.push(
+      '',
       `**Sample traces**: ${obs.sampleTraceIds.map((t) => `\`${t}\``).join(', ')}`,
     );
   }

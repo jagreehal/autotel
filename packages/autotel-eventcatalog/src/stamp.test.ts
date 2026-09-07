@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import path from 'node:path';
 import {
   stampCatalog,
   buildStampBlock,
@@ -65,7 +65,7 @@ describe('buildStampBlock', () => {
 describe('stampCatalog', () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'autotel-stamp-'));
+    dir = await mkdtemp(path.join(tmpdir(), 'autotel-stamp-'));
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -75,7 +75,7 @@ describe('stampCatalog', () => {
     catalogId: string,
     body: string,
   ): Promise<string> {
-    const evDir = join(
+    const evDir = path.join(
       dir,
       'domains',
       'X',
@@ -85,7 +85,7 @@ describe('stampCatalog', () => {
       catalogId,
     );
     await mkdir(evDir, { recursive: true });
-    const file = join(evDir, 'index.mdx');
+    const file = path.join(evDir, 'index.mdx');
     const frontmatter = `---\nid: ${catalogId}\nversion: 1.0.0\n---\n\n`;
     await writeFile(file, frontmatter + body, 'utf8');
     return file;
