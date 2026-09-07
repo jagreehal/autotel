@@ -95,6 +95,24 @@ export const loadUser = withTracing({ name: 'user.load' })(
 - **Coverage**: entry points that have emitted nothing
 - **WebMCP**: browser tool surface from `autotel-webmcp` spans, which tools the agent can currently see, what the browser dropped, what results cost in bytes. Full-page viewer only, it does not fit the embedded widget's gzip budget
 
+## WebMCP tools (the viewer as an agent-callable API)
+
+The full-page viewer registers its own read-only WebMCP tools, so an agent driving the browser reads the same telemetry the panel shows — no CLI, no API key, no screenshots.
+
+| Tool                       | Input                | Answers                                                           |
+| -------------------------- | -------------------- | ----------------------------------------------------------------- |
+| `autotel_query_traces`     | `query`, `limit`     | Search traces — one row each: name, service, status, duration     |
+| `autotel_get_trace`        | `traceId` (required) | Every span of one trace                                           |
+| `autotel_list_errors`      | `query`              | What is failing, grouped by fingerprint                           |
+| `autotel_query_logs`       | `query`, `limit`     | Search log records, with the trace id when there is one           |
+| `autotel_webmcp_inventory` | —                    | The page's own WebMCP tool surface, including dropped annotations |
+
+`query` is the same query language as the UI's query bar. Results are projected to the columns the list views show and capped per call; `autotel_get_trace` is how an agent asks for spans.
+
+Registered against `document.modelContext` directly — no library, no runtime dependency. Registration is a no-op in a browser without WebMCP, so no feature detection is needed.
+
+**Full-page only, both at runtime and in the bundle.** The embedded widget is a guest in someone else's page, where `document.modelContext` belongs to that page — devtools tools there would change what its agent sees and land in its own WebMCP tab. `vite.widget.config.ts` also swaps `src/widget/webmcp.ts` for `webmcp.lean.ts` in the embedded build, so its bundle carries none of the tool definitions.
+
 ## Environment Variables
 
 | Variable                   | Default     | Purpose                       |
@@ -131,4 +149,5 @@ npx autotel-devtools --port 4319 --host 0.0.0.0 --title "My App"
 - Do NOT use the widget in Node: it's a browser-only IIFE bundle. Use `createDevtools()` server-side instead.
 - Do NOT set a production OTLP endpoint at `localhost:4318`: devtools is in-memory only (no persistence, caps at 100 items per signal by default). Bump `AUTOTEL_MAX_*_COUNT` for longer local sessions.
 - Do NOT embed the widget into pages served via strict CSP without allowing `http://localhost:4318`: the WebSocket connection and script load both need the devtools origin allowed.
+- Do NOT expect the WebMCP tools in the embedded widget: they are full-page only, by design and by build. Open the viewer at `http://localhost:4318`.
 - Do NOT confuse the two builds: the **server** uses tsup (Node ESM + CJS), the **widget** uses Vite's IIFE build. Don't import `autotel-devtools/server` into widget code; it pulls in Node APIs.

@@ -116,7 +116,8 @@
     "vite": "^8.1.5",
     "vitest": "^4.1.10",
     "vitest-browser-svelte": "^3.0.0",
-    "vitest-mock-extended": "^5.1.0"
+    "vitest-mock-extended": "^5.1.0",
+    "webmcpable": "^0.5.0"
   },
   "peerDependencies": {
     "autotel": "workspace:*"

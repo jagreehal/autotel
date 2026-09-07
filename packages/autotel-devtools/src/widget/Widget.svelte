@@ -36,6 +36,7 @@
   import { DEFAULT_SELECTION } from './timeWindow';
   import { createWorkingSet } from './workingSet.svelte';
   import { createPortalTarget } from './components/ui/portal';
+  import { devtoolsTools } from './webmcp';
 
   interface Props {
     mode: 'widget' | 'fullpage';
@@ -183,6 +184,26 @@
       unsubscribeStatus();
       wsClient.disconnect();
     };
+  });
+
+  // Offer the stored telemetry to an agent driving this page.
+  //
+  // Full page only. The embedded widget lives in the developer's own app, where
+  // `document.modelContext` belongs to that app — devtools tools in its surface
+  // would change what its agent sees and show up in its own WebMCP tab. The
+  // standalone viewer owns its page, so there it is ours to use.
+  $effect(() => {
+    if (mode !== 'fullpage') return;
+    const baseUrl = httpBaseFromWsUrl(wsUrl);
+    if (!baseUrl) return;
+
+    const registry = devtoolsTools({
+      fetch: globalThis.fetch.bind(globalThis),
+      baseUrl,
+    });
+    // A no-op in any browser without WebMCP, so there is nothing to detect.
+    void registry.mount();
+    return () => registry.unmount();
   });
 </script>
 
