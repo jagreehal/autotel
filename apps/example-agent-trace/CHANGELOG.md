@@ -1,5 +1,12 @@
 # @jagreehal/example-agent-trace
 
+## 1.0.6
+
+### Patch Changes
+
+- Updated dependencies [3926832]
+  - autotel-subscribers@56.1.0
+
 ## 1.0.5
 
 ### Patch Changes

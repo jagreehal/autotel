@@ -1,9 +1,9 @@
 {
   "name": "@jagreehal/example-eventcatalog",
-  "version": "0.1.38",
+  "version": "0.1.39",
   "private": true,
   "type": "module",
-  "description": "Demo: an EventCatalog populated from autotel telemetry \u2014 the destination autotel-eventcatalog generates toward.",
+  "description": "Demo: an EventCatalog populated from autotel telemetry — the destination autotel-eventcatalog generates toward.",
   "scripts": {
     "catalog:build": "cd catalog && pnpm build",
     "catalog:dev": "cd catalog && pnpm dev",
@@ -11,7 +11,7 @@
     "catalog:drift:ci": "autotel-eventcatalog drift --snapshot services/test/snapshot.json --catalog catalog --output catalog-drift.md --fail-on-drift",
     "catalog:install": "cd catalog && pnpm install --ignore-workspace",
     "catalog:map": "autotel-eventcatalog map --snapshot services/test/snapshot.json --catalog catalog --output catalog-map.html",
-    "catalog:map:drift": "autotel-eventcatalog map --snapshot services/test/snapshot-drifted.json --catalog catalog --output catalog-map-drift.html --mode replay --title \"E-Commerce \u2014 a run with drift\"",
+    "catalog:map:drift": "autotel-eventcatalog map --snapshot services/test/snapshot-drifted.json --catalog catalog --output catalog-map-drift.html --mode replay --title \"E-Commerce — a run with drift\"",
     "catalog:map:replay": "autotel-eventcatalog map --snapshot services/test/snapshot.json --catalog catalog --output catalog-map.html --mode replay",
     "catalog:stamp": "autotel-eventcatalog stamp --snapshot services/test/snapshot.json --catalog catalog",
     "catalog:stamp:dry": "autotel-eventcatalog stamp --snapshot services/test/snapshot.json --catalog catalog --dry-run",
