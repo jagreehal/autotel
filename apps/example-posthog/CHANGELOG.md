@@ -1,5 +1,11 @@
 # @jagreehal/example-posthog
 
+## 0.0.11
+
+### Patch Changes
+
+- autotel-posthog@8.0.0
+
 ## 0.0.10
 
 ### Patch Changes
