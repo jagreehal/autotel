@@ -1,6 +1,6 @@
 ---
 title: Effect
-description: Bridge autotel and Effect v4 so Effect.withSpan spans export through autotel.
+description: Bridge autotel and Effect v4 so Effect.withSpan spans and Effect.log calls export through autotel.
 ---
 
 Effect v4 ships official OpenTelemetry support via `@effect/opentelemetry`. Autotel
@@ -48,6 +48,37 @@ await Effect.runPromise(
 
 HTTP spans from autotel's `node:http` instrumentation become parents of domain
 spans from `Effect.withSpan`.
+
+## Logs come with it
+
+That one `layer()` call bridges logs as well as spans. `Effect.log*` becomes an
+OpenTelemetry log record — reaching any OTLP log backend, autotel-devtools
+included — plus a trace-correlated structured line on stdout.
+
+A log written inside `Effect.withSpan` carries that span's trace and span ids,
+so logs and traces line up in the same backend. `Effect.annotateLogs` values
+become log-record attributes, and an `Error` or a `Cause` passed to
+`Effect.logError` is reported as an `err` attribute with its stack:
+
+```typescript
+Effect.log('charged').pipe(Effect.annotateLogs({ 'order.id': 'o-1' }));
+// {"level":"info","msg":"charged","order.id":"o-1","traceId":"...","spanId":"..."}
+```
+
+Pass `logs: false` for spans only, or an options object to configure the
+logger:
+
+```typescript
+layer({ serviceName: 'my-api', logs: { level: 'debug', pretty: true } });
+layer({ serviceName: 'my-api', logs: false });
+```
+
+`mergeWithExisting: true` keeps Effect's console logger alongside this one,
+`level` sets the stdout minimum level (default `'info'`, so pass `'debug'` for
+`Effect.logDebug` to reach stdout), `pretty: true` swaps JSON for
+human-readable stdout, and `console: false` emits only the log record — use it
+when `captureConsole()` is on. `loggerLayer()` is exported for the case where
+something else owns the tracer.
 
 ## Unit tests
 

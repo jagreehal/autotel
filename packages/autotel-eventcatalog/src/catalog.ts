@@ -90,7 +90,9 @@ export async function readCatalogState(
  * use `.`. We walk `properties` (objects) and `items` (arrays).
  */
 export function extractDeclaredFieldPaths(
-  schema: JsonSchemaNode | undefined,
+  // Optional rather than `| undefined`: an event with no schema at all is a
+  // normal catalog state, and callers should not have to pass a placeholder.
+  schema?: JsonSchemaNode,
   prefix = '',
 ): string[] {
   const out = new Set<string>();

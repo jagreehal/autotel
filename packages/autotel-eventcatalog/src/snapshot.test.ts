@@ -1,13 +1,13 @@
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadSnapshot } from './snapshot.js';
 
 let workDir: string;
 
 beforeEach(() => {
-  workDir = mkdtempSync(join(tmpdir(), 'autotel-ec-snapshot-'));
+  workDir = mkdtempSync(path.join(tmpdir(), 'autotel-ec-snapshot-'));
 });
 
 afterEach(() => {
@@ -15,9 +15,9 @@ afterEach(() => {
 });
 
 function writeSnapshot(name: string, body: string): string {
-  const path = join(workDir, name);
-  writeFileSync(path, body, 'utf8');
-  return path;
+  const file = path.join(workDir, name);
+  writeFileSync(file, body, 'utf8');
+  return file;
 }
 
 describe('loadSnapshot', () => {
@@ -36,13 +36,13 @@ describe('loadSnapshot', () => {
   });
 
   it('throws "Snapshot not found" for a missing file', async () => {
-    await expect(loadSnapshot(join(workDir, 'nope.json'))).rejects.toThrow(
+    await expect(loadSnapshot(path.join(workDir, 'nope.json'))).rejects.toThrow(
       /Snapshot not found/,
     );
   });
 
   it('throws when path is a directory', async () => {
-    const dir = join(workDir, 'dir-as-snapshot');
+    const dir = path.join(workDir, 'dir-as-snapshot');
     mkdirSync(dir);
     await expect(loadSnapshot(dir)).rejects.toThrow(/directory, not a file/);
   });

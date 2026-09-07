@@ -76,6 +76,13 @@ For each tracked event the snapshot includes `fieldStats`. Observed
 runtime types and sampled primitive values per dotted field path. Which
 powers type-drift and value-drift detection downstream.
 
+Each observation also carries `sources`: one entry per distinct
+`(producer, channel)` pair, with that pair's own count and first/last-seen. Read
+`sources` when attributing a count to a specific relationship, so two services
+publishing the same event name each keep their own traffic. The list is
+additive and sorted, so existing readers are unaffected and a committed
+snapshot stays byte-stable.
+
 ## Custom Subscriber
 
 ```typescript

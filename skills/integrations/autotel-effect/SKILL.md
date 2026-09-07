@@ -1,7 +1,7 @@
 ---
 name: autotel-effect
 description: >
-  Use this skill when wiring Effect v4 to autotel so `Effect.withSpan` spans export through the same OpenTelemetry pipeline as autotel's HTTP, fetch and MCP instrumentation. Covers the one-call `layer()` bridge, init ordering with `--import`, why v4 subpath imports matter, and what to provide in tests.
+  Use this skill when wiring Effect v4 to autotel so `Effect.withSpan` spans and `Effect.log*` calls export through the same OpenTelemetry pipeline as autotel's HTTP, fetch and MCP instrumentation. Covers the one-call `layer()` bridge and its `logs` option, init ordering with `--import`, why v4 subpath imports matter, and what to provide in tests.
 ---
 
 # autotel-effect
@@ -57,6 +57,26 @@ In a server, merge it where services are assembled:
 appLayer.pipe(Layer.provideMerge(layer({ serviceName: 'my-api' })));
 ```
 
+### 3. Logs come with it
+
+That one call bridges logs as well as spans. `Effect.log*` becomes an OpenTelemetry **log record** — reaching any OTLP log backend, autotel-devtools included — plus a trace-correlated structured line on stdout. A log written inside `Effect.withSpan` carries that span's trace and span ids, so logs and traces line up in the same backend.
+
+Pass `logs: false` for spans only, or an options object to configure the logger:
+
+```typescript
+layer({ serviceName: 'my-api', logs: { level: 'debug', pretty: true } });
+layer({ serviceName: 'my-api', logs: false });
+```
+
+| `logs` option       | Default  | Does                                            |
+| ------------------- | -------- | ----------------------------------------------- |
+| `mergeWithExisting` | `false`  | Keep Effect's console logger alongside this one |
+| `level`             | `'info'` | Minimum level for the stdout line               |
+| `pretty`            | `false`  | Human-readable stdout instead of JSON           |
+| `console`           | `true`   | Write the stdout line at all                    |
+
+`loggerLayer()` is exported for the case where something else owns the tracer and you only want autotel to own the logs.
+
 ## Core Patterns
 
 ### The trace is one tree, not two
@@ -81,6 +101,21 @@ await Effect.runPromise(handler(input)); // no autotel, no OTLP
 
 Provide `layer(...)` with autotel's `createMemoryExporter()` only in the tests that assert on exported spans.
 
+### Annotations and errors keep their shape
+
+`Effect.annotateLogs` values become log-record attributes. An `Error` in the message parts, or a `Cause` passed to `Effect.logError`, is reported as an `err` attribute with its stack rather than stringified into the message:
+
+```typescript
+Effect.fail(new Error('card declined')).pipe(
+  Effect.catchCause((cause) => Effect.logError('payment failed', cause)),
+);
+// body: "payment failed", err: "Error: card declined\n    at ..."
+```
+
+### Set `level` before expecting debug logs
+
+The stdout line defaults to `level: 'info'`, so `Effect.logDebug` never reaches stdout even when Effect's own minimum log level allows it. Pass `logs: { level: 'debug' }` for both to agree.
+
 ### Do not reach for a barrel import
 
 The package imports `@effect/opentelemetry/OtelTracer` and `.../Resource` by subpath deliberately. The v4 barrel pulls `@opentelemetry/sdk-trace-web` in at runtime, which is not what a Node service wants in its graph.
@@ -92,3 +127,5 @@ The package imports `@effect/opentelemetry/OtelTracer` and `.../Resource` by sub
 - `serviceName` matches the `service` passed to `init()`, or the resource disagrees with itself.
 - Effect v4. On v3 this package does not apply.
 - No second exporter: autotel already owns export.
+- One `layer()` call, not `layer()` merged with `loggerLayer()` — the first already installs the second.
+- `logs: { console: false }` wherever `captureConsole()` is on, or each Effect log is reported twice.

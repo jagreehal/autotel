@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T14:50:20.374Z",
+  "generatedAt": "2026-09-07T19:41:35.198Z",
   "sizes": {
     "autotel": 1991424,
     "autotel-adapters": 142517,
@@ -13,8 +13,8 @@
     "autotel-devtools": 1759218,
     "autotel-drizzle": 63604,
     "autotel-edge": 158843,
-    "autotel-effect": 3952,
-    "autotel-eventcatalog": 163954,
+    "autotel-effect": 13112,
+    "autotel-eventcatalog": 278141,
     "autotel-genai": 890115,
     "autotel-hono": 15168,
     "autotel-langfuse": 42060,
@@ -29,7 +29,7 @@
     "autotel-posthog": 111602,
     "autotel-schema": 173371,
     "autotel-sentry": 3139,
-    "autotel-subscribers": 280148,
+    "autotel-subscribers": 284480,
     "autotel-tanstack": 273878,
     "autotel-telemetry": 29626,
     "autotel-terminal": 282430,

@@ -1,5 +1,5 @@
 import { writeFile, mkdir } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadSnapshot } from './snapshot';
 import { readCatalogState } from './catalog';
@@ -14,6 +14,8 @@ import type { Renderer } from './renderers/types';
 import { evaluatePolicy, type DriftPolicyMode } from './policy';
 import { stampCatalog, buildStampSummary } from './stamp';
 import { generateCatalogFromSnapshot, buildGenerateSummary } from './generate';
+import { buildLiveMap } from './map';
+import { renderLiveMapHtml, type MapMode } from './renderers/map-html';
 
 /** Built-in renderer names. Kept as a string so the type allows future
  *  renderers (sarif, slack, ...) without churning the CLI argument type. */
@@ -94,7 +96,7 @@ interface RendererModule {
 }
 
 async function loadRendererModule(modulePath: string): Promise<void> {
-  const resolved = resolve(process.cwd(), modulePath);
+  const resolved = path.resolve(process.cwd(), modulePath);
   let mod: RendererModule;
   try {
     // SAFETY: a renderer module is user-supplied; isRenderer below checks each
@@ -154,13 +156,34 @@ async function processRegisterRendererFlags(argv: string[]): Promise<string[]> {
   return remaining;
 }
 
-type Args = DriftArgs | StampArgs | GenerateArgs;
+type MapArgs = {
+  command: 'map';
+  snapshot: string;
+  catalog: string;
+  output: string;
+  mode: MapMode;
+  liveUrl?: string;
+  liveEventName?: string;
+  title?: string;
+  summaryOutput?: string;
+};
+
+type Args = DriftArgs | StampArgs | GenerateArgs | MapArgs;
 
 function parseArgs(argv: string[]): Args {
   const [command, ...rest] = argv;
-  if (command !== 'drift' && command !== 'stamp' && command !== 'generate') {
+  if (
+    command !== 'drift' &&
+    command !== 'stamp' &&
+    command !== 'generate' &&
+    command !== 'map'
+  ) {
     usage();
     process.exit(2);
+  }
+
+  if (command === 'map') {
+    return parseMapArgs(rest);
   }
 
   if (command === 'generate') {
@@ -265,11 +288,11 @@ function parseDriftArgs(rest: string[]): DriftArgs {
 
   return {
     command: 'drift',
-    snapshot: resolve(snapshot),
-    baseSnapshot: baseSnapshot ? resolve(baseSnapshot) : undefined,
-    catalog: resolve(catalog),
-    output: output ? resolve(output) : undefined,
-    summaryOutput: summaryOutput ? resolve(summaryOutput) : undefined,
+    snapshot: path.resolve(snapshot),
+    baseSnapshot: baseSnapshot ? path.resolve(baseSnapshot) : undefined,
+    catalog: path.resolve(catalog),
+    output: output ? path.resolve(output) : undefined,
+    summaryOutput: summaryOutput ? path.resolve(summaryOutput) : undefined,
     failOnDrift,
     policy,
     format,
@@ -330,11 +353,11 @@ function parseStampArgs(rest: string[]): StampArgs {
 
   return {
     command: 'stamp',
-    snapshot: resolve(snapshot),
-    catalog: resolve(catalog),
+    snapshot: path.resolve(snapshot),
+    catalog: path.resolve(catalog),
     dryRun,
     format,
-    summaryOutput: summaryOutput ? resolve(summaryOutput) : undefined,
+    summaryOutput: summaryOutput ? path.resolve(summaryOutput) : undefined,
   };
 }
 
@@ -402,13 +425,109 @@ function parseGenerateArgs(rest: string[]): GenerateArgs {
 
   return {
     command: 'generate',
-    snapshot: resolve(snapshot),
-    catalog: resolve(catalog),
+    snapshot: path.resolve(snapshot),
+    catalog: path.resolve(catalog),
     dryRun,
     edgesOnly,
     version,
     format,
-    summaryOutput: summaryOutput ? resolve(summaryOutput) : undefined,
+    summaryOutput: summaryOutput ? path.resolve(summaryOutput) : undefined,
+  };
+}
+
+function parseMapMode(value: string | undefined): MapMode {
+  if (value === 'static' || value === 'replay' || value === 'live')
+    return value;
+  process.stderr.write(
+    `Invalid --mode: ${value}. Expected 'static' | 'replay' | 'live'.\n`,
+  );
+  process.exit(2);
+}
+
+function parseMapArgs(rest: string[]): MapArgs {
+  let snapshot: string | undefined;
+  let catalog: string | undefined;
+  let output: string | undefined;
+  let mode: MapMode = 'static';
+  let liveUrl: string | undefined;
+  let liveEventName: string | undefined;
+  let title: string | undefined;
+  let summaryOutput: string | undefined;
+
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    switch (arg) {
+      case '--snapshot': {
+        snapshot = requireValue(rest, ++i, '--snapshot');
+        break;
+      }
+      case '--catalog': {
+        catalog = requireValue(rest, ++i, '--catalog');
+        break;
+      }
+      case '--output': {
+        output = requireValue(rest, ++i, '--output');
+        break;
+      }
+      case '--mode': {
+        mode = parseMapMode(requireValue(rest, ++i, '--mode'));
+        break;
+      }
+      case '--live-url': {
+        liveUrl = requireValue(rest, ++i, '--live-url');
+        break;
+      }
+      case '--live-event': {
+        liveEventName = requireValue(rest, ++i, '--live-event');
+        break;
+      }
+      case '--title': {
+        title = requireValue(rest, ++i, '--title');
+        break;
+      }
+      case '--summary-output': {
+        summaryOutput = requireValue(rest, ++i, '--summary-output');
+        break;
+      }
+      case '-h':
+      case '--help': {
+        usage();
+        process.exit(0);
+        break;
+      }
+      default: {
+        process.stderr.write(`Unknown argument: ${arg}\n`);
+        usage();
+        process.exit(2);
+      }
+    }
+  }
+
+  if (!snapshot || !catalog || !output) {
+    process.stderr.write(
+      'All of --snapshot, --catalog and --output are required for map.\n',
+    );
+    usage();
+    process.exit(2);
+  }
+
+  // Live mode without an endpoint would render a page that says "live" and
+  // never moves, which is exactly the dishonesty this command exists to remove.
+  if (mode === 'live' && !liveUrl) {
+    process.stderr.write('--mode live requires --live-url <sse endpoint>.\n');
+    process.exit(2);
+  }
+
+  return {
+    command: 'map',
+    snapshot: path.resolve(snapshot),
+    catalog: path.resolve(catalog),
+    output: path.resolve(output),
+    mode,
+    liveUrl,
+    liveEventName,
+    title,
+    summaryOutput: summaryOutput ? path.resolve(summaryOutput) : undefined,
   };
 }
 
@@ -419,6 +538,7 @@ function usage(): void {
       '  autotel-eventcatalog drift --snapshot <path> --catalog <path> [options]',
       '  autotel-eventcatalog stamp --snapshot <path> --catalog <path> [--dry-run]',
       '  autotel-eventcatalog generate --snapshot <path> --catalog <path> [options]',
+      '  autotel-eventcatalog map --snapshot <path> --catalog <path> --output <path.html>',
       '',
       'Global options (any command):',
       '  --register-renderer <module>  Dynamically import a Renderer (default export',
@@ -451,6 +571,16 @@ function usage(): void {
       '  --version <semver>       Version to assign to newly generated resources (default: 1.0.0)',
       "  --format <kind>          Output format: 'text' (default) | 'json'",
       '  --summary-output <path>  Write a machine-readable generate summary JSON file',
+      '',
+      'map options:',
+      '  --snapshot <path>        Architecture snapshot JSON',
+      '  --catalog <path>         EventCatalog root',
+      '  --output <path>          Write the self-contained HTML map here',
+      "  --mode <kind>            'static' (default) | 'replay' | 'live'",
+      '  --live-url <url>         SSE endpoint of live events (required for live)',
+      "  --live-event <name>      SSE event name to listen for (default: 'message')",
+      '  --title <text>           Override the page title',
+      '  --summary-output <path>  Write the machine-readable live map JSON',
       '',
       '  -h, --help               Show this help',
       '',
@@ -501,7 +631,7 @@ async function runDrift(args: DriftArgs): Promise<void> {
   if (!output.endsWith('\n')) process.stdout.write('\n');
 
   if (args.output) {
-    await mkdir(dirname(args.output), { recursive: true });
+    await mkdir(path.dirname(args.output), { recursive: true });
     await writeFile(args.output, output, 'utf8');
     process.stderr.write(`\nWrote drift report: ${args.output}\n`);
   }
@@ -513,7 +643,7 @@ async function runDrift(args: DriftArgs): Promise<void> {
     policyResult,
   );
   if (args.summaryOutput) {
-    await mkdir(dirname(args.summaryOutput), { recursive: true });
+    await mkdir(path.dirname(args.summaryOutput), { recursive: true });
     await writeFile(
       args.summaryOutput,
       JSON.stringify(summary, null, 2),
@@ -604,7 +734,7 @@ async function runStamp(args: StampArgs): Promise<void> {
   }
 
   if (args.summaryOutput) {
-    await mkdir(dirname(args.summaryOutput), { recursive: true });
+    await mkdir(path.dirname(args.summaryOutput), { recursive: true });
     await writeFile(
       args.summaryOutput,
       JSON.stringify(summary, null, 2),
@@ -645,7 +775,7 @@ async function runGenerate(args: GenerateArgs): Promise<void> {
   }
 
   if (args.summaryOutput) {
-    await mkdir(dirname(args.summaryOutput), { recursive: true });
+    await mkdir(path.dirname(args.summaryOutput), { recursive: true });
     await writeFile(
       args.summaryOutput,
       JSON.stringify(summary, null, 2),
@@ -653,6 +783,38 @@ async function runGenerate(args: GenerateArgs): Promise<void> {
     );
     process.stderr.write(`Wrote generate summary: ${args.summaryOutput}\n`);
   }
+}
+
+async function runMap(args: MapArgs): Promise<void> {
+  const [snapshot, catalog] = await Promise.all([
+    loadSnapshot(args.snapshot),
+    readCatalogState(args.catalog),
+  ]);
+  const map = buildLiveMap(snapshot, catalog);
+  const html = renderLiveMapHtml(map, {
+    mode: args.mode,
+    ...(args.liveUrl && { liveUrl: args.liveUrl }),
+    ...(args.liveEventName && { liveEventName: args.liveEventName }),
+    ...(args.title && { title: args.title }),
+  });
+
+  await mkdir(path.dirname(args.output), { recursive: true });
+  await writeFile(args.output, html, 'utf8');
+  if (args.summaryOutput) {
+    await mkdir(path.dirname(args.summaryOutput), { recursive: true });
+    await writeFile(
+      args.summaryOutput,
+      `${JSON.stringify(map, null, 2)}\n`,
+      'utf8',
+    );
+  }
+
+  const s = map.summary;
+  process.stdout.write(
+    `${args.output}\n` +
+      `${s.observedEdges} observed, ${s.declaredOnlyEdges} declared-but-never-seen, ` +
+      `${s.undocumentedEdges} undocumented, ${s.assertedEdges} asserted (mode: ${args.mode})\n`,
+  );
 }
 
 async function main(): Promise<void> {
@@ -666,6 +828,10 @@ async function main(): Promise<void> {
   }
   if (args.command === 'generate') {
     await runGenerate(args);
+    return;
+  }
+  if (args.command === 'map') {
+    await runMap(args);
     return;
   }
   await runDrift(args);

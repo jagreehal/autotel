@@ -98,3 +98,25 @@ export type {
   GenerateSummaryItem,
   GenerateSummary,
 } from './generate';
+
+export { buildLiveMap, LIVE_MAP_SPEC } from './map';
+export type {
+  LiveMap,
+  LiveMapSummary,
+  MapNode,
+  MapEdge,
+  MapNodeKind,
+  MapEdgeKind,
+  MapEvidence,
+  MapLiveness,
+} from './map';
+
+export { renderLiveMapHtml } from './renderers/map-html';
+export type { MapMode, RenderMapOptions } from './renderers/map-html';
+
+export {
+  suggestRenames,
+  suggestRenamesBetween,
+  describeSuggestion,
+} from './suggest';
+export type { RenameSuggestion, SuggestionConfidence } from './suggest';

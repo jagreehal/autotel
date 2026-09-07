@@ -95,7 +95,8 @@ function pickDeclineCode(): string {
     'expired_card',
     'fraud_suspected',
   ];
-  return codes[Math.floor(Math.random() * codes.length)];
+  // Index is always in range, but the compiler cannot know that.
+  return codes[Math.floor(Math.random() * codes.length)] ?? 'card_declined';
 }
 
 function maybeIntroduceDrift(startedAt: number): void {

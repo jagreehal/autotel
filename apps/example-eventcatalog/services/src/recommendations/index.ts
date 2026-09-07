@@ -69,7 +69,11 @@ export const generateRecommendation = traceConsumer({
     messages: buildPrompt(msg),
   });
 
-  const recommendations = JSON.parse(result.choices[0].message.content);
+  const content = result.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error('Model returned no content for the recommendation prompt');
+  }
+  const recommendations = JSON.parse(content);
 
   const extra = globalThis.__autotel_demo_extra_recommendation_field__ === true;
 

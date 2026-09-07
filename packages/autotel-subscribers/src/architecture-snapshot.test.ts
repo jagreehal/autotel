@@ -83,6 +83,86 @@ describe('ArchitectureSnapshotSubscriber', () => {
     });
   });
 
+  /**
+   * `producer` and `channel` are first-write-wins and `observedCount` is an
+   * event-level total, so two services publishing the same event name collapse
+   * into one. Anything attributing a count to a specific relationship has to
+   * read `sources`, or it credits the second producer's traffic to the first.
+   */
+  it('keeps a per-relationship count when two producers share an event name', async () => {
+    await sub.trackEvent('order.placed', {
+      orderId: 'o-1',
+      _autotel: { producer: 'ServiceA', channel: 'topic-a' },
+    });
+    await sub.trackEvent('order.placed', {
+      orderId: 'o-2',
+      _autotel: { producer: 'ServiceB', channel: 'topic-b' },
+    });
+
+    const observation = sub.toSnapshot({ now: FIXED_NOW }).events[
+      'order.placed'
+    ];
+
+    // The flat fields still answer first-wins, unchanged.
+    expect(observation?.observedCount).toBe(2);
+    expect(observation?.producer).toBe('ServiceA');
+
+    // ...and the second producer is no longer invisible.
+    expect(observation?.sources).toEqual([
+      expect.objectContaining({
+        producer: 'ServiceA',
+        channel: 'topic-a',
+        count: 1,
+      }),
+      expect.objectContaining({
+        producer: 'ServiceB',
+        channel: 'topic-b',
+        count: 1,
+      }),
+    ]);
+  });
+
+  /**
+   * Both fields come from caller metadata and may contain any character, so a
+   * joined key is ambiguous: ('A|B', 'C') and ('A', 'B|C') collapse into one.
+   */
+  it('keeps pairs distinct when a name contains the separator character', async () => {
+    await sub.trackEvent('e', { _autotel: { producer: 'A|B', channel: 'C' } });
+    await sub.trackEvent('e', { _autotel: { producer: 'A', channel: 'B|C' } });
+
+    const sources = sub.toSnapshot({ now: FIXED_NOW }).events['e']?.sources;
+    expect(sources).toHaveLength(2);
+    expect(sources?.every((source) => source.count === 1)).toBe(true);
+  });
+
+  it('accumulates a repeated relationship into one source entry', async () => {
+    for (const orderId of ['o-1', 'o-2', 'o-3']) {
+      await sub.trackEvent('order.placed', {
+        orderId,
+        _autotel: { producer: 'ServiceA', channel: 'topic-a' },
+      });
+    }
+
+    const sources = sub.toSnapshot({ now: FIXED_NOW }).events['order.placed']
+      ?.sources;
+    expect(sources).toHaveLength(1);
+    expect(sources?.[0]?.count).toBe(3);
+  });
+
+  it('freezes and sorts sources so a committed snapshot is byte-stable', async () => {
+    await sub.trackEvent('e', { _autotel: { producer: 'Z', channel: 'z' } });
+    await sub.trackEvent('e', { _autotel: { producer: 'A', channel: 'a' } });
+
+    const snap = sub.toSnapshot({
+      freezeTimestamps: '2026-01-01T00:00:00.000Z',
+    });
+    const sources = snap.events['e']?.sources ?? [];
+    expect(sources.map((source) => source.producer)).toEqual(['A', 'Z']);
+    expect(
+      sources.every((s) => s.firstSeen === '2026-01-01T00:00:00.000Z'),
+    ).toBe(true);
+  });
+
   it('accumulates count, lastSeen, and merges field paths across calls', async () => {
     await sub.trackEvent('order.placed', { orderId: 'o-1' });
     // Second call adds a new field path.

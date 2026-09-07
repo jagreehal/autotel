@@ -464,11 +464,13 @@ function mapRuntimeTypes(types: string[]): string[] {
       case 'boolean':
       case 'object':
       case 'array':
-      case 'null':
+      case 'null': {
         out.add(t);
         break;
-      default:
+      }
+      default: {
         break;
+      }
     }
   }
   return [...out];

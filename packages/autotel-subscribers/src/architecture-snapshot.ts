@@ -67,6 +67,17 @@ export type EventObservation = {
   producer?: string;
   /** Services known to consume this event (optional metadata from _autotel.consumers). */
   consumers?: string[];
+  /**
+   * One entry per distinct (producer, channel) pair this event was seen on,
+   * with that pair's own count.
+   *
+   * `producer` and `channel` above are first-write-wins and `observedCount` is
+   * an event-level total, so two services publishing the same event name
+   * collapse into one: the second producer disappears and its observations are
+   * silently credited to the first. Anything attributing counts to a specific
+   * relationship must read this instead.
+   */
+  sources?: EventSource[];
   /** Observed runtime types and sample primitive values per field path. */
   fieldStats?: Record<string, FieldStats>;
   /** Optional contract schema metadata carried from track() call sites. */
@@ -76,6 +87,54 @@ export type EventObservation = {
     hash: string;
   };
 };
+
+/** One (producer, channel) pair an event was observed on, with its own count. */
+export type EventSource = {
+  producer?: string;
+  channel?: string;
+  count: number;
+  firstSeen: string;
+  lastSeen: string;
+};
+
+/**
+ * Order two (producer, channel) pairs, comparing the fields rather than a
+ * joined key.
+ *
+ * Both come from caller-supplied `_autotel` metadata and may contain any
+ * character, so joining them with a separator is ambiguous: `('A|B', 'C')` and
+ * `('A', 'B|C')` produce the same string and would merge into one source.
+ */
+function compareSources(a: EventSource, b: EventSource): number {
+  return (
+    (a.producer ?? '').localeCompare(b.producer ?? '') ||
+    (a.channel ?? '').localeCompare(b.channel ?? '')
+  );
+}
+
+function recordSource(
+  observation: { sources?: EventSource[] },
+  producer: string | undefined,
+  channel: string | undefined,
+  now: string,
+): void {
+  const sources = (observation.sources ??= []);
+  const existing = sources.find(
+    (source) => source.producer === producer && source.channel === channel,
+  );
+  if (existing) {
+    existing.count += 1;
+    existing.lastSeen = now;
+    return;
+  }
+  sources.push({
+    ...(producer !== undefined && { producer }),
+    ...(channel !== undefined && { channel }),
+    count: 1,
+    firstSeen: now,
+    lastSeen: now,
+  });
+}
 
 export type FieldStats = {
   /** Runtime types observed for this field path (e.g. string, number). */
@@ -139,6 +198,19 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
               hash: payload.schema.hash,
             }
           : undefined,
+        sources: [
+          {
+            ...(autotelMeta.producer !== undefined && {
+              producer: autotelMeta.producer,
+            }),
+            ...(autotelMeta.channel !== undefined && {
+              channel: autotelMeta.channel,
+            }),
+            count: 1,
+            firstSeen: now,
+            lastSeen: now,
+          },
+        ],
       });
       return;
     }
@@ -161,6 +233,7 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
 
     existing.channel ??= autotelMeta.channel;
     existing.producer ??= autotelMeta.producer;
+    recordSource(existing, autotelMeta.producer, autotelMeta.channel, now);
     existing.consumers = mergeUnique(
       existing.consumers ?? [],
       autotelMeta.consumers ?? [],
@@ -204,6 +277,15 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
         fieldPaths: obs.fieldPaths.toSorted(),
         sampleTraceIds: obs.sampleTraceIds.toSorted(),
         fieldStats: sortFieldStats(obs.fieldStats),
+        ...(obs.sources && {
+          sources: obs.sources
+            .map((source) => ({
+              ...source,
+              firstSeen: freezeTimestamps ?? source.firstSeen,
+              lastSeen: freezeTimestamps ?? source.lastSeen,
+            }))
+            .toSorted(compareSources),
+        }),
       };
     }
 

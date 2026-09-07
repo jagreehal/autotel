@@ -1,20 +1,51 @@
 import * as OtelTracer from '@effect/opentelemetry/OtelTracer';
 import * as Resource from '@effect/opentelemetry/Resource';
+import { logs, SeverityNumber } from '@opentelemetry/api-logs';
+import { createBuiltinLogger, type BuiltinLoggerOptions } from 'autotel/logger';
+import * as Cause from 'effect/Cause';
 import * as Layer from 'effect/Layer';
+import * as Logger from 'effect/Logger';
+import type * as LogLevel from 'effect/LogLevel';
+import * as References from 'effect/References';
+
+export interface AutotelEffectLoggerOptions {
+  /** Keep Effect's default console logger alongside this one. Default: false. */
+  readonly mergeWithExisting?: boolean;
+  /**
+   * Minimum level autotel's logger emits to stdout. Default: `'info'` — leave
+   * it there and `Effect.logDebug` never reaches stdout even when Effect's own
+   * minimum log level allows it.
+   */
+  readonly level?: BuiltinLoggerOptions['level'];
+  /** Pretty-print the stdout line instead of JSON. Default: false. */
+  readonly pretty?: boolean;
+  /**
+   * Also write each log to stdout via autotel's built-in logger.
+   * Default: true. Set to false when `captureConsole()` is on, otherwise
+   * every Effect log is reported twice.
+   */
+  readonly console?: boolean;
+}
 
 export interface AutotelEffectLayerOptions {
   readonly serviceName: string;
   readonly serviceVersion?: string;
+  /**
+   * Bridge `Effect.log*` as well as spans. Default: `true`. Pass `false` for
+   * spans only, or an options object to configure the logger.
+   */
+  readonly logs?: boolean | AutotelEffectLoggerOptions;
 }
 
 /**
- * Routes `Effect.withSpan` through autotel's global OpenTelemetry provider.
+ * Routes `Effect.withSpan` and `Effect.log*` through autotel's global
+ * OpenTelemetry provider.
  *
  * Call `autotel.init()` before this layer is built — typically by loading an
  * instrumentation module with `node --import` or `tsx --import`.
  */
-export function layer(options: AutotelEffectLayerOptions) {
-  return OtelTracer.layerGlobal.pipe(
+export function layer(options: AutotelEffectLayerOptions): Layer.Layer<never> {
+  const tracer = OtelTracer.layerGlobal.pipe(
     Layer.provide(
       Resource.layer({
         serviceName: options.serviceName,
@@ -24,4 +55,116 @@ export function layer(options: AutotelEffectLayerOptions) {
       }),
     ),
   );
+
+  const logs = options.logs ?? true;
+
+  return Layer.mergeAll(
+    tracer,
+    logs === false
+      ? Layer.empty
+      : loggerLayer({
+          serviceName: options.serviceName,
+          ...(options.serviceVersion
+            ? { serviceVersion: options.serviceVersion }
+            : {}),
+          ...(logs === true ? {} : logs),
+        }),
+  );
+}
+
+/**
+ * Routes Effect's `Effect.log*` through autotel instead of Effect's console
+ * logger, emitting each log as an OpenTelemetry log record (so it reaches any
+ * OTLP log backend, autotel-devtools included) and, unless disabled, a
+ * structured line on stdout via autotel's built-in logger.
+ *
+ * `layer()` already includes this. Reach for it on its own only when something
+ * else owns the tracer and you want autotel to own the logs.
+ */
+export function loggerLayer(
+  options: Omit<AutotelEffectLayerOptions, 'logs'> & AutotelEffectLoggerOptions,
+) {
+  const log = createBuiltinLogger(options.serviceName, {
+    ...(options.level ? { level: options.level } : {}),
+    ...(options.pretty ? { pretty: options.pretty } : {}),
+  });
+  // Resolved per-emit, not here: `init()` installs the global LoggerProvider,
+  // and the layer may well be built before it runs.
+  const otelLogger = () =>
+    logs.getLogger(options.serviceName, options.serviceVersion);
+
+  return Logger.layer(
+    [
+      Logger.make(({ cause, fiber, logLevel, message }) => {
+        const method = LEVEL_TO_METHOD[logLevel];
+        if (!method) return;
+
+        const parts = Array.isArray(message) ? message : [message];
+        const metadata: Record<string, unknown> = {
+          ...fiber.getRef(References.CurrentLogAnnotations),
+        };
+
+        // `Effect.logError('msg', error)` puts the error in the message parts,
+        // `Effect.log(...).pipe(Effect.catchCause(...))` puts it in the cause.
+        // Either way the stack belongs in `err`, not stringified into `msg`.
+        const errors = parts.filter((part) => part instanceof Error);
+        if (cause.reasons.length > 0) {
+          metadata.err = Cause.pretty(cause);
+        } else if (errors.length > 0) {
+          metadata.err = errors.map((error) => error.stack ?? String(error));
+        }
+
+        const body = parts.map(formatPart).join(' ');
+
+        if (options.console ?? true) {
+          log[method](metadata, body);
+        }
+        otelLogger().emit({
+          body,
+          severityNumber: LEVEL_TO_SEVERITY[logLevel],
+          severityText: logLevel,
+          attributes: {
+            ...metadata,
+            ...(Array.isArray(metadata.err)
+              ? { err: metadata.err.join('\n') }
+              : {}),
+          },
+        });
+      }),
+    ],
+    { mergeWithExisting: options.mergeWithExisting ?? false },
+  );
+}
+
+const LEVEL_TO_METHOD: Partial<
+  Record<LogLevel.LogLevel, 'debug' | 'info' | 'warn' | 'error'>
+> = {
+  Trace: 'debug',
+  Debug: 'debug',
+  Info: 'info',
+  Warn: 'warn',
+  Error: 'error',
+  Fatal: 'error',
+};
+
+const LEVEL_TO_SEVERITY: Record<LogLevel.LogLevel, SeverityNumber> = {
+  All: SeverityNumber.UNSPECIFIED,
+  Trace: SeverityNumber.TRACE,
+  Debug: SeverityNumber.DEBUG,
+  Info: SeverityNumber.INFO,
+  Warn: SeverityNumber.WARN,
+  Error: SeverityNumber.ERROR,
+  Fatal: SeverityNumber.FATAL,
+  None: SeverityNumber.UNSPECIFIED,
+};
+
+function formatPart(part: unknown): string {
+  if (typeof part === 'string') return part;
+  // `JSON.stringify(new Error('x'))` is `{}` — String() keeps the message.
+  if (part instanceof Error) return String(part);
+  try {
+    return JSON.stringify(part) ?? String(part);
+  } catch {
+    return String(part);
+  }
 }

@@ -26,15 +26,18 @@ export async function loadSnapshot(
   let raw: string;
   try {
     raw = await readFile(path, 'utf8');
-  } catch (err) {
-    if (isNodeFsError(err) && err.code === 'ENOENT') {
-      throw new Error(`Snapshot not found: ${path}`);
+  } catch (error) {
+    if (isNodeFsError(error) && error.code === 'ENOENT') {
+      throw new Error(`Snapshot not found: ${path}`, { cause: error });
     }
-    if (isNodeFsError(err) && err.code === 'EISDIR') {
-      throw new Error(`Snapshot path is a directory, not a file: ${path}`);
+    if (isNodeFsError(error) && error.code === 'EISDIR') {
+      throw new Error(`Snapshot path is a directory, not a file: ${path}`, {
+        cause: error,
+      });
     }
     throw new Error(
-      `Could not read snapshot at ${path}: ${err instanceof Error ? err.message : String(err)}`,
+      `Could not read snapshot at ${path}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
   }
 
@@ -45,9 +48,10 @@ export async function loadSnapshot(
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch (err) {
+  } catch (error) {
     throw new Error(
-      `Snapshot is not valid JSON: ${path} (${err instanceof Error ? err.message : String(err)})`,
+      `Snapshot is not valid JSON: ${path} (${error instanceof Error ? error.message : String(error)})`,
+      { cause: error },
     );
   }
 
@@ -88,7 +92,7 @@ function validateSnapshot(parsed: unknown, path: string): ArchitectureSnapshot {
   }
 
   if (typeof parsed.generatedAt !== 'string') {
-    throw new Error(
+    throw new TypeError(
       `Snapshot is missing required \`generatedAt\` (ISO 8601 string): ${path}`,
     );
   }
@@ -100,7 +104,7 @@ function validateSnapshot(parsed: unknown, path: string): ArchitectureSnapshot {
       );
     }
     if (typeof observation.observedCount !== 'number') {
-      throw new Error(
+      throw new TypeError(
         `Snapshot event "${name}" is missing required \`observedCount\`: ${path}`,
       );
     }
