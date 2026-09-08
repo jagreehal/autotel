@@ -4,12 +4,37 @@
 // therefore fails the release with E404 *after* changesets has consumed its
 // changeset. Catch it here, on the PR that adds the package, instead.
 import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const packages = JSON.parse(
   execFileSync('pnpm', ['-r', 'list', '--depth', '-1', '--json'], {
     encoding: 'utf8',
   }),
 ).filter((p) => !p.private && p.name !== 'autotel-monorepo');
+
+// Apache-2.0 s4(a)/4(d): every published tarball must carry the licence and the
+// NOTICE (which is where the trademark reservation lives). npm auto-includes
+// LICENSE but not NOTICE, so both need a "files" entry.
+const unlicensed = [];
+for (const { name, path } of packages) {
+  const files =
+    JSON.parse(readFileSync(join(path, 'package.json'), 'utf8')).files ?? [];
+  for (const f of ['LICENSE', 'NOTICE']) {
+    if (!existsSync(join(path, f))) unlicensed.push(`${name}: no ${f} file`);
+    else if (!files.includes(f))
+      unlicensed.push(`${name}: ${f} not in "files"`);
+  }
+}
+
+if (unlicensed.length > 0) {
+  console.error(
+    `Publishable packages missing licence text:\n  ${unlicensed.join('\n  ')}\n\n` +
+      `Copy the root LICENSE and NOTICE into each package directory and add\n` +
+      `both to its "files" array, so they ship in the published tarball.`,
+  );
+  process.exit(1);
+}
 
 const missing = [];
 for (const { name } of packages) {
@@ -34,4 +59,6 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-console.log(`${packages.length} publishable packages, all present on npm.`);
+console.log(
+  `${packages.length} publishable packages, all licensed and present on npm.`,
+);
