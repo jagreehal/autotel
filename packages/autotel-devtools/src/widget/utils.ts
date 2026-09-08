@@ -178,17 +178,6 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Check if click is outside element
- */
-export function isOutsideClick(
-  event: MouseEvent,
-  element: HTMLElement | null,
-): boolean {
-  if (!element) return true;
-  return !element.contains(event.target as Node);
-}
-
-/**
  * Scrub the obvious secrets from captured text.
  *
  * Used wherever opt-in payload capture puts user data on screen — agent prompts

@@ -212,6 +212,14 @@
     return () => observer.disconnect();
   });
 
+  /**
+   * The row element for a span. Scoped to the scroll container rather than
+   * `document`, which cannot see into the shadow root the widget renders in.
+   */
+  function rowElement(spanId: string): HTMLElement | null | undefined {
+    return scrollEl?.querySelector<HTMLElement>(`#waterfall-row-${spanId}`);
+  }
+
   function revealRow(index: number) {
     if (!scrollEl || visibleRows.length < 300) return;
     const top = index * ROW_HEIGHT;
@@ -223,7 +231,6 @@
     scrollTop = scrollEl.scrollTop;
   }
 
-  // Arrow key navigation
   const handleKeydown = (e: KeyboardEvent) => {
     if (helpShortcutsSignal.value || isInputFocused()) return;
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown' && e.key !== 'Enter')
@@ -252,9 +259,7 @@
     if (next) {
       onSpanSelect?.(next.span);
       revealRow(nextIdx);
-      // Scroll the row into view
-      const el = document.getElementById(`waterfall-row-${next.span.spanId}`);
-      el?.scrollIntoView({ block: 'nearest' });
+      rowElement(next.span.spanId)?.scrollIntoView({ block: 'nearest' });
     }
   };
 
@@ -288,9 +293,7 @@
       );
       if (selectedIndex >= 0) revealRow(selectedIndex);
       requestAnimationFrame(() =>
-        document
-          .getElementById(`waterfall-row-${id}`)
-          ?.scrollIntoView({ block: 'center' }),
+        rowElement(id)?.scrollIntoView({ block: 'center' }),
       );
     });
   });
