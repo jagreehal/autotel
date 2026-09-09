@@ -43,6 +43,21 @@ describe('getExecutionLogger', () => {
     });
   });
 
+  it('flattens a Map like a nested object and reads a Set as its array', () => {
+    const ctx = createMockContext();
+    const log = getExecutionLogger(ctx);
+
+    log.set({
+      seats: new Map([['1a', 'taken']]),
+      tags: new Set(['a', 'b']),
+    });
+
+    expect(ctx.setAttributes).toHaveBeenCalledWith({
+      'seats.1a': 'taken',
+      tags: ['a', 'b'],
+    });
+  });
+
   it('adds warning events and sets a warning level marker', () => {
     const ctx = createMockContext();
     const log = getExecutionLogger(ctx);

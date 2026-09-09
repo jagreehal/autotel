@@ -22,6 +22,22 @@ export interface UnknownRecord {
 export type UnknownFunction = (...args: unknown[]) => unknown;
 
 /** The value as an object, or undefined when it is anything else. */
+/**
+ * The value as a record to descend into: a plain object as itself, a Map as
+ * its entries. Anything else is a leaf.
+ */
+export function asPlainRecordOrMap(value: unknown): UnknownRecord | undefined {
+  if (value instanceof Map) {
+    const entries: UnknownRecord = {};
+    for (const [key, entry] of value) entries[String(key)] = entry;
+    return entries;
+  }
+  const record = asRecord(value);
+  return record !== undefined && record.constructor === Object
+    ? record
+    : undefined;
+}
+
 export function asRecord(value: unknown): UnknownRecord | undefined {
   // SAFETY: an object nothing has read yet is exactly a bag of unread fields,
   // which is what UnknownRecord says. Arrays are excluded - callers that want
@@ -100,6 +116,8 @@ export function toAttributeValue(value: unknown): AttributeValue | undefined {
   if (scalar !== undefined) return scalar;
   if (typeof value === 'number') return undefined;
   if (Array.isArray(value)) return toAttributeArray(value);
+  if (value instanceof Set) return toAttributeArray([...value]);
+  if (value instanceof Map) return JSON.stringify(Object.fromEntries(value));
   return JSON.stringify(value);
 }
 

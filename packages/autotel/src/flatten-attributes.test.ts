@@ -27,6 +27,11 @@ describe('toAttributeValue', () => {
     expect(toAttributeValue(new Error('boom'))).toBe('boom');
   });
 
+  it('returns a Set as the array it carries', () => {
+    expect(toAttributeValue(new Set(['a', 'b']))).toEqual(['a', 'b']);
+    expect(toAttributeValue(new Set([1, 2]))).toEqual([1, 2]);
+  });
+
   it('returns undefined for plain objects', () => {
     expect(toAttributeValue({ a: 1 })).toBeUndefined();
   });
@@ -64,6 +69,38 @@ describe('flattenToAttributes', () => {
       name: 'root',
       'self.name': 'root',
       'self.self': '<circular-reference>',
+    });
+  });
+
+  it('flattens a Map like a nested object', () => {
+    const result = flattenToAttributes({
+      seats: new Map([
+        ['1a', 'taken'],
+        ['1b', 'free'],
+      ]),
+    });
+    expect(result).toEqual({ 'seats.1a': 'taken', 'seats.1b': 'free' });
+  });
+
+  it('flattens a Map with non-string keys', () => {
+    const result = flattenToAttributes({ byId: new Map([[7, 'seven']]) });
+    expect(result).toEqual({ 'byId.7': 'seven' });
+  });
+
+  it('handles a self-referential Map like a self-referential object', () => {
+    const map = new Map<string, unknown>([['name', 'root']]);
+    map.set('self', map);
+
+    const obj: Record<string, unknown> = { name: 'root' };
+    obj.self = obj;
+
+    expect(flattenToAttributes({ nested: map })).toEqual({
+      'nested.name': 'root',
+      'nested.self': '<circular-reference>',
+    });
+    expect(flattenToAttributes({ nested: obj })).toEqual({
+      'nested.name': 'root',
+      'nested.self': '<circular-reference>',
     });
   });
 

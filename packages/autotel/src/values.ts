@@ -144,6 +144,15 @@ export function asFunction(value: unknown): UnknownFunction | undefined {
  * The value as a plain object - one built from a literal, not an instance of
  * some class that has its own idea of what it is.
  */
+export function asPlainRecordOrMap(value: unknown): UnknownRecord | undefined {
+  if (value instanceof Map) {
+    const entries: UnknownRecord = {};
+    for (const [key, entry] of value) entries[String(key)] = entry;
+    return entries;
+  }
+  return asPlainRecord(value);
+}
+
 export function asPlainRecord(value: unknown): UnknownRecord | undefined {
   const record = asRecord(value);
   return record !== undefined &&
@@ -205,6 +214,8 @@ export function toAttributeValue(value: unknown): AttributeValue | undefined {
   const scalar = asString(value) ?? asNumber(value) ?? asBoolean(value);
   if (scalar !== undefined) return scalar;
   if (Array.isArray(value)) return toAttributeArray(value);
+  if (value instanceof Set) return toAttributeArray([...value]);
+  if (value instanceof Map) return JSON.stringify(Object.fromEntries(value));
   return JSON.stringify(value);
 }
 

@@ -94,6 +94,15 @@ Effect.log('charged').pipe(Effect.annotateLogs({ 'order.id': 'o-1' }));
 // {"level":"info","msg":"charged","order.id":"o-1","traceId":"...","spanId":"..."}
 ```
 
+Rich annotation values are flattened to the attribute shape the rest of autotel
+produces: a nested object becomes dot-notation keys, a `Date` becomes an ISO
+string, an `Error` becomes its message.
+
+```typescript
+Effect.annotateLogs({ order: { id: 7 }, at: new Date(0) });
+// attributes: { 'order.id': 7, at: '1970-01-01T00:00:00.000Z' }
+```
+
 Errors keep their stack: a `Cause` passed to `Effect.logError` (or an `Error`
 in the message parts) is logged as `err` rather than stringified into `msg`.
 

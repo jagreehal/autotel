@@ -45,8 +45,8 @@ describe('GET /source', () => {
   // No default value: `start(undefined)` would silently select it, which is
   // exactly how the "disabled" case ended up testing the enabled one.
   async function start(sourceRoot: string | undefined) {
-    devtools = new DevtoolsServer();
     server = createServer();
+    devtools = new DevtoolsServer({ server });
     attachDevtoolsRoutes(server, devtools, { sourceRoot });
     await new Promise<void>((r) => server!.listen(0, '127.0.0.1', () => r()));
     const addr = server.address();

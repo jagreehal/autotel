@@ -45,9 +45,11 @@ export const processOrder = withTracing({})((ctx) => async (order: Order) => {
 
 **Features:**
 
-- Auto-serializes non-string values to JSON
+- Descends into nested objects and `Map`s alike, giving dot-notation keys
+- Reads a `Set` as the array it carries
+- Auto-serializes remaining non-string values to JSON
 - Filters out null/undefined values
-- Gracefully handles circular references (→ `<serialization-failed>`)
+- Gracefully handles circular references (→ `<circular-reference>`)
 - Customizable prefix (default: `'metadata'`)
 
 ## Isolated Tracer Provider

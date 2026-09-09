@@ -2,6 +2,7 @@ import type { UnknownRecord } from './values';
 import {
   asFunction,
   asRecord,
+  asPlainRecordOrMap,
   asString,
   nonEmptyString,
   readProperty,
@@ -98,6 +99,7 @@ export interface ExecutionLoggerOptions {
 function toLogAttribute(value: unknown): AttributeValue | undefined {
   if (value instanceof Date) return value.toISOString();
   if (value instanceof Error) return value.message;
+  if (value instanceof Set) return toAttributeValue([...value]);
   if (asRecord(value)) return undefined;
   try {
     return toAttributeValue(value);
@@ -122,14 +124,16 @@ function flattenToAttributes(fields: UnknownRecord, prefix = '') {
         continue;
       }
 
-      const nested = asRecord(value);
-      if (nested && nested.constructor === Object) {
-        if (seen.has(nested)) {
+      const nested = asPlainRecordOrMap(value);
+      if (nested !== undefined) {
+        // Keyed on the value itself: a Map flattens to a fresh object each
+        // time, which a WeakSet would never recognise.
+        if (seen.has(value as object)) {
           out[nextKey] = '<circular-reference>';
           continue;
         }
 
-        seen.add(nested);
+        seen.add(value as object);
         flatten(nested, nextKey);
         continue;
       }

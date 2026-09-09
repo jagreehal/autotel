@@ -189,6 +189,32 @@ describe('loggerLayer', () => {
     expect(record!.spanContext?.spanId).toBe(span.spanId);
   });
 
+  it('flattens rich annotation values onto the log record', async () => {
+    await captureLogs(
+      Effect.log('annotated').pipe(
+        Effect.annotateLogs({
+          when: new Date(0),
+          order: { id: 7, tags: ['a', 'b'] },
+          seats: new Map([['1a', 'taken']]),
+        }),
+        Effect.provide(
+          loggerLayer({ serviceName: 'svc-attrs', console: false }),
+        ),
+      ),
+    );
+
+    const record = logExporter
+      .getFinishedLogRecords()
+      .find((entry) => entry.body === 'annotated');
+
+    expect(record!.attributes).toMatchObject({
+      when: '1970-01-01T00:00:00.000Z',
+      'order.id': 7,
+      'order.tags': ['a', 'b'],
+      'seats.1a': 'taken',
+    });
+  });
+
   it('emits a log record even with console output disabled', async () => {
     const records = await captureLogs(
       Effect.log('silent').pipe(
