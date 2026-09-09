@@ -1,5 +1,16 @@
 # autotel-backends
 
+## 2.13.15
+
+### Patch Changes
+
+- cd007ec: Ship the Apache-2.0 licence text and NOTICE in every published tarball. The
+  packages declared `Apache-2.0` in their metadata but carried no licence text,
+  so installs had neither the licence nor the trademark reservation.
+- Updated dependencies [ec24ab1]
+- Updated dependencies [cd007ec]
+  - autotel@7.6.2
+
 ## 2.13.14
 
 ### Patch Changes

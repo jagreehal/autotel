@@ -1,5 +1,17 @@
 # autotel-cloudflare
 
+## 13.0.2
+
+### Patch Changes
+
+- cd007ec: Ship the Apache-2.0 licence text and NOTICE in every published tarball. The
+  packages declared `Apache-2.0` in their metadata but carried no licence text,
+  so installs had neither the licence nor the trademark reservation.
+- Updated dependencies [ec24ab1]
+- Updated dependencies [cd007ec]
+  - autotel-edge@5.1.1
+  - autotel-genai@0.10.2
+
 ## 13.0.1
 
 ### Patch Changes

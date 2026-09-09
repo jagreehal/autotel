@@ -1,6 +1,6 @@
 {
   "name": "autotel-effect",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "Bridge autotel and Effect v4: Effect.withSpan spans export through autotel's global TracerProvider",
   "type": "module",
   "main": "./dist/index.js",

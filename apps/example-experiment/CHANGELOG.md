@@ -1,5 +1,13 @@
 # @jagreehal/example-experiment
 
+## 1.0.6
+
+### Patch Changes
+
+- Updated dependencies [ec24ab1]
+- Updated dependencies [cd007ec]
+  - autotel@7.6.2
+
 ## 1.0.5
 
 ### Patch Changes
