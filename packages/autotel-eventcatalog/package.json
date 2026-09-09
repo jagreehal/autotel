@@ -28,7 +28,9 @@
     "action.yml",
     "README.md",
     "CHANGELOG.md",
-    "CONTRIBUTING.md"
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsdown",

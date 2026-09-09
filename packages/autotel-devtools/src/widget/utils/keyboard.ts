@@ -4,7 +4,11 @@
  * user is typing in a search box, textarea, or contenteditable element.
  */
 export function isInputFocused(): boolean {
-  const el = document.activeElement;
+  // The widget renders inside a shadow root, so `document.activeElement` is the
+  // shadow *host*, not the focused input. Walk down until we reach the element
+  // that actually has focus, or every shortcut fires while the user types.
+  let el = document.activeElement;
+  while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
   if (!el) return false;
   const tag = el.tagName;
   return (
