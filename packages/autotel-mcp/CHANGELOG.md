@@ -1,5 +1,13 @@
 # autotel-mcp
 
+## 0.8.1
+
+### Patch Changes
+
+- cd007ec: Ship the Apache-2.0 licence text and NOTICE in every published tarball. The
+  packages declared `Apache-2.0` in their metadata but carried no licence text,
+  so installs had neither the licence nor the trademark reservation.
+
 ## 0.8.0
 
 ### Minor Changes

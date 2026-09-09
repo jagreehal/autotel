@@ -1,5 +1,23 @@
 # autotel-devtools
 
+## 27.2.1
+
+### Patch Changes
+
+- cd007ec: Keyboard shortcuts in the viewer now yield to whatever you are typing.
+
+  The widget renders in a shadow root, where `document.activeElement` names the host element rather than the input holding the caret. `isInputFocused` walks `shadowRoot.activeElement` down to the element that really has focus, and every global handler routes through it — the trace-detail view keys, the digits that switch tab, `/`, `Cmd+A`. Typing `l` into the attribute filter filters for `l`.
+
+  Waterfall row lookups are scoped to the scroll container for the same reason, so arrow-key navigation scrolls the span it selects into view.
+
+- cd007ec: Ship the Apache-2.0 licence text and NOTICE in every published tarball. The
+  packages declared `Apache-2.0` in their metadata but carried no licence text,
+  so installs had neither the licence nor the trademark reservation.
+- Updated dependencies [ec24ab1]
+- Updated dependencies [cd007ec]
+  - autotel@7.6.2
+  - autotel-agents@0.6.1
+
 ## 27.2.0
 
 ### Minor Changes
