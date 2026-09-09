@@ -1,5 +1,12 @@
 # @jagreehal/example-datadog
 
+## 1.0.94
+
+### Patch Changes
+
+- Updated dependencies [dfacb4d]
+  - autotel-backends@2.14.0
+
 ## 1.0.93
 
 ### Patch Changes

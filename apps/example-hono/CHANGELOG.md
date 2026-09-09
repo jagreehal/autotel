@@ -1,5 +1,12 @@
 # @jagreehal/example-hono
 
+## 1.0.69
+
+### Patch Changes
+
+- Updated dependencies [dfacb4d]
+  - autotel-devtools@27.2.2
+
 ## 1.0.68
 
 ### Patch Changes

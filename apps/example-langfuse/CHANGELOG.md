@@ -1,5 +1,12 @@
 # @jagreehal/example-langfuse
 
+## 0.0.25
+
+### Patch Changes
+
+- Updated dependencies [dfacb4d]
+  - autotel-genai@0.11.0
+
 ## 0.0.24
 
 ### Patch Changes

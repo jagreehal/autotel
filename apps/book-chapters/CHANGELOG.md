@@ -1,5 +1,14 @@
 # @autotel/book-chapters
 
+## 1.0.26
+
+### Patch Changes
+
+- Updated dependencies [dfacb4d]
+  - autotel-genai@0.11.0
+  - autotel-devtools@27.2.2
+  - autotel-subscribers@56.1.2
+
 ## 1.0.25
 
 ### Patch Changes

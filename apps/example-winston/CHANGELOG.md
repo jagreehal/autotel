@@ -1,5 +1,13 @@
 # @jagreehal/example-winston
 
+## 1.0.87
+
+### Patch Changes
+
+- Updated dependencies [dfacb4d]
+  - autotel-devtools@27.2.2
+  - autotel-subscribers@56.1.2
+
 ## 1.0.86
 
 ### Patch Changes

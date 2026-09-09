@@ -1,5 +1,13 @@
 # @jagreehal/example-devtools
 
+## 1.0.44
+
+### Patch Changes
+
+- Updated dependencies [dfacb4d]
+  - autotel-web@2.0.0
+  - autotel-devtools@27.2.2
+
 ## 1.0.43
 
 ### Patch Changes

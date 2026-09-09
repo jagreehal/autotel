@@ -1,5 +1,13 @@
 # autotel-posthog
 
+## 9.0.0
+
+### Patch Changes
+
+- Updated dependencies [dfacb4d]
+  - autotel-web@2.0.0
+  - autotel-subscribers@56.1.2
+
 ## 8.0.1
 
 ### Patch Changes

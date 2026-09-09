@@ -1,5 +1,12 @@
 # @jagreehal/example-vitest
 
+## 1.0.66
+
+### Patch Changes
+
+- Updated dependencies [dfacb4d]
+  - autotel-vitest@0.4.60
+
 ## 1.0.65
 
 ### Patch Changes
