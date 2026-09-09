@@ -163,6 +163,117 @@ describe('compileWhere — structure', () => {
   });
 });
 
+/**
+ * The same signal, with the normalized attribute index the store gives it.
+ * Free text has to reach attribute values through this table: the values live
+ * in a JSON blob on the row, and the index is what makes them searchable
+ * without scanning it.
+ */
+const SPANS_INDEXED: SignalSchema = {
+  ...SPANS,
+  attributeIndex: {
+    table: 'attribute_occurrences',
+    signal: 'traces',
+    entitySql: "(trace_id || ':' || span_id)",
+  },
+};
+
+/** Compile against the indexed schema. */
+function indexedSqlFor(text: string) {
+  const result = parse(text);
+  if (!result.ok) throw new Error(`parse failed: ${result.errors[0]?.message}`);
+  return compileWhere(result.node, SPANS_INDEXED);
+}
+
+describe('compileWhere — free text over attribute values', () => {
+  it('adds an attribute-value clause to the column clauses', () => {
+    const { sql, params } = indexedSqlFor('checkout');
+
+    expect(sql).toBe(
+      `("name" LIKE ? ESCAPE '\\' OR "service" LIKE ? ESCAPE '\\' OR "trace_id" LIKE ? ESCAPE '\\' OR (trace_id || ':' || span_id) IN (SELECT entity_id FROM "attribute_occurrences" WHERE signal = ? AND (value_json LIKE ? ESCAPE '\\' OR (json_valid(value_json) AND EXISTS (SELECT 1 FROM json_tree(value_json) jt WHERE jt.value LIKE ? ESCAPE '\\')))))`,
+    );
+    // Placeholder order: three column patterns, then the signal, then the
+    // pattern once for the stored JSON and once for the decoded value — the
+    // order they appear in the SQL above.
+    expect(params).toEqual([
+      '%checkout%',
+      '%checkout%',
+      '%checkout%',
+      'traces',
+      '%checkout%',
+      '%checkout%',
+    ]);
+  });
+
+  it('keeps the attribute subquery uncorrelated', () => {
+    // The load-bearing detail. `LIKE '%x%'` cannot use an index, so the
+    // occurrences table is scanned - but a subquery that does not mention the
+    // outer row is scanned once, while a correlated `EXISTS` is re-scanned per
+    // span. Measured on 2000 spans: ~5ms here, 2.5s correlated.
+    const { sql } = indexedSqlFor('checkout');
+
+    const subquery = sql.slice(sql.indexOf('IN (SELECT'));
+    expect(subquery).not.toContain('trace_id ||');
+    expect(subquery).not.toContain('entity_id =');
+  });
+
+  it('matches values, never keys', () => {
+    // `key` is deliberately absent from the subquery: every span carries
+    // resource keys like `process.command` and `host.name`, so matching keys
+    // would make common words match everything.
+    const { sql } = indexedSqlFor('checkout');
+
+    const subquery = sql.slice(sql.indexOf('IN (SELECT'));
+    expect(subquery).not.toContain('key LIKE');
+  });
+
+  it('matches decoded values as well as the stored JSON', () => {
+    // The column holds `JSON.stringify(value)`, so a backslash or a quote is
+    // escaped there. The walk reaches array elements, which carry that
+    // escaping one level down.
+    const { sql } = indexedSqlFor('checkout');
+
+    expect(sql).toContain(
+      'FROM json_tree(value_json) jt WHERE jt.value LIKE ?',
+    );
+    expect(sql).toContain('json_valid(value_json)');
+  });
+
+  it('escapes LIKE wildcards in the search text', () => {
+    // `%` and `_` are wildcards in SQL LIKE. Unescaped, searching `100%` would
+    // match every row that has any attribute at all.
+    const { params } = indexedSqlFor(JSON.stringify('100%_'));
+
+    const pattern = '%100\\%\\_%';
+    expect(params).toEqual([
+      pattern,
+      pattern,
+      pattern,
+      'traces',
+      pattern,
+      pattern,
+    ]);
+  });
+
+  it('leaves a schema without an attribute index alone', () => {
+    // Metrics have no such index; the clause must not be emitted at all rather
+    // than referencing a table that is not there.
+    const { sql } = sqlFor('checkout');
+
+    expect(sql).not.toContain('EXISTS');
+  });
+
+  it('never places the search text into the SQL string', () => {
+    const hostile = "x' OR 1=1; DROP TABLE spans --";
+    const { sql, params } = indexedSqlFor(JSON.stringify(hostile));
+
+    expect(sql).not.toContain('DROP');
+    expect(sql).not.toContain('OR 1=1');
+    // Every occurrence of the text is a bound parameter.
+    expect(params.filter((value) => value === `%${hostile}%`)).toHaveLength(5);
+  });
+});
+
 describe('compileWhere — injection boundary', () => {
   const HOSTILE = [
     "api'; DROP TABLE spans; --",

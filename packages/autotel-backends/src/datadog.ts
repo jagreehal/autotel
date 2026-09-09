@@ -144,6 +144,23 @@ export interface DatadogPresetConfig {
   agentPort?: number;
 
   /**
+   * Route GenAI (`gen_ai.*`) spans to Datadog Agent Observability by sending
+   * the `dd-otlp-source: llmobs` header alongside the API key.
+   *
+   * Datadog maps canonical OTel GenAI semantic conventions (v1.37+) onto its
+   * native Agent Observability schema — model, provider, token usage, cost,
+   * finish reason. Without this header those spans arrive as ordinary APM
+   * spans and Agent Observability shows nothing. Traces are written to both
+   * products, so a service that is not LLM-shaped loses nothing by sending it.
+   *
+   * Only applies to direct cloud ingestion; in `useAgent` mode the Agent
+   * decides the routing itself.
+   *
+   * @default true
+   */
+  llmobs?: boolean;
+
+  /**
    * Custom log record processors (advanced).
    * Overrides the default log processor if enableLogs is true.
    */
@@ -158,6 +175,7 @@ export interface DatadogPresetConfig {
  *   - Direct: https://otlp.{site} → SDK appends /v1/traces, /v1/metrics, /v1/logs
  *   - Agent: http://localhost:4318 (default)
  * - Datadog API key authentication headers (direct ingestion only)
+ * - Agent Observability routing for GenAI spans (`dd-otlp-source: llmobs`)
  * - Unified service tagging (service, env, version)
  * - Resource attribute best practices
  * - Optional log export configuration
@@ -203,6 +221,7 @@ export function createDatadogConfig(
     environment,
     version,
     enableLogs = false,
+    llmobs = true,
     useAgent = false,
     agentHost = 'localhost',
     agentPort = 4318,
@@ -264,7 +283,11 @@ export function createDatadogConfig(
   // Direct cloud ingestion configuration
   // Datadog OTLP endpoint: base URL without path (SDK appends /v1/traces, /v1/metrics, /v1/logs)
   const otlpEndpoint = `https://otlp.${site}`;
-  const authHeaders = `dd-api-key=${apiKey}`;
+  // `dd-otlp-source: llmobs` is what routes gen_ai.* spans to Agent
+  // Observability; they reach APM either way.
+  const authHeaders = llmobs
+    ? `dd-api-key=${apiKey},dd-otlp-source=llmobs`
+    : `dd-api-key=${apiKey}`;
 
   const cloudConfig: AutotelConfig = {
     ...baseConfig,

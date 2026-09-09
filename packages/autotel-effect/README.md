@@ -73,9 +73,42 @@ In a server, merge the layer where you assemble services:
 appLayer.pipe(Layer.provideMerge(layer({ serviceName: 'my-api' })));
 ```
 
-HTTP spans from autotel's `node:http` instrumentation become parents of domain spans from `Effect.withSpan`.
+### 3. Join the surrounding trace with `withAutotel`
 
-### 3. Logs come with it
+Effect takes a span's parent from its own `Tracer.ParentSpan`, not from the
+ambient OpenTelemetry context, and marks a span as a root when it has none. So a
+bare `Effect.runPromise` inside an instrumented HTTP handler opens a **new
+trace** — the handler's span and the Effect's span end up in two separate
+traces, with nothing to say they belong together. `withAutotel` hands Effect the
+active autotel span as the parent:
+
+```typescript
+import { withAutotel } from 'autotel-effect';
+
+app.get('/api/todos', async () => {
+  // inside autotel's `node:http` span
+  return Effect.runPromise(withAutotel(program));
+});
+```
+
+It reads the active span when the effect **runs**, so a program assembled once
+at startup still joins the request it is run inside. That is also why this is
+not part of `layer()`: a layer is built once for the whole application, long
+before any request span exists.
+
+With it, HTTP spans from autotel's `node:http` instrumentation become parents of
+domain spans from `Effect.withSpan`.
+
+### Don't reach for `trace()` here
+
+autotel's `trace(name, fn)` wraps a function and ends its span when that
+function **returns**. A function that returns an `Effect` returns a description
+of work, not the work, so the span closes before anything runs and measures the
+construction rather than the effect. Use Effect's own instrumentation instead —
+`Effect.fn('name')(...)` or `Effect.withSpan('name')` — which is what `layer()`
+routes through autotel.
+
+### 4. Logs come with it
 
 One `layer()` call bridges both signals. `Effect.log*` becomes an OpenTelemetry
 **log record** (so it reaches any OTLP log backend, including autotel-devtools)
@@ -113,7 +146,7 @@ allows it); `pretty: true` swaps JSON for human-readable stdout; `console: false
 drops the stdout line and emits only the log record — use it when
 `captureConsole()` is on, or every Effect log is reported twice.
 
-### 4. Unit tests: provide nothing
+### 5. Unit tests: provide nothing
 
 Effect's default `Tracer` is already an in-memory native tracer, so handler tests
 need no layer at all — `Effect.withSpan` runs and exports nowhere:
@@ -127,11 +160,15 @@ that assert on exported spans.
 
 ## Trace shape
 
+With `Effect.runPromise(withAutotel(program))`:
+
 ```text
 HTTP GET /api/todos     (autotel node:http)
   └── todo.list         (Effect.withSpan)
         └── db.query    (another withSpan or instrumented client)
 ```
+
+Without `withAutotel`, `todo.list` is the root of a second, unrelated trace.
 
 ## Example
 

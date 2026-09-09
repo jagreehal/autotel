@@ -115,6 +115,20 @@ test('tagged test', async ({ page }) => {
 
 Multiple key=value pairs are separated by `;`. The format is `key=value;key2=value2`.
 
+### Linking a test run to its trace, and back
+
+Every test is annotated with type `otel-trace`, carrying the trace URL resolved
+from `OTEL_TRACE_URL_TEMPLATE` or the raw trace id, so the HTML report points at
+the backend trace for that test.
+
+The reporter carries Playwright's own artefacts the other way, onto the test
+span: `test.trace.path`, `test.video.path`, `test.screenshot.path`. Find the
+failed span in the backend, then replay the run that produced it:
+
+```bash
+npx playwright show-trace <test.trace.path>
+```
+
 ### Server-side span assertions with `createTestSpansClient`
 
 Pairs with `createTestSpansHandlers()` from `autotel-tanstack/testing` to assert what spans the server actually created:

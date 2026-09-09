@@ -6,6 +6,7 @@ import type { TestCase, TestResult, TestStep } from '@playwright/test/reporter';
 interface RecordedSpan {
   end: ReturnType<typeof vi.fn>;
   recordException: ReturnType<typeof vi.fn>;
+  setAttribute: ReturnType<typeof vi.fn>;
   setStatus: ReturnType<typeof vi.fn>;
 }
 
@@ -25,6 +26,7 @@ vi.mock('autotel', () => ({
       const span: RecordedSpan = {
         end: vi.fn(),
         recordException: vi.fn(),
+        setAttribute: vi.fn(),
         setStatus: vi.fn(),
       };
       spans.push(span);
@@ -55,9 +57,12 @@ function testCase(fields: {
   } as TestCase;
 }
 
-function testResult(status: TestResult['status'] = 'passed'): TestResult {
-  // SAFETY: only `status` is read from a result on the paths under test.
-  return { status } as TestResult;
+function testResult(
+  status: TestResult['status'] = 'passed',
+  attachments: TestResult['attachments'] = [],
+): TestResult {
+  // SAFETY: only `status` and `attachments` are read from a result.
+  return { status, attachments } as TestResult;
 }
 
 function testStep(fields: {
@@ -97,6 +102,75 @@ describe('OtelReporter', () => {
     expect(spans).toHaveLength(2);
     expect(spans[0]!.end).toHaveBeenCalledTimes(1);
     expect(spans[1]!.end).not.toHaveBeenCalled();
+  });
+
+  it('puts the playwright trace path on the test span', async () => {
+    const { OtelReporter } = await import('./reporter');
+    const reporter = new OtelReporter();
+
+    const test = testCase({ id: 'a', title: 'traced test', line: 3 });
+    reporter.onTestBegin(test, testResult());
+    reporter.onTestEnd(
+      test,
+      testResult('failed', [
+        {
+          name: 'trace',
+          path: '/tmp/a.trace.zip',
+          contentType: 'application/zip',
+        },
+        { name: 'stdout', path: '/tmp/noise.txt', contentType: 'text/plain' },
+      ]),
+    );
+
+    expect(spans[0]!.setAttribute).toHaveBeenCalledWith(
+      'test.trace.path',
+      '/tmp/a.trace.zip',
+    );
+    expect(spans[0]!.setAttribute).toHaveBeenCalledTimes(1);
+  });
+
+  it('puts the video and screenshot paths on the test span', async () => {
+    const { OtelReporter } = await import('./reporter');
+    const reporter = new OtelReporter();
+
+    const test = testCase({ id: 'b', title: 'recorded test', line: 4 });
+    reporter.onTestBegin(test, testResult());
+    reporter.onTestEnd(
+      test,
+      testResult('failed', [
+        { name: 'video', path: '/tmp/b.webm', contentType: 'video/webm' },
+        { name: 'screenshot', path: '/tmp/b.png', contentType: 'image/png' },
+      ]),
+    );
+
+    expect(spans[0]!.setAttribute).toHaveBeenCalledWith(
+      'test.video.path',
+      '/tmp/b.webm',
+    );
+    expect(spans[0]!.setAttribute).toHaveBeenCalledWith(
+      'test.screenshot.path',
+      '/tmp/b.png',
+    );
+  });
+
+  it('ignores an artefact that was attached inline rather than as a file', async () => {
+    const { OtelReporter } = await import('./reporter');
+    const reporter = new OtelReporter();
+
+    const test = testCase({ id: 'c', title: 'inline attachment', line: 5 });
+    reporter.onTestBegin(test, testResult());
+    reporter.onTestEnd(
+      test,
+      testResult('failed', [
+        {
+          name: 'screenshot',
+          body: Buffer.from('png bytes'),
+          contentType: 'image/png',
+        },
+      ]),
+    );
+
+    expect(spans[0]!.setAttribute).not.toHaveBeenCalled();
   });
 
   it('marks a step span as error when step.error exists even if result.status is passed', async () => {

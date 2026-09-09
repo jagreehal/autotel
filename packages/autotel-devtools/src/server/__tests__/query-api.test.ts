@@ -148,6 +148,232 @@ async function seed(port: number) {
   return now;
 }
 
+/** A span whose attributes carry the values someone would search for. */
+async function seedAttributeSpans(port: number) {
+  const now = Date.now();
+  await postTraces(
+    port,
+    otlpSpan({
+      traceId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1',
+      spanId: 'b111111111111111',
+      name: 'checkout',
+      service: 'shop',
+      startMs: now - 3000,
+      durationMs: 900,
+      attributes: [
+        { key: 'checkout.coupon', value: { stringValue: 'SAVE20' } },
+        { key: 'order.total', value: { doubleValue: 99.99 } },
+        { key: 'payment.captured', value: { boolValue: true } },
+        { key: 'customer.name', value: { stringValue: 'Ada Lovelace' } },
+        {
+          key: 'cart.skus',
+          value: {
+            arrayValue: {
+              values: [{ stringValue: 'sku-1' }, { stringValue: 'sku-9' }],
+            },
+          },
+        },
+      ],
+    }),
+  );
+  await postTraces(
+    port,
+    otlpSpan({
+      traceId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2',
+      spanId: 'b222222222222222',
+      name: 'refund',
+      service: 'shop',
+      startMs: now - 2000,
+      durationMs: 20,
+      attributes: [
+        { key: 'discount.label', value: { stringValue: '100%off' } },
+        { key: 'note', value: { stringValue: 'no coupon' } },
+        // Values whose stored JSON is not what the viewer displays: the store
+        // holds `"C:\\Users\\alice"` and `"say \\"hello\\""`.
+        { key: 'file.path', value: { stringValue: 'C:\\Users\\alice' } },
+        { key: 'log.line', value: { stringValue: 'say "hello"' } },
+        // The same escaping, one level down: an array's elements are escaped
+        // inside the stored JSON too.
+        {
+          key: 'file.paths',
+          value: {
+            arrayValue: {
+              values: [
+                { stringValue: 'D:\\shared\\report.csv' },
+                { stringValue: 'said "goodbye"' },
+              ],
+            },
+          },
+        },
+      ],
+    }),
+  );
+  return now;
+}
+
+describe('POST /api/query/traces — free text reaches attribute values', () => {
+  it('finds a span by an attribute value typed on its own', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    const { body } = await query(port, { query: 'SAVE20' });
+
+    expect(body.traces).toHaveLength(1);
+    expect(body.traces?.[0].traceId).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1');
+  });
+
+  it('matches an attribute value regardless of case', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    const { body } = await query(port, { query: 'save20' });
+
+    expect(body.traces).toHaveLength(1);
+  });
+
+  it('matches part of an attribute value', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    const { body } = await query(port, { query: 'Lovelace' });
+
+    expect(body.traces).toHaveLength(1);
+  });
+
+  it('matches a numeric attribute value', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    const { body } = await query(port, { query: '99.99' });
+
+    expect(body.traces).toHaveLength(1);
+  });
+
+  it('matches a boolean attribute value', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    const { body } = await query(port, { query: 'true' });
+
+    expect(body.traces).toHaveLength(1);
+  });
+
+  it('matches one element of an array attribute value', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    const { body } = await query(port, { query: 'sku-9' });
+
+    expect(body.traces).toHaveLength(1);
+  });
+
+  it('matches a quoted phrase containing a space', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    const { body } = await query(port, { query: '"Ada Lovelace"' });
+
+    expect(body.traces).toHaveLength(1);
+  });
+
+  it('treats a LIKE wildcard in the search text as a literal', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    // `%` is a wildcard in SQL LIKE. Unescaped, this would match every span
+    // that has any attribute at all.
+    const { body } = await query(port, { query: '"100%"' });
+
+    expect(body.traces).toHaveLength(1);
+    expect(body.traces?.[0].traceId).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2');
+  });
+
+  it('matches a value containing backslashes', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    // The viewer shows the decoded value; the row holds JSON, where every
+    // backslash is doubled.
+    const { body } = await query(port, { query: 'C:\\Users\\alice' });
+
+    expect(body.traces).toHaveLength(1);
+    expect(body.traces?.[0].traceId).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2');
+  });
+
+  it('matches a value containing quotes', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    // Stored as `"say \"hello\""`; the phrase as displayed has to match.
+    const { body } = await query(port, { query: '"say \\"hello\\""' });
+
+    expect(body.traces).toHaveLength(1);
+    expect(body.traces?.[0].traceId).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2');
+  });
+
+  it('matches an escaped value inside an array attribute', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    // An array is stored as JSON text, so its elements carry the same
+    // escaping one level down.
+    const { body } = await query(port, { query: 'D:\\shared\\report.csv' });
+
+    expect(body.traces).toHaveLength(1);
+    expect(body.traces?.[0].traceId).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2');
+  });
+
+  it('matches a quoted value inside an array attribute', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    const { body } = await query(port, { query: '"said \\"goodbye\\""' });
+
+    expect(body.traces).toHaveLength(1);
+  });
+
+  it('does not match on an attribute key', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    // Deliberate: people search for values they saw in their data, and every
+    // span carries resource keys like `process.command` and `host.name`, so
+    // matching keys would make common words match everything. `key = value`
+    // and the attributes panel are how you search by key.
+    const { body } = await query(port, { query: 'checkout.coupon' });
+
+    expect(body.traces).toHaveLength(0);
+  });
+
+  it('still matches the span name and service', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    expect((await query(port, { query: 'refund' })).body.traces).toHaveLength(
+      1,
+    );
+    expect((await query(port, { query: 'shop' })).body.traces).toHaveLength(2);
+  });
+
+  it('combines an attribute value with a comparison', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    const { body } = await query(port, { query: 'SAVE20 AND duration > 100' });
+
+    expect(body.traces).toHaveLength(1);
+  });
+
+  it('finds nothing for a value no span carries', async () => {
+    const port = await start();
+    await seedAttributeSpans(port);
+
+    const { body } = await query(port, { query: 'SAVE99' });
+
+    expect(body.traces).toHaveLength(0);
+  });
+});
+
 describe('POST /api/query/traces', () => {
   it('returns every ingested trace for an empty query', async () => {
     const port = await start();

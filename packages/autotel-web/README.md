@@ -410,7 +410,8 @@ initFull({
     enabled: true,
     selectors: ['button', 'a', '[data-track]'],
   },
-  privacy: { allowedOrigins: ['api.myapp.com'], respectDoNotTrack: true },
+  propagateTo: ['api.myapp.com'],
+  privacy: { respectDoNotTrack: true },
   debug: false,
 });
 ```
@@ -683,7 +684,8 @@ interface AutotelWebConfig {
 }
 
 interface PrivacyConfig {
-  /** Only inject traceparent on these origins (whitelist) */
+  /** @deprecated Use top-level `propagateTo`. An exclusive allowlist: when set it
+   *  decides on its own, and same-origin is not implied. */
   allowedOrigins?: string[];
 
   /** Never inject traceparent on these origins (blacklist) */
@@ -703,8 +705,8 @@ interface PrivacyConfig {
 init({
   service: 'my-spa',
   debug: false,
+  propagateTo: ['api.myapp.com'],
   privacy: {
-    allowedOrigins: ['api.myapp.com'],
     respectDoNotTrack: true,
   },
 });
@@ -766,6 +768,7 @@ interface AutotelWebFullConfig {
   captureLongTasks?: boolean; // app.jank events (main thread >= 50ms); opt-in (default false)
   copyHttpSpanAttributesToEvent?: boolean;
   userInteraction?: { enabled: boolean; selectors?: string[] };
+  propagateTo?: string[]; // cross-origin propagation opt-in (same-origin always)
   privacy?: PrivacyConfig;
   debug?: boolean;
 }
@@ -845,7 +848,8 @@ autotel-web includes built-in privacy controls to ensure compliance with GDPR, C
 
 ```typescript
 interface PrivacyConfig {
-  /** Only inject traceparent on these origins (whitelist) */
+  /** @deprecated Use top-level `propagateTo`. An exclusive allowlist: when set it
+   *  decides on its own, and same-origin is not implied. */
   allowedOrigins?: string[];
 
   /** Never inject traceparent on these origins (blacklist) */

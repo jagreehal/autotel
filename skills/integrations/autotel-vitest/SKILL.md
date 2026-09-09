@@ -70,6 +70,21 @@ Each test span is named `test:${task.name}` and carries these attributes automat
 
 If a test throws, the span is marked `ERROR` and records the exception.
 
+### Finding the trace from a test run
+
+Every test is annotated with type `otel-trace`, carrying the trace URL resolved
+from `OTEL_TRACE_URL_TEMPLATE` or the raw trace id, so a reporter — the HTML
+report, the browser trace view's step list — links back to the trace for that
+test.
+
+In browser mode, a recorded Playwright trace reaches reporters as an annotation
+attachment; the OtelReporter copies its path onto the test span as
+`test.trace.path`, so a failed span leads to the replay:
+
+```bash
+npx playwright show-trace <test.trace.path>
+```
+
 ### Optional: OtelReporter (runner-process spans)
 
 The fixture creates spans in the **worker** process. If you also want **runner-process** spans for test/suite timing (visible in your OTLP backend as a hierarchy), add the reporter:

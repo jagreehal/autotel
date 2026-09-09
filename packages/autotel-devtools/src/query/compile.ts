@@ -91,6 +91,33 @@ function emit(
         params.push(pattern);
         return `${targetSql(field, schema, params, { pathAlreadyPushed: false })} LIKE ? ESCAPE '${LIKE_ESCAPE}'`;
       });
+
+      // Attribute values too: what someone types into a search box is
+      // something they saw in their own data - an order id, a coupon, an email
+      // - and those are values, not span names. Keys are deliberately not
+      // matched; every span carries resource keys such as `host.name`, so
+      // ordinary words would match every row. `key = value` searches by key.
+      //
+      // Both the stored JSON and its decoded leaves. The column holds
+      // `JSON.stringify(value)`, so `C:\Users\alice` sits there with its
+      // backslashes doubled, and an array keeps that escaping one level down -
+      // `json_tree` walks to the leaves, so a value matches as the viewer
+      // displays it at any depth. The raw form stays for `true` and `null`,
+      // which come back from the walk as 1 and NULL.
+      //
+      // `IN (SELECT ...)`, not a correlated `EXISTS`: `LIKE '%x%'` cannot use
+      // an index, so the occurrences table is scanned either way, but a
+      // subquery that does not mention the outer row is evaluated once instead
+      // of once per span - 7ms against 2000 spans, where the correlated form
+      // took 2.5s.
+      const index = schema.attributeIndex;
+      if (index) {
+        params.push(index.signal, pattern, pattern);
+        clauses.push(
+          `${index.entitySql} IN (SELECT entity_id FROM ${quoteIdent(index.table)} WHERE signal = ? AND (value_json LIKE ? ESCAPE '${LIKE_ESCAPE}' OR (json_valid(value_json) AND EXISTS (SELECT 1 FROM json_tree(value_json) jt WHERE jt.value LIKE ? ESCAPE '${LIKE_ESCAPE}'))))`,
+        );
+      }
+
       if (clauses.length === 0) return '1';
       if (clauses.length === 1) return clauses[0];
       return `(${clauses.join(' OR ')})`;

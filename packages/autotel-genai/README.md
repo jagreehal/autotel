@@ -86,7 +86,18 @@ recordLLMCost(ctx, 'claude-sonnet-4', {
   inputTokens: 4000,
   cacheReadInputTokens: 3500, // priced at the cached rate
 });
+
+// Hosted ids price as the model they name
+estimateLLMCost('eu.anthropic.claude-3-5-haiku-20241022-v1:0', usage);
+
+// Your own rates, merged over the built-in table
+estimateLLMCost('my-finetune', usage, {
+  pricing: { 'my-finetune': { inputPer1M: 0.5, outputPer1M: 1.5 } },
+});
 ```
+
+`createGenAiObserver({ pricing })` and `autotelTelemetry({ pricing })` take the
+same map once, so every span an observer prices uses it.
 
 **Server-side tools are money too.** Web search, code interpreter and file
 search are billed per call, outside the token counts. An agent that searches on

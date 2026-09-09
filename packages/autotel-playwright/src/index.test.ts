@@ -234,6 +234,52 @@ describe('autotel-playwright annotations', () => {
     expect(span.setAttribute).toHaveBeenCalledWith('flow', 'signup');
   });
 
+  it('annotates the test with the trace id so reporters can link to it', async () => {
+    await import('./index');
+
+    const spanFixture = state.fixtures?._otelTestSpan;
+    const spanFixtureFn = Array.isArray(spanFixture)
+      ? spanFixture[0]
+      : spanFixture;
+
+    const annotations: Array<{ type: string; description?: string }> = [];
+    await spanFixtureFn?.({}, async () => {}, {
+      annotations,
+      project: { name: 'chromium' },
+      title: 'otel-trace test',
+    });
+
+    expect(annotations.find((a) => a.type === 'otel-trace')).toEqual({
+      type: 'otel-trace',
+      description: 'trace-1',
+    });
+  });
+
+  it('annotates with the backend trace URL when one is configured', async () => {
+    const { resolveTraceUrl } = await import('autotel');
+    vi.mocked(resolveTraceUrl).mockReturnValueOnce(
+      'https://grafana.example.com/explore?traceId=trace-1',
+    );
+
+    await import('./index');
+
+    const spanFixture = state.fixtures?._otelTestSpan;
+    const spanFixtureFn = Array.isArray(spanFixture)
+      ? spanFixture[0]
+      : spanFixture;
+
+    const annotations: Array<{ type: string; description?: string }> = [];
+    await spanFixtureFn?.({}, async () => {}, {
+      annotations,
+      project: { name: 'chromium' },
+      title: 'otel-trace url test',
+    });
+
+    expect(annotations.find((a) => a.type === 'otel-trace')?.description).toBe(
+      'https://grafana.example.com/explore?traceId=trace-1',
+    );
+  });
+
   it('attaches otel-spans annotation to testInfo when collector returns spans', async () => {
     mockDrainResult = [
       {

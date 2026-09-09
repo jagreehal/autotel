@@ -17,6 +17,7 @@ export default defineConfig({
     'architecture-snapshot': 'src/architecture-snapshot.ts',
     file: 'src/file.ts',
     loki: 'src/loki.ts',
+    posthog: 'src/posthog.ts',
     // The exports map declares `autotel-subscribers/testing`; without an entry
     // here it resolved to a file the build never wrote.
     testing: 'src/testing/index.ts',

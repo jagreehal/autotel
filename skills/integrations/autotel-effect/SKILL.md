@@ -57,7 +57,36 @@ In a server, merge it where services are assembled:
 appLayer.pipe(Layer.provideMerge(layer({ serviceName: 'my-api' })));
 ```
 
-### 3. Logs come with it
+### 3. Join the surrounding trace with `withAutotel`
+
+Effect takes a span's parent from its own `Tracer.ParentSpan`, and marks a span
+as a root when it has none. `withAutotel` hands it the autotel span that is
+active around the run, so an `Effect.withSpan` inside an instrumented handler
+lands in that request's trace:
+
+```typescript
+import { layer, withAutotel } from 'autotel-effect';
+
+app.get('/api/todos', async () => {
+  // inside autotel's `node:http` span
+  return Effect.runPromise(withAutotel(program));
+});
+```
+
+It reads the active span when the effect **runs**, not when it is built, so a
+program assembled once at startup still joins the request it is run inside.
+That is also why it is not part of `layer()`: a layer is built once for the
+whole application, before any request span exists.
+
+Trace shape with it:
+
+```text
+HTTP GET /api/todos     (autotel node:http)
+  └── todo.list         (Effect.withSpan)
+        └── db.query    (another withSpan or instrumented client)
+```
+
+### 4. Logs come with it
 
 That one call bridges logs as well as spans. `Effect.log*` becomes an OpenTelemetry **log record** — reaching any OTLP log backend, autotel-devtools included — plus a trace-correlated structured line on stdout. A log written inside `Effect.withSpan` carries that span's trace and span ids, so logs and traces line up in the same backend.
 
@@ -81,7 +110,7 @@ layer({ serviceName: 'my-api', logs: false });
 
 ### The trace is one tree, not two
 
-HTTP spans from autotel's `node:http` instrumentation become the parents of domain spans from `Effect.withSpan`:
+With `Effect.runPromise(withAutotel(program))`, HTTP spans from autotel's `node:http` instrumentation are the parents of domain spans from `Effect.withSpan`:
 
 ```text
 HTTP GET /api/todos     (autotel node:http)
@@ -123,6 +152,14 @@ Effect.fail(new Error('card declined')).pipe(
 
 The stdout line defaults to `level: 'info'`, so `Effect.logDebug` never reaches stdout even when Effect's own minimum log level allows it. Pass `logs: { level: 'debug' }` for both to agree.
 
+### `trace()` is not the tool for a function returning an Effect
+
+autotel's `trace(name, fn)` ends its span when the function **returns**. A
+function returning an `Effect` returns a description of work, so the span
+measures the construction rather than the run. Use Effect's own
+instrumentation — `Effect.fn('name')` or `Effect.withSpan('name')` — which is
+what `layer()` routes through autotel.
+
 ### Do not reach for a barrel import
 
 The package imports `@effect/opentelemetry/OtelTracer` and `.../Resource` by subpath deliberately. The v4 barrel pulls `@opentelemetry/sdk-trace-web` in at runtime, which is not what a Node service wants in its graph.
@@ -136,3 +173,5 @@ The package imports `@effect/opentelemetry/OtelTracer` and `.../Resource` by sub
 - No second exporter: autotel already owns export.
 - One `layer()` call, not `layer()` merged with `loggerLayer()` — the first already installs the second.
 - `logs: { console: false }` wherever `captureConsole()` is on, or each Effect log is reported twice.
+- `Effect.runPromise(withAutotel(program))` wherever the run happens inside an autotel span, so the Effect spans join that trace.
+- Span instrumentation on an Effect comes from `Effect.fn` / `Effect.withSpan`, never from wrapping the function in `trace()`.

@@ -112,6 +112,8 @@ test('user flow', async ({ page }) => {
 - **page:** For every request whose URL matches the configured API base origin, the fixture adds W3C trace context and `x-test-name` to the request headers (via `page.route`).
 - **requestWithTrace:** Same headers are merged into requests made with the wrapped `request` fixture (get/post/put/patch/delete/head/fetch) when the URL matches the API base.
 - **step(name, fn):** Runs `fn` as a child span `step:${name}` under the test span for finer-grained traces. If `fn` throws, the span is marked as error with `recordException` before re-throwing.
+- Every test gets an `otel-trace` annotation holding the trace URL (from `OTEL_TRACE_URL_TEMPLATE`) or the raw trace id, so the Playwright HTML report points at the backend trace.
+- The reporter puts Playwright's own artefacts on the test span: `test.trace.path`, `test.video.path`, `test.screenshot.path`. Find the failed span in your backend, then `npx playwright show-trace <test.trace.path>` (or drop it on [trace.playwright.dev](https://trace.playwright.dev)) to replay it.
 - Optional per-test attributes: use annotations with type `autotel.attribute` and description `key=value` or semicolon-delimited `key1=value1;key2=value2` (see `AUTOTEL_ATTRIBUTE_ANNOTATION`).
 
 ## API

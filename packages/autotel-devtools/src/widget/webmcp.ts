@@ -76,7 +76,8 @@ function clampLimit(limit: unknown): number {
 const QUERY_HELP =
   'Filter expression, e.g. `service = api duration > 100`, `status = ERROR`, ' +
   '`name contains checkout`. Conditions side by side mean AND; `OR` and ' +
-  'parentheses work. Empty string matches everything.';
+  'parentheses work. A bare word is free text, matched against the span name, ' +
+  'service, trace id and every attribute value. Empty string matches everything.';
 
 const queryInput = {
   type: 'object',

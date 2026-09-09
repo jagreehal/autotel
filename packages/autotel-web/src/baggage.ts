@@ -23,6 +23,8 @@
  * ```
  */
 
+import { isPropagationAllowed } from './propagate';
+
 /**
  * Maximum serialized `baggage` header size in bytes.
  * Matches the W3C Baggage spec recommended maximum total length. Entries that
@@ -180,24 +182,9 @@ export function isBaggageDestinationAllowed(
   currentOrigin: string,
   allowedOrigins: readonly string[] = [],
 ): boolean {
-  let targetOrigin: string;
-  try {
-    targetOrigin =
-      url.startsWith('http://') || url.startsWith('https://')
-        ? new URL(url).origin
-        : new URL(url, currentOrigin || 'http://localhost').origin;
-  } catch {
-    // Unparseable URL — fail closed.
-    return false;
-  }
-
-  // Same-origin is always allowed.
-  if (currentOrigin && targetOrigin === currentOrigin) return true;
-
-  // Cross-origin only via explicit allowlist (substring match for parity with
-  // PrivacyManager.allowedOrigins).
-  const t = targetOrigin.toLowerCase();
-  return allowedOrigins.some((o) => t.includes(o.toLowerCase()));
+  // Same rule as `traceparent`, and deliberately the same function: baggage
+  // must never travel further than the header it rides alongside.
+  return isPropagationAllowed(url, currentOrigin, allowedOrigins);
 }
 
 /**

@@ -5,6 +5,8 @@
 Subscribers for [autotel](https://github.com/jagreehal/autotel) to send events to Mixpanel, Amplitude, Segment, Slack, Loki, files, and custom webhooks.
 
 > **PostHog moved.** `PostHogSubscriber` now lives in [`autotel-posthog`](../autotel-posthog), alongside the browser session/replay join, so one package covers PostHog end to end. Import it from `autotel-posthog/subscriber`; it still extends the `EventSubscriber` base defined here.
+>
+> Importing it from here still resolves for one more minor, but constructing it throws with the new import path — `autotel-posthog` depends on this package, so a real re-export would make the two depend on each other.
 
 ## Why Use This?
 

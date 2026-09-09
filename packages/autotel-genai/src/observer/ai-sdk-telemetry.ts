@@ -82,6 +82,7 @@ import {
   type AiSdkUsageFields,
 } from './ai-sdk-fields.js';
 import { createGenAiObserver } from './observer.js';
+import type { ModelPricing } from '../cost.js';
 import type {
   ChatStreamTiming,
   GenAiObserverEvent,
@@ -270,6 +271,11 @@ export interface AutotelTelemetryOptions {
    * request span. Return `undefined` to keep it a root.
    */
   resolveParentContext?: (event: GenAiObserverEvent) => Context | undefined;
+  /**
+   * Extra `gen_ai.usage.cost.usd` pricing, merged over the built-in table.
+   * See {@link GenAiObserverOptions.pricing}.
+   */
+  pricing?: Record<string, ModelPricing>;
 }
 
 /** Per-call correlation state, keyed by the AI SDK `callId`. */
@@ -333,6 +339,7 @@ export function autotelTelemetry(
   const observe: GenAiObserver = createGenAiObserver({
     tracer: options.tracer,
     exportContent,
+    pricing: options.pricing,
     resolveParentContext: options.resolveParentContext,
     onSpanStart: (id, span) => spans.set(id, span),
   });

@@ -298,3 +298,44 @@ describe('server-tool pricing covers only per-call billing', () => {
     ).toBe(30);
   });
 });
+
+describe('hosted model ids', () => {
+  const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000 };
+  const bare = estimateLLMCost('claude-3-5-haiku', usage);
+
+  it.each([
+    ['bedrock', 'anthropic.claude-3-5-haiku-20241022-v1:0'],
+    [
+      'bedrock EU inference profile',
+      'eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+    ],
+    [
+      'bedrock US inference profile',
+      'us.anthropic.claude-3-5-haiku-20241022-v1:0',
+    ],
+    ['vertex', 'publishers/anthropic/models/claude-3-5-haiku@20241022'],
+  ])('prices the same model behind a %s prefix', (_label, model) => {
+    expect(estimateLLMCost(model, usage)).toBe(bare);
+  });
+
+  it('does not mistake a version for a vendor prefix', () => {
+    // Stripping at the first dot would turn `gpt-4.1-mini` into `1-mini` and
+    // lose the entry the table already holds.
+    const mini = MODEL_PRICING['gpt-4.1-mini'];
+    expect(estimateLLMCost('gpt-4.1-mini', usage)).toBe(
+      mini.inputPer1M + mini.outputPer1M,
+    );
+  });
+
+  it('leaves an unknown model unpriced rather than guessing', () => {
+    expect(estimateLLMCost('zai.glm-4.7-flash', usage)).toBeUndefined();
+  });
+
+  it('prices an unknown model from a caller-supplied table', () => {
+    expect(
+      estimateLLMCost('zai.glm-4.7-flash', usage, {
+        pricing: { 'glm-4.7-flash': { inputPer1M: 1, outputPer1M: 2 } },
+      }),
+    ).toBe(3);
+  });
+});

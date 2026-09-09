@@ -65,7 +65,11 @@ const task = { name: 'a test', meta: {} as TaskMeta };
 async function runFixture(body: () => void) {
   const { otelTestSpanFixture } = await import('./fixture');
   const [fixtureFn] = otelTestSpanFixture;
-  await fixtureFn({ task }, async () => body());
+  // `annotate` is always present on a real test context, and it is async — so
+  // the fixture is exercised here the way vitest actually calls it. Awaiting
+  // anything before the context is entered detaches the entry from the async
+  // resource the test body inherits.
+  await fixtureFn({ task, annotate: async () => {} }, async () => body());
 }
 
 describe('fixture context entry', () => {

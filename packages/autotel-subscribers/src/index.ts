@@ -41,6 +41,9 @@ export {
 } from './security';
 export { WebhookSubscriber, type WebhookConfig } from './webhook';
 export { LokiSubscriber, type LokiConfig } from './loki';
+// Moved to `autotel-posthog/subscriber`; kept for one minor so the old import
+// resolves and names its new home. See ./posthog.
+export { PostHogSubscriber, type PostHogConfig } from './posthog';
 export {
   ArchitectureSnapshotSubscriber,
   ARCHITECTURE_SNAPSHOT_SPEC,
