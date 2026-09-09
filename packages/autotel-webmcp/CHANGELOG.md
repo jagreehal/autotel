@@ -1,5 +1,12 @@
 # autotel-webmcp
 
+## 3.0.0
+
+### Patch Changes
+
+- Updated dependencies [dfacb4d]
+  - autotel-web@2.0.0
+
 ## 2.0.1
 
 ### Patch Changes

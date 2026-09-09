@@ -1,5 +1,12 @@
 # @jagreehal/example-mcp-client
 
+## 0.1.94
+
+### Patch Changes
+
+- Updated dependencies [dfacb4d]
+  - autotel-genai@0.11.0
+
 ## 0.1.93
 
 ### Patch Changes

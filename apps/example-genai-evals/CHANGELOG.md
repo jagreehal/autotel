@@ -1,5 +1,13 @@
 # @jagreehal/example-genai-evals
 
+## 1.0.17
+
+### Patch Changes
+
+- Updated dependencies [dfacb4d]
+  - autotel-genai@0.11.0
+  - autotel-subscribers@56.1.2
+
 ## 1.0.16
 
 ### Patch Changes
