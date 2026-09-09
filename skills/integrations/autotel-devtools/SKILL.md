@@ -109,6 +109,29 @@ The full-page viewer registers its own read-only WebMCP tools, so an agent drivi
 
 `query` is the same query language as the UI's query bar. Results are projected to the columns the list views show and capped per call; `autotel_get_trace` is how an agent asks for spans.
 
+## The query language
+
+```text
+service = api duration > 100    # conditions side by side mean AND
+status = ERROR OR duration > 1s
+name contains checkout
+user.id = "u-42"                # anything not a first-class field is an attribute
+severity_number >= 17           # logs: error and above
+SAVE20                          # a bare word is free text
+```
+
+**Fields.** Traces: `service`, `name`, `kind`, `duration`, `status`, `trace_id`,
+`span_id`, `parent_span_id`. Logs: `service`, `severity`, `severity_number`,
+`trace_id`, `span_id`, `body`. Anything else is looked up as an attribute, so
+every attribute a service emits is queryable without being declared.
+
+**Free text** matches those fields and every attribute value — so an order id
+or coupon code set with `ctx.setAttribute` finds its span when typed on its
+own, as the viewer displays it, array elements included. Attribute **keys** are
+not matched: every span carries resource keys like `host.name` and
+`process.command`, so matching keys would make ordinary words match everything.
+Search by key with `key = value`.
+
 Registered against `document.modelContext` directly — no library, no runtime dependency. Registration is a no-op in a browser without WebMCP, so no feature detection is needed.
 
 **Full-page only, both at runtime and in the bundle.** The embedded widget is a guest in someone else's page, where `document.modelContext` belongs to that page — devtools tools there would change what its agent sees and land in its own WebMCP tab. `vite.widget.config.ts` also swaps `src/widget/webmcp.ts` for `webmcp.lean.ts` in the embedded build, so its bundle carries none of the tool definitions.

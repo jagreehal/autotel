@@ -89,18 +89,27 @@ init(
 
 **All options:**
 
-| Option                | Required       | Default                | Description                                                               |
-| --------------------- | -------------- | ---------------------- | ------------------------------------------------------------------------- |
-| `apiKey`              | if `!useAgent` | —                      | Datadog API key                                                           |
-| `service`             | yes            | —                      | Service name                                                              |
-| `site`                | no             | `'datadoghq.com'`      | Datadog site region (`datadoghq.eu`, `us3.datadoghq.com`, etc.)           |
-| `environment`         | no             | `DD_ENV \|\| NODE_ENV` | Deployment environment                                                    |
-| `version`             | no             | `DD_VERSION \|\| auto` | Service version                                                           |
-| `enableLogs`          | no             | `false`                | Export OTel logs via OTLP; also sets `OTEL_EXPORTER_OTLP_LOGS_*` env vars |
-| `useAgent`            | no             | `false`                | Route telemetry to local Datadog Agent instead of direct cloud ingestion  |
-| `agentHost`           | no             | `'localhost'`          | Agent hostname (when `useAgent: true`)                                    |
-| `agentPort`           | no             | `4318`                 | Agent OTLP HTTP port (when `useAgent: true`)                              |
-| `logRecordProcessors` | no             | —                      | Override default log processor (advanced)                                 |
+| Option                | Required       | Default                | Description                                                                 |
+| --------------------- | -------------- | ---------------------- | --------------------------------------------------------------------------- |
+| `apiKey`              | if `!useAgent` | —                      | Datadog API key                                                             |
+| `service`             | yes            | —                      | Service name                                                                |
+| `site`                | no             | `'datadoghq.com'`      | Datadog site region (`datadoghq.eu`, `us3.datadoghq.com`, etc.)             |
+| `environment`         | no             | `DD_ENV \|\| NODE_ENV` | Deployment environment                                                      |
+| `version`             | no             | `DD_VERSION \|\| auto` | Service version                                                             |
+| `enableLogs`          | no             | `false`                | Export OTel logs via OTLP; also sets `OTEL_EXPORTER_OTLP_LOGS_*` env vars   |
+| `llmobs`              | no             | `true`                 | Send `dd-otlp-source: llmobs` so `gen_ai.*` spans reach Agent Observability |
+| `useAgent`            | no             | `false`                | Route telemetry to local Datadog Agent instead of direct cloud ingestion    |
+| `agentHost`           | no             | `'localhost'`          | Agent hostname (when `useAgent: true`)                                      |
+| `agentPort`           | no             | `4318`                 | Agent OTLP HTTP port (when `useAgent: true`)                                |
+| `logRecordProcessors` | no             | —                      | Override default log processor (advanced)                                   |
+
+**GenAI spans reach Agent Observability by default.** Direct cloud ingestion
+sends `dd-otlp-source: llmobs` alongside the API key, which is what maps
+canonical OTel GenAI conventions — model, provider, token usage, cost, finish
+reason — onto Datadog's Agent Observability schema. Traces are written to APM
+as well, so a service that is not LLM-shaped loses nothing by sending it; pass
+`llmobs: false` to send only the API key. In `useAgent` mode the Agent decides
+the routing, so the option does not apply.
 
 When `enableLogs: true`, the preset auto-sets `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL`, and `OTEL_EXPORTER_OTLP_LOGS_HEADERS` environment variables (only if not already set), enabling `pino-opentelemetry-transport` without extra configuration.
 

@@ -31,8 +31,27 @@ describe('createDatadogConfig()', () => {
       expect(config).toMatchObject({
         service: 'my-service',
         endpoint: 'https://otlp.datadoghq.com',
-        headers: 'dd-api-key=test-api-key',
+        headers: 'dd-api-key=test-api-key,dd-otlp-source=llmobs',
       });
+    });
+
+    it('should send dd-otlp-source=llmobs so GenAI spans reach Agent Observability', () => {
+      const config = createDatadogConfig({
+        apiKey: 'test-api-key',
+        service: 'my-service',
+      });
+
+      expect(config.headers).toContain('dd-otlp-source=llmobs');
+    });
+
+    it('should omit dd-otlp-source when llmobs is false', () => {
+      const config = createDatadogConfig({
+        apiKey: 'test-api-key',
+        service: 'my-service',
+        llmobs: false,
+      });
+
+      expect(config.headers).toBe('dd-api-key=test-api-key');
     });
 
     it('should use correct endpoint for EU site', () => {

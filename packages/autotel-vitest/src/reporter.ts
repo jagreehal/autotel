@@ -60,6 +60,14 @@ class OtelReporter implements Reporter {
     const entry = this.testSpans.get(testCase.id);
     if (!entry) return;
 
+    // Vitest exposes a browser-mode Playwright trace to reporters as an
+    // annotation attachment; carry its path so the span links to the replay.
+    const tracePath = testCase
+      .annotations()
+      .find((annotation) => annotation.attachment?.path?.endsWith('.trace.zip'))
+      ?.attachment?.path;
+    if (tracePath) entry.span.setAttribute('test.trace.path', tracePath);
+
     const result = testCase.result();
     if (result.state === 'failed') {
       entry.span.setStatus({ code: SpanStatusCode.ERROR });

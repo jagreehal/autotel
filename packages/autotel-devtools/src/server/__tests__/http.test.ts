@@ -15,6 +15,31 @@ describe('HTTP server', () => {
     httpServer = null;
   });
 
+  it('lets an instrumented browser client send its trace headers', async () => {
+    httpServer = createServer();
+    wsServer = new DevtoolsServer({ server: httpServer });
+    attachDevtoolsRoutes(httpServer, wsServer);
+    await new Promise<void>((r) => httpServer.listen(0, '127.0.0.1', r));
+    const port = httpServer.address().port;
+
+    // What a browser sends before an autotel-web instrumented fetch to the
+    // query API: the propagator has added `traceparent`, so the request is no
+    // longer simple and Chrome preflights it first.
+    const res = await fetch(`http://127.0.0.1:${port}/api/query/traces`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:5173',
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'traceparent,baggage',
+      },
+    });
+
+    expect(res.status).toBe(204);
+    const allowed = res.headers.get('access-control-allow-headers') ?? '';
+    expect(allowed.toLowerCase()).toContain('traceparent');
+    expect(allowed.toLowerCase()).toContain('baggage');
+  });
+
   it('accepts OTLP trace data at POST /v1/traces', async () => {
     httpServer = createServer();
     wsServer = new DevtoolsServer({ server: httpServer });

@@ -138,6 +138,12 @@ rather than a nice-to-have.
   bad payload takes the whole visit with it. The unload beacon carries
   `retryBatch` as well as `pending`: the retry timer will never fire again once
   the page is gone.
+- **Propagation is opt-in cross-origin, and separate from tracing.** Same-origin
+  always; anything else needs `propagateTo`, because an unexpected header
+  preflights and a server that does not allow `traceparent` rejects the request
+  outright — the tracer breaking the app it observes. The browser span is
+  recorded either way: tying it to the injection turned "do not propagate" into
+  "do not trace". `privacy` may only subtract from the decision.
 - **Instrumentation never throws into the app.** Console patches, breadcrumbs
   and log records swallow their own failures.
 - **Lean mode stays dependency-free.** No `@opentelemetry/*` import may reach

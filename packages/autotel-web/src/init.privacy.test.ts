@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { init, resetForTesting } from './init';
 
+const PAGE_ORIGIN = 'https://app.example.com';
+
 describe('init() with privacy controls', () => {
   let callTracker: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
 
@@ -42,13 +44,30 @@ describe('init() with privacy controls', () => {
         } as Response);
       });
 
+    // init() returns at its SSR guard without a window, so without this stub
+    // nothing is patched and every "does not inject" assertion below passes
+    // for the wrong reason.
+    vi.stubGlobal('window', {
+      fetch: mockFetch,
+      location: { origin: PAGE_ORIGIN, href: `${PAGE_ORIGIN}/` },
+      addEventListener: vi.fn(),
+    });
     global.fetch = mockFetch;
-    if (globalThis.window !== undefined) {
-      // SAFETY: the test installs its own fetch on the stubbed window, which is
-      // what init() then patches.
-      (window as any).fetch = mockFetch;
-    }
   });
+
+  /** The instrumented fetch init() installed on the stubbed window. */
+  function patchedFetch(): typeof fetch {
+    // SAFETY: the beforeEach stubs a window carrying a fetch, and init()
+    // replaces it with the instrumented one before any test calls this.
+    return (globalThis.window as { fetch: typeof fetch }).fetch;
+  }
+
+  /** The traceparent on the most recent call, or null. */
+  function lastTraceparent(): string | null {
+    const requestInit = callTracker.at(-1)?.[1];
+    const headers = new Headers(requestInit?.headers);
+    return headers.get('traceparent');
+  }
 
   afterEach(() => {
     // Clean up navigator mocks
@@ -63,8 +82,17 @@ describe('init() with privacy controls', () => {
       writable: true,
     });
 
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     resetForTesting();
+  });
+
+  it('injects traceparent with no privacy config (control)', async () => {
+    init({ service: 'test-app' });
+
+    await patchedFetch()(`${PAGE_ORIGIN}/api/users`);
+
+    expect(lastTraceparent()).toMatch(/^00-[\da-f]{32}-[\da-f]{16}-0[01]$/);
   });
 
   describe('Do Not Track (DNT)', () => {
@@ -89,15 +117,10 @@ describe('init() with privacy controls', () => {
         },
       });
 
-      await fetch('https://api.example.com/users');
+      // Same-origin, so only the DNT check can stop the injection.
+      await patchedFetch()(`${PAGE_ORIGIN}/api/users`);
 
-      // Check that fetch was called without traceparent
-      const [_, requestInit] = callTracker[0];
-      const headers =
-        requestInit?.headers instanceof Headers
-          ? requestInit.headers
-          : new Headers(requestInit?.headers);
-      expect(headers.has('traceparent')).toBe(false);
+      expect(lastTraceparent()).toBeNull();
     });
   });
 
@@ -115,15 +138,10 @@ describe('init() with privacy controls', () => {
         },
       });
 
-      await fetch('https://api.example.com/users');
+      // Same-origin, so only the DNT check can stop the injection.
+      await patchedFetch()(`${PAGE_ORIGIN}/api/users`);
 
-      // Check that fetch was called without traceparent
-      const [_, requestInit] = callTracker[0];
-      const headers =
-        requestInit?.headers instanceof Headers
-          ? requestInit.headers
-          : new Headers(requestInit?.headers);
-      expect(headers.has('traceparent')).toBe(false);
+      expect(lastTraceparent()).toBeNull();
     });
   });
 
@@ -136,15 +154,9 @@ describe('init() with privacy controls', () => {
         },
       });
 
-      await fetch('https://analytics.google.com/collect');
+      await patchedFetch()('https://analytics.google.com/collect');
 
-      // Check that fetch was called without traceparent
-      const [_, requestInit] = callTracker[0];
-      const headers =
-        requestInit?.headers instanceof Headers
-          ? requestInit.headers
-          : new Headers(requestInit?.headers);
-      expect(headers.has('traceparent')).toBe(false);
+      expect(lastTraceparent()).toBeNull();
     });
   });
 
@@ -171,12 +183,10 @@ describe('init() with privacy controls', () => {
         },
       });
 
-      await fetch('https://api.myapp.com/users');
+      await patchedFetch()('https://api.myapp.com/users');
 
-      // Check that fetch was called without traceparent (DNT takes precedence)
-      const [_, requestInit] = callTracker[0];
-      const headers = new Headers(requestInit?.headers);
-      expect(headers.has('traceparent')).toBe(false);
+      // DNT takes precedence over the allowlist.
+      expect(lastTraceparent()).toBeNull();
     });
   });
 });

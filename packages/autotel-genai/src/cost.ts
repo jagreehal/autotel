@@ -184,7 +184,32 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'gemini-2.0-flash': { inputPer1M: 0.1, outputPer1M: 0.4 },
 };
 
-function resolvePricing(
+/**
+ * Strip one leading vendor segment from a hosted model id, or return
+ * `undefined` when there is nothing left to strip.
+ *
+ * Bedrock, Vertex and the cross-region inference profiles all namespace the
+ * model rather than rename it: `anthropic.claude-3-5-haiku-20241022-v1:0`,
+ * `eu.anthropic.claude-...`, `publishers/anthropic/models/claude-...`. The
+ * price table is keyed on the model itself, so the prefix has to come off
+ * before a lookup can hit.
+ *
+ * A segment containing a digit is left alone. Model families carry their
+ * version in the name — `gpt-4.1-mini`, `gemini-1.5-pro`, `claude-3-opus` —
+ * and stripping `gpt-4` off `gpt-4.1-mini` would turn a real key into `1-mini`.
+ */
+function stripVendorPrefix(model: string): string | undefined {
+  const slash = model.lastIndexOf('/');
+  if (slash !== -1) return model.slice(slash + 1);
+
+  const dot = model.indexOf('.');
+  if (dot === -1) return undefined;
+  const head = model.slice(0, dot);
+  if (head.length === 0 || /\d/.test(head)) return undefined;
+  return model.slice(dot + 1);
+}
+
+function matchPricing(
   table: Record<string, ModelPricing>,
   model: string,
 ): ModelPricing | undefined {
@@ -200,6 +225,21 @@ function resolvePricing(
     }
   }
   return best;
+}
+
+function resolvePricing(
+  table: Record<string, ModelPricing>,
+  model: string,
+): ModelPricing | undefined {
+  // Least-stripped match wins, so an id the table already knows is never
+  // reinterpreted by peeling a segment off it.
+  let candidate: string | undefined = model;
+  while (candidate !== undefined) {
+    const price = matchPricing(table, candidate);
+    if (price) return price;
+    candidate = stripVendorPrefix(candidate);
+  }
+  return undefined;
 }
 
 /** The table this model's tool prices resolve through, model entry first. */

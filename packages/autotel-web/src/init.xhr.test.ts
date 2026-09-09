@@ -95,8 +95,28 @@ function send(
 }
 
 describe('XHR traceparent injection', () => {
-  it('reaches the server', async () => {
+  it('sends nothing cross-origin without propagateTo', async () => {
+    // The server here allows the header, but most do not: an unexpected
+    // `traceparent` makes the browser preflight, and a server that does not
+    // list it in `Access-Control-Allow-Headers` fails the request outright.
+    // So the default has to be same-origin, which the test server is not.
     init({ service: 'demo', instrumentFetch: false, instrumentXHR: true });
+
+    await send('/api');
+
+    expect(received[0]?.traceparent).toBeUndefined();
+  });
+
+  it('reaches the server', async () => {
+    init({
+      service: 'demo',
+      instrumentFetch: false,
+      instrumentXHR: true,
+      // jsdom's page origin is not the test server's, and cross-origin
+      // propagation is opt-in - which is the whole point of the preflight the
+      // server answers below.
+      propagateTo: [origin],
+    });
 
     await send('/api');
 
@@ -106,7 +126,12 @@ describe('XHR traceparent injection', () => {
   });
 
   it('leaves a traceparent the caller set with setRequestHeader', async () => {
-    init({ service: 'demo', instrumentFetch: false, instrumentXHR: true });
+    init({
+      service: 'demo',
+      instrumentFetch: false,
+      instrumentXHR: true,
+      propagateTo: [origin],
+    });
 
     await send('/api', (xhr) => {
       xhr.setRequestHeader('traceparent', MANUAL_TRACEPARENT);
@@ -116,7 +141,12 @@ describe('XHR traceparent injection', () => {
   });
 
   it('does not disturb an onreadystatechange handler the app assigns', async () => {
-    init({ service: 'demo', instrumentFetch: false, instrumentXHR: true });
+    init({
+      service: 'demo',
+      instrumentFetch: false,
+      instrumentXHR: true,
+      propagateTo: [origin],
+    });
     const states: number[] = [];
 
     await send('/api', (xhr) => {
@@ -129,7 +159,12 @@ describe('XHR traceparent injection', () => {
   });
 
   it('injects on every request when one instance is reused', async () => {
-    init({ service: 'demo', instrumentFetch: false, instrumentXHR: true });
+    init({
+      service: 'demo',
+      instrumentFetch: false,
+      instrumentXHR: true,
+      propagateTo: [origin],
+    });
     const xhr = new XMLHttpRequest();
 
     await sendOn(xhr, '/one');
@@ -144,7 +179,12 @@ describe('XHR traceparent injection', () => {
   });
 
   it('still respects a manual traceparent on a reused instance', async () => {
-    init({ service: 'demo', instrumentFetch: false, instrumentXHR: true });
+    init({
+      service: 'demo',
+      instrumentFetch: false,
+      instrumentXHR: true,
+      propagateTo: [origin],
+    });
     const xhr = new XMLHttpRequest();
 
     await sendOn(xhr, '/one');
@@ -156,7 +196,12 @@ describe('XHR traceparent injection', () => {
   });
 
   it('leaves a traceparent an OPENED handler sets during open()', async () => {
-    init({ service: 'demo', instrumentFetch: false, instrumentXHR: true });
+    init({
+      service: 'demo',
+      instrumentFetch: false,
+      instrumentXHR: true,
+      propagateTo: [origin],
+    });
     const xhr = new XMLHttpRequest();
     xhr.onreadystatechange = () => {
       if (xhr.readyState === XMLHttpRequest.OPENED) {

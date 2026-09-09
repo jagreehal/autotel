@@ -8,6 +8,7 @@
  */
 
 import { createTraceparent, parseTraceparent } from './traceparent';
+import { isPropagationAllowed } from './propagate';
 import { PrivacyManager, PrivacyConfig, getDenialReason } from './privacy';
 import { setEventSink } from './emit-event';
 import {
@@ -62,6 +63,34 @@ export interface AutotelWebConfig {
    * Use '' (empty string) for same-origin (requires /v1/traces proxy).
    */
   endpoint?: string;
+
+  /**
+   * Cross-origin destinations allowed to receive `traceparent` and `baggage`.
+   *
+   * Same-origin requests always propagate; everything else is opt-in. This is a
+   * compatibility control, not a privacy one: an unexpected request header
+   * makes the browser preflight, and a server that does not list `traceparent`
+   * in `Access-Control-Allow-Headers` rejects the request outright. It is the
+   * same default OpenTelemetry's web instrumentation applies.
+   *
+   * Not propagating is not the same as not tracing — the browser span is still
+   * recorded, with its timing, status and errors. Only the join with that
+   * server's own spans is lost, which is what listing the origin here restores.
+   *
+   * Substring-matched against the destination origin.
+   *
+   * @example
+   * ```typescript
+   * init({
+   *   service: 'my-spa',
+   *   // your API is on another origin, and it allows the header
+   *   propagateTo: ['api.myapp.com'],
+   * });
+   * ```
+   *
+   * @default [] (same-origin only)
+   */
+  propagateTo?: string[];
 
   /**
    * Privacy controls for traceparent header injection
@@ -286,6 +315,7 @@ export function init(userConfig: AutotelWebConfig): void {
       service: config.service,
       instrumentFetch: config.instrumentFetch !== false,
       instrumentXHR: config.instrumentXHR !== false,
+      propagateTo: config.propagateTo ?? [],
       privacyEnabled: !!config.privacy,
       privacyConfig: config.privacy
         ? {
@@ -332,6 +362,39 @@ export function setBaggage(record: Record<string, string>): void {
 export { clearBaggage };
 
 /**
+ * Whether our headers may be sent to `url`.
+ *
+ * Two rules, in order:
+ *
+ * 1. Compliance (DNT, GPC, `privacy.blockedOrigins`) can only ever subtract.
+ *    `privacy.allowedOrigins` is the deprecated form of the second rule and
+ *    still decides on its own when set, so existing configs keep working.
+ * 2. Otherwise: same-origin always, cross-origin only via `propagateTo`.
+ */
+function shouldSendHeaders(url: string): boolean {
+  if (privacyManager && !privacyManager.shouldInjectTraceparent(url)) {
+    return false;
+  }
+  // The legacy allowlist already answered for every origin it was given.
+  if (config?.privacy?.allowedOrigins?.length) return true;
+  return isPropagationAllowed(url, window.location?.origin ?? '', [
+    ...(config?.propagateTo ?? []),
+    // Naming a cross-origin host as a baggage destination already declares it
+    // one of ours, and baggage may never travel further than the traceparent
+    // beside it - so the narrower list would silently disable the wider one.
+    ...(config?.baggage?.allowedOrigins ?? []),
+  ]);
+}
+
+/** Why `shouldSendHeaders` said no, for the debug log. */
+function headerDenialReason(url: string): string {
+  if (privacyManager && !privacyManager.shouldInjectTraceparent(url)) {
+    return getDenialReason(privacyManager, url) ?? 'privacy';
+  }
+  return 'cross-origin destination is not listed in `propagateTo`';
+}
+
+/**
  * Patch fetch() to auto-inject traceparent headers
  */
 function patchFetch(): void {
@@ -361,30 +424,28 @@ function patchFetch(): void {
       init?.headers ?? (input instanceof Request ? input.headers : undefined),
     );
 
-    // Only inject if traceparent doesn't already exist
-    let injectedTraceparent: string | undefined;
+    // Ids are minted for every instrumented request; whether the header goes
+    // out is a separate question. A destination we may not propagate to still
+    // gets its browser span - the call keeps its timing, status and errors, and
+    // only the join with that server's own spans is lost.
+    let traceparent: string | undefined;
     if (!headers.has('traceparent')) {
-      // Check privacy controls
-      if (privacyManager && !privacyManager.shouldInjectTraceparent(url)) {
-        if (config?.debug) {
-          const reason = getDenialReason(privacyManager, url);
-          console.log(
-            '[autotel-web] Skipped traceparent on fetch (privacy):',
-            url,
-            reason,
-          );
-        }
-      } else {
-        injectedTraceparent = createTraceparent();
-        headers.set('traceparent', injectedTraceparent);
-
+      traceparent = createTraceparent();
+      if (shouldSendHeaders(url)) {
+        headers.set('traceparent', traceparent);
         if (config?.debug) {
           console.log(
             '[autotel-web] Injected traceparent on fetch:',
             url,
-            injectedTraceparent,
+            traceparent,
           );
         }
+      } else if (config?.debug) {
+        console.log(
+          '[autotel-web] Skipped traceparent on fetch:',
+          url,
+          headerDenialReason(url),
+        );
       }
     }
 
@@ -392,10 +453,10 @@ function patchFetch(): void {
     // Fail-closed by origin and a strict subset of where traceparent goes:
     // only sent if privacy allows AND the destination is same-origin/allowlisted.
     if (hasBaggage() && !headers.has('baggage')) {
-      const privacyAllows =
-        !privacyManager || privacyManager.shouldInjectTraceparent(url);
+      // Never wider than traceparent: both the propagation decision above and
+      // baggage's own allowlist have to say yes.
       if (
-        privacyAllows &&
+        shouldSendHeaders(url) &&
         isBaggageDestinationAllowed(
           url,
           window.location.origin,
@@ -426,12 +487,12 @@ function patchFetch(): void {
     const startTime = performance.timeOrigin + performance.now();
     const fetchPromise = originalFetch!(input, { ...init, headers });
 
-    // Export browser span if exporter is configured
-    if (injectedTraceparent && isConfigured()) {
+    // Not conditional on the header having been sent - see above.
+    if (traceparent && isConfigured()) {
       fetchPromise.then(
         (response) => {
           const endTime = performance.timeOrigin + performance.now();
-          const parsed = parseTraceparent(injectedTraceparent!);
+          const parsed = parseTraceparent(traceparent);
           if (parsed) {
             let pathname: string;
             try {
@@ -458,7 +519,7 @@ function patchFetch(): void {
         },
         () => {
           const endTime = performance.timeOrigin + performance.now();
-          const parsed = parseTraceparent(injectedTraceparent!);
+          const parsed = parseTraceparent(traceparent);
           if (parsed) {
             let pathname: string;
             try {
@@ -491,6 +552,16 @@ function patchFetch(): void {
  * Patch XMLHttpRequest to auto-inject traceparent headers
  */
 function patchXMLHttpRequest(): void {
+  // A window without XMLHttpRequest is a real environment - some embedded and
+  // SSR-ish runtimes drop it - and reading a prototype off `undefined` would
+  // take init(), and the fetch instrumentation with it, down.
+  if (globalThis.XMLHttpRequest === undefined) {
+    if (config?.debug) {
+      console.log('[autotel-web] No XMLHttpRequest in this environment');
+    }
+    return;
+  }
+
   // Always get the current prototypes as the originals
   // This allows tests to set up mocks before calling init()
   originalXHROpen = XMLHttpRequest.prototype.open;
@@ -561,13 +632,12 @@ function patchXMLHttpRequest(): void {
     const urlStr = xhrUrl.get(this) ?? '';
 
     if (!xhrHasTraceparent.has(this)) {
-      if (privacyManager && !privacyManager.shouldInjectTraceparent(urlStr)) {
+      if (!shouldSendHeaders(urlStr)) {
         if (config?.debug) {
-          const reason = getDenialReason(privacyManager, urlStr);
           console.log(
-            '[autotel-web] Skipped traceparent on XHR (privacy):',
+            '[autotel-web] Skipped traceparent on XHR:',
             urlStr,
-            reason,
+            headerDenialReason(urlStr),
           );
         }
       } else {
@@ -599,10 +669,8 @@ function patchXMLHttpRequest(): void {
     // Inject W3C baggage header (independent of traceparent).
     // Fail-closed by origin and a strict subset of where traceparent goes.
     if (hasBaggage() && !xhrHasBaggage.has(this)) {
-      const privacyAllows =
-        !privacyManager || privacyManager.shouldInjectTraceparent(urlStr);
       if (
-        privacyAllows &&
+        shouldSendHeaders(urlStr) &&
         isBaggageDestinationAllowed(
           urlStr,
           window.location.origin,

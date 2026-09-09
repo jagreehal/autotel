@@ -75,6 +75,20 @@ class OtelReporter implements Reporter {
     const key = testKey(test);
     const span = this.testSpans.get(key);
     if (span) {
+      // Playwright has written the trace zip, video and screenshots by the
+      // time it reports the result, so the span can carry their paths: find a
+      // failed span in your backend, then
+      // `npx playwright show-trace <test.trace.path>` to replay that test.
+      for (const attachment of result.attachments) {
+        if (
+          attachment.path &&
+          (attachment.name === 'trace' ||
+            attachment.name === 'video' ||
+            attachment.name === 'screenshot')
+        ) {
+          span.setAttribute(`test.${attachment.name}.path`, attachment.path);
+        }
+      }
       if (result.status !== 'passed' && result.status !== 'skipped') {
         span.setStatus({ code: SpanStatusCode.ERROR });
         if (result.error) span.recordException(toError(result.error));

@@ -248,12 +248,19 @@ severity_number >= 17          # logs: error and above
 parent_span_id = NULL          # root spans only
 "user id" = "u-42"             # quote a key a bare word can't spell
 checkout                       # bare words are free text
+SAVE20                         # ...including attribute *values*
 ```
 
 **Fields.** Traces: `service`, `name`, `kind`, `duration`, `status`, `trace_id`,
 `span_id`, `parent_span_id`. Logs: `service`, `severity`, `severity_number`,
 `trace_id`, `span_id`, `body`. **Anything else is looked up as an attribute**, so
 every attribute your services emit is queryable without being declared.
+
+**Free text** matches those first-class fields _and every attribute value_ — so
+the order id or coupon code you set with `ctx.setAttribute` finds its span when
+you type it on its own. Attribute **keys** are not matched: every span carries
+resource keys like `host.name` and `process.command`, so matching keys would
+make ordinary words match everything. Search by key with `key = value`.
 
 `severity` and `severity_number` both exist on purpose: the text is what you
 read, but "error and above" is a numeric comparison and string ordering cannot

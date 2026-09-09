@@ -69,6 +69,7 @@ import {
   normaliseOtlpEndpoint,
   selfInstrumentationIgnoreUrls,
 } from './otlp-endpoint';
+import { propagationUrlPattern } from './propagate';
 
 /**
  * Stamps session attributes in `onStart`, which is the only hook that can still
@@ -285,6 +286,16 @@ export interface AutotelWebFullConfig {
         replacement?: string;
       };
 
+  /**
+   * Cross-origin destinations allowed to receive `traceparent` and `baggage`.
+   * Same-origin always propagates; everything else is opt-in, because an
+   * unexpected header makes the browser preflight and a server that does not
+   * allow it rejects the request. Spans are recorded either way.
+   *
+   * Same field, same meaning, as lean mode's `propagateTo`.
+   */
+  propagateTo?: string[];
+
   /** Privacy controls (origin filtering, DNT, GPC). Applied to which requests get traced. */
   privacy?: PrivacyConfig;
 
@@ -409,14 +420,24 @@ export function initFull(config: AutotelWebFullConfig): void {
   // batch buffer.
   const selfUrls = selfInstrumentationIgnoreUrls(config.endpoint);
 
+  // Cross-origin destinations that may receive the header. The Web SDK is
+  // already same-origin-only without this, which is the behaviour lean mode now
+  // matches; `privacy.allowedOrigins` is the deprecated spelling, and a
+  // cross-origin baggage destination is one of ours by declaration.
+  // As patterns, not raw strings: `propagateTraceHeaderCorsUrls` is matched
+  // against the whole URL, where a string entry has to equal it outright and a
+  // bare substring regex also matches in the path. See `propagationUrlPattern`.
+  const propagateTo = [
+    ...(config.propagateTo ?? []),
+    ...(config.privacy?.allowedOrigins ?? []),
+    ...(config.baggage?.allowedOrigins ?? []),
+  ].map((origin) => propagationUrlPattern(origin));
+
   if (config.captureFetch !== false) {
     const fetchOptions: ConstructorParameters<typeof FetchInstrumentation>[0] =
       {};
-    if (config.privacy?.allowedOrigins?.length) {
-      fetchOptions.propagateTraceHeaderCorsUrls =
-        config.privacy.allowedOrigins.map(
-          (o) => new RegExp(escapeRegex(o), 'i'),
-        );
+    if (propagateTo.length) {
+      fetchOptions.propagateTraceHeaderCorsUrls = propagateTo;
     }
     if (selfUrls.length) {
       fetchOptions.ignoreUrls = selfUrls;
@@ -427,8 +448,8 @@ export function initFull(config: AutotelWebFullConfig): void {
     const xhrOptions: ConstructorParameters<
       typeof XMLHttpRequestInstrumentation
     >[0] = {};
-    if (config.privacy?.allowedOrigins?.length) {
-      xhrOptions.propagateTraceHeaderCorsUrls = config.privacy.allowedOrigins;
+    if (propagateTo.length) {
+      xhrOptions.propagateTraceHeaderCorsUrls = propagateTo;
     }
     if (selfUrls.length) {
       xhrOptions.ignoreUrls = selfUrls;
@@ -652,10 +673,6 @@ function fetchUrl(input: RequestInfo | URL): string {
   if (typeof input === 'string') return input;
   if (input instanceof URL) return input.toString();
   return input.url;
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** A value that settles later, whatever produced it. */

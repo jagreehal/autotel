@@ -178,7 +178,7 @@ export function createGenAiObserver(
     if (event.usage) {
       const costModel = event.costModel ?? event.response?.model;
       const costUsd = costModel
-        ? estimateLLMCost(costModel, event.usage)
+        ? estimateLLMCost(costModel, event.usage, { pricing: options.pricing })
         : undefined;
       span.setAttributes(genAiUsageAttributes({ ...event.usage, costUsd }));
     }

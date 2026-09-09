@@ -95,6 +95,7 @@ The fixture is `auto: true`, so every test gets a parent span automatically.
 - Span attributes: `test.name`, `test.file`, `test.suite`
 - If a test throws, the span is marked as error and records the exception
 - Any `trace()` / `span()` calls in the test flow become children of the active test span
+- An `otel-trace` annotation on every test, holding the trace URL (from `OTEL_TRACE_URL_TEMPLATE`) or the raw trace id, so reporters — including the browser trace view's step list — link back to the trace
 - The test's spans on `task.meta.otelSpans`, which
   [executable-stories](https://github.com/jagreehal/executable-stories) renders
   as a trace waterfall in its report with no extra wiring
@@ -119,6 +120,10 @@ Reporter spans:
 
 - test span: `test:${name}`
 - suite span: `suite:${name}`
+
+In browser mode, Vitest exposes a recorded Playwright trace to reporters as an
+annotation attachment; the reporter copies its path onto the test span as
+`test.trace.path`, so a failed span leads straight to the replay.
 
 ## Testing Utilities
 

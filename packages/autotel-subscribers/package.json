@@ -71,6 +71,11 @@
       "types": "./dist/loki.d.ts",
       "import": "./dist/loki.js",
       "require": "./dist/loki.cjs"
+    },
+    "./posthog": {
+      "types": "./dist/posthog.d.ts",
+      "import": "./dist/posthog.js",
+      "require": "./dist/posthog.cjs"
     }
   },
   "files": [

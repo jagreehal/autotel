@@ -1,6 +1,6 @@
 # Autotel + Effect Example
 
-Minimal [Effect v4](https://effect.website/) app with [autotel](https://github.com/jagreehal/autotel) export and [`autotel-effect`](../../packages/autotel-effect) bridging `Effect.withSpan` to the global OpenTelemetry provider.
+A request handler that runs an [Effect v4](https://effect.website/) program, which is where the two tracers have to agree. [`autotel-effect`](../../packages/autotel-effect) bridges `Effect.withSpan` to autotel's global OpenTelemetry provider, and `withAutotel` makes the Effect join the trace of the request it runs inside.
 
 ## Try it
 
@@ -15,7 +15,31 @@ From the monorepo root:
 pnpm --filter @jagreehal/example-effect start
 ```
 
-Without an OTLP endpoint, autotel logs spans to the console (`debug: true` in `instrumentation.ts`).
+It serves two routes, calls both, and prints what was exported:
+
+```text
+trace d7e26049…
+  └── GET /api/todos
+    └── todo.list
+      └── db.query
+
+trace 3d6b4867…
+  └── todo.list
+    └── db.query
+
+trace 543d1ffc…
+  └── GET /api/todos/detached
+```
+
+`/api/todos` runs the effect with `withAutotel` — one trace. `/api/todos/detached` runs the same effect without it, and the request span and the Effect spans land in **different traces**.
+
+Set `OTLP_ENDPOINT` and the same spans go to your backend as well.
+
+## Why the second route detaches
+
+Effect takes a span's parent from its own `Tracer.ParentSpan`, not from the ambient OpenTelemetry context, and marks a span as a root when it has none — which is what `@effect/opentelemetry` reads to decide it should ignore the ambient context. So a bare `Effect.runPromise` inside a traced handler opens a new trace, silently. `withAutotel` hands Effect the active autotel span as its parent, and nothing else changes.
+
+The program here is built once at startup, before any request exists. `withAutotel` reads the active span when the effect **runs**, so it still joins the right request.
 
 ## How it works
 
@@ -23,7 +47,7 @@ Without an OTLP endpoint, autotel logs spans to the console (`debug: true` in `i
 
 2. **`autotel-effect` provides Effect's tracer** — `layer({ serviceName: 'example-effect' })` wires `OtelTracer.layerGlobal` to that provider. No Effect NodeSdk or OTLP layer in the app.
 
-3. **Spans export through autotel** — `Effect.withSpan(...)` in the program creates spans on the global provider; autotel handles OTLP/console export.
+3. **`withAutotel` joins the surrounding trace** — the handler's span becomes the parent of `todo.list`.
 
 ## Snippets
 
@@ -35,7 +59,6 @@ import { init } from 'autotel';
 
 init({
   service: 'example-effect',
-  debug: true,
   endpoint:
     process.env.OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
 });
@@ -45,24 +68,30 @@ init({
 tsx --import ./instrumentation.ts src/index.ts
 ```
 
-### Run traced Effect code
+### Run an Effect inside a request
 
 ```typescript
+import { trace } from 'autotel';
+import { layer, withAutotel } from 'autotel-effect';
 import * as Effect from 'effect/Effect';
 import { pipe } from 'effect/Function';
-import { layer } from 'autotel-effect';
 
-const AutotelEffect = layer({ serviceName: 'example-effect' });
-
-const program = pipe(
-  Effect.log('Hello from Effect'),
-  Effect.withSpan('step-b'),
-  Effect.withSpan('step-a'),
-  Effect.withSpan('example-effect'),
+const listTodos = pipe(
+  Effect.succeed(todos),
+  Effect.withSpan('db.query'),
+  Effect.withSpan('todo.list'),
+  Effect.provide(layer({ serviceName: 'example-effect' })),
 );
 
-await pipe(program, Effect.provide(AutotelEffect), Effect.runPromise);
+// `trace.run` stands in for autotel's `node:http` instrumentation here:
+// whatever opens the request span, `withAutotel` picks it up.
+await trace.run('GET /api/todos', async () => {
+  const result = await Effect.runPromise(withAutotel(listTodos));
+  // ...
+});
 ```
+
+Don't reach for `trace(name, fn)` around a function that returns an `Effect`: the span would end when the Effect is **constructed**, not when it runs. Use `Effect.fn` or `Effect.withSpan`.
 
 ## Learn more
 

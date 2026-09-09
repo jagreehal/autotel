@@ -1,6 +1,7 @@
 import {
   flush,
   getTracer,
+  resolveTraceUrl,
   getAutotelTracerProvider,
   context as otelContext,
   otelTrace,
@@ -115,12 +116,14 @@ export type OtelFixtureFn = (
       suite?: { name: string };
       meta: TaskMeta;
     };
+    /** Vitest's test-context annotate; absent on versions without it. */
+    annotate?: (message: string, type?: string) => Promise<void>;
   },
   use: (span: Span) => Promise<void>,
 ) => Promise<void>;
 
 export const otelTestSpanFixture: [OtelFixtureFn, { auto: true }] = [
-  async ({ task }, use) => {
+  async ({ task, annotate }, use) => {
     ensureCollector();
     const tracer = getTracer(TRACER_NAME, TRACER_VERSION);
     const span = tracer.startSpan(`test:${task.name}`, {
@@ -131,13 +134,27 @@ export const otelTestSpanFixture: [OtelFixtureFn, { auto: true }] = [
       },
     });
     const ctx = otelTrace.setSpan(otelContext.active(), span);
+    // Before awaiting anything at all: `enterWith` binds to the async resource
+    // this fixture shares with the runner, and an await ahead of it detaches
+    // the entry onto a continuation the test body never inherits.
+    const entered = enterContext(ctx);
+
+    // Reporters - and the browser trace view's step list - render annotations,
+    // so the test report links back to this trace. A decoration must never fail
+    // a test, hence the swallowed rejection.
+    if (annotate) {
+      const traceId = span.spanContext().traceId;
+      await annotate(
+        resolveTraceUrl(undefined, traceId) ?? traceId,
+        'otel-trace',
+      ).catch(() => {});
+    }
+
     try {
       // enterContext reaches the test body; context.with does not. It only
       // fails on a context manager with no AsyncLocalStorage behind it, where
       // context.with is still the correct call.
-      await (enterContext(ctx)
-        ? use(span)
-        : otelContext.with(ctx, () => use(span)));
+      await (entered ? use(span) : otelContext.with(ctx, () => use(span)));
     } catch (error) {
       span.setStatus({ code: SpanStatusCode.ERROR });
       span.recordException(

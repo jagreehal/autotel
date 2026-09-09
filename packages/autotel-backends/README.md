@@ -68,6 +68,11 @@ init(
 );
 ```
 
+Direct cloud ingestion sends `dd-otlp-source: llmobs` alongside the API key, so
+`gen_ai.*` spans land in Agent Observability with their model, provider, token
+usage, cost and finish reason mapped from the canonical OTel conventions. They
+reach APM either way; pass `llmobs: false` to send only the API key.
+
 ## Available Backends
 
 ### 🍯 Honeycomb

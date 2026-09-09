@@ -68,8 +68,8 @@ init({
   debug: false, // Log injection decisions to console (default: false)
   instrumentFetch: true, // Patch fetch() (default: true)
   instrumentXHR: true, // Patch XMLHttpRequest (default: true)
+  propagateTo: ['api.myapp.com'], // Cross-origin destinations (default: none)
   privacy: {
-    allowedOrigins: ['api.myapp.com'], // Only inject on these origins
     blockedOrigins: ['analytics.google.com'], // Never inject on these origins
     respectDoNotTrack: true, // Honour browser DNT header
     respectGPC: true, // Honour Global Privacy Control
@@ -77,7 +77,31 @@ init({
 });
 ```
 
-Privacy decision order: DNT check → GPC check → blockedOrigins → allowedOrigins → allow all.
+### Where `traceparent` goes
+
+Same-origin requests always carry it. Cross-origin destinations are opt-in via
+`propagateTo`, matched as a substring of the destination origin — the same
+default OpenTelemetry's web instrumentation applies, because an unexpected
+request header makes the browser preflight and the server has to answer with:
+
+```
+Access-Control-Allow-Headers: traceparent, baggage
+```
+
+Full mode (`initFull`) takes the same `propagateTo` field, so both modes reach
+the same destinations.
+
+Propagation and tracing are independent: a cross-origin call that carries no
+header still records its browser span, with timing, status and errors. Listing
+the origin in `propagateTo` is what joins that span to the server's own.
+
+A cross-origin host named in `baggage.allowedOrigins` propagates too — baggage
+never travels further than the `traceparent` beside it.
+
+Decision order: DNT → GPC → `blockedOrigins` → `propagateTo` → same-origin.
+Each privacy control only ever subtracts. `privacy.allowedOrigins` is the
+deprecated spelling of `propagateTo`: when set it decides on its own, and
+same-origin is not implied.
 
 ### Functional API (lean mode)
 

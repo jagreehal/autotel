@@ -119,7 +119,18 @@ the agent runtime set `gen_ai.usage.cost.unpriced_model` to the model id. Treat
 a non-empty value as "this model needs a price before any cost number is
 trustworthy".
 
-Override/extend pricing per call with `{ pricing: { 'my-model': { inputPer1M, outputPer1M } } }`.
+Override/extend pricing per call with `{ pricing: { 'my-model': { inputPer1M, outputPer1M } } }`,
+or once for a whole observer — `createGenAiObserver({ pricing })` and
+`autotelTelemetry({ pricing })` take the same map, merged over the built-in
+table. Reach for it for anything the built-in table cannot know: a new release,
+a self-hosted or fine-tuned model, or a negotiated rate.
+
+Hosted ids resolve to the model they name. Bedrock, Vertex and the cross-region
+inference profiles namespace rather than rename —
+`anthropic.claude-3-5-haiku-20241022-v1:0`, `eu.anthropic.claude-...`,
+`publishers/anthropic/models/claude-...` — so the vendor segment is peeled off
+until a key matches, least-stripped first. A segment carrying a digit is left
+alone, since model families put their version in the name (`gpt-4.1-mini`).
 
 ### Typed attribute builders
 

@@ -23,7 +23,7 @@ import type {
   GenAiToolInput,
   GenAiWorkflowInput,
 } from '../attributes.js';
-import type { TokenUsage } from '../cost.js';
+import type { ModelPricing, TokenUsage } from '../cost.js';
 import type { GenAiMessage, GenAiMessagePart } from '../events.js';
 import type { GenAiProviderName } from '../semconv.js';
 import type {
@@ -231,4 +231,13 @@ export interface GenAiObserverOptions {
    * ambient context.
    */
   onSpanStart?: (id: string, span: Span) => void;
+  /**
+   * Extra `gen_ai.usage.cost.usd` pricing, merged over the built-in table and
+   * keyed the same way (longest matching model prefix wins).
+   *
+   * Needed for any model the built-in table cannot know: a new release, a
+   * self-hosted or fine-tuned model, or a negotiated rate that differs from
+   * list price. Without a matching entry the cost attribute is simply absent.
+   */
+  pricing?: Record<string, ModelPricing>;
 }

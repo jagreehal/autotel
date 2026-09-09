@@ -90,6 +90,75 @@ describe('autotel-vitest fixture', () => {
     expect(createdSpans[0].end).toHaveBeenCalledTimes(1);
   });
 
+  it('annotates the test with the trace id so reporters can link to it', async () => {
+    const { fixtureFn } = await getFixture();
+    const annotate = vi.fn(async () => {});
+
+    await fixtureFn(
+      {
+        task: {
+          name: 'annotated',
+          file: { name: 'a.test.ts' },
+          suite: { name: '' },
+          meta: {},
+        },
+        annotate,
+      },
+      async () => {},
+    );
+
+    expect(annotate).toHaveBeenCalledWith('trace-1', 'otel-trace');
+  });
+
+  it('annotates with the backend trace URL when one is configured', async () => {
+    const { resolveTraceUrl } = await import('autotel');
+    vi.mocked(resolveTraceUrl).mockReturnValueOnce(
+      'https://grafana.example.com/explore?traceId=trace-1',
+    );
+
+    const { fixtureFn } = await getFixture();
+    const annotate = vi.fn(async () => {});
+
+    await fixtureFn(
+      {
+        task: {
+          name: 'annotated with url',
+          file: { name: 'a.test.ts' },
+          suite: { name: '' },
+          meta: {},
+        },
+        annotate,
+      },
+      async () => {},
+    );
+
+    expect(annotate).toHaveBeenCalledWith(
+      'https://grafana.example.com/explore?traceId=trace-1',
+      'otel-trace',
+    );
+  });
+
+  it('does not fail the test when annotate rejects', async () => {
+    const { fixtureFn } = await getFixture();
+
+    await expect(
+      fixtureFn(
+        {
+          task: {
+            name: 'annotate rejects',
+            file: { name: 'a.test.ts' },
+            suite: { name: '' },
+            meta: {},
+          },
+          annotate: vi.fn(async () => {
+            throw new Error('too late to annotate');
+          }),
+        },
+        async () => {},
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it('ends the span after the test completes', async () => {
     const { fixtureFn } = await getFixture();
 

@@ -4,6 +4,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 const spans: Array<{
   end: ReturnType<typeof vi.fn>;
   recordException: ReturnType<typeof vi.fn>;
+  setAttribute: ReturnType<typeof vi.fn>;
   setStatus: ReturnType<typeof vi.fn>;
 }> = [];
 
@@ -18,6 +19,7 @@ vi.mock('autotel', () => ({
       const span = {
         end: vi.fn(),
         recordException: vi.fn(),
+        setAttribute: vi.fn(),
         setStatus: vi.fn(),
       };
       spans.push(span);
@@ -37,6 +39,7 @@ function makeTestCase(overrides: {
     state: string;
     errors?: Array<{ message?: string; stack?: string }>;
   };
+  annotations?: Array<{ attachment?: { path?: string } }>;
 }) {
   // SAFETY: OtelReporter reads id, name, fullName, module.moduleId and result()
   // off a test case. Vitest's own type describes a great deal more, none of
@@ -47,6 +50,7 @@ function makeTestCase(overrides: {
     fullName: overrides.name,
     module: { moduleId: overrides.moduleId ?? 'test.ts' },
     result: () => overrides.result ?? { state: 'passed', errors: undefined },
+    annotations: () => overrides.annotations ?? [],
   } as any;
 }
 
@@ -196,6 +200,44 @@ describe('OtelReporter', () => {
     expect(spans).toHaveLength(2);
     expect(spans[0].end).toHaveBeenCalledTimes(1);
     expect(spans[1].end).not.toHaveBeenCalled();
+  });
+
+  it('puts a browser trace annotation path on the test span', async () => {
+    const { OtelReporter } = await import('./reporter');
+    const reporter = new OtelReporter();
+
+    const testCase = makeTestCase({
+      id: 'test-trace',
+      name: 'traced test',
+      annotations: [
+        { attachment: { path: '/tmp/noise.png' } },
+        { attachment: { path: '/tmp/browser-traced test.trace.zip' } },
+      ],
+    });
+
+    reporter.onTestCaseReady!(testCase);
+    reporter.onTestCaseResult!(testCase);
+
+    expect(spans[0].setAttribute).toHaveBeenCalledWith(
+      'test.trace.path',
+      '/tmp/browser-traced test.trace.zip',
+    );
+  });
+
+  it('leaves the span alone when the test recorded no browser trace', async () => {
+    const { OtelReporter } = await import('./reporter');
+    const reporter = new OtelReporter();
+
+    const testCase = makeTestCase({
+      id: 'test-untraced',
+      name: 'untraced test',
+      annotations: [{ attachment: { path: '/tmp/screenshot.png' } }, {}],
+    });
+
+    reporter.onTestCaseReady!(testCase);
+    reporter.onTestCaseResult!(testCase);
+
+    expect(spans[0].setAttribute).not.toHaveBeenCalled();
   });
 
   it('does not end suite spans from other modules when a module ends', async () => {

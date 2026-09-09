@@ -198,7 +198,16 @@ export function attachDevtoolsRoutes(
         'Access-Control-Allow-Methods',
         'GET, POST, DELETE, OPTIONS',
       );
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      // Reflect what the preflight asks for rather than naming a fixed list. A
+      // caller instrumented by autotel-web sends `traceparent`, and whatever
+      // else its propagator adds - `tracestate`, `baggage`, b3, x-datadog-* -
+      // so any list we hardcode fails somebody's preflight and their request
+      // never arrives. The origin is already `*` and credentials are never
+      // allowed, so this grants no reach a simple request does not have.
+      res.setHeader(
+        'Access-Control-Allow-Headers',
+        req.headers['access-control-request-headers'] ?? 'Content-Type',
+      );
 
       // Identity stamp on every response: lets a client confirm it is really
       // talking to autotel-devtools (and not, say, an IDE's OTLP collector that

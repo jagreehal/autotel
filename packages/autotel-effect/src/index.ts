@@ -2,9 +2,10 @@ import { logLevelToSeverityNumber } from '@effect/opentelemetry/OtelLogger';
 import * as OtelTracer from '@effect/opentelemetry/OtelTracer';
 import * as Resource from '@effect/opentelemetry/Resource';
 import { logs } from '@opentelemetry/api-logs';
-import { flattenToAttributes } from 'autotel';
+import { flattenToAttributes, getActiveSpan, otelTrace } from 'autotel';
 import { createBuiltinLogger, type BuiltinLoggerOptions } from 'autotel/logger';
 import * as Cause from 'effect/Cause';
+import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
 import * as Logger from 'effect/Logger';
 import type * as LogLevel from 'effect/LogLevel';
@@ -72,6 +73,30 @@ export function layer(options: AutotelEffectLayerOptions): Layer.Layer<never> {
           ...(logs === true ? {} : logs),
         }),
   );
+}
+
+/**
+ * Runs `self` as a child of the autotel span active around it, so an
+ * `Effect.withSpan` inside an instrumented handler lands in that request's
+ * trace: `Effect.runPromise(withAutotel(program))`.
+ *
+ * Effect takes a span's parent from its own `Tracer.ParentSpan`, which the
+ * ambient OpenTelemetry context does not supply. The active span is read when
+ * the effect runs rather than when it is built, so a program assembled once at
+ * startup still joins the request it runs inside - and why this is not part of
+ * `layer()`, which is built once for the whole application.
+ */
+export function withAutotel<A, E, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> {
+  return Effect.suspend(() => {
+    const spanContext = getActiveSpan()?.spanContext();
+    // An invalid context is what the API hands back for a non-recording span;
+    // parenting to it would produce a child of the all-zero trace id.
+    return spanContext && otelTrace.isSpanContextValid(spanContext)
+      ? OtelTracer.withSpanContext(self, spanContext)
+      : self;
+  });
 }
 
 /**

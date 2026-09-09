@@ -762,3 +762,36 @@ describe('autotelTelemetry — per-call output recording', () => {
     expect(String(chat.attributes[GEN_AI.OUTPUT_MESSAGES])).toContain('SF');
   });
 });
+
+describe('autotelTelemetry — cost pricing', () => {
+  it('prices a model the built-in table cannot know from a supplied table', () => {
+    const t = autotelTelemetry({
+      tracer,
+      pricing: { 'glm-4.7-flash': { inputPer1M: 1, outputPer1M: 2 } },
+    });
+
+    t.onStart({
+      callId: 'p1',
+      operationId: 'ai.generateText',
+      provider: 'amazon-bedrock',
+      modelId: 'zai.glm-4.7-flash',
+    });
+    t.onLanguageModelCallStart({
+      callId: 'p1',
+      provider: 'amazon-bedrock',
+      modelId: 'zai.glm-4.7-flash',
+    });
+    t.onLanguageModelCallEnd({
+      callId: 'p1',
+      modelId: 'zai.glm-4.7-flash',
+      finishReason: 'stop',
+      usage: { inputTokens: 1_000_000, outputTokens: 1_000_000 },
+    });
+    t.onEnd({ callId: 'p1' });
+
+    // Vendor-prefixed id resolves through the supplied entry.
+    expect(
+      one('chat zai.glm-4.7-flash').attributes[GEN_AI.USAGE_COST_USD],
+    ).toBe(3);
+  });
+});

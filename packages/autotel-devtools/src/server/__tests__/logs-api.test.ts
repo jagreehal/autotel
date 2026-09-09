@@ -171,6 +171,31 @@ describe('POST /api/query/logs', () => {
     expect(second.body.logs).toHaveLength(1);
   });
 
+  it('finds a log by an attribute value typed on its own', async () => {
+    const port = await start();
+    await postLogs(port, [
+      {
+        timeUnixNano: nano(T0 + 5000),
+        severityText: 'INFO',
+        severityNumber: 9,
+        body: { stringValue: 'order placed' },
+        attributes: [{ key: 'order.id', value: { stringValue: 'ord-42' } }],
+      },
+      {
+        timeUnixNano: nano(T0 + 6000),
+        severityText: 'INFO',
+        severityNumber: 9,
+        body: { stringValue: 'cache warm' },
+        attributes: [],
+      },
+    ]);
+
+    const { body } = await query(port, { query: 'ord-42' });
+
+    // Same rule as traces: the value is what someone saw in their data.
+    expect(body.logs).toHaveLength(1);
+  });
+
   it('reports a malformed query as 400 with positioned errors', async () => {
     const port = await start();
     const { status, body } = await query(port, { query: 'service =' });

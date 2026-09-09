@@ -176,8 +176,12 @@ export function configureExporter(
       }
       flushSpans();
     };
-    window.addEventListener('online', onOnline);
-    detachOnline = () => window.removeEventListener('online', onOnline);
+    // Hold the window this listener went on rather than reading the global
+    // again at detach time: teardown can run once that global is gone, and
+    // dereferencing it there threw out of the reset.
+    const target = window;
+    target.addEventListener('online', onOnline);
+    detachOnline = () => target.removeEventListener('online', onOnline);
   }
 }
 

@@ -32,6 +32,7 @@ import {
   context as otelContext,
   propagation,
   otelTrace,
+  resolveTraceUrl,
   SpanStatusCode,
 } from 'autotel';
 import { TestSpanCollector } from 'autotel/test-span-collector';
@@ -222,6 +223,15 @@ export const test = base.extend<{
         },
       });
       setAttributesFromAnnotations(span, testInfo);
+      // The other half of the Playwright-trace link: reporters render
+      // annotations, so the HTML report points at the backend trace for this
+      // test. Pushed before the body runs, so a crashing test still gets it.
+      testInfo.annotations.push({
+        type: 'otel-trace',
+        description:
+          resolveTraceUrl(undefined, span.spanContext().traceId) ??
+          span.spanContext().traceId,
+      });
       const ctx = otelTrace.setSpan(otelContext.active(), span);
       const carrier: Record<string, string> = {};
       otelContext.with(ctx, () => {
