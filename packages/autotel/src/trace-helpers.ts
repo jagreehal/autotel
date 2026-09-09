@@ -38,7 +38,7 @@ import { requireModule } from './node-require';
 import {
   asBoolean,
   asNumber,
-  asPlainRecord,
+  asPlainRecordOrMap,
   asString,
   toError,
   type UnknownRecord,
@@ -688,24 +688,26 @@ export function flattenMetadata(
         continue;
       }
 
-      // Recursively flatten plain objects (with cycle detection)
-      const nested = asPlainRecord(value);
+      // Recursively flatten plain objects and Maps (with cycle detection)
+      const nested = asPlainRecordOrMap(value);
       if (nested !== undefined) {
-        // Detect circular references
-        if (seen.has(nested)) {
+        // Keyed on the value itself: a Map flattens to a fresh object each
+        // time, which a WeakSet would never recognise.
+        if (seen.has(value as object)) {
           flattened[attributeKey] = '<circular-reference>';
           continue;
         }
 
-        // Mark as visited and recursively flatten
-        seen.add(nested);
+        seen.add(value as object);
         flatten(nested, attributeKey);
         continue;
       }
 
-      // Serialize arrays and other non-plain objects to JSON
+      // Serialize arrays, Sets and other non-plain objects to JSON
       try {
-        flattened[attributeKey] = JSON.stringify(value);
+        flattened[attributeKey] = JSON.stringify(
+          value instanceof Set ? [...value] : value,
+        );
       } catch {
         // Handle circular references or non-serializable objects
         flattened[attributeKey] = '<serialization-failed>';

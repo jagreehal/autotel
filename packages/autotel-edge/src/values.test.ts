@@ -28,6 +28,15 @@ describe('toAttributeValue', () => {
     expect(toAttributeValue([true, false])).toEqual([true, false]);
   });
 
+  it('reads a Set as the array it carries', () => {
+    expect(toAttributeValue(new Set(['a', 'b']))).toEqual(['a', 'b']);
+    expect(toAttributeValue(new Set([1, 2]))).toEqual([1, 2]);
+  });
+
+  it('renders a Map as its entries', () => {
+    expect(toAttributeValue(new Map([['1a', 'taken']]))).toBe('{"1a":"taken"}');
+  });
+
   it('does not send an array of numbers OTLP cannot encode', () => {
     expect(toAttributeValue([1, Number.NaN])).toBe('[1,null]');
   });

@@ -103,7 +103,14 @@ Provide `layer(...)` with autotel's `createMemoryExporter()` only in the tests t
 
 ### Annotations and errors keep their shape
 
-`Effect.annotateLogs` values become log-record attributes. An `Error` in the message parts, or a `Cause` passed to `Effect.logError`, is reported as an `err` attribute with its stack rather than stringified into the message:
+`Effect.annotateLogs` values become log-record attributes. Rich values are flattened to the shape the rest of autotel produces: a nested object becomes dot-notation keys, a `Date` becomes an ISO string, an `Error` becomes its message.
+
+```typescript
+Effect.annotateLogs({ order: { id: 7 }, at: new Date(0) });
+// attributes: { 'order.id': 7, at: '1970-01-01T00:00:00.000Z' }
+```
+
+An `Error` in the message parts, or a `Cause` passed to `Effect.logError`, is reported as an `err` attribute with its stack rather than stringified into the message:
 
 ```typescript
 Effect.fail(new Error('card declined')).pipe(

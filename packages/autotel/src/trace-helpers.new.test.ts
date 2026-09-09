@@ -73,6 +73,43 @@ describe('flattenMetadata', () => {
     });
   });
 
+  it('should flatten a Map like a nested object', () => {
+    const flattened = flattenMetadata({
+      seats: new Map([
+        ['1a', 'taken'],
+        ['1b', 'free'],
+      ]),
+    });
+
+    expect(flattened).toEqual({
+      'metadata.seats.1a': 'taken',
+      'metadata.seats.1b': 'free',
+    });
+  });
+
+  it('should serialise a Set as the array it carries', () => {
+    const flattened = flattenMetadata({ tags: new Set(['a', 'b']) });
+
+    expect(flattened).toEqual({ 'metadata.tags': '["a","b"]' });
+  });
+
+  it('should handle a self-referential Map like a self-referential object', () => {
+    const map = new Map<string, unknown>([['name', 'root']]);
+    map.set('self', map);
+
+    const object: Record<string, unknown> = { name: 'root' };
+    object.self = object;
+
+    expect(flattenMetadata({ nested: map })).toEqual({
+      'metadata.nested.name': 'root',
+      'metadata.nested.self': '<circular-reference>',
+    });
+    expect(flattenMetadata({ nested: object })).toEqual({
+      'metadata.nested.name': 'root',
+      'metadata.nested.self': '<circular-reference>',
+    });
+  });
+
   it('should use custom prefix', () => {
     const metadata = {
       userId: '123',

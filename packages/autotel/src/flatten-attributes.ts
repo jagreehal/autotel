@@ -2,7 +2,7 @@ import type { AttributeValue } from './trace-context';
 import {
   asBoolean,
   asNumber,
-  asPlainRecord,
+  asPlainRecordOrMap,
   asString,
   type UnknownRecord,
 } from './values';
@@ -17,6 +17,7 @@ export function toAttributeValue(value: unknown): AttributeValue | undefined {
   const scalar = asString(value) ?? asNumber(value) ?? asBoolean(value);
   if (scalar !== undefined) return scalar;
   if (Array.isArray(value)) return toAttributeArray(value);
+  if (value instanceof Set) return toAttributeArray([...value]);
   if (value instanceof Date) return value.toISOString();
   if (value instanceof Error) return value.message;
   return undefined;
@@ -64,13 +65,15 @@ export function flattenToAttributes(
         continue;
       }
 
-      const nested = asPlainRecord(value);
+      const nested = asPlainRecordOrMap(value);
       if (nested !== undefined) {
-        if (seen.has(nested)) {
+        // Keyed on the value itself, not on `nested`: a Map flattens to a
+        // fresh object each time, which a WeakSet would never recognise.
+        if (seen.has(value as object)) {
           out[nextKey] = '<circular-reference>';
           continue;
         }
-        seen.add(nested);
+        seen.add(value as object);
         flatten(nested, nextKey);
         continue;
       }

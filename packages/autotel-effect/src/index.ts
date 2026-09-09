@@ -1,6 +1,8 @@
+import { logLevelToSeverityNumber } from '@effect/opentelemetry/OtelLogger';
 import * as OtelTracer from '@effect/opentelemetry/OtelTracer';
 import * as Resource from '@effect/opentelemetry/Resource';
-import { logs, SeverityNumber } from '@opentelemetry/api-logs';
+import { logs } from '@opentelemetry/api-logs';
+import { flattenToAttributes } from 'autotel';
 import { createBuiltinLogger, type BuiltinLoggerOptions } from 'autotel/logger';
 import * as Cause from 'effect/Cause';
 import * as Layer from 'effect/Layer';
@@ -121,14 +123,16 @@ export function loggerLayer(
         }
         otelLogger().emit({
           body,
-          severityNumber: LEVEL_TO_SEVERITY[logLevel],
+          severityNumber: logLevelToSeverityNumber(logLevel),
           severityText: logLevel,
-          attributes: {
+          // Annotations are `unknown`; only what flattens to an OTel attribute
+          // reaches the record, in the same shape the rest of autotel emits.
+          attributes: flattenToAttributes({
             ...metadata,
             ...(Array.isArray(metadata.err)
               ? { err: metadata.err.join('\n') }
               : {}),
-          },
+          }),
         });
       }),
     ],
@@ -145,17 +149,6 @@ const LEVEL_TO_METHOD: Partial<
   Warn: 'warn',
   Error: 'error',
   Fatal: 'error',
-};
-
-const LEVEL_TO_SEVERITY: Record<LogLevel.LogLevel, SeverityNumber> = {
-  All: SeverityNumber.UNSPECIFIED,
-  Trace: SeverityNumber.TRACE,
-  Debug: SeverityNumber.DEBUG,
-  Info: SeverityNumber.INFO,
-  Warn: SeverityNumber.WARN,
-  Error: SeverityNumber.ERROR,
-  Fatal: SeverityNumber.FATAL,
-  None: SeverityNumber.UNSPECIFIED,
 };
 
 function formatPart(part: unknown): string {
