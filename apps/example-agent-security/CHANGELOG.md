@@ -1,5 +1,15 @@
 # @jagreehal/example-agent-security
 
+## 0.0.31
+
+### Patch Changes
+
+- Updated dependencies [0fc0c29]
+  - autotel@7.7.0
+  - autotel-genai@0.12.0
+  - autotel-audit@1.1.3
+  - autotel-mcp-instrumentation@57.0.0
+
 ## 0.0.30
 
 ### Patch Changes
