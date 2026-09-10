@@ -35,6 +35,7 @@
 
 import {
   SpanStatusCode,
+  createContextKey,
   trace as otelTrace,
   context,
   propagation,
@@ -49,6 +50,7 @@ import {
   getContextStorage,
 } from './trace-context';
 import { runInOperationContext } from './operation-context';
+import { isFunction, readProperty } from './values';
 import {
   FUNCTIONAL_ERROR_MESSAGE_LIMIT,
   runWithTraceContext,
@@ -187,40 +189,145 @@ export function getActiveTraceContext<
 // so this target is never read from - it exists only to be proxied.
 const ctxProxyTarget = {} as TraceContext;
 
-export const ctx = new Proxy(ctxProxyTarget, {
-  get(_target, prop) {
-    const ctxValue = getCtxValue();
-    if (!ctxValue) {
-      return;
-    }
-    // SAFETY: the trap forwards whatever member was asked for; a name that is
-    // not on a TraceContext reads undefined, as it would on the real object.
-    return ctxValue[prop as keyof typeof ctxValue];
-  },
+/**
+ * What the methods do when no span is active - which is what a real
+ * `NonRecordingSpan` does too, and the reason instrumentation can never be the
+ * thing that throws: the same `ctx.setAttribute()` call runs under `vitest` and
+ * under a plain `node server.js`, where nothing preloaded the SDK.
+ *
+ * Only these names get a callable fallback. A blanket no-op would answer `then`
+ * as well, which would turn `ctx` into a thenable that never resolves.
+ * `functional.test.ts` asserts this list against a live context, so a new
+ * member cannot quietly go missing from it.
+ */
+const noop = (): void => {};
+const INACTIVE_CTX_METHODS: Record<string, (...args: never[]) => unknown> = {
+  setAttribute: noop,
+  setAttributes: noop,
+  setStatus: noop,
+  recordException: noop,
+  addEvent: noop,
+  addLink: noop,
+  addLinks: noop,
+  updateName: noop,
+  recordError: noop,
+  track: noop,
+  isRecording: () => false,
+  getBaggage: () => undefined,
+  setBaggage: (_key: never, value: never) => value,
+  deleteBaggage: noop,
+  getAllBaggage: () => new Map(),
+  getTypedBaggage: () => undefined,
+  setTypedBaggage: noop,
+};
 
-  has(_target, prop) {
-    const ctxValue = getCtxValue();
-    if (!ctxValue) {
-      return false;
-    }
-    return prop in ctxValue;
-  },
+/** A `ctx`-shaped view of whatever context `resolve` finds at access time. */
+function createCtxProxy(resolve: () => TraceContext | null): TraceContext {
+  return new Proxy(ctxProxyTarget, {
+    get(_target, prop) {
+      const ctxValue = resolve();
+      if (!ctxValue) {
+        // traceId and friends stay undefined: `if (ctx.traceId)` is how callers
+        // ask whether anything is being recorded.
+        return typeof prop === 'string'
+          ? INACTIVE_CTX_METHODS[prop]
+          : undefined;
+      }
+      // SAFETY: the trap forwards whatever member was asked for; a name that is
+      // not on a TraceContext reads undefined, as it would on the real object.
+      return ctxValue[prop as keyof typeof ctxValue];
+    },
 
-  ownKeys() {
-    const ctxValue = getCtxValue();
-    if (!ctxValue) {
-      return [];
-    }
-    return Object.keys(ctxValue);
-  },
+    // The three traps below agree with `get`: `'recordError' in ctx` is how
+    // this codebase guards an optional context, so a method that answers must
+    // also be reported as present, or the guard skips the very call the
+    // fallback exists to make safe.
+    has(_target, prop) {
+      const ctxValue = resolve();
+      if (!ctxValue) {
+        return typeof prop === 'string' && prop in INACTIVE_CTX_METHODS;
+      }
+      return prop in ctxValue;
+    },
 
-  getOwnPropertyDescriptor(_target, prop) {
-    const ctxValue = getCtxValue();
-    if (!ctxValue) {
-      return;
-    }
-    return Object.getOwnPropertyDescriptor(ctxValue, prop);
-  },
+    ownKeys() {
+      const ctxValue = resolve();
+      return Object.keys(ctxValue ?? INACTIVE_CTX_METHODS);
+    },
+
+    getOwnPropertyDescriptor(_target, prop) {
+      const ctxValue = resolve();
+      if (!ctxValue) {
+        const fallback =
+          typeof prop === 'string' ? INACTIVE_CTX_METHODS[prop] : undefined;
+        return fallback === undefined
+          ? undefined
+          : {
+              value: fallback,
+              writable: false,
+              enumerable: true,
+              configurable: true,
+            };
+      }
+      return Object.getOwnPropertyDescriptor(ctxValue, prop);
+    },
+  });
+}
+
+export const ctx = createCtxProxy(getCtxValue);
+
+/**
+ * The key `@opentelemetry/core` publishes RPC metadata under. `createContextKey`
+ * is `Symbol.for`, so this reads exactly what `instrumentation-http` (and every
+ * framework instrumentation that renames the route) wrote, without taking a
+ * dependency on core.
+ */
+const RPC_METADATA_KEY = createContextKey(
+  'OpenTelemetry SDK Context Key RPC_METADATA',
+);
+
+/**
+ * The span the current request is being recorded on, or the active span when
+ * there is no request - a queue consumer or a cron job has none, and an
+ * attribute belongs somewhere real rather than nowhere.
+ */
+function getRequestSpan(): Span | undefined {
+  const requestSpan = readProperty(
+    context.active().getValue(RPC_METADATA_KEY),
+    'span',
+  );
+  // SAFETY: RPC metadata carries the server span; anything else under that key
+  // is not one, and takes the active-span path below.
+  return isFunction(readProperty(requestSpan, 'spanContext'))
+    ? (requestSpan as Span)
+    : otelTrace.getActiveSpan();
+}
+
+/**
+ * The ambient {@link ctx}, aimed at the **request** span rather than at
+ * whatever span the calling code happens to be inside.
+ *
+ * Framework instrumentation nests spans per layer - express opens one per
+ * middleware and per route handler - so `ctx.setAttribute()` from a shared
+ * middleware records on a span that ends the moment `next()` fires. Attributes
+ * that describe the request as a whole (the authenticated user, the tenant, the
+ * plan) belong on the request span, which is what a backend shows as the
+ * resource and what a canonical log line is built from.
+ *
+ * Falls back to the active span outside a request, and no-ops when nothing is
+ * active at all, exactly as `ctx` does.
+ *
+ * @example
+ * ```typescript
+ * app.use((req, _res, next) => {
+ *   requestCtx.setAttributes({ user: req.user });  // user.id, user.plan, ...
+ *   next();
+ * });
+ * ```
+ */
+export const requestCtx: TraceContext = createCtxProxy(() => {
+  const span = getRequestSpan();
+  return span ? createTraceContext(span) : null;
 });
 
 /**

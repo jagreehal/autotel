@@ -91,7 +91,8 @@ export interface YamlConfig {
     always_sample_slow?: boolean;
     slow_threshold_ms?: number;
   };
-  autoInstrumentations?: string[] | Record<string, { enabled?: boolean }>;
+  autoInstrumentations?:
+    string[] | Record<string, { enabled?: boolean } & Record<string, unknown>>;
   /** Path to a policy `.json` file or a directory of them (OTEP 4738). */
   policies?: string;
   debug?: boolean;

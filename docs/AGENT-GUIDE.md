@@ -13,6 +13,7 @@ This document gives AI coding agents **before/after examples**, **when-to-use-wh
 | Run named work now with span context                          | `trace.run('checkout', async (ctx) => { ctx.setAttribute(...); ... })`      | One-off operations, run right here       |
 | Read the active span inside a traced body                     | ambient `ctx` import: `ctx.setAttribute(...)`, `ctx.track(...)`             | Attributes from any depth, no plumbing   |
 | Reusable handler with an explicit context argument            | `withTracing({})((ctx) => async (args) => { ctx.setAttribute(...); ... })`  | Wrappers that need the handle passed in  |
+| Tag the whole request from a shared middleware                | ambient `requestCtx` import: `requestCtx.setAttributes({ user })`           | Auth/tenant middleware, framework layers |
 | One snapshot per request (attributes + correlated log events) | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()` | HTTP request handlers, background jobs   |
 | Throw an error with why/fix/link                              | `createStructuredError({ message, why?, fix?, link?, status?, cause? })`    | API routes, services, validation         |
 | Show API error in UI (client)                                 | `parseError(caught)` → use `message`, `why`, `fix`, `link`                  | Toasts, error banners, forms             |

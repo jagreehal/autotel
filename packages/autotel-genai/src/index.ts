@@ -42,9 +42,15 @@ export {
   SERVER_TOOL_PRICING_PER_1K,
   estimateLLMCost,
   recordLLMCost,
+  registerModelPricing,
   unpricedServerTools,
 } from './cost.js';
-export type { ModelPricing, TokenUsage, EstimateCostOptions } from './cost.js';
+export type {
+  ModelPricing,
+  ModelPricingTable,
+  TokenUsage,
+  EstimateCostOptions,
+} from './cost.js';
 
 // --- Metrics ---------------------------------------------------------------
 export {

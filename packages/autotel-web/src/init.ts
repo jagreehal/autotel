@@ -9,6 +9,7 @@
 
 import { createTraceparent, parseTraceparent } from './traceparent';
 import { isPropagationAllowed } from './propagate';
+import { isSelfTelemetryUrl } from './otlp-endpoint';
 import { PrivacyManager, PrivacyConfig, getDenialReason } from './privacy';
 import { setEventSink } from './emit-event';
 import {
@@ -91,6 +92,34 @@ export interface AutotelWebConfig {
    * @default [] (same-origin only)
    */
   propagateTo?: string[];
+
+  /**
+   * Treat every request to the collector's origin as telemetry, not only the
+   * OTLP paths.
+   *
+   * Set this when the collector serves more than OTLP - autotel's devtools
+   * collector serves its own UI and query API beside `/v1/traces` - so the
+   * widget that displays the traces is itself a fetch from this page. Tracing
+   * that makes the tool a source of the data it displays: every poll of the
+   * trace list writes another trace to the list.
+   *
+   * Off by default, because nothing in the URL can tell a dedicated collector
+   * from an OTLP endpoint proxied through the application's own server, and
+   * getting that wrong silences the requests the page exists to make. The
+   * page's own origin is never excluded, whatever this says.
+   *
+   * @example
+   * ```typescript
+   * init({
+   *   service: 'my-spa',
+   *   endpoint: 'http://localhost:4848',  // devtools collector, nothing else
+   *   collectorOwnsOrigin: true,
+   * });
+   * ```
+   *
+   * @default false
+   */
+  collectorOwnsOrigin?: boolean;
 
   /**
    * Privacy controls for traceparent header injection
@@ -386,6 +415,20 @@ function shouldSendHeaders(url: string): boolean {
   ]);
 }
 
+/**
+ * A call to our own collector. Never instrumented: the tool that displays the
+ * traces would otherwise appear in them, and every poll of the trace list would
+ * write another trace to the list.
+ */
+function isSelfTelemetry(url: string): boolean {
+  return isSelfTelemetryUrl(
+    url,
+    config?.endpoint,
+    window.location?.origin ?? '',
+    config?.collectorOwnsOrigin,
+  );
+}
+
 /** Why `shouldSendHeaders` said no, for the debug log. */
 function headerDenialReason(url: string): string {
   if (privacyManager && !privacyManager.shouldInjectTraceparent(url)) {
@@ -413,6 +456,10 @@ function patchFetch(): void {
         : input instanceof URL
           ? input.toString()
           : input.url;
+
+    // Our own collector: hand the call straight to fetch, untouched and
+    // unrecorded, so reading the telemetry never becomes telemetry.
+    if (isSelfTelemetry(url)) return originalFetch!(input, init);
 
     // Create headers object.
     //
@@ -630,6 +677,12 @@ function patchXMLHttpRequest(): void {
     body?: Document | XMLHttpRequestBodyInit | null,
   ): void {
     const urlStr = xhrUrl.get(this) ?? '';
+
+    if (isSelfTelemetry(urlStr)) {
+      // originalXHRSend is set by patchXMLHttpRequest() before this runs.
+      originalXHRSend!.call(this, body);
+      return;
+    }
 
     if (!xhrHasTraceparent.has(this)) {
       if (!shouldSendHeaders(urlStr)) {

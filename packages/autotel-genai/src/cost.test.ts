@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   GEN_AI_COST_ATTRIBUTE,
   MODEL_PRICING,
   estimateLLMCost,
   recordLLMCost,
+  registerModelPricing,
   SERVER_TOOL_PRICING_PER_1K,
   unpricedServerTools,
 } from './cost.js';
@@ -337,5 +338,72 @@ describe('hosted model ids', () => {
         pricing: { 'glm-4.7-flash': { inputPer1M: 1, outputPer1M: 2 } },
       }),
     ).toBe(3);
+  });
+});
+
+describe('registerModelPricing()', () => {
+  const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000 };
+  let restore: (() => void) | undefined;
+
+  afterEach(() => {
+    restore?.();
+    restore = undefined;
+  });
+
+  it('prices many models process-wide with no options threaded through', () => {
+    restore = registerModelPricing({
+      'glm-4.7-flash': { inputPer1M: 0.6, outputPer1M: 2.2 },
+      'acme-ft-7b': { inputPer1M: 0.1, outputPer1M: 0.1 },
+    });
+
+    // Vendor-namespaced ids resolve through the family key.
+    expect(estimateLLMCost('zai.glm-4.7-flash', usage)).toBeCloseTo(2.8);
+    expect(estimateLLMCost('acme-ft-7b', usage)).toBeCloseTo(0.2);
+  });
+
+  it('overrides a built-in price', () => {
+    const before = estimateLLMCost('gpt-4o', usage);
+    restore = registerModelPricing({
+      'gpt-4o': { inputPer1M: 1, outputPer1M: 1 },
+    });
+
+    expect(estimateLLMCost('gpt-4o', usage)).toBe(2);
+    restore();
+    restore = undefined;
+    expect(estimateLLMCost('gpt-4o', usage)).toBe(before);
+  });
+
+  it('restores an added model back to unpriced', () => {
+    restore = registerModelPricing({
+      'acme-ft-7b': { inputPer1M: 1, outputPer1M: 1 },
+    });
+    restore();
+    restore = undefined;
+
+    expect(estimateLLMCost('acme-ft-7b', usage)).toBeUndefined();
+    expect(MODEL_PRICING['acme-ft-7b']).toBeUndefined();
+  });
+});
+
+describe('registerModelPricing layering', () => {
+  it('leaves a later registration alone when an earlier one is restored', () => {
+    const base = registerModelPricing({
+      'layer-test': { inputPer1M: 1, outputPer1M: 1 },
+    });
+    const override = registerModelPricing({
+      'layer-test': { inputPer1M: 2, outputPer1M: 2 },
+    });
+
+    // The base table is torn down first - a per-tenant override outliving the
+    // startup registration that seeded it.
+    base();
+    expect(
+      estimateLLMCost('layer-test', { inputTokens: 1e6, outputTokens: 0 }),
+    ).toBe(2);
+
+    override();
+    expect(
+      estimateLLMCost('layer-test', { inputTokens: 1e6, outputTokens: 0 }),
+    ).toBeUndefined();
   });
 });

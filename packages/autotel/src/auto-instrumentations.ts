@@ -61,14 +61,71 @@ const INSTRUMENTATION_CLASS_TO_PACKAGE = new Map<string, string>(
 );
 
 /**
- * Type for the auto-instrumentations loader function
- * @internal Used for testing injection
+ * Per-package config, as `getNodeAutoInstrumentations` takes it: `enabled`
+ * plus whatever else that instrumentation accepts, which it forwards straight
+ * to the constructor (`ignoreLayersType` for express, say).
  */
-/** Per-package switches, as `getNodeAutoInstrumentations` takes them. */
+export type InstrumentationOptions = { enabled?: boolean } & Record<
+  string,
+  unknown
+>;
+
+/** Per-package switches, keyed by full package name. */
 export interface InstrumentationSwitches {
-  [packageName: string]: { enabled?: boolean };
+  [packageName: string]: InstrumentationOptions;
 }
 
+/**
+ * What autotel configures when the caller has not said otherwise.
+ *
+ * `instrumentation-express` opens a span per layer and runs the layer under it,
+ * so whatever is active inside a middleware is that layer's span - one that
+ * ends the moment `next()` fires. Request-wide attributes set there would land
+ * on `middleware - anonymous` rather than on the request span every backend
+ * shows as the resource. Ignoring the two leaf layer types puts them back on
+ * the request span and drops a pile of noise spans with them; the route rename
+ * (`GET /users/:id`) survives, because `rpcMetadata.route` is assigned before
+ * the ignore check.
+ *
+ * Pass your own `ignoreLayersType` - `[]` for the upstream behaviour - to
+ * override it, or `ignoreLayers` to silence only the noisy paths.
+ */
+const AUTOTEL_DEFAULTS: InstrumentationSwitches = {
+  '@opentelemetry/instrumentation-express': {
+    ignoreLayersType: ['middleware', 'request_handler'],
+  },
+};
+
+/** Apply {@link AUTOTEL_DEFAULTS} under whatever the caller already chose. */
+function withAutotelDefaults(
+  config: InstrumentationSwitches,
+): InstrumentationSwitches {
+  const merged: InstrumentationSwitches = { ...config };
+  for (const [packageName, defaults] of Object.entries(AUTOTEL_DEFAULTS)) {
+    const options = merged[packageName];
+    // Nothing to configure on an instrumentation that is not loading.
+    if (options?.enabled === false) continue;
+    merged[packageName] = { ...defaults, ...options };
+  }
+  return merged;
+}
+
+/**
+ * `express` and `@opentelemetry/instrumentation-express` name the same thing.
+ * `getNodeAutoInstrumentations` only answers to the full name - it
+ * `diag.error`s anything else and ignores the config - so the short form every
+ * autotel example uses has to be expanded before it gets there.
+ */
+function toPackageName(name: string): string {
+  return name.startsWith('@opentelemetry/instrumentation-')
+    ? name
+    : `@opentelemetry/instrumentation-${name}`;
+}
+
+/**
+ * The `getNodeAutoInstrumentations` signature.
+ * @internal Named so tests can inject a loader in its place.
+ */
 export type AutoInstrumentationsLoader = (
   config?: InstrumentationSwitches,
 ) => NodeSDKConfiguration['instrumentations'];
@@ -179,41 +236,21 @@ export function getAutoInstrumentations(
     }
   }
 
-  if (integrations === true) {
-    // If exclusions exist, pass them to getNodeAutoInstrumentations
-    if (Object.keys(exclusionConfig).length > 0) {
-      return getNodeAutoInstrumentations(exclusionConfig);
-    }
-    return getNodeAutoInstrumentations();
+  const config: InstrumentationSwitches = { ...exclusionConfig };
+
+  const requested: Array<[string, InstrumentationOptions]> =
+    integrations === true
+      ? []
+      : Array.isArray(integrations)
+        ? integrations.map((name) => [name, { enabled: true }])
+        : Object.entries(integrations);
+
+  for (const [name, options] of requested) {
+    const packageName = toPackageName(name);
+    // A manual instrumentation for the same package takes precedence.
+    if (packageName in exclusionConfig) continue;
+    config[packageName] = options;
   }
 
-  if (Array.isArray(integrations)) {
-    const config: InstrumentationSwitches = { ...exclusionConfig };
-    for (const name of integrations) {
-      const packageName = `@opentelemetry/instrumentation-${name}`;
-      // Don't override exclusions
-      if (!exclusionConfig[packageName]) {
-        config[packageName] = { enabled: true };
-      }
-    }
-    return getNodeAutoInstrumentations(config);
-  }
-
-  const config: InstrumentationSwitches = {
-    ...exclusionConfig,
-    ...integrations,
-  };
-
-  // Override any integrations that conflict with manual instrumentations
-  for (const packageName of Object.keys(exclusionConfig)) {
-    const integrationsKey = Object.keys(integrations).find((key) =>
-      packageName.includes(key),
-    );
-    if (integrationsKey) {
-      // Manual instrumentation takes precedence
-      config[packageName] = { enabled: false };
-    }
-  }
-
-  return getNodeAutoInstrumentations(config);
+  return getNodeAutoInstrumentations(withAutotelDefaults(config));
 }

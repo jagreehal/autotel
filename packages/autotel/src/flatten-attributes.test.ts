@@ -111,3 +111,68 @@ describe('flattenToAttributes', () => {
     expect(result).toEqual({ date: '2025-01-01T00:00:00.000Z' });
   });
 });
+
+// Conversion runs on whatever the application hands an attribute setter, so it
+// has to be total: anything it cannot represent becomes a marker, and nothing
+// throws back into the caller's code path.
+describe('values that cannot be converted', () => {
+  it('marks an invalid date rather than throwing', () => {
+    expect(toAttributeValue(new Date('nonsense'))).toBe('<invalid-date>');
+    expect(flattenToAttributes({ at: new Date('nonsense') })).toEqual({
+      at: '<invalid-date>',
+    });
+  });
+
+  it('marks a non-finite number rather than encoding one', () => {
+    expect(toAttributeValue(Number.NaN)).toBe('<invalid-number>');
+    expect(toAttributeValue(Number.POSITIVE_INFINITY)).toBe('<invalid-number>');
+    expect(toAttributeValue(0)).toBe(0);
+    expect(toAttributeValue(-1.5)).toBe(-1.5);
+  });
+
+  it('still records a valid date as ISO 8601', () => {
+    const at = new Date('2026-09-10T08:00:00.000Z');
+    expect(toAttributeValue(at)).toBe('2026-09-10T08:00:00.000Z');
+  });
+
+  it('survives a getter that throws', () => {
+    const value = {
+      ok: 1,
+      get boom(): string {
+        throw new Error('getter exploded');
+      },
+    };
+
+    expect(flattenToAttributes({ value })).toEqual({
+      'value.ok': 1,
+      'value.boom': '<serialization-failed>',
+    });
+  });
+
+  it('survives a toString that throws inside a Map key', () => {
+    const key = {
+      toString() {
+        throw new Error('key exploded');
+      },
+    };
+
+    expect(() =>
+      flattenToAttributes({ meta: new Map([[key, 'v']]) }),
+    ).not.toThrow();
+  });
+
+  it('survives an object whose own enumeration throws', () => {
+    const hostile = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error('enumeration exploded');
+        },
+      },
+    );
+
+    expect(flattenToAttributes({ hostile })).toEqual({
+      hostile: '<serialization-failed>',
+    });
+  });
+});

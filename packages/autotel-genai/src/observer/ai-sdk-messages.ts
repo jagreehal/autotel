@@ -46,6 +46,16 @@ export interface ContentPartView {
   data?: unknown | undefined;
 }
 
+/**
+ * The AI SDK's `Instructions`: a string, one system message, or a list of them.
+ *
+ * System content travels here, not in `messages` - `allowSystemInMessages` is
+ * off by default, so a prompt assembled the normal way carries no system role
+ * at all.
+ */
+export type InstructionsView =
+  string | ModelMessageView | readonly ModelMessageView[] | undefined;
+
 /** Result of converting an AI SDK prompt: messages plus split-out system parts. */
 export interface ConvertedPrompt {
   messages: GenAiMessage[];
@@ -53,17 +63,26 @@ export interface ConvertedPrompt {
 }
 
 /**
- * Convert an AI SDK `ModelMessage[]` prompt to GenAI input messages, splitting
- * `system` messages out into `systemInstructions` (recorded separately per the
- * conventions).
+ * Convert an AI SDK prompt to GenAI input messages.
+ *
+ * System content is recorded separately per the conventions, and reaches us two
+ * ways: as the event's own `instructions` (the normal case), and - only when
+ * the caller set `allowSystemInMessages` - as `system` entries in `messages`.
+ * Both are collected, instructions first, which is the order the SDK assembles
+ * the prompt in.
  */
 export function promptToGenAiMessages(
   messages?: readonly ModelMessageView[],
+  instructions?: InstructionsView,
 ): ConvertedPrompt {
-  if (!messages?.length) return { messages: [] };
+  const system: GenAiMessagePart[] = instructionsToParts(instructions);
+  if (!messages?.length) {
+    return system.length > 0
+      ? { messages: [], systemInstructions: system }
+      : { messages: [] };
+  }
 
   const out: GenAiMessage[] = [];
-  const system: GenAiMessagePart[] = [];
 
   for (const message of messages) {
     const role = message.role ?? 'user';
@@ -78,6 +97,30 @@ export function promptToGenAiMessages(
   return system.length > 0
     ? { messages: out, systemInstructions: system }
     : { messages: out };
+}
+
+/**
+ * The parts an `Instructions` value carries, in each of its three shapes.
+ *
+ * Total, like every converter here: this runs inside a `diagnostics_channel`
+ * subscriber, where a throw is re-raised as an uncaught exception and takes the
+ * process with it. A value of some fourth shape - `null` from untyped JS or a
+ * JSON config - records nothing rather than throwing.
+ */
+function instructionsToParts(
+  instructions: InstructionsView | null,
+): GenAiMessagePart[] {
+  if (typeof instructions === 'string') return contentToParts(instructions);
+  if (Array.isArray(instructions)) {
+    return instructions.flatMap((message) => messageContent(message));
+  }
+  return messageContent(instructions);
+}
+
+/** The parts of one system message, or none when it is not a message at all. */
+function messageContent(message: unknown): GenAiMessagePart[] {
+  if (typeof message !== 'object' || message === null) return [];
+  return contentToParts((message as ModelMessageView).content);
 }
 
 /**

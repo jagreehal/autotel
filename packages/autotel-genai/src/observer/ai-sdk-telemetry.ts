@@ -73,6 +73,7 @@ import {
   contentToGenAiMessage,
   promptToGenAiMessages,
   type ContentPartView,
+  type InstructionsView,
   type ModelMessageView,
 } from './ai-sdk-messages.js';
 import {
@@ -82,7 +83,7 @@ import {
   type AiSdkUsageFields,
 } from './ai-sdk-fields.js';
 import { createGenAiObserver } from './observer.js';
-import type { ModelPricing } from '../cost.js';
+import type { ModelPricingTable } from '../cost.js';
 import type {
   ChatStreamTiming,
   GenAiObserverEvent,
@@ -107,6 +108,16 @@ interface OperationStartEvent {
    * `sessionId` are recorded (`user.id`, `gen_ai.conversation.id`).
    */
   runtimeContext?: Record<string, unknown> | undefined;
+  /** The operation's own prompt — stamped on the `invoke_agent` root. */
+  messages?: readonly ModelMessageView[] | undefined;
+  /**
+   * System content, which is where it lives: `allowSystemInMessages` is off by
+   * default, so `messages` carries no system role and this is the only place a
+   * normal call states its instructions.
+   */
+  instructions?: InstructionsView;
+  /** Per-call opt-out; either side being `false` suppresses that side. */
+  recordInputs?: boolean | undefined;
 }
 
 interface LanguageModelCallStartEventView {
@@ -123,6 +134,8 @@ interface LanguageModelCallStartEventView {
   seed?: number | undefined;
   /** Standardized prompt messages (when content capture is on). */
   messages?: readonly ModelMessageView[] | undefined;
+  /** The system content of the standardized prompt; see the note above. */
+  instructions?: InstructionsView;
   /** Whether the SDK call permits recording inputs (default true). */
   recordInputs?: boolean | undefined;
 }
@@ -191,6 +204,22 @@ interface ObjectStepEndEventView {
 
 interface OperationEndEventView {
   callId: string;
+  /**
+   * The content of the operation's *first* step. On a multi-step tool loop
+   * that is the tool-call preamble, not the answer — prefer
+   * {@link OperationEndEventView.finalStep}.
+   */
+  content?: readonly ContentPartView[] | undefined;
+  /** The last step of the loop: the content that answers the prompt. */
+  finalStep?:
+    | {
+        content?: readonly ContentPartView[] | undefined;
+        finishReason?: string | undefined;
+      }
+    | undefined;
+  finishReason?: string | undefined;
+  /** Per-call opt-out; either side being `false` suppresses that side. */
+  recordOutputs?: boolean | undefined;
 }
 
 interface AbortEventView {
@@ -272,10 +301,11 @@ export interface AutotelTelemetryOptions {
    */
   resolveParentContext?: (event: GenAiObserverEvent) => Context | undefined;
   /**
-   * Extra `gen_ai.usage.cost.usd` pricing, merged over the built-in table.
-   * See {@link GenAiObserverOptions.pricing}.
+   * Extra `gen_ai.usage.cost.usd` pricing for this integration, merged over the
+   * built-in table. For process-wide prices prefer `registerModelPricing` from
+   * `autotel-genai/cost`. See {@link GenAiObserverOptions.pricing}.
    */
-  pricing?: Record<string, ModelPricing>;
+  pricing?: ModelPricingTable;
 }
 
 /** Per-call correlation state, keyed by the AI SDK `callId`. */
@@ -473,11 +503,19 @@ export function autotelTelemetry(
       calls.set(event.callId, state);
       applyRuntimeContext(state, event.runtimeContext);
       if (!hasAgent) return;
+      // The operation's own input belongs on the root: a trace list shows
+      // roots, so a root without content reads as an empty trace.
+      const content =
+        captureContent && event.recordInputs !== false
+          ? promptToGenAiMessages(event.messages, event.instructions)
+          : undefined;
       observe({
         type: 'agent.start',
         id: event.callId,
         provider: normalizeProvider(event.provider),
         agent: { name: event.functionId ?? event.modelId ?? AI_SDK_AGENT_NAME },
+        inputMessages: content?.messages,
+        systemInstructions: content?.systemInstructions,
       });
       stampIdentity(event.callId, state);
     },
@@ -488,7 +526,7 @@ export function autotelTelemetry(
       if (state) state.openLm.push(id);
       const content =
         captureContent && event.recordInputs !== false
-          ? promptToGenAiMessages(event.messages)
+          ? promptToGenAiMessages(event.messages, event.instructions)
           : undefined;
       observe({
         type: 'chat.start',
@@ -672,7 +710,21 @@ export function autotelTelemetry(
       calls.delete(event.callId);
       closeOpenEmbeds(state);
       if (!state.hasAgent) return;
-      observe({ type: 'agent.end', id: event.callId });
+      // `event.content` is the first step's content: on a tool loop that is
+      // the "let me look that up" preamble. The root has to carry the answer.
+      const finalContent = event.finalStep?.content ?? event.content;
+      const outputMessage =
+        captureContent && event.recordOutputs !== false
+          ? contentToGenAiMessage(
+              finalContent,
+              event.finalStep?.finishReason ?? event.finishReason,
+            )
+          : undefined;
+      observe({
+        type: 'agent.end',
+        id: event.callId,
+        outputMessages: outputMessage ? [outputMessage] : undefined,
+      });
       spans.delete(event.callId);
     },
 

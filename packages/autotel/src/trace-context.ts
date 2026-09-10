@@ -15,6 +15,7 @@ import { context, propagation } from '@opentelemetry/api';
 // namespace import for browser-bundler compat; `import type` is erased — see node-require.ts
 import type { AsyncLocalStorage } from 'node:async_hooks';
 import * as nodeAsyncHooks from 'node:async_hooks';
+import { flattenToAttributes, toAttributeValue } from './flatten-attributes';
 import { recordStructuredError } from './structured-error';
 import { track } from './track';
 import type { UnknownRecord } from './values';
@@ -149,10 +150,17 @@ export type AttributeValue = OtelAttributeValue;
  * Span methods available on trace context
  */
 export interface SpanMethods {
-  /** Set a single attribute on the span */
-  setAttribute(key: string, value: AttributeValue): void;
-  /** Set multiple attributes on the span */
-  setAttributes(attrs: Attributes): void;
+  /**
+   * Set a single attribute on the span.
+   *
+   * A scalar or homogeneous array is recorded as given. Anything richer - a
+   * nested object, a `Map`, a `Set`, a `Date` - is flattened to dot-notation
+   * keys (`client.rights` + `{ admin: true }` gives `client.rights.admin`),
+   * the same rule the request logger and structured errors follow.
+   */
+  setAttribute(key: string, value: unknown): void;
+  /** Set multiple attributes on the span, flattened as {@link setAttribute} does */
+  setAttributes(attrs: UnknownRecord): void;
   /** Set the status of the span */
   setStatus(status: { code: SpanStatusCode; message?: string }): void;
   /** Add a link to another span */
@@ -456,8 +464,24 @@ export function createTraceContext<
     traceId: spanContext.traceId,
     spanId: spanContext.spanId,
     correlationId: spanContext.traceId.slice(0, 16),
-    setAttribute: span.setAttribute.bind(span),
-    setAttributes: span.setAttributes.bind(span),
+    setAttribute: (key: string, value: unknown) => {
+      // One conversion rule with `setAttributes` below. A value OTel cannot
+      // record - an object, a `Map`, a failed measurement - reads as undefined
+      // here and goes to the flattener, which names it or spreads it into
+      // dot-notation keys.
+      const attr = toAttributeValue(value);
+      if (attr === undefined) {
+        span.setAttributes(flattenToAttributes({ [key]: value }));
+        return;
+      }
+      span.setAttribute(key, attr);
+    },
+    setAttributes: (attrs: UnknownRecord) => {
+      // Straight through the flattener, never a peek at the values first: a
+      // getter that throws must be one key's failure marker rather than an
+      // exception on the caller's path. Scalars come out of it unchanged.
+      span.setAttributes(flattenToAttributes(attrs));
+    },
     setStatus: (status: { code: SpanStatusCode; message?: string }) => {
       spansWithExplicitStatus.add(span);
       span.setStatus(status);
