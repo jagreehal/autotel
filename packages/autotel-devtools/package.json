@@ -1,6 +1,6 @@
 {
   "name": "autotel-devtools",
-  "version": "27.2.2",
+  "version": "28.0.0",
   "description": "Standalone OTLP receiver with web UI for local development",
   "type": "module",
   "sideEffects": false,

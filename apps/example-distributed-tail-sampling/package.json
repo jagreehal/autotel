@@ -1,6 +1,6 @@
 {
   "name": "example-distributed-tail-sampling",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "description": "Why tail sampling has to live in the collector once more than one service is involved",
