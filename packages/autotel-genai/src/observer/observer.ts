@@ -56,6 +56,8 @@ import { agentContextFromSpan } from '../agent/context.js';
 import { SpanRegistry } from './span-registry.js';
 import type {
   ChatEndEvent,
+  AgentEndEvent,
+  AgentStartEvent,
   ChatStartEvent,
   GenAiObserver,
   GenAiObserverEvent,
@@ -162,6 +164,23 @@ export function createGenAiObserver(
     }
   }
 
+  function applyAgentStart(span: Span, event: AgentStartEvent): void {
+    const content = approvedContent(event);
+    if (content?.type !== 'agent.start') return;
+    setGenAiContent(spanSink(span), {
+      inputMessages: content.inputMessages,
+      systemInstructions: content.systemInstructions,
+    });
+  }
+
+  function applyAgentEnd(span: Span, event: AgentEndEvent): void {
+    const content = approvedContent(event);
+    if (content?.type !== 'agent.end') return;
+    setGenAiContent(spanSink(span), {
+      outputMessages: content.outputMessages,
+    });
+  }
+
   function applyChatStart(span: Span, event: ChatStartEvent): void {
     const content = approvedContent(event);
     if (content?.type !== 'chat.start') return;
@@ -180,7 +199,18 @@ export function createGenAiObserver(
       const costUsd = costModel
         ? estimateLLMCost(costModel, event.usage, { pricing: options.pricing })
         : undefined;
-      span.setAttributes(genAiUsageAttributes({ ...event.usage, costUsd }));
+      span.setAttributes(
+        genAiUsageAttributes({
+          ...event.usage,
+          costUsd,
+          // An absent cost reads as a free call. Say which model had no price
+          // instead, the way `recordGenAiUsage` and the agent runtime do.
+          unpricedModel:
+            costModel !== undefined && costUsd === undefined
+              ? costModel
+              : undefined,
+        }),
+      );
     }
     if (event.streaming) {
       const { timeToFinish, outputTokensPerSecond, timePerOutputChunk } =
@@ -249,7 +279,7 @@ export function createGenAiObserver(
       }
       case 'agent.start': {
         const internal = !event.remote;
-        start(
+        const span = start(
           event,
           genAiSpanName(GEN_AI_OPERATION.INVOKE_AGENT, event.agent.name),
           internal ? SpanKind.INTERNAL : SpanKind.CLIENT,
@@ -261,6 +291,7 @@ export function createGenAiObserver(
             ...genAiAgentAttributes(event.agent, { internal }),
           },
         );
+        applyAgentStart(span, event);
         return;
       }
       case 'chat.start': {
@@ -287,9 +318,12 @@ export function createGenAiObserver(
         applyToolStart(span, event);
         return;
       }
-      case 'workflow.end':
-      case 'agent.end': {
+      case 'workflow.end': {
         end(event);
+        return;
+      }
+      case 'agent.end': {
+        end(event, (span) => applyAgentEnd(span, event));
         return;
       }
       case 'chat.end': {

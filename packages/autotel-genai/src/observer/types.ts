@@ -23,7 +23,7 @@ import type {
   GenAiToolInput,
   GenAiWorkflowInput,
 } from '../attributes.js';
-import type { ModelPricing, TokenUsage } from '../cost.js';
+import type { ModelPricingTable, TokenUsage } from '../cost.js';
 import type { GenAiMessage, GenAiMessagePart } from '../events.js';
 import type { GenAiProviderName } from '../semconv.js';
 import type {
@@ -80,6 +80,17 @@ export interface AgentStartEvent extends SpanStart {
   agent: GenAiAgentInput;
   provider?: GenAiProviderName;
   /**
+   * Opt-in content — the operation's own input, written only when
+   * `exportContent` returns it.
+   *
+   * A root span with no content is what makes a trace list read as empty: the
+   * list shows roots, so the prompt has to be on the root and not only on the
+   * `chat` child that consumed it.
+   */
+  inputMessages?: GenAiMessage[] | string;
+  /** Opt-in content — written only when `exportContent` returns it. */
+  systemInstructions?: GenAiMessagePart[] | string;
+  /**
    * A remote agent call is a CLIENT span and keeps `gen_ai.agent.id`; an
    * in-process agent is INTERNAL and drops it per spec breaking change #242.
    */
@@ -88,6 +99,11 @@ export interface AgentStartEvent extends SpanStart {
 
 export interface AgentEndEvent extends SpanEnd {
   type: 'agent.end';
+  /**
+   * Opt-in content — the operation's final output, written only when
+   * `exportContent` returns it. See {@link AgentStartEvent.inputMessages}.
+   */
+  outputMessages?: GenAiMessage[] | string;
 }
 
 /** Start of a single model inference call (a leaf — carries token usage). */
@@ -232,12 +248,16 @@ export interface GenAiObserverOptions {
    */
   onSpanStart?: (id: string, span: Span) => void;
   /**
-   * Extra `gen_ai.usage.cost.usd` pricing, merged over the built-in table and
-   * keyed the same way (longest matching model prefix wins).
+   * Extra `gen_ai.usage.cost.usd` pricing for this observer, merged over the
+   * built-in table.
    *
    * Needed for any model the built-in table cannot know: a new release, a
    * self-hosted or fine-tuned model, or a negotiated rate that differs from
-   * list price. Without a matching entry the cost attribute is simply absent.
+   * list price. Without a matching entry the cost attribute is absent and
+   * `gen_ai.usage.cost.unpriced_model` names the model instead.
+   *
+   * For prices that apply process-wide, prefer `registerModelPricing` from
+   * `autotel-genai/cost` — one call, every cost site.
    */
-  pricing?: Record<string, ModelPricing>;
+  pricing?: ModelPricingTable;
 }

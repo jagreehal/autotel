@@ -790,8 +790,310 @@ describe('autotelTelemetry — cost pricing', () => {
     t.onEnd({ callId: 'p1' });
 
     // Vendor-prefixed id resolves through the supplied entry.
+    const chat = one('chat zai.glm-4.7-flash');
+    expect(chat.attributes[GEN_AI.USAGE_COST_USD]).toBe(3);
+    expect(chat.attributes[GEN_AI.USAGE_COST_UNPRICED_MODEL]).toBeUndefined();
+  });
+
+  it('names the unpriced model instead of leaving cost silently absent', () => {
+    // An absent cost attribute is indistinguishable from a free call, so a
+    // model with no price has to say so.
+    const t = autotelTelemetry({ tracer });
+
+    t.onStart({
+      callId: 'p2',
+      operationId: 'ai.generateText',
+      provider: 'amazon-bedrock',
+      modelId: 'zai.glm-4.7-flash',
+    });
+    t.onLanguageModelCallStart({
+      callId: 'p2',
+      provider: 'amazon-bedrock',
+      modelId: 'zai.glm-4.7-flash',
+    });
+    t.onLanguageModelCallEnd({
+      callId: 'p2',
+      modelId: 'zai.glm-4.7-flash',
+      finishReason: 'stop',
+      usage: { inputTokens: 100, outputTokens: 20 },
+    });
+    t.onEnd({ callId: 'p2' });
+
+    const chat = one('chat zai.glm-4.7-flash');
+    expect(chat.attributes[GEN_AI.USAGE_COST_USD]).toBeUndefined();
+    expect(chat.attributes[GEN_AI.USAGE_COST_UNPRICED_MODEL]).toBe(
+      'zai.glm-4.7-flash',
+    );
+    // Tokens are still there — only the price is unknown.
+    expect(chat.attributes[GEN_AI.USAGE_INPUT_TOKENS]).toBe(100);
+  });
+});
+
+describe('autotelTelemetry — root span content', () => {
+  it('puts the operation prompt and final output on invoke_agent', () => {
+    // A trace list shows roots. A root with no content reads as an empty
+    // trace even when every child carries the conversation.
+    const t = autotelTelemetry({ tracer, captureContent: true });
+
+    t.onStart({
+      callId: 'r1',
+      operationId: 'ai.generateText',
+      provider: 'amazon-bedrock',
+      modelId: 'zai.glm-4.7-flash',
+      functionId: 'demo-agent',
+      messages: [
+        { role: 'system', content: 'Be terse.' },
+        { role: 'user', content: 'weather in London?' },
+      ],
+    });
+    t.onLanguageModelCallStart({ callId: 'r1', modelId: 'zai.glm-4.7-flash' });
+    t.onLanguageModelCallEnd({
+      callId: 'r1',
+      modelId: 'zai.glm-4.7-flash',
+      finishReason: 'stop',
+      content: [{ type: 'text', text: 'Cloudy, 18C.' }],
+    });
+    t.onEnd({
+      callId: 'r1',
+      finishReason: 'stop',
+      content: [{ type: 'text', text: 'Cloudy, 18C.' }],
+    });
+
+    const agent = one('invoke_agent demo-agent');
+    expect(String(agent.attributes[GEN_AI.INPUT_MESSAGES])).toContain(
+      'weather in London?',
+    );
+    expect(String(agent.attributes[GEN_AI.OUTPUT_MESSAGES])).toContain(
+      'Cloudy, 18C.',
+    );
+    // System messages are recorded separately, per the conventions.
+    expect(String(agent.attributes[GEN_AI.SYSTEM_INSTRUCTIONS])).toContain(
+      'Be terse.',
+    );
+  });
+
+  it('leaves the root bare when content capture is off', () => {
+    const t = autotelTelemetry({ tracer });
+
+    t.onStart({
+      callId: 'r2',
+      operationId: 'ai.generateText',
+      functionId: 'demo-agent',
+      messages: [{ role: 'user', content: 'secret prompt' }],
+    });
+    t.onEnd({
+      callId: 'r2',
+      finishReason: 'stop',
+      content: [{ type: 'text', text: 'secret answer' }],
+    });
+
+    const agent = one('invoke_agent demo-agent');
+    expect(agent.attributes[GEN_AI.INPUT_MESSAGES]).toBeUndefined();
+    expect(agent.attributes[GEN_AI.OUTPUT_MESSAGES]).toBeUndefined();
+  });
+
+  it('carries the final step on the root, not the tool-call preamble', () => {
+    // On a tool loop `onEnd.content` is step one — "let me look that up".
+    // The root is what a trace list shows, so it has to hold the answer.
+    const t = autotelTelemetry({ tracer, captureContent: true });
+
+    t.onStart({
+      callId: 'r4',
+      operationId: 'ai.generateText',
+      functionId: 'demo-agent',
+      messages: [{ role: 'user', content: 'weather in London?' }],
+    });
+    t.onEnd({
+      callId: 'r4',
+      finishReason: 'tool-calls',
+      content: [{ type: 'text', text: 'Let me check the weather.' }],
+      finalStep: {
+        content: [{ type: 'text', text: 'Cloudy, 18C.' }],
+        finishReason: 'stop',
+      },
+    });
+
+    const output = String(
+      one('invoke_agent demo-agent').attributes[GEN_AI.OUTPUT_MESSAGES],
+    );
+    expect(output).toContain('Cloudy, 18C.');
+    expect(output).not.toContain('Let me check the weather.');
+  });
+
+  it('honours a per-call recordOutputs opt-out on the root', () => {
+    const t = autotelTelemetry({ tracer, captureContent: true });
+
+    t.onStart({
+      callId: 'r3',
+      operationId: 'ai.generateText',
+      functionId: 'demo-agent',
+      messages: [{ role: 'user', content: 'keep the question' }],
+    });
+    t.onEnd({
+      callId: 'r3',
+      finishReason: 'stop',
+      content: [{ type: 'text', text: 'drop the answer' }],
+      recordOutputs: false,
+    });
+
+    const agent = one('invoke_agent demo-agent');
+    expect(String(agent.attributes[GEN_AI.INPUT_MESSAGES])).toContain(
+      'keep the question',
+    );
+    expect(agent.attributes[GEN_AI.OUTPUT_MESSAGES]).toBeUndefined();
+  });
+});
+
+describe('autotelTelemetry — instructions as the AI SDK emits them', () => {
+  // `allowSystemInMessages` is off by default, so system content never reaches
+  // `messages`: the SDK hands it over as `instructions` on the event, in any of
+  // the three shapes `Instructions` allows.
+  /** The AI SDK's own `Instructions` union, restated (no `ai` dependency). */
+  type SystemMessage = { role: 'system'; content: string };
+  type Instructions = string | SystemMessage | SystemMessage[];
+
+  const generate = (
+    t: ReturnType<typeof autotelTelemetry>,
+    instructions: Instructions,
+  ) => {
+    const prompt = {
+      messages: [{ role: 'user', content: 'Capital of France?' }],
+      instructions,
+    };
+    t.onStart({
+      callId: 'i1',
+      operationId: 'ai.generateText',
+      modelId: 'gpt-4o',
+      functionId: 'demo-agent',
+      ...prompt,
+    });
+    t.onLanguageModelCallStart({ callId: 'i1', modelId: 'gpt-4o', ...prompt });
+    t.onLanguageModelCallEnd({
+      callId: 'i1',
+      modelId: 'gpt-4o',
+      finishReason: 'stop',
+      content: [{ type: 'text', text: 'Paris.' }],
+    });
+    t.onEnd({ callId: 'i1' });
+  };
+
+  const systemOf = (span: ReadableSpan): unknown =>
+    JSON.parse(String(span.attributes[GEN_AI.SYSTEM_INSTRUCTIONS]));
+
+  it('records a plain string instruction on the root and the model span', () => {
+    generate(autotelTelemetry({ tracer, captureContent: true }), 'Be terse.');
+
+    const expected = [{ type: 'text', content: 'Be terse.' }];
+    expect(systemOf(one('invoke_agent demo-agent'))).toEqual(expected);
+    expect(systemOf(one('chat gpt-4o'))).toEqual(expected);
+  });
+
+  it('records a single system message instruction', () => {
+    generate(autotelTelemetry({ tracer, captureContent: true }), {
+      role: 'system',
+      content: 'Be terse.',
+    });
+
+    expect(systemOf(one('invoke_agent demo-agent'))).toEqual([
+      { type: 'text', content: 'Be terse.' },
+    ]);
+  });
+
+  it('records every message of an array instruction, in order', () => {
+    generate(autotelTelemetry({ tracer, captureContent: true }), [
+      { role: 'system', content: 'Be terse.' },
+      { role: 'system', content: 'Answer in English.' },
+    ]);
+
+    expect(systemOf(one('invoke_agent demo-agent'))).toEqual([
+      { type: 'text', content: 'Be terse.' },
+      { type: 'text', content: 'Answer in English.' },
+    ]);
+  });
+
+  it('keeps the input messages free of the instructions', () => {
+    generate(autotelTelemetry({ tracer, captureContent: true }), 'Be terse.');
+
+    const input = JSON.parse(
+      String(one('chat gpt-4o').attributes[GEN_AI.INPUT_MESSAGES]),
+    );
+    expect(input).toEqual([
+      {
+        role: 'user',
+        parts: [{ type: 'text', content: 'Capital of France?' }],
+      },
+    ]);
+  });
+
+  it('records nothing for an instructions value of some other shape', () => {
+    // Untyped JS or a JSON config can hand over `null`. This runs inside a
+    // diagnostics_channel subscriber, where a throw takes the process with it.
+    const t = autotelTelemetry({ tracer, captureContent: true });
+    expect(() => generate(t, null as unknown as Instructions)).not.toThrow();
+
     expect(
-      one('chat zai.glm-4.7-flash').attributes[GEN_AI.USAGE_COST_USD],
-    ).toBe(3);
+      one('invoke_agent demo-agent').attributes[GEN_AI.SYSTEM_INSTRUCTIONS],
+    ).toBeUndefined();
+  });
+
+  it('skips a hole in an array of instructions', () => {
+    generate(autotelTelemetry({ tracer, captureContent: true }), [
+      null as unknown as SystemMessage,
+      { role: 'system', content: 'Be terse.' },
+    ]);
+
+    expect(systemOf(one('invoke_agent demo-agent'))).toEqual([
+      { type: 'text', content: 'Be terse.' },
+    ]);
+  });
+
+  it('obeys the privacy gate', () => {
+    generate(autotelTelemetry({ tracer }), 'Be terse.');
+
+    expect(
+      one('invoke_agent demo-agent').attributes[GEN_AI.SYSTEM_INSTRUCTIONS],
+    ).toBeUndefined();
+    expect(
+      one('chat gpt-4o').attributes[GEN_AI.SYSTEM_INSTRUCTIONS],
+    ).toBeUndefined();
+  });
+
+  it('obeys a per-call recordInputs: false', () => {
+    const t = autotelTelemetry({ tracer, captureContent: true });
+    t.onStart({
+      callId: 'i2',
+      operationId: 'ai.generateText',
+      modelId: 'gpt-4o',
+      functionId: 'quiet-agent',
+      instructions: 'Be terse.',
+      recordInputs: false,
+    });
+    t.onEnd({ callId: 'i2' });
+
+    expect(
+      one('invoke_agent quiet-agent').attributes[GEN_AI.SYSTEM_INSTRUCTIONS],
+    ).toBeUndefined();
+  });
+
+  it('merges with system messages when allowSystemInMessages is on', () => {
+    const t = autotelTelemetry({ tracer, captureContent: true });
+    t.onStart({
+      callId: 'i3',
+      operationId: 'ai.generateText',
+      modelId: 'gpt-4o',
+      functionId: 'both-agent',
+      instructions: 'Be terse.',
+      messages: [
+        { role: 'system', content: 'Answer in English.' },
+        { role: 'user', content: 'Capital of France?' },
+      ],
+    });
+    t.onEnd({ callId: 'i3' });
+
+    // Instructions lead, exactly as the SDK assembles the prompt.
+    expect(systemOf(one('invoke_agent both-agent'))).toEqual([
+      { type: 'text', content: 'Be terse.' },
+      { type: 'text', content: 'Answer in English.' },
+    ]);
   });
 });

@@ -76,6 +76,63 @@ app.get('/checkout', async (req, res) => {
 });
 ```
 
+## Attributes From Middleware
+
+`@opentelemetry/instrumentation-express` gives every layer a span of its own and
+runs the layer under it, so an attribute set from a shared `router.use`
+middleware would land on a `middleware - anonymous` span that ends the moment
+`next()` fires - not on the request span your backend shows as the resource.
+
+autotel turns those leaf layer spans off by default
+(`ignoreLayersType: ['middleware', 'request_handler']`), so `ctx` inside a
+middleware already means the request:
+
+```typescript
+import { ctx } from 'autotel';
+
+app.use((req, _res, next) => {
+  ctx.setAttribute('user.id', req.user.id);
+  // Objects are flattened: client-rights.admin, client-rights.reports.view, ...
+  ctx.setAttributes({ 'client-rights': req.user.rights });
+  next();
+});
+```
+
+The route rename (`GET /users/:id`) is unaffected - `rpcMetadata.route` is
+assigned before the ignore check - and a pile of noise spans goes away with it.
+
+### Keeping per-middleware timing
+
+Ask for the layer spans back when you want to see time spent per middleware:
+
+```typescript
+init({
+  service: 'my-api',
+  autoInstrumentations: {
+    // `[]` restores upstream behaviour; `ignoreLayers` silences named paths.
+    express: { ignoreLayersType: [] },
+  },
+});
+```
+
+With layer spans on, use `requestCtx` for anything that describes the request as
+a whole. It writes to the request span from wherever it is called, while `ctx`
+keeps pointing at the span the code is actually in:
+
+```typescript
+import { ctx, requestCtx } from 'autotel';
+
+app.use((req, _res, next) => {
+  requestCtx.setAttribute('user.id', req.user.id); // on GET /users/:id
+  ctx.setAttribute('auth.cache_hit', cached); // on middleware - authenticate
+  next();
+});
+```
+
+`requestCtx` falls back to the active span outside a request - a queue consumer
+or a cron job has no request span - and no-ops when nothing is active, so it is
+safe in a test run that never loaded the SDK.
+
 ## What Gets Traced
 
 With `autoInstrumentations: ['express', 'http']`:

@@ -1334,6 +1334,57 @@ describe('Functional API', () => {
       expect(ctx.spanId).toBeUndefined();
     });
 
+    // Instrumentation must never be the thing that throws: a `ctx` call from a
+    // framework middleware runs in tests and in `node server.js` too, where
+    // nothing preloaded the SDK and no span is active.
+    it('no-ops the span methods when no span is active', () => {
+      expect(() => ctx.setAttribute('user.id', 'u_1')).not.toThrow();
+      expect(() => ctx.setAttributes({ 'user.id': 'u_1' })).not.toThrow();
+      expect(() => ctx.setStatus({ code: SpanStatusCode.ERROR })).not.toThrow();
+      expect(() => ctx.updateName('renamed')).not.toThrow();
+      expect(() => ctx.recordError(new Error('boom'))).not.toThrow();
+      expect(() => ctx.track('checkout.completed')).not.toThrow();
+      expect(() => ctx.addLinks([])).not.toThrow();
+      expect(ctx.isRecording()).toBe(false);
+      expect(ctx.getBaggage('tenant')).toBeUndefined();
+      expect(ctx.getAllBaggage()).toEqual(new Map());
+      expect(ctx.setBaggage('tenant', 't_1')).toBe('t_1');
+      expect(() => ctx.deleteBaggage('tenant')).not.toThrow();
+    });
+
+    // The fallback above is a hand-written list; this is its drift alarm.
+    it('covers every method a live context exposes', async () => {
+      const seen = await new Promise<string[]>((resolve) => {
+        const collect = traceFactory((live: TraceContext) => async () => {
+          resolve(
+            Object.entries(live)
+              .filter(([, value]) => typeof value === 'function')
+              .map(([key]) => key),
+          );
+        });
+        void collect();
+      });
+
+      for (const key of seen) {
+        expect(typeof ctx[key as keyof TraceContext]).toBe('function');
+      }
+    });
+
+    it('reports the methods it answers as present', () => {
+      // `'recordError' in ctx` is how this codebase guards an optional context;
+      // a method that answers has to be visible to that guard.
+      expect('recordError' in ctx).toBe(true);
+      expect('setAttribute' in ctx).toBe(true);
+      expect(Object.keys(ctx)).toContain('setAttributes');
+      expect('traceId' in ctx).toBe(false);
+    });
+
+    it('still reports a thenable-free ctx when no span is active', async () => {
+      // A no-op returned for `then` would make ctx a broken thenable.
+      expect((ctx as unknown as { then?: unknown }).then).toBeUndefined();
+      await expect(Promise.resolve(ctx)).resolves.toBeDefined();
+    });
+
     it('should record exceptions via context', async () => {
       const collector = createTraceCollector();
 

@@ -7,22 +7,19 @@ Creates a request-scoped logger that writes to the active span. All fields accum
 ```typescript
 import { trace, getRequestLogger } from 'autotel';
 
-export const handleOrder = trace(
-  'order.handle',
-  async (req: OrderRequest) => {
-    const log = getRequestLogger();
+export const handleOrder = trace('order.handle', async (req: OrderRequest) => {
+  const log = getRequestLogger();
 
-    log.set({ feature: 'checkout', tier: req.user.tier });
+  log.set({ feature: 'checkout', tier: req.user.tier });
 
-    const cart = await loadCart(req.cartId);
-    log.set({ cart_items: cart.items.length, cart_total: cart.total });
+  const cart = await loadCart(req.cartId);
+  log.set({ cart_items: cart.items.length, cart_total: cart.total });
 
-    const payment = await processPayment(cart);
-    log.set({ payment_method: payment.method, payment_id: payment.id });
+  const payment = await processPayment(cart);
+  log.set({ payment_method: payment.method, payment_id: payment.id });
 
-    return { success: true };
-  },
-);
+  return { success: true };
+});
 ```
 
 ## API

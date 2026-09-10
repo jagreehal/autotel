@@ -32,6 +32,7 @@ import { GEN_AI_OPERATION, GEN_AI_TOOL_TYPE } from '../semconv.js';
 import {
   contentToGenAiMessage,
   promptToGenAiMessages,
+  type InstructionsView,
   type ContentPartView,
   type ModelMessageView,
 } from './ai-sdk-messages.js';
@@ -69,6 +70,11 @@ interface ChannelEvent {
   seed?: number;
   toolCall?: { toolCallId?: string; toolName?: string; input?: unknown };
   messages?: readonly ModelMessageView[];
+  /**
+   * System content. It arrives here rather than in `messages`, which carries no
+   * system role unless the caller opted into `allowSystemInMessages`.
+   */
+  instructions?: InstructionsView;
   recordInputs?: boolean;
   recordOutputs?: boolean;
 }
@@ -131,7 +137,7 @@ export function subscribeAiTelemetry(
           ids.set(message, id);
           const content =
             captureContent && event.recordInputs !== false
-              ? promptToGenAiMessages(event.messages)
+              ? promptToGenAiMessages(event.messages, event.instructions)
               : undefined;
           observe({
             type: 'chat.start',

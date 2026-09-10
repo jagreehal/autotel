@@ -123,15 +123,33 @@ export interface TokenUsage {
   tokenSource?: 'observed' | 'estimated';
 }
 
+/**
+ * Model id → price, keyed the way {@link MODEL_PRICING} is: exact match first,
+ * then longest matching prefix after any vendor namespace is stripped.
+ *
+ * Key by **family**, not by deployed id. One `claude-3-5-haiku` entry covers
+ * `anthropic.claude-3-5-haiku-20241022-v1:0`, the `eu.`/`us.` inference
+ * profiles, the Vertex `publishers/...` path, and every later date-version.
+ */
+export type ModelPricingTable = Record<string, ModelPricing>;
+
 export interface EstimateCostOptions {
-  /** Override or extend {@link MODEL_PRICING}. Keys are matched first. */
-  pricing?: Record<string, ModelPricing>;
+  /**
+   * Prices for this call only, merged over {@link MODEL_PRICING} — an entry
+   * here both fills in a model the table lacks and overrides one it has.
+   *
+   * For prices that apply to the whole process, prefer
+   * {@link registerModelPricing} so every entry point sees them without an
+   * option threaded through each call.
+   */
+  pricing?: ModelPricingTable;
 }
 
 /**
  * Approximate public list prices (USD per 1M tokens) at the time of writing.
  * Prices change; treat these as convenience defaults, not a billing source of
- * truth. Override per call via `options.pricing` or mutate this table at init.
+ * truth. Add your own with {@link registerModelPricing}, or per call via
+ * `options.pricing`.
  * Matching is exact first, then by longest key prefix, so versioned model ids
  * (`claude-sonnet-4-6-20251101`) resolve to a base entry (`claude-sonnet-4-6`).
  */
@@ -209,6 +227,10 @@ function stripVendorPrefix(model: string): string | undefined {
   return model.slice(dot + 1);
 }
 
+// A linear scan of every key on a non-exact match, run once per strip level —
+// and a namespaced id (every Bedrock one) never hits the exact-match fast path.
+// Fine at table sizes in the tens; index by first segment if a large registered
+// table ever shows up in a profile.
 function matchPricing(
   table: Record<string, ModelPricing>,
   model: string,
@@ -225,6 +247,72 @@ function matchPricing(
     }
   }
   return best;
+}
+
+/**
+ * Add prices to {@link MODEL_PRICING} for the whole process, so every cost
+ * site sees them — {@link estimateLLMCost}, {@link recordLLMCost},
+ * `recordGenAiUsage`, `autotelTelemetry()`, and the agent runtime — with no
+ * option threaded through each call.
+ *
+ * This is the one to reach for with more than a couple of models: prices are a
+ * property of the deployment, not of the call. Later registrations win, so a
+ * base table can be layered over.
+ *
+ * Returns a function that restores the previous prices — useful in tests, and
+ * the reason to prefer this over mutating {@link MODEL_PRICING} directly.
+ *
+ * @example
+ * ```ts
+ * import { registerModelPricing } from 'autotel-genai/cost';
+ *
+ * // Once at startup. Key by family, not by deployed model id.
+ * registerModelPricing({
+ *   'glm-4.7-flash': { inputPer1M: 0.6, outputPer1M: 2.2 },
+ *   'acme-ft-7b': { inputPer1M: 0.1, outputPer1M: 0.1 },
+ * });
+ * ```
+ */
+/**
+ * Registrations in the order they were made, so a model's price is whatever the
+ * last live layer says and restoring one never disturbs another. Without the
+ * stack, tearing a base table down while a per-tenant override is still live
+ * would leave the override's price behind, or the base's - depending only on
+ * the order the restores happened to run in.
+ */
+const pricingLayers: Array<{ table: ModelPricingTable; live: boolean }> = [];
+/** Each model's price before any layer touched it. */
+const unlayeredPricing = new Map<string, ModelPricing | undefined>();
+
+function applyPricingLayers(models: readonly string[]): void {
+  for (const model of models) {
+    let price: ModelPricing | undefined;
+    for (const layer of pricingLayers) {
+      if (layer.live && layer.table[model]) price = layer.table[model];
+    }
+    price ??= unlayeredPricing.get(model);
+    if (price === undefined) delete MODEL_PRICING[model];
+    else MODEL_PRICING[model] = price;
+  }
+}
+
+export function registerModelPricing(pricing: ModelPricingTable): () => void {
+  const models = Object.keys(pricing);
+  for (const model of models) {
+    if (!unlayeredPricing.has(model)) {
+      unlayeredPricing.set(model, MODEL_PRICING[model]);
+    }
+  }
+
+  const layer = { table: pricing, live: true };
+  pricingLayers.push(layer);
+  applyPricingLayers(models);
+
+  return () => {
+    if (!layer.live) return;
+    layer.live = false;
+    applyPricingLayers(models);
+  };
 }
 
 function resolvePricing(

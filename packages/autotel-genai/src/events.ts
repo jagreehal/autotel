@@ -34,8 +34,16 @@ import {
 } from './semconv.js';
 import type { UnknownRecord } from './values.js';
 
-/** Minimal sink: just what these helpers touch on a trace context. */
-export type GenAiContentSink = Pick<TraceContext, 'setAttributes' | 'track'>;
+/**
+ * Minimal sink: just what these helpers touch on a trace context, and only the
+ * scalars they actually set. Narrower than `TraceContext['setAttributes']` on
+ * purpose - a real context satisfies it, and a sink backed by a raw span needs
+ * no flattener, which would pull the whole `autotel` root into this entry.
+ */
+export interface GenAiContentSink {
+  setAttributes(attrs: Record<string, string | number>): void;
+  track: TraceContext['track'];
+}
 
 /** A single content part within a message (text, tool_call, tool_call_response, …). */
 export interface GenAiMessagePart {

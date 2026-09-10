@@ -144,6 +144,15 @@ rather than a nice-to-have.
   outright — the tracer breaking the app it observes. The browser span is
   recorded either way: tying it to the injection turned "do not propagate" into
   "do not trace". `privacy` may only subtract from the decision.
+- **Reading the telemetry is never telemetry, and the app is never silenced for
+  it.** The OTLP paths of the configured endpoint are excluded from tracing and
+  propagation in both modes (`src/otlp-endpoint.ts`). The collector's whole
+  origin is excluded only when the app declares `collectorOwnsOrigin` — nothing
+  in a URL distinguishes a collector that serves its own UI beside `/v1/traces`
+  from an OTLP endpoint proxied through the application's own server, and a
+  loopback port is as likely to be a dev API server as a collector. Guessing it
+  costs the app its own spans. The page's own origin is never excluded whatever
+  the declaration says.
 - **Instrumentation never throws into the app.** Console patches, breadcrumbs
   and log records swallow their own failures.
 - **Lean mode stays dependency-free.** No `@opentelemetry/*` import may reach

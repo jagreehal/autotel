@@ -54,8 +54,30 @@ span('db.insert', async () => {
 ```
 
 `ctx` is a live view of the active span, not a value captured at import time.
-Read it inside a traced body and it answers from that span; read it with
-nothing traced and every member is `undefined`, so it never throws.
+Read it inside a traced body and it answers from that span. With nothing traced
+
+- an uninstrumented test run, or a plain `node server.js` - `ctx.traceId` reads
+  `undefined` and the methods no-op, so instrumentation is never what throws.
+
+Attribute values can be as rich as the data: an object, `Map`, `Set` or `Date`
+is flattened to dot-notation keys, so `ctx.setAttribute('user', user)` records
+`user.id`, `user.plan`. Never flatten by hand before the call.
+
+`requestCtx` is the same ambient view aimed at the **request** span. Framework
+instrumentation opens a span per middleware and per route handler, so context
+describing the whole request - the authenticated user, the tenant, the plan -
+set from a shared middleware belongs there rather than on a layer span that ends
+at `next()`:
+
+```typescript
+import { ctx, requestCtx } from 'autotel';
+
+app.use((req, _res, next) => {
+  requestCtx.setAttributes({ user: req.user }); // on GET /users/:id
+  ctx.setAttribute('auth.cache_hit', cached); // on the middleware's own span
+  next();
+});
+```
 
 `withTracing({ name })((ctx) => fn)` hands the context in as an argument
 instead. Both forms are supported: prefer the ambient `ctx` in application

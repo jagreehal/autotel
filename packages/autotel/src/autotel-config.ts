@@ -159,6 +159,22 @@ export interface AutotelConfig {
    * })
    * ```
    *
+   * @example Pass options to an instrumentation
+   * Anything beyond `enabled` goes to that instrumentation's constructor, and
+   * overrides what autotel defaults it to. Express defaults to
+   * `ignoreLayersType: ['middleware', 'request_handler']`, which keeps
+   * attributes set from a middleware on the request span; `[]` asks for the
+   * per-layer spans back.
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   autoInstrumentations: {
+   *     http: { enabled: true },
+   *     express: { ignoreLayersType: [] }
+   *   }
+   * })
+   * ```
+   *
    * @example Manual config when you need custom settings
    * ```typescript
    * import { MongoDBInstrumentation } from '@opentelemetry/instrumentation-mongodb'
@@ -175,7 +191,9 @@ export interface AutotelConfig {
    * ```
    */
   autoInstrumentations?:
-    string[] | boolean | Record<string, { enabled?: boolean }>;
+    | string[]
+    | boolean
+    | Record<string, { enabled?: boolean } & Record<string, unknown>>;
 
   /**
    * OTLP endpoint for traces/metrics/logs

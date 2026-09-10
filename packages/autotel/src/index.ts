@@ -99,6 +99,7 @@ export {
   withNewContext,
   withBaggage,
   ctx,
+  requestCtx,
   getActiveTraceContext,
 } from './functional';
 export { forceKeep } from './force-keep';

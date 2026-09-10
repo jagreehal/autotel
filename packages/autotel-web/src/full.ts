@@ -100,6 +100,34 @@ export interface AutotelWebFullConfig {
   endpoint?: string;
 
   /**
+   * Treat every request to the collector's origin as telemetry, not only the
+   * OTLP paths.
+   *
+   * Set this when the collector serves more than OTLP - autotel's devtools
+   * collector serves its own UI and query API beside `/v1/traces` - so the
+   * widget that displays the traces is itself a fetch from this page. Tracing
+   * that makes the tool a source of the data it displays: every poll of the
+   * trace list writes another trace to the list.
+   *
+   * Off by default, because nothing in the URL can tell a dedicated collector
+   * from an OTLP endpoint proxied through the application's own server, and
+   * getting that wrong silences the requests the page exists to make. The
+   * page's own origin is never excluded, whatever this says.
+   *
+   * @example
+   * ```typescript
+   * init({
+   *   service: 'my-spa',
+   *   endpoint: 'http://localhost:4848',  // devtools collector, nothing else
+   *   collectorOwnsOrigin: true,
+   * });
+   * ```
+   *
+   * @default false
+   */
+  collectorOwnsOrigin?: boolean;
+
+  /**
    * Custom span processor(s). If provided, used instead of default BatchSpanProcessor + OTLP exporter.
    * When endpoint is set, this is ignored.
    */
@@ -418,7 +446,11 @@ export function initFull(config: AutotelWebFullConfig): void {
   // creates a span, which is exported, which creates another span -- a
   // feedback loop that floods the collector and starves real spans out of the
   // batch buffer.
-  const selfUrls = selfInstrumentationIgnoreUrls(config.endpoint);
+  const selfUrls = selfInstrumentationIgnoreUrls(
+    config.endpoint,
+    window.location?.origin,
+    config.collectorOwnsOrigin,
+  );
 
   // Cross-origin destinations that may receive the header. The Web SDK is
   // already same-origin-only without this, which is the behaviour lean mode now
