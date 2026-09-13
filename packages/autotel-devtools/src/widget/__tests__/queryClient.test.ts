@@ -104,6 +104,23 @@ describe('queryTraces — success', () => {
   });
 });
 
+describe('queryTraces — fetch binding', () => {
+  it('works with an unbound native-style fetch (no "Illegal invocation")', async () => {
+    let seenThis: unknown = 'unset';
+    const fetch = async function (this: unknown) {
+      // eslint-disable-next-line @typescript-eslint/no-this-alias -- the binding is the thing under test
+      seenThis = this;
+      return new Response(JSON.stringify({ traces: [], nextCursor: null }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    } as unknown as typeof globalThis.fetch;
+    const result = await queryTraces({ query: '' }, { fetch, baseUrl: BASE });
+    expect(result.status).toBe('ok');
+    expect(seenThis).toBe(globalThis);
+  });
+});
+
 describe('queryTraces — failure modes stay distinguishable', () => {
   it('surfaces a malformed query as an invalid result with positioned errors', async () => {
     const fetchFn = stubFetch(400, {

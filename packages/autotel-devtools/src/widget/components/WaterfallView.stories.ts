@@ -26,3 +26,21 @@ export const Filtered: Story = {
 export const SpanSelected: Story = {
   args: { trace: makeTrace(), selectedSpanId: 'span-2' },
 };
+
+/** Hover a span name to see the full name plus timing, status and key attributes. */
+export const HoverCard: Story = {
+  args: { trace: makeTrace() },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.hover(canvas.getByText('carrier.quote'));
+  },
+};
+
+/** The name column remembers its width; drag the header handle to widen it. */
+export const WideNameColumn: Story = {
+  args: { trace: makeTrace() },
+  beforeEach: () => {
+    window.localStorage.setItem('autotel-devtools:waterfall-name-width', '360');
+    return () =>
+      window.localStorage.removeItem('autotel-devtools:waterfall-name-width');
+  },
+};

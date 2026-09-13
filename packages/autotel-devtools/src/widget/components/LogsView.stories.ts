@@ -304,3 +304,35 @@ export const PausedWithBuffer: Story = {
     await expect(canvas.getByText('Application ready')).toBeInTheDocument();
   },
 };
+
+/** A Claude Code event: the key attributes read inline, ids stay behind expand. */
+export const WithKeyAttributes: Story = {
+  play: async ({ canvas }) => {
+    updateWidgetData({
+      logs: [
+        makeLog({
+          body: 'claude_code.tool_result',
+          resourceName: 'claude-code',
+          attributes: {
+            'session.id': 'sess-1',
+            tool_name: 'Bash',
+            success: false,
+            duration_ms: 1510,
+          },
+        }),
+        makeLog({
+          body: 'claude_code.api_request',
+          resourceName: 'claude-code',
+          attributes: {
+            model: 'claude-opus-5[1m]',
+            input_tokens: 2,
+            output_tokens: 83,
+            cost_usd: 0.21,
+          },
+        }),
+      ],
+    });
+    await expect(await canvas.findByText('Bash')).toBeInTheDocument();
+    await expect(canvas.getByText('claude-opus-5[1m]')).toBeInTheDocument();
+  },
+};

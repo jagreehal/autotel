@@ -350,6 +350,26 @@ describe('parseOtlpTraces', () => {
 });
 
 describe('parseOtlpLogs', () => {
+  it('gives distinct ids to records that share a timestamp and no trace', () => {
+    const rec = (name: string) => ({
+      timeUnixNano: '1700000000000000000',
+      severityNumber: 9,
+      body: { stringValue: name },
+      attributes: [{ key: 'event.name', value: { stringValue: name } }],
+    });
+    const logs = parseOtlpLogs({
+      resourceLogs: [
+        {
+          scopeLogs: [
+            { logRecords: [rec('hook_a'), rec('hook_b'), rec('hook_a')] },
+          ],
+        },
+      ],
+    });
+    expect(logs).toHaveLength(3);
+    expect(new Set(logs.map((l) => l.id)).size).toBe(2);
+  });
+
   it('parses OTLP log records', () => {
     const payload = {
       resourceLogs: [

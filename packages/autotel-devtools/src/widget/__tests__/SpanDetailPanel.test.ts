@@ -71,6 +71,31 @@ describe('SpanDetailPanel — code location', () => {
   });
 });
 
+describe('SpanDetailPanel — sensitive attributes', () => {
+  afterEach(cleanup);
+
+  it('shows token counts, redacts string credentials, and reveals on click', async () => {
+    const span = makeSpan({
+      attributes: {
+        'gen_ai.usage.input_tokens': 907,
+        'gen_ai.usage.output_tokens': 114,
+        'http.request.header.authorization': 'Bearer abc',
+        'http.request.header.x-api-key': ['key-one'],
+      },
+    });
+    render(SpanDetailPanel, {
+      props: { span, trace: makeTrace(span), onClose: () => {} },
+    });
+    expect(screen.getByText('907')).toBeTruthy();
+    expect(screen.getByText('114')).toBeTruthy();
+    expect(screen.queryByText('Bearer abc')).toBeNull();
+    expect(screen.queryByText(/key-one/)).toBeNull();
+    expect(screen.getAllByText('[redacted]')).toHaveLength(2);
+    await fireEvent.click(screen.getAllByText('[redacted]')[0]);
+    expect(screen.getByText('Bearer abc')).toBeTruthy();
+  });
+});
+
 describe('SpanDetailPanel — navigable IDs', () => {
   afterEach(() => {
     cleanup();

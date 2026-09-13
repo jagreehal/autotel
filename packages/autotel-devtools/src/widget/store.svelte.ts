@@ -661,8 +661,11 @@ export const selectedTraceCountSignal = computed(
 // trace was first seen in.
 function recomputeTrace(base: TraceData, spans: SpanData[]): TraceData {
   const sorted = [...spans].sort((a, b) => a.startTime - b.startTime);
-  const rootSpan =
-    sorted.find((s) => !s.parentSpanId) ?? base.rootSpan ?? sorted[0];
+  // The same rule as the server's `pickRoot`: a trace is partial until a true
+  // root is in the set, however the spans arrived. Recomputed rather than
+  // carried over, so a root that lands in a later batch clears the flag.
+  const trueRoot = sorted.find((s) => !s.parentSpanId);
+  const rootSpan = trueRoot ?? base.rootSpan ?? sorted[0];
   const startTime = Math.min(...sorted.map((s) => s.startTime));
   const endTime = Math.max(...sorted.map((s) => s.endTime));
   const status: TraceData['status'] = sorted.some(
@@ -680,6 +683,7 @@ function recomputeTrace(base: TraceData, spans: SpanData[]): TraceData {
     duration: endTime - startTime,
     status,
     service: rootService ?? base.service,
+    partial: trueRoot === undefined,
   };
 }
 

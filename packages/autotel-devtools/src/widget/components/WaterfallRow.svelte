@@ -107,8 +107,13 @@
      * indentation, so a caller that has not been updated still renders.
      */
     connectors?: TreeConnectors;
+    /** Pixel widths of the name / duration columns (the parent's resizable columns). */
+    nameWidth?: number;
+    durationWidth?: number;
     onSelect?: () => void;
     onToggleCollapse?: () => void;
+    /** Pointer entered (target given) or left (null) the name cell. */
+    onHover?: (target: HTMLElement | null) => void;
   }
 
   let {
@@ -119,8 +124,11 @@
     hasChildren,
     isCritical,
     connectors,
+    nameWidth = 200,
+    durationWidth = 80,
     onSelect,
     onToggleCollapse,
+    onHover,
   }: Props = $props();
 
   const span = $derived(node.span);
@@ -176,10 +184,10 @@
   <!-- Span name column. The gutter draws the tree structure; without
        connectors we fall back to flat indentation. -->
   <div
-    class="w-[200px] shrink-0 pr-2 py-2 flex items-center gap-1 min-w-0"
-    style={connectors
-      ? 'padding-left: 8px;'
-      : `padding-left: ${8 + node.depth * 16}px;`}
+    class="shrink-0 pr-2 py-2 flex items-center gap-1 min-w-0"
+    style={`width: ${nameWidth}px; padding-left: ${connectors ? 8 : 8 + node.depth * 16}px;`}
+    onpointerenter={(e) => onHover?.(e.currentTarget)}
+    onpointerleave={() => onHover?.(null)}
   >
     {#if connectors}
       <TreeGutter
@@ -222,10 +230,7 @@
     {/if}
 
     <!-- Span name -->
-    <span
-      class={cn('text-xs truncate', isError ? 'text-danger' : 'text-fg')}
-      title={span.name}
-    >
+    <span class={cn('text-xs truncate', isError ? 'text-danger' : 'text-fg')}>
       {span.name || 'unknown'}
     </span>
 
@@ -354,7 +359,10 @@
   </div>
 
   <!-- Duration column -->
-  <div class="w-[80px] shrink-0 px-2 py-2 text-right">
+  <div
+    class="shrink-0 px-2 py-2 text-right"
+    style={`width: ${durationWidth}px;`}
+  >
     <span
       class={cn('text-xs font-mono', isError ? 'text-danger' : 'text-fg-muted')}
     >

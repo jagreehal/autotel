@@ -17,19 +17,26 @@ import {
 } from './timeWindow';
 import type { TraceSortKey, SortDir, TraceStatusFilter } from './store.svelte';
 
-export const TAB_VALUES: readonly TabType[] = [
-  'traces',
-  'resources',
-  'service-map',
-  'metrics',
-  'logs',
-  'errors',
-  'genai',
-  'flow',
-  'security',
-];
+// A `Record` rather than a list so adding a tab without listing it here is a
+// type error: a missing id made `#tab=agents` silently open Traces.
+const TAB_SET: Record<TabType, true> = {
+  traces: true,
+  compare: true,
+  coverage: true,
+  agents: true,
+  resources: true,
+  'service-map': true,
+  metrics: true,
+  logs: true,
+  errors: true,
+  genai: true,
+  flow: true,
+  security: true,
+  webmcp: true,
+};
+export const TAB_VALUES = Object.keys(TAB_SET) as readonly TabType[];
 
-/** The tab shown by default — omitted from the hash to keep clean URLs. */
+/** The tab shown when the hash names none. */
 export const DEFAULT_TAB: TabType = 'traces';
 
 /**
@@ -139,12 +146,13 @@ export function parseNavHash(hash: string): NavState {
 }
 
 /**
- * Serialize nav state into a location hash. The default tab and empty values are
- * omitted; fully-default state returns `''` (a clean, hash-less URL).
+ * Serialize nav state into a location hash. Empty values are omitted; the tab
+ * is always written when set, default included, so a copied link says which
+ * view it points at rather than relying on the reader knowing the default.
  */
 export function formatNavHash(state: NavState): string {
   const params = new URLSearchParams();
-  if (state.tab && state.tab !== DEFAULT_TAB) params.set('tab', state.tab);
+  if (state.tab) params.set('tab', state.tab);
   if (state.traceId) params.set('trace', state.traceId);
   if (state.traceId && state.spanId) params.set('span', state.spanId);
   if (state.q) params.set('q', state.q);

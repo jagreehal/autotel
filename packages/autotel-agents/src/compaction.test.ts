@@ -336,3 +336,97 @@ describe('postCompactionRegression', () => {
     expect(result.reason).toMatch(/no calls/i);
   });
 });
+
+/** A raw `tool_result`, as Claude Code emits it. */
+function toolResult(
+  seq: number,
+  name: string,
+  resultBytes?: number,
+): AgentRawEvent {
+  return {
+    eventName: 'tool_result',
+    timestamp: 1000 + seq * 1000,
+    attributes: {
+      'session.id': SESSION,
+      'event.sequence': seq,
+      tool_name: name,
+      success: 'true',
+      ...(resultBytes !== undefined && { tool_result_size_bytes: resultBytes }),
+    },
+    resource: { 'service.name': 'claude-code' },
+    scope: { name: 'com.anthropic.claude_code' },
+  };
+}
+
+describe('per-tool context attribution', () => {
+  it('charges the context a step grew by to the tool result consumed in between', () => {
+    // Read returns a 5k file; the next request is 5k bigger. That growth is Read's.
+    const session = fold([
+      turn(1, 20_000),
+      toolResult(2, 'Read'),
+      turn(3, 25_000),
+    ]);
+
+    expect(session.rollup.tools['Read']?.contextTokens).toBe(5000);
+  });
+
+  it('splits the growth evenly across tools that ran in parallel', () => {
+    // Two Reads in one step, 8k of growth: no way to tell which one did it.
+    const session = fold([
+      turn(1, 20_000),
+      toolResult(2, 'Read'),
+      toolResult(3, 'Grep'),
+      turn(4, 28_000),
+    ]);
+
+    expect(session.rollup.tools['Read']?.contextTokens).toBe(4000);
+    expect(session.rollup.tools['Grep']?.contextTokens).toBe(4000);
+  });
+
+  it('leaves a result that crossed a compaction uncharged and rebases after it', () => {
+    // Read's result went into a context that was then replaced by a 15k
+    // summary; the drop is not Read's doing. Grep, after the reset, is charged
+    // against the summary.
+    const session = fold([
+      turn(1, 120_000),
+      toolResult(2, 'Read'),
+      request(3, { input: 2, cacheRead: 0, cacheCreation: 15_000 }),
+      toolResult(4, 'Grep'),
+      turn(5, 18_000),
+    ]);
+
+    expect(session.rollup.compactions).toHaveLength(1);
+    expect(session.rollup.tools['Read']?.contextTokens).toBe(0);
+    expect(session.rollup.tools['Grep']?.contextTokens).toBe(2998);
+  });
+
+  it("charges a Task by the parent's own growth, not the sub-agent's requests", () => {
+    // Parent at 120k spawns a Task; the sub-agent runs small requests on its
+    // own context and its Reads are charged there. The parent resumes 5k
+    // bigger — that is the Task's result.
+    const session = fold([
+      from(1, 120_000, 'user'),
+      toolResult(2, 'Task'),
+      from(3, 8000, 'agent'),
+      toolResult(4, 'Read'),
+      from(5, 11_000, 'agent'),
+      from(6, 125_000, 'user'),
+    ]);
+
+    expect(session.rollup.tools['Task']?.contextTokens).toBe(5000);
+    expect(session.rollup.tools['Read']?.contextTokens).toBe(3000);
+  });
+
+  it('splits by result size when the agent reports it', () => {
+    // A 40KB Read and a 200B Grep in one step: the growth is almost all Read's.
+    const session = fold([
+      turn(1, 20_000),
+      toolResult(2, 'Read', 40_000),
+      toolResult(3, 'Grep', 200),
+      turn(4, 30_050),
+    ]);
+
+    expect(session.rollup.tools['Read']?.contextTokens).toBe(10_000);
+    expect(session.rollup.tools['Grep']?.contextTokens).toBe(50);
+  });
+});

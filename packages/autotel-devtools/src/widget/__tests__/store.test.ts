@@ -73,6 +73,36 @@ describe('Widget Store', () => {
       expect(sortedTracesSignal.value[0].traceId).toBe('trace-1');
     });
 
+    it('clears the partial flag once the root span arrives in a later batch', () => {
+      const child = makeSpan({
+        traceId: 'late-root',
+        spanId: 'child',
+        parentSpanId: 'root',
+        startTime: 1_000,
+      });
+      const root = makeSpan({
+        traceId: 'late-root',
+        spanId: 'root',
+        startTime: 900,
+      });
+      const first = makeTrace({
+        traceId: 'late-root',
+        spans: [child],
+        rootSpan: child,
+        partial: true,
+      });
+      updateWidgetData({ traces: [first] });
+      expect(tracesSignal.value[0]?.partial).toBe(true);
+
+      updateWidgetData({
+        traces: [
+          makeTrace({ traceId: 'late-root', spans: [root], rootSpan: root }),
+        ],
+      });
+      expect(tracesSignal.value[0]?.partial).toBe(false);
+      expect(tracesSignal.value[0]?.rootSpan.spanId).toBe('root');
+    });
+
     it('merges new traces, keeping unique by traceId', () => {
       const trace1 = makeTrace({ traceId: 'trace-1' });
       const trace2 = makeTrace({ traceId: 'trace-2' });

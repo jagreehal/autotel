@@ -24,7 +24,8 @@
     ".windsurf/**",
     "__temp/**",
     "temp/**",
-    "tools/oxlint/anti-slop/**"
+    "tools/oxlint/anti-slop/**",
+    "packages/autotel-claude-code/types/claude-code.d.ts"
   ],
   "jsPlugins": [
     {

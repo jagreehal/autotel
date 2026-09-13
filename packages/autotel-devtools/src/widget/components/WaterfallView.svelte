@@ -109,6 +109,9 @@
   import { helpShortcutsSignal } from '../store.svelte';
   import type { TraceData } from '../types';
   import WaterfallRow, { getSpanKindColor } from './WaterfallRow.svelte';
+  import SpanHoverCard from './SpanHoverCard.svelte';
+  import ResizeHandle from './ResizablePanel.svelte';
+  import { useResizable } from './resizable.svelte';
 
   interface Props {
     trace: TraceData;
@@ -151,7 +154,82 @@
     onMatchCount?.(matchedSpanIds.size);
   });
 
-  const GRID_LINES_STYLE = 'left: 200px; right: 80px;';
+  // Resizable name / duration columns; the timeline takes what is left.
+  // Widths persist across traces so a deep tree stays readable once widened.
+  // `useResizable` bounds a panel against one container, so each column is
+  // handed a virtual container that already excludes the *other* column: the
+  // timeline keeps at least MIN_TIMELINE px however the two are dragged.
+  let rootEl: HTMLDivElement | undefined = $state();
+  const MIN_TIMELINE = 200;
+  const columnContainer = (other: () => number) => ({
+    get current() {
+      if (!rootEl) return null;
+      return { clientWidth: rootEl.clientWidth - other() } as HTMLElement;
+    },
+  });
+  const nameCol = useResizable({
+    initial: 200,
+    min: 120,
+    minOther: MIN_TIMELINE,
+    containerRef: columnContainer(() => durationCol.size),
+    storageKey: 'autotel-devtools:waterfall-name-width',
+  });
+  const durationCol = useResizable({
+    initial: 80,
+    min: 56,
+    minOther: MIN_TIMELINE,
+    containerRef: columnContainer(() => nameCol.size),
+    storageKey: 'autotel-devtools:waterfall-duration-width',
+    invert: true,
+  });
+  // A restored width was chosen in some other window: clamp both columns once
+  // the container is measured, and again whenever it shrinks. Name first, so
+  // the duration column is fitted against the name width that survived.
+  $effect(() => {
+    const el = rootEl;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const fitColumns = () => {
+      nameCol.fit();
+      durationCol.fit();
+    };
+    fitColumns();
+    const ro = new ResizeObserver(fitColumns);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
+  const nameWidth = $derived(nameCol.size);
+  const durationWidth = $derived(durationCol.size);
+  const gridLinesStyle = $derived(
+    `left: ${nameWidth}px; right: ${durationWidth}px;`,
+  );
+
+  // One hover card for the whole list, anchored under the hovered name cell.
+  // Delayed on first entry so scanning down the tree does not flash cards;
+  // moving between rows while one is open swaps immediately.
+  let hover = $state<{
+    node: SpanNode;
+    top: number;
+    left: number;
+    above: boolean;
+  } | null>(null);
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+  function onRowHover(node: SpanNode, target: HTMLElement | null) {
+    clearTimeout(hoverTimer);
+    if (!target || !rootEl) {
+      hover = null;
+      return;
+    }
+    const root = rootEl.getBoundingClientRect();
+    const cell = target.getBoundingClientRect();
+    const above = cell.top - root.top > root.height / 2;
+    const next = {
+      node,
+      above,
+      top: (above ? cell.top : cell.bottom) - root.top,
+      left: Math.min(cell.left - root.left + 8, Math.max(0, root.width - 428)),
+    };
+    hoverTimer = setTimeout(() => (hover = next), hover ? 0 : 250);
+  }
 
   let collapsed = $state(new Set<string>());
   let showCritical = $state(true);
@@ -342,11 +420,22 @@
   ] as const;
 </script>
 
-<div class="flex flex-col h-full">
-  <!-- Timeline header with time markers -->
+<div bind:this={rootEl} class="flex flex-col h-full relative">
+  <!-- Timeline header with time markers. Column handles sit in zero-width
+       wrappers so the header stays aligned with the rows below it. -->
   <div class="flex border-b border-line bg-subtle text-xs text-fg-subtle">
-    <div class="w-[200px] shrink-0 px-3 py-2 font-medium text-fg-muted">
+    <div
+      class="shrink-0 px-3 py-2 font-medium text-fg-muted truncate"
+      style={`width: ${nameWidth}px;`}
+    >
       Span Name
+    </div>
+    <div class="relative w-0 flex self-stretch">
+      <ResizeHandle
+        dragging={nameCol.dragging}
+        title="Drag to resize the name column · double-click to reset"
+        {...nameCol.separatorProps}
+      />
     </div>
     <div bind:this={markersEl} class="flex-1 relative py-2">
       {#each timeMarkers as marker, idx (idx)}
@@ -364,8 +453,16 @@
         </div>
       {/each}
     </div>
+    <div class="relative w-0 flex self-stretch">
+      <ResizeHandle
+        dragging={durationCol.dragging}
+        title="Drag to resize the duration column · double-click to reset"
+        {...durationCol.separatorProps}
+      />
+    </div>
     <div
-      class="w-[80px] shrink-0 px-2 py-2 text-right font-medium text-fg-muted"
+      class="shrink-0 px-2 py-2 text-right font-medium text-fg-muted"
+      style={`width: ${durationWidth}px;`}
     >
       Duration
     </div>
@@ -374,11 +471,14 @@
   <!-- Timeline grid lines -->
   <div
     bind:this={scrollEl}
-    onscroll={(event) => (scrollTop = event.currentTarget.scrollTop)}
+    onscroll={(event) => {
+      scrollTop = event.currentTarget.scrollTop;
+      hover = null;
+    }}
     class="flex-1 overflow-auto relative"
   >
     <!-- Grid lines behind content -->
-    <div class="absolute inset-0 pointer-events-none" style={GRID_LINES_STYLE}>
+    <div class="absolute inset-0 pointer-events-none" style={gridLinesStyle}>
       {#each timeMarkers as marker, idx (idx)}
         <div
           class="absolute top-0 bottom-0 border-l border-line-subtle"
@@ -411,8 +511,11 @@
             hasChildren={hasChildren(node.span.spanId)}
             isCritical={showCritical && criticalPath.has(node.span.spanId)}
             {connectors}
+            {nameWidth}
+            {durationWidth}
             onSelect={() => onSpanSelect?.(node.span)}
             onToggleCollapse={() => toggleCollapse(node.span.spanId)}
+            onHover={(target) => onRowHover(node, target)}
           />
         </div>
       {/each}
@@ -429,6 +532,15 @@
       {/if}
     </div>
   </div>
+
+  {#if hover}
+    <div
+      class="absolute z-40 pointer-events-none"
+      style={`top: ${hover.top}px; left: ${hover.left}px;${hover.above ? ' transform: translateY(-100%);' : ''}`}
+    >
+      <SpanHoverCard node={hover.node} {trace} />
+    </div>
+  {/if}
 
   <!-- Legend -->
   <div

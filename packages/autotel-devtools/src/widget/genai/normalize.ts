@@ -381,20 +381,37 @@ function readUsage(attrs: Attrs): GenAiUsage {
     num(attrs['gen_ai.usage.completion_tokens']) ??
     num(attrs['llm.usage.completion_tokens']) ??
     num(attrs['ai.usage.outputTokens']);
+  const cacheReadInputTokens =
+    num(attrs['gen_ai.usage.cache_read.input_tokens']) ??
+    num(attrs['cache_read_tokens']);
+  const cacheCreationInputTokens =
+    num(attrs['gen_ai.usage.cache_creation.input_tokens']) ??
+    num(attrs['cache_creation_tokens']);
+  // Claude Code spans (`claude_code.llm_request`) use flat names, and their
+  // `input_tokens` is the *uncached* remainder, where semconv's total includes
+  // the cached tokens. Fold them back in so the cost split stays non-negative.
+  const ccInput = num(attrs['input_tokens']);
   return {
-    inputTokens,
-    outputTokens,
+    inputTokens:
+      inputTokens ??
+      (ccInput === undefined
+        ? undefined
+        : ccInput +
+          (cacheReadInputTokens ?? 0) +
+          (cacheCreationInputTokens ?? 0)),
+    outputTokens: outputTokens ?? num(attrs['output_tokens']),
     reasoningOutputTokens: num(attrs['gen_ai.usage.reasoning.output_tokens']),
-    cacheReadInputTokens: num(attrs['gen_ai.usage.cache_read.input_tokens']),
-    cacheCreationInputTokens: num(
-      attrs['gen_ai.usage.cache_creation.input_tokens'],
-    ),
+    cacheReadInputTokens,
+    cacheCreationInputTokens,
   };
 }
 
 // autotel-genai streaming-performance attributes (`gen_ai.response.*`, seconds).
 function readStreaming(attrs: Attrs): GenAiStreaming | undefined {
-  const timeToFirstChunkS = num(attrs['gen_ai.response.time_to_first_chunk']);
+  const ttftMs = num(attrs['ttft_ms']); // Claude Code
+  const timeToFirstChunkS =
+    num(attrs['gen_ai.response.time_to_first_chunk']) ??
+    (ttftMs === undefined ? undefined : ttftMs / 1000);
   const timeToFinishS = num(attrs['gen_ai.response.time_to_finish']);
   const outputTokensPerSecond = num(
     attrs['gen_ai.response.output_tokens_per_second'],

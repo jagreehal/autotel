@@ -71,6 +71,16 @@ A drop alone is not enough. A `Task` sub-agent runs on its own fresh context, so
 
 This is inference, never observation — hence `confidence`, and hence no claim about what the summary contained. Thresholds are tuned against synthetic timelines and stay provisional until validated against a recorded session that actually compacted.
 
+## Which tool is filling the context
+
+Every tool result lands in the next prompt, and the agent reports that prompt's size. The growth between the request that called a tool and the one that consumed its result is the tool's, so each `ToolUsage` carries it:
+
+```ts
+session.rollup.tools['Read']?.contextTokens; // tokens Read's results added
+```
+
+Tools that ran in parallel share the step's growth in proportion to `tool_result_size_bytes` when the agent reports it, evenly otherwise. A `Task` is charged by the parent's own growth once the sub-agent returns; the sub-agent's Reads are charged against its own requests. Nothing is charged across a compaction.
+
 ## Adding an agent
 
 ```ts

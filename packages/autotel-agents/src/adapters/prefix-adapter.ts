@@ -207,6 +207,7 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
           if (toolName) event.tool = buildToolRef(toolName, attrs);
           event.success = bool(attrs, 'success');
           event.durationMs = num(attrs, 'duration_ms');
+          event.resultBytes = num(attrs, 'tool_result_size_bytes');
           const decision = str(attrs, 'decision');
           if (decision === 'accept' || decision === 'reject')
             event.decision = decision;

@@ -83,3 +83,13 @@ export const Compacted: Story = {
     await expect(marker.textContent).toMatch(/likely/);
   },
 };
+
+/** Timeline chips are built from the session's own event types; ticking one filters. */
+export const TimelineFiltered: Story = {
+  play: async ({ canvas, userEvent }) => {
+    updateWidgetData({ agents: sampleAgentSessions() });
+    const chip = await canvas.findByRole('button', { name: /^tool_result/ });
+    await userEvent.click(chip);
+    await expect(chip).toHaveAttribute('aria-pressed', 'true');
+  },
+};

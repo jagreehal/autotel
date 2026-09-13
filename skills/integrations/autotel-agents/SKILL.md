@@ -18,6 +18,7 @@ This package does **no I/O** — no `node:*`, no `protobufjs`, no `ws`. The `aut
 - Summarize cost, models, and MCP servers across many agent sessions.
 - Attribute spend to the skill, sub-agent, effort level or prompt that drove it.
 - Split `mcp__server__tool` names to attribute usage per MCP server.
+- Find which tool's results are filling the context window.
 - Add support for a new agent that mirrors the Claude Code contract.
 
 ## Core patterns
@@ -69,6 +70,15 @@ import { parseToolName } from 'autotel-agents';
 parseToolName('mcp__github__create_issue');
 // → { name, isMcp: true, mcpServer: 'github', mcpTool: 'create_issue' }
 ```
+
+### Find the tool filling the context
+
+```ts
+session.rollup.tools['Read']?.contextTokens;
+// tokens the next prompt grew by after Read's results, summed over the session
+```
+
+Parallel results split a step's growth by `tool_result_size_bytes` when reported, evenly otherwise; a `Task` is charged by the parent's growth, its sub-agent's tools by their own requests; nothing is charged across a compaction.
 
 ### Add an agent adapter
 

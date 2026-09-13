@@ -5,6 +5,19 @@
   import { timeZoneSignal } from '../store.svelte';
 
   const SENSITIVE_RE = /(password|secret|token|authorization|api[-_.]?key)/i;
+
+  /**
+   * A number or boolean cannot hold a credential: `gen_ai.usage.input_tokens`
+   * matches the key pattern but carries a count, which is the number someone
+   * opened the panel to read. Strings, arrays and objects stay masked.
+   */
+  function isSensitiveAttribute(key: string, value: unknown): boolean {
+    return (
+      typeof value !== 'number' &&
+      typeof value !== 'boolean' &&
+      SENSITIVE_RE.test(key)
+    );
+  }
   const RESOURCE_PREFIXES = [
     'service.',
     'deployment.',
@@ -112,6 +125,13 @@
     links: false,
   });
   let fullscreenValue = $state<{ key: string; value: string } | null>(null);
+  // Sensitive attribute keys the user has clicked open. Reset per span, so a
+  // credential shown on one span is not silently shown on the next.
+  let revealed = $state(new Set<string>());
+  $effect(() => {
+    void span.spanId;
+    revealed = new Set();
+  });
 
   const toggleSection = (section: string) => {
     expandedSections = {
@@ -207,7 +227,8 @@
   value: unknown,
   onFullscreen: (v: { key: string; value: string }) => void,
 )}
-  {@const isSensitive = SENSITIVE_RE.test(attrKey)}
+  {@const isSensitive =
+    isSensitiveAttribute(attrKey, value) && !revealed.has(attrKey)}
   {@const isResource = RESOURCE_PREFIXES.some((p) => attrKey.startsWith(p))}
   {@const json = isSensitive ? null : tryParseJsonContainer(value)}
   {#if json !== null}
@@ -259,7 +280,18 @@
         {/if}
       </div>
       <div class="mt-0.5 text-fg leading-snug at-wrap-anywhere">
-        {isSensitive ? '[redacted]' : text}
+        {#if isSensitive}
+          <button
+            type="button"
+            class="text-fg-subtle hover:text-fg underline decoration-dotted"
+            title="Click to reveal"
+            onclick={() => (revealed = new Set(revealed).add(attrKey))}
+          >
+            [redacted]
+          </button>
+        {:else}
+          {text}
+        {/if}
       </div>
     </div>
   {/if}

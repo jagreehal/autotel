@@ -1,0 +1,4 @@
+{
+  "description": "OpenTelemetry for plugins: an engine.create step adds $.autotel over $.http, $.clock and $.env beneath; a * hook traces every dispatch with its chain; a ToolUse render hook shows the call's duration",
+  "modules": ["./register.ts"]
+}

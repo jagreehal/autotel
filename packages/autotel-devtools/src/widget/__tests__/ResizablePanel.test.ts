@@ -113,4 +113,23 @@ describe('useResizable / ResizablePanel', () => {
       ),
     );
   });
+
+  it('fit() re-clamps a restored size to the container it is now in', () => {
+    window.localStorage.setItem(STORAGE_KEY, '900');
+    const container = { clientWidth: 500 };
+    const state = useResizable({
+      initial: 200,
+      min: 120,
+      minOther: 200,
+      containerRef: { current: container as HTMLElement },
+      storageKey: STORAGE_KEY,
+    });
+    expect(state.size).toBe(900); // nothing measured yet
+    state.fit();
+    expect(state.size).toBe(300); // 500 - minOther
+    // The container shrank again: fit() follows it.
+    container.clientWidth = 400;
+    state.fit();
+    expect(state.size).toBe(200);
+  });
 });

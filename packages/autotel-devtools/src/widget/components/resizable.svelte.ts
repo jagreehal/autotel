@@ -69,6 +69,13 @@ export interface ResizableState {
   readonly size: number;
   readonly dragging: boolean;
   readonly separatorProps: SeparatorProps;
+  /**
+   * Re-clamp the current size against the container as it is *now*. Dragging
+   * clamps as it goes, but a size restored from storage was chosen in some
+   * other window, and a container can shrink underneath a size that fitted.
+   * Call it once the container is measured and again whenever it resizes.
+   */
+  fit: () => void;
 }
 
 export function useResizable(options: UseResizableOptions): ResizableState {
@@ -136,7 +143,13 @@ export function useResizable(options: UseResizableOptions): ResizableState {
     persist(storageKey, next);
   };
 
+  const fit = () => {
+    const next = clamp(sizeRef.current);
+    if (next !== sizeRef.current) setSize(next);
+  };
+
   return {
+    fit,
     get size() {
       return size;
     },

@@ -126,6 +126,7 @@
   import { httpBaseFromWsUrl } from '../source-client';
   import { connectionUrlSignal } from '../store.svelte';
   import { matchesNeedle } from '../utils/textMatch';
+  import { keyAttributes } from '../utils/keyAttributes';
 
   const logs = $derived(sortedLogsSignal.value);
   const paused = $derived(pausedSignal.value);
@@ -196,8 +197,14 @@
     if (serverReady) {
       source = query.length > 0 ? serverLogs : mergeLogRows(serverLogs, logs);
     }
-    return source.filter((log) =>
-      logMatches(log, serverReady ? '' : query, severityFilter),
+    // Keyed `{#each}` throws on a repeated id, which would take the whole view
+    // down; a stale snapshot or store file may still hold pre-fix duplicates.
+    const seen = new Set<string>();
+    return source.filter(
+      (log) =>
+        !seen.has(log.id) &&
+        seen.add(log.id) &&
+        logMatches(log, serverReady ? '' : query, severityFilter),
     );
   });
 
@@ -248,7 +255,21 @@
         >
           {log.severityText ?? 'LOG'}
         </span>
-        <span class="font-mono text-fg truncate min-w-0 flex-1">{body}</span>
+        <span class="font-mono text-fg truncate min-w-0">{body}</span>
+        <!-- What the event was about, without expanding it: the same
+             allowlist the waterfall hover card uses. Ids and identity stay
+             behind the expand. -->
+        <span class="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+          {#each keyAttributes(log.attributes ?? {}, 4) as [key, value] (key)}
+            <span
+              class="inline-flex items-baseline gap-1 max-w-[16rem] font-mono text-[11px] whitespace-nowrap"
+              title={`${key}: ${value}`}
+            >
+              <span class="text-fg-subtle">{key}</span>
+              <span class="text-fg-muted truncate">{value}</span>
+            </span>
+          {/each}
+        </span>
         {#if log.resourceName}
           <span class="flex-shrink-0 text-fg-subtle truncate max-w-[10rem]">
             {log.resourceName}

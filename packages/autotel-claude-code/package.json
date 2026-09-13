@@ -1,0 +1,55 @@
+{
+  "name": "autotel-claude-code",
+  "version": "0.1.0",
+  "description": "OpenTelemetry for Claude Code plugins (a Claude Mod): $.autotel spans for plugin authors, one span per hook dispatch with the chain beneath it, and each tool call's duration on its row",
+  "type": "module",
+  "private": false,
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts"
+    },
+    "./claude-code": {
+      "types": "./types/claude-code.d.ts"
+    }
+  },
+  "files": [
+    ".claude-plugin",
+    "hooks",
+    "!hooks/*.test.ts",
+    "types",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint hooks/**/*.ts",
+    "type-check": "tsc -p tsconfig.json"
+  },
+  "keywords": [
+    "claude-code",
+    "claude-mod",
+    "function-hooks",
+    "opentelemetry",
+    "autotel",
+    "tracing"
+  ],
+  "license": "Apache-2.0",
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-claude-code"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-claude-code#readme",
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

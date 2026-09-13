@@ -113,6 +113,31 @@ describe('toGenAiSpan — anthropic with cache', () => {
   });
 });
 
+describe('toGenAiSpan — Claude Code flat usage names', () => {
+  const base = loadFixture('anthropic-cache');
+  const span = toGenAiSpan({
+    ...base,
+    name: 'claude_code.llm_request',
+    attributes: {
+      'gen_ai.system': 'anthropic',
+      'gen_ai.request.model': 'claude-sonnet-4',
+      input_tokens: 2,
+      output_tokens: 83,
+      cache_read_tokens: 10010,
+      cache_creation_tokens: 18412,
+      ttft_ms: 1215,
+    },
+  });
+
+  it('reads the flat names and folds cached tokens into the input total', () => {
+    expect(span.usage.inputTokens).toBe(2 + 10010 + 18412);
+    expect(span.usage.outputTokens).toBe(83);
+    expect(span.usage.cacheReadInputTokens).toBe(10010);
+    expect(span.usage.cacheCreationInputTokens).toBe(18412);
+    expect(span.streaming?.timeToFirstChunkS).toBeCloseTo(1.215);
+  });
+});
+
 describe('toGenAiSpan — openai-agents handoff', () => {
   const span = toGenAiSpan(loadFixture('openai-agents-handoff'));
 
