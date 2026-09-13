@@ -1,5 +1,12 @@
 # @jagreehal/example-winston
 
+## 1.0.89
+
+### Patch Changes
+
+- Updated dependencies [76080ec]
+  - autotel-devtools@28.0.1
+
 ## 1.0.88
 
 ### Patch Changes
