@@ -1,6 +1,6 @@
 {
   "name": "autotel-claude-code",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OpenTelemetry for Claude Code plugins (a Claude Mod): $.autotel spans for plugin authors, one span per hook dispatch with the chain beneath it, and each tool call's duration on its row",
   "type": "module",
   "private": false,
