@@ -1,5 +1,6 @@
 // src/server/otlp.ts
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import type { SpanData, TraceData, LogData } from './types';
 import type {
@@ -233,8 +234,16 @@ export function parseOtlpLogs(payload: unknown): LogData[] {
         const spanId = normalizeHexId(rec.spanId) || undefined;
         const body = rec.body ? resolveOtlpValue(rec.body) : '';
 
+        const attributes = flattenAttributes(rec.attributes);
+        // The id must differ for records that share a millisecond: Claude Code
+        // emits several `hook_registered` events at the same timestamp with no
+        // trace, and the store's `ON CONFLICT DO NOTHING` would keep only one.
+        const digest = createHash('sha1')
+          .update(JSON.stringify([body, attributes]))
+          .digest('hex')
+          .slice(0, 8);
         logs.push({
-          id: `${traceId || 'no-trace'}:${spanId || 'no-span'}:${timestamp}:${rec.severityNumber || 0}`,
+          id: `${traceId || 'no-trace'}:${spanId || 'no-span'}:${timestamp}:${rec.severityNumber || 0}:${digest}`,
           traceId,
           spanId,
           resourceName: getResourceName(resourceAttrs),
@@ -242,7 +251,7 @@ export function parseOtlpLogs(payload: unknown): LogData[] {
           severityNumber: rec.severityNumber,
           body: logBody(body),
           timestamp,
-          attributes: flattenAttributes(rec.attributes),
+          attributes,
           resource: resourceAttrs,
         });
       }

@@ -268,3 +268,58 @@ export function postCompactionRegression(
       : 'read share held steady across the reset',
   };
 }
+
+/**
+ * Queue a tool result for context attribution by the next request on the
+ * lineage that issued it. A tool result carries no lineage of its own, so it
+ * is taken to belong to the most recent request: a sub-agent's Reads follow
+ * the sub-agent's request, and the parent's Task call follows the parent's.
+ */
+export function pendToolContext(
+  rollup: AgentSessionRollup,
+  name: string,
+  resultBytes?: number,
+): void {
+  const state = rollup.toolContextState;
+  state.byLineage[state.lineage ?? DEFAULT_LINEAGE]?.pending.push({
+    name,
+    resultBytes,
+  });
+}
+
+/**
+ * Charge the context a request grew by to the tool results it consumed.
+ *
+ * The prompt of a request is the previous prompt on the same lineage plus
+ * whatever came back from the tools in between, so the delta is theirs.
+ * Tools that ran in parallel share it in proportion to their result size,
+ * or evenly when the agent does not report one, so a single dominant result
+ * is reported in full.
+ */
+export function foldToolContext(
+  rollup: AgentSessionRollup,
+  event: AgentEvent,
+): void {
+  const state = rollup.toolContextState;
+  const lineage = event.contextLineageId ?? DEFAULT_LINEAGE;
+  const context = contextTokens(event);
+  const prev = state.byLineage[lineage];
+  if (prev && prev.pending.length > 0) {
+    const delta = Math.max(0, context - prev.lastContext);
+    const bytes = prev.pending.reduce(
+      (sum, t) => sum + (t.resultBytes ?? 0),
+      0,
+    );
+    const sized =
+      bytes > 0 && prev.pending.every((t) => t.resultBytes !== undefined);
+    const total = sized ? bytes : prev.pending.length;
+    for (const tool of prev.pending) {
+      const weight = sized ? tool.resultBytes! : 1;
+      rollup.tools[tool.name]!.contextTokens += Math.round(
+        (delta * weight) / total,
+      );
+    }
+  }
+  state.lineage = lineage;
+  state.byLineage[lineage] = { lastContext: context, pending: [] };
+}

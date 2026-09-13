@@ -488,24 +488,31 @@
         {/if}
       </h3>
       <div class="flex items-center gap-1">
-        <!-- Bulk actions bar -->
-        {#if hasSelection}
+        <!-- Bulk actions bar. Always present once there are rows, so the
+             checkboxes have a visible purpose before anything is ticked. -->
+        {#if filtered.length > 0}
           <div class="flex items-center gap-1 mr-2 px-2 border-r border-line">
             <button
               onclick={handleExportSelected}
-              class="flex items-center gap-1 px-2 py-1 text-xs rounded bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
-              title="Export selected traces"
+              disabled={!hasSelection}
+              class="flex items-center gap-1 px-2 py-1 text-xs rounded bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-accent/10"
+              title={hasSelection
+                ? 'Export selected traces'
+                : 'Tick traces to export them · Export selected'}
             >
               <Download size={12} />
-              Export ({selectedCount})
+              Export{hasSelection ? ` (${selectedCount})` : ''}
             </button>
             <button
               onclick={handleDeleteSelected}
-              class="flex items-center gap-1 px-2 py-1 text-xs rounded bg-danger-bg text-danger hover:bg-danger-bg/80 transition-colors"
-              title="Delete selected traces"
+              disabled={!hasSelection}
+              class="flex items-center gap-1 px-2 py-1 text-xs rounded bg-danger-bg text-danger hover:bg-danger-bg/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-danger-bg"
+              title={hasSelection
+                ? 'Delete selected traces'
+                : 'Tick traces to delete them · Delete selected'}
             >
               <Trash2 size={12} />
-              Delete
+              Delete{hasSelection ? ` (${selectedCount})` : ''}
             </button>
           </div>
         {/if}

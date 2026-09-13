@@ -40,6 +40,7 @@ function makeTrace(overrides: Partial<TraceData> = {}): TraceData {
     duration: overrides.duration ?? 100,
     status: overrides.status ?? 'OK',
     service: overrides.service ?? 'test-service',
+    partial: overrides.partial,
   };
 }
 
@@ -355,5 +356,44 @@ export const PausedWithBuffer: Story = {
     await expect(await canvas.findByText('Resume (+3)')).toBeInTheDocument();
     await expect(canvas.getByText('GET /api/users')).toBeInTheDocument();
     await expect(canvas.getByText('Drop buffer')).toBeInTheDocument();
+  },
+};
+
+/** Export / Delete sit in the header before any selection, disabled with a hint. */
+export const BulkActionsBeforeSelection: Story = {
+  play: async ({ canvas, userEvent }) => {
+    updateWidgetData({
+      traces: [
+        makeTrace({ traceId: 'trace-1' }),
+        makeTrace({ traceId: 'trace-2' }),
+      ],
+    });
+    const exportBtn = await canvas.findByRole('button', { name: 'Export' });
+    await expect(exportBtn).toBeDisabled();
+    await userEvent.click(canvas.getAllByRole('checkbox')[1]);
+    await expect(exportBtn).toBeEnabled();
+  },
+};
+
+/** A trace whose root never arrived is marked partial. */
+export const FragmentTrace: Story = {
+  play: async ({ canvas }) => {
+    updateWidgetData({
+      traces: [
+        makeTrace({
+          traceId: 'trace-frag',
+          partial: true,
+          rootSpan: makeSpan({
+            traceId: 'trace-frag',
+            name: 'claude_code.llm_request',
+            parentSpanId: 'missing',
+          }),
+        }),
+      ],
+    });
+    await expect(
+      await canvas.findByText('claude_code.llm_request'),
+    ).toBeInTheDocument();
+    await expect(await canvas.findByText('partial')).toBeInTheDocument();
   },
 };

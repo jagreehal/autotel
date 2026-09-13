@@ -45,6 +45,7 @@
     UsageBreakdown,
   } from 'autotel-agents';
   import CopyButton from './CopyButton.svelte';
+  import SearchInput from './SearchInput.svelte';
 
   const launchCommand = 'npx autotel-devtools claude';
 
@@ -151,10 +152,39 @@
     return s.rollup.inputTokens + s.rollup.outputTokens;
   }
 
-  // newest events first, capped so a long session stays responsive
-  const timeline = $derived(
-    selected ? [...selected.timeline].reverse().slice(0, 200) : [],
-  );
+  // Timeline filters, built from what this session actually contains: one
+  // chip per event type present (with its count), plus free text over the
+  // label and detail columns. Empty selection means every type.
+  let timelineTypes = $state(new Set<string>());
+  let timelineQuery = $state('');
+  const timelineTypeCounts = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const e of selected?.timeline ?? [])
+      counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
+    return [...counts].sort((a, b) => b[1] - a[1]);
+  });
+  function toggleTimelineType(type: string) {
+    const next = new Set(timelineTypes);
+    if (!next.delete(type)) next.add(type);
+    timelineTypes = next;
+  }
+  // newest events first, filtered, then capped so a long session stays responsive
+  const timeline = $derived.by(() => {
+    if (!selected) return [];
+    const present = new Set(timelineTypeCounts.map(([t]) => t));
+    const types = [...timelineTypes].filter((t) => present.has(t));
+    const q = timelineQuery.trim().toLowerCase();
+    return [...selected.timeline]
+      .reverse()
+      .filter(
+        (e) =>
+          (types.length === 0 || types.includes(e.type)) &&
+          (!q ||
+            e.type.includes(q) ||
+            `${eventLabel(e)} ${eventDetail(e)}`.toLowerCase().includes(q)),
+      )
+      .slice(0, 200);
+  });
   const sessionTools = $derived(
     selected
       ? Object.values(selected.rollup.tools).sort((a, b) => b.count - a.count)
@@ -431,6 +461,10 @@
                       {#if t.totalDurationMs > 0}<span
                           >{formatDuration(t.totalDurationMs)}</span
                         >{/if}
+                      {#if t.contextTokens > 0}<span
+                          title="Context this tool's results added"
+                          >+{formatNumber(t.contextTokens)} tok</span
+                        >{/if}
                     </span>
                   </div>
                 {/each}
@@ -526,7 +560,38 @@
                   />Reveal prompts{/if}
               </button>
             </div>
+            {#if timelineTypeCounts.length > 0}
+              <div class="flex flex-wrap items-center gap-1 mb-2">
+                {#if timelineTypeCounts.length > 1}
+                  {#each timelineTypeCounts as [type, n] (type)}
+                    <button
+                      type="button"
+                      aria-pressed={timelineTypes.has(type)}
+                      onclick={() => toggleTimelineType(type)}
+                      class="px-1.5 py-0.5 rounded text-[10px] border transition-colors {timelineTypes.has(
+                        type,
+                      )
+                        ? 'bg-accent/10 text-accent border-accent/40'
+                        : 'bg-subtle text-fg-muted border-transparent hover:border-line'}"
+                      >{type} <span class="opacity-70">{n}</span></button
+                    >
+                  {/each}
+                {/if}
+                <SearchInput
+                  bind:value={timelineQuery}
+                  placeholder="Filter events…"
+                  ariaLabel="Filter timeline events"
+                  class="relative ml-auto w-44"
+                  inputClass="border-line focus:border-line py-0.5 text-[11px]"
+                />
+              </div>
+            {/if}
             <div class="flex flex-col gap-1">
+              {#if timeline.length === 0}
+                <div class="py-3 text-center text-xs text-fg-subtle">
+                  No events match.
+                </div>
+              {/if}
               {#each timeline as e (e.id)}
                 {@const reset = compactionAt.get(e.id)}
                 {#if reset}

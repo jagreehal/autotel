@@ -121,3 +121,26 @@ export const WithLinks: Story = {
     await expect(links[0].tagName).toBe('BUTTON');
   },
 };
+
+/**
+ * Token counts match the "token" key pattern but are numbers, so they show;
+ * the string credential stays `[redacted]` until clicked.
+ */
+export const SensitiveAttributes: Story = {
+  args: {
+    span: {
+      ...span,
+      attributes: {
+        'gen_ai.usage.input_tokens': 907,
+        'gen_ai.usage.output_tokens': 114,
+        'http.request.header.authorization': 'Bearer abc',
+      },
+    },
+  },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText('907')).toBeInTheDocument();
+    await expect(canvas.getByText('[redacted]')).toBeInTheDocument();
+    await userEvent.click(canvas.getByText('[redacted]'));
+    await expect(await canvas.findByText('Bearer abc')).toBeInTheDocument();
+  },
+};

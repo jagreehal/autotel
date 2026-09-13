@@ -10,7 +10,11 @@
  *    representations of the same fact never double-count.
  */
 
-import { foldContextReset } from './compaction';
+import {
+  foldContextReset,
+  foldToolContext,
+  pendToolContext,
+} from './compaction';
 import { mergeAttrs, readIdentity } from './identity';
 import { TOOL_CATEGORIES } from './tool-taxonomy';
 import {
@@ -110,6 +114,7 @@ function emptyRollup(): AgentSessionRollup {
     hooks: { runs: 0, blocked: 0, errored: 0, cancelled: 0 },
     contextHighWaterTokens: 0,
     contextState: wireKeyed(),
+    toolContextState: { byLineage: wireKeyed() },
     compactions: [],
   };
 }
@@ -172,6 +177,7 @@ function bumpTool(rollup: AgentSessionRollup, event: AgentEvent): ToolUsage {
     rejected: 0,
     failures: 0,
     totalDurationMs: 0,
+    contextTokens: 0,
   };
   rollup.tools[ref.name] = existing;
   return existing;
@@ -241,6 +247,7 @@ export function foldEvent(
       bumpUsage(rollup.byAgent, event.agentName, event);
       bumpUsage(rollup.byPrompt, event.promptId, event);
       foldContextReset(rollup, event);
+      foldToolContext(rollup, event);
       break;
     }
     case 'api_error':
@@ -266,6 +273,7 @@ export function foldEvent(
         usage.totalDurationMs += event.durationMs ?? 0;
         if (event.success === false) usage.failures += 1;
         tallyToolKind(rollup, event);
+        pendToolContext(rollup, usage.name, event.resultBytes);
       }
       break;
     }

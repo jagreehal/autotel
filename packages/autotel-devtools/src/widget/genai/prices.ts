@@ -19,6 +19,22 @@ const TABLE: Record<string, PriceEntry> = {
   'openai/gpt-4o-mini': { inputPerMTok: 0.15, outputPerMTok: 0.6 },
   'openai/gpt-4-turbo': { inputPerMTok: 10, outputPerMTok: 30 },
   'openai/gpt-3.5-turbo': { inputPerMTok: 0.5, outputPerMTok: 1.5 },
+  // Anthropic first-party rates (docs, 2026-06). Longest-prefix match means
+  // `claude-opus-5[1m]` (Claude Code's 1M-context id) hits `claude-opus-5`,
+  // and `claude-opus-4-6` hits its own row rather than `claude-opus-4`.
+  'anthropic/claude-fable-5-1': {
+    inputPerMTok: 10,
+    outputPerMTok: 50,
+    cacheReadPerMTok: 0.25,
+  },
+  'anthropic/claude-fable-5': { inputPerMTok: 10, outputPerMTok: 50 },
+  'anthropic/claude-opus-5': { inputPerMTok: 5, outputPerMTok: 25 },
+  'anthropic/claude-opus-4-8': { inputPerMTok: 5, outputPerMTok: 25 },
+  'anthropic/claude-opus-4-7': { inputPerMTok: 5, outputPerMTok: 25 },
+  'anthropic/claude-opus-4-6': { inputPerMTok: 5, outputPerMTok: 25 },
+  'anthropic/claude-sonnet-5': { inputPerMTok: 2, outputPerMTok: 10 },
+  'anthropic/claude-sonnet-4-6': { inputPerMTok: 3, outputPerMTok: 15 },
+  'anthropic/claude-haiku-4-5': { inputPerMTok: 1, outputPerMTok: 5 },
   'anthropic/claude-opus-4': { inputPerMTok: 15, outputPerMTok: 75 },
   'anthropic/claude-sonnet-4': { inputPerMTok: 3, outputPerMTok: 15 },
   'anthropic/claude-3-5-sonnet': { inputPerMTok: 3, outputPerMTok: 15 },

@@ -63,4 +63,22 @@ describe('AgentsView', () => {
     await fireEvent.click(toggle);
     expect(toggle.textContent).toMatch(/Hide prompts/);
   });
+
+  it('filters the timeline by event type chips and free text', async () => {
+    render(AgentsView);
+    updateWidgetData({ agents: sampleAgentSessions() });
+
+    const chip = await screen.findByRole('button', { name: /^tool_result/ });
+    const before = screen.getAllByText('tool_result').length;
+    await fireEvent.click(chip);
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    // Only tool_result rows remain: no api_request badge in the list.
+    expect(screen.queryAllByText('api_request').length).toBeLessThanOrEqual(1);
+    expect(screen.getAllByText('tool_result').length).toBe(before);
+
+    await fireEvent.input(screen.getByLabelText('Filter timeline events'), {
+      target: { value: 'zzz-no-such-event' },
+    });
+    expect(screen.getByText('No events match.')).toBeTruthy();
+  });
 });

@@ -8,6 +8,15 @@ import {
   type NavState,
 } from './url-sync';
 
+describe('parseNavHash — tab ids', () => {
+  it('accepts every tab, not only the original nine', () => {
+    for (const tab of ['agents', 'webmcp', 'compare', 'coverage'] as const) {
+      expect(parseNavHash(`#tab=${tab}`).tab).toBe(tab);
+    }
+    expect(parseNavHash('#tab=nope').tab).toBeUndefined();
+  });
+});
+
 describe('isTabType', () => {
   it('accepts known tabs and rejects everything else', () => {
     expect(isTabType('genai')).toBe(true);
@@ -43,12 +52,12 @@ describe('parseNavHash', () => {
 });
 
 describe('formatNavHash', () => {
-  it('returns an empty string for fully-default state', () => {
+  it('returns an empty string when no state is set', () => {
     expect(formatNavHash({})).toBe('');
-    expect(formatNavHash({ tab: DEFAULT_TAB })).toBe('');
   });
 
-  it('omits the default tab but keeps non-default tabs', () => {
+  it('keeps the tab explicit, default included, so a copied link names it', () => {
+    expect(formatNavHash({ tab: DEFAULT_TAB })).toBe('#tab=traces');
     expect(formatNavHash({ tab: 'genai' })).toBe('#tab=genai');
   });
 
@@ -123,12 +132,7 @@ describe('round-trip', () => {
       { sort: { key: 'duration', dir: 'asc' }, genaiQuery: 'gpt' },
     ];
     for (const s of states) {
-      const parsed = parseNavHash(formatNavHash(s));
-      // The default tab is intentionally dropped from the hash, so normalize it
-      // out of the expectation.
-      const expected = { ...s };
-      if (expected.tab === DEFAULT_TAB) delete expected.tab;
-      expect(parsed).toEqual(expected);
+      expect(parseNavHash(formatNavHash(s))).toEqual(s);
     }
   });
 });

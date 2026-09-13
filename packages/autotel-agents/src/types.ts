@@ -158,6 +158,8 @@ export interface AgentEvent {
   skillName?: string;
 
   // tool_result / tool_decision
+  /** Size of the tool's result, in bytes, when the agent reports it. */
+  resultBytes?: number;
   tool?: ToolRef;
   decision?: ToolDecision;
   success?: boolean;
@@ -216,6 +218,12 @@ export interface HookStats {
   cancelled: number;
 }
 
+/** A tool result awaiting context attribution by the next request. */
+export interface PendingToolContext {
+  name: string;
+  resultBytes?: number;
+}
+
 /** Per-tool usage tally within a session. */
 export interface ToolUsage {
   name: string;
@@ -227,6 +235,13 @@ export interface ToolUsage {
   rejected: number;
   failures: number;
   totalDurationMs: number;
+  /**
+   * Context this tool's results added, in tokens: the growth of the prompt
+   * between the request that called the tool and the one that consumed its
+   * result. Answers "which tool is bloating my context" — see
+   * {@link ./compaction!foldToolContext}.
+   */
+  contextTokens: number;
 }
 
 /**
@@ -312,6 +327,19 @@ export interface AgentSessionRollup {
    * ones. Same role as {@link AgentSession.metricState}.
    */
   contextState: Record<string, number>;
+  /**
+   * Internal reducer state (not for UI): per-tool context attribution — the
+   * prompt size of the last request and the tools whose results it has not
+   * yet consumed, per lineage, plus which lineage is currently running. See
+   * {@link ./compaction!foldToolContext}.
+   */
+  toolContextState: {
+    lineage?: string;
+    byLineage: Record<
+      string,
+      { lastContext: number; pending: PendingToolContext[] }
+    >;
+  };
   /**
    * Points where the agent's context was replaced — see
    * {@link ./compaction}. Inferred from token-count discontinuities, so each

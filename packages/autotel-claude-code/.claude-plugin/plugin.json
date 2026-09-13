@@ -1,0 +1,13 @@
+{
+  "name": "autotel",
+  "version": "0.1.0",
+  "description": "OpenTelemetry for Claude Code plugins: adds $.autotel in the engine.create fold so a plugin records spans, traces every hook dispatch with the chain beneath it, and shows each tool call's settled duration on its row. Exports OTLP/HTTP to OTEL_EXPORTER_OTLP_ENDPOINT (autotel-devtools claude sets it).",
+  "author": {
+    "name": "Jag Reehal",
+    "url": "https://jagreehal.com"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-claude-code#readme",
+  "repository": "https://github.com/jagreehal/autotel",
+  "license": "Apache-2.0",
+  "keywords": ["opentelemetry", "autotel", "observability", "tracing", "mod"]
+}

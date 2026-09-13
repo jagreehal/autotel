@@ -61,7 +61,8 @@ export async function queryFields(
   deps: QueryClientDeps,
 ): Promise<string[]> {
   try {
-    const response = await deps.fetch(
+    const response = await deps.fetch.call(
+      globalThis,
       `${deps.baseUrl}/api/query/${signal}/fields`,
       { signal: deps.signal },
     );
@@ -102,7 +103,10 @@ async function postQuery(
 
   let response: Response;
   try {
-    response = await deps.fetch(url, {
+    // Called with `globalThis` as `this`: a caller handing over the bare
+    // `fetch` (rather than a bound one) otherwise fails with the browser's
+    // "Illegal invocation", which reads as a network error and is not one.
+    response = await deps.fetch.call(globalThis, url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),

@@ -201,34 +201,35 @@
       <Clock size={12} />
       {latency}
     </span>
-    <span
-      class="inline-flex items-center gap-1 font-mono text-xs"
-      title="Tokens in (cached) → out (reasoning)"
-    >
-      <Hash size={12} />
-      {inputTokensLabel}
-      <span class="text-fg-subtle">→</span>
-      {outputTokensLabel}
-    </span>
+    <!-- A stat with no value is left out rather than drawn as a dash: a
+         strip of placeholders reads as broken, an absent stat as unknown. -->
+    {#if span.usage.inputTokens != null || span.usage.outputTokens != null}
+      <span
+        class="inline-flex items-center gap-1 font-mono text-xs"
+        title="Tokens in (cached) → out (reasoning)"
+      >
+        <Hash size={12} />
+        {inputTokensLabel}
+        <span class="text-fg-subtle">→</span>
+        {outputTokensLabel}
+      </span>
+    {/if}
     {#if showContextGauge}
       <ContextWindowGauge
         used={span.usage.inputTokens ?? 0}
         total={contextWindow ?? 0}
       />
     {/if}
-    <span
-      class={cn(
-        'inline-flex items-center gap-1',
-        costKnown ? 'text-fg' : 'text-fg-subtle',
-      )}
-      title={span.cost?.source === 'reported'
-        ? 'Reported cost (gen_ai.usage.cost.usd)'
-        : span.cost?.source === 'table'
-          ? 'Estimated cost'
-          : `No price for ${span.provider}/${span.requestModel}`}
-    >
-      <Coins size={12} />
-      {formatCostUsd(span.cost?.total, costKnown)}
-    </span>
+    {#if costKnown}
+      <span
+        class="inline-flex items-center gap-1 text-fg"
+        title={span.cost?.source === 'reported'
+          ? 'Reported cost (gen_ai.usage.cost.usd)'
+          : 'Estimated cost'}
+      >
+        <Coins size={12} />
+        {formatCostUsd(span.cost?.total)}
+      </span>
+    {/if}
   </span>
 </div>

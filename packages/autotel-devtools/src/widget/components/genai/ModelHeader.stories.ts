@@ -20,3 +20,8 @@ export const Default: Story = { args: { span: chatSpan() } };
 export const WithTraceLink: Story = {
   args: { span: chatSpan(), onOpenTrace: () => {} },
 };
+
+/** No usage or price on the span: the token and cost stats are omitted, not dashed. */
+export const NoUsageOrCost: Story = {
+  args: { span: { ...chatSpan(), usage: {}, cost: undefined } },
+};
