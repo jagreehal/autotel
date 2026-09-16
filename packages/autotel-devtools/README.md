@@ -189,7 +189,10 @@ process. Point them at the bound port, or free the original.
 
 When your app emits OpenTelemetry GenAI spans (Vercel AI SDK, Pydantic AI, OpenAI
 Agents, Anthropic, Google GenAI, LangChain, …), the **GenAI** tab gives two extras
-on top of the per-span detail:
+on top of the per-span detail. Each row is titled `provider/model`; agent
+(`invoke_agent`) and tool (`execute_tool`) spans carry no model, so they are
+titled by agent or tool name instead, and the tool name is searchable in the
+filter box.
 
 - A **run summary strip** sits above the detail for any multi-span run: total
   cost (table-priced; a trailing `+` marks a lower bound when some calls are

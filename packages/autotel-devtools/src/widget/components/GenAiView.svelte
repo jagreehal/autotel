@@ -3,6 +3,7 @@
   import { formatTokenCounts, formatCostUsd } from '../utils/genaiFormat';
   import { formatDuration } from '../utils';
   import { groupRuns } from '../genai/summary';
+  import { spanLabel } from '../genai/label';
 
   // The "run" a given span belongs to — its conversation group, or its trace
   // when no conversation id. Used to scope the summary strip and the tour to
@@ -41,6 +42,7 @@
       String(n.operation),
       n.name,
       n.agent?.name,
+      n.tool?.name,
       row.service,
     ]);
   }
@@ -51,6 +53,7 @@
     Cpu,
     MessageSquare,
     Bot,
+    Wrench,
     List,
     Network,
     ListTree,
@@ -381,11 +384,7 @@
     {#each filtered as row, i (row.normalized.spanId)}
       {@const active = row.normalized.spanId === selected?.normalized.spanId}
       {@const errored = row.normalized.status === 'error'}
-      {@const model =
-        row.normalized.responseModel ?? row.normalized.requestModel}
-      {@const isAgentSpan =
-        row.normalized.agent?.name &&
-        (row.normalized.provider === 'unknown' || model === 'unknown')}
+      {@const label = spanLabel(row.normalized)}
       <li role="option" aria-selected={active}>
         <button
           type="button"
@@ -410,8 +409,13 @@
           )}
         >
           <div class="flex items-center gap-1.5 text-xs font-mono">
-            {#if isAgentSpan}
+            {#if label.kind === 'agent'}
               <Bot size={11} class={errored ? 'text-danger' : 'text-accent'} />
+            {:else if label.kind === 'tool'}
+              <Wrench
+                size={11}
+                class={errored ? 'text-danger' : 'text-accent'}
+              />
             {:else}
               <Cpu
                 size={11}
@@ -419,9 +423,7 @@
               />
             {/if}
             <span class="text-fg truncate">
-              {isAgentSpan
-                ? `agent: ${row.normalized.agent!.name}`
-                : `${row.normalized.provider}/${model}`}
+              {label.text}
             </span>
           </div>
           <div
