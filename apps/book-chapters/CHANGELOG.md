@@ -1,5 +1,15 @@
 # @autotel/book-chapters
 
+## 1.0.29
+
+### Patch Changes
+
+- Updated dependencies [c6398c5]
+- Updated dependencies [c6398c5]
+- Updated dependencies [c6398c5]
+  - autotel-devtools@28.0.2
+  - autotel-genai@0.13.0
+
 ## 1.0.28
 
 ### Patch Changes
