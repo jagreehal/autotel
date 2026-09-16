@@ -96,7 +96,7 @@ export interface TokenUsage {
   reasoningOutputTokens?: number;
   /** `gen_ai.usage.cache_read.input_tokens` — subset of `inputTokens`. */
   cacheReadInputTokens?: number;
-  /** `gen_ai.usage.cache_creation.input_tokens` — billed in addition. */
+  /** `gen_ai.usage.cache_write.input_tokens` — billed in addition. */
   cacheCreationInputTokens?: number;
   /**
    * Whether the provider reports cache tokens *in addition to* `inputTokens`

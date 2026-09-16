@@ -105,7 +105,7 @@ export function extractAiSdkUsage(
     num(attributes[GEN_AI.USAGE_REASONING_OUTPUT_TOKENS]) ??
     num(attributes[AI_SDK_ATTR.USAGE_REASONING_TOKENS]);
   const cacheCreationInputTokens = num(
-    attributes[GEN_AI.USAGE_CACHE_CREATION_INPUT_TOKENS],
+    attributes[GEN_AI.USAGE_CACHE_WRITE_INPUT_TOKENS],
   );
 
   if (

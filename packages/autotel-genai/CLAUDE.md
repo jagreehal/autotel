@@ -117,7 +117,7 @@ exactly aligned with them.
     (in `ai-sdk-bridge.ts`) is an `@ai-sdk/otel` `enrichSpan` helper. Provenance +
     runtimeContext mapping only; it **cannot** add cost (the SDK gives `enrichSpan`
     no usage/model and its own attrs win). `rerank` is intentionally unmapped
-    (no canonical `gen_ai` operation in v1.42.0). When changing any of these, keep
+    (no canonical `gen_ai` operation in the `1.42.0-dev` registry). When changing any of these, keep
     them assignable to the real `ai` `Telemetry` interface (compile-check against
     `/Users/jreehal/dev/ai/ai/packages/ai/dist`).
 - `src/agent/`: agent identity / delegation / policy / audit governance
@@ -153,8 +153,10 @@ exactly aligned with them.
 
 - **Canonical names only.** Every attribute key must come from `GEN_AI.*` in
   `semconv.ts`. No string literals for `gen_ai.*` elsewhere; no `total_tokens`
-  (not in the v1.42.0 registry); usage is `input_tokens` / `output_tokens`.
-- **Spec fidelity.** Match the snapshot at `/Users/jreehal/dev/temp/semantic-conventions-genai`.
+  (not in the `1.42.0-dev` registry); usage is `input_tokens` / `output_tokens`.
+- **Spec fidelity.** Match `scripts/semconv-genai-registry.json`, regenerated from a
+  checkout of `open-telemetry/semantic-conventions-genai` with
+  `node scripts/check-semconv-drift.mjs --update-genai <checkout>`.
   `gen_ai.request.top_k` and `gen_ai.retrieval.top_k` are ints. Honor breaking
   change #242: drop `gen_ai.agent.id` on _internal_ `invoke_agent` spans
   (`genAiAgentAttributes(…, { internal: true })`). Include `server.address` /

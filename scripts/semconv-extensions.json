@@ -65,7 +65,6 @@
   "gen_ai.guard.warning": "autotel extension (autotel-genai)",
   "gen_ai.prompt.hash": "autotel extension (autotel-genai)",
   "gen_ai.prompt.label": "autotel extension (autotel-genai)",
-  "gen_ai.prompt.version": "autotel extension (autotel-genai)",
   "gen_ai.response.output_tokens_per_second": "autotel extension (autotel-genai)",
   "gen_ai.response.time_per_output_chunk": "autotel extension (autotel-genai)",
   "gen_ai.response.time_to_finish": "autotel extension (autotel-genai)",
