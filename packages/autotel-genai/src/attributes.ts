@@ -176,7 +176,7 @@ export function genAiUsageAttributes(
   set(attrs, GEN_AI.USAGE_CACHE_READ_INPUT_TOKENS, input.cacheReadInputTokens);
   set(
     attrs,
-    GEN_AI.USAGE_CACHE_CREATION_INPUT_TOKENS,
+    GEN_AI.USAGE_CACHE_WRITE_INPUT_TOKENS,
     input.cacheCreationInputTokens,
   );
   set(attrs, GEN_AI.USAGE_COST_USD, input.costUsd);

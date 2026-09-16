@@ -55,7 +55,7 @@ export const GEN_AI = {
   USAGE_OUTPUT_TOKENS: 'gen_ai.usage.output_tokens',
   USAGE_REASONING_OUTPUT_TOKENS: 'gen_ai.usage.reasoning.output_tokens',
   USAGE_CACHE_READ_INPUT_TOKENS: 'gen_ai.usage.cache_read.input_tokens',
-  USAGE_CACHE_CREATION_INPUT_TOKENS: 'gen_ai.usage.cache_creation.input_tokens',
+  USAGE_CACHE_WRITE_INPUT_TOKENS: 'gen_ai.usage.cache_write.input_tokens',
   TOKEN_TYPE: 'gen_ai.token.type',
 
   // --- Content (opt-in, may carry sensitive data) --------------------------
@@ -279,7 +279,7 @@ export const GEN_AI_METRIC = {
   OPERATION_DURATION: 'gen_ai.client.operation.duration',
   TIME_TO_FIRST_CHUNK: 'gen_ai.client.operation.time_to_first_chunk',
   TIME_PER_OUTPUT_CHUNK: 'gen_ai.client.operation.time_per_output_chunk',
-  WORKFLOW_DURATION: 'gen_ai.workflow.duration',
+  INVOKE_WORKFLOW_DURATION: 'gen_ai.invoke_workflow.duration',
   /** Autotel extension — the spec publishes no cost metric. */
   COST_USD: 'gen_ai.client.cost.usd',
 } as const;

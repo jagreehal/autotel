@@ -5,12 +5,14 @@
     Coins,
     Hash,
     Bot,
+    Wrench,
     Gauge,
     ShieldAlert,
     TriangleAlert,
   } from '@lucide/svelte';
   import { cn } from '../../utils/cn';
   import CopyButton from '../CopyButton.svelte';
+  import { spanLabel } from '../../genai/label';
   import {
     formatInputTokens,
     formatOutputTokens,
@@ -97,14 +99,8 @@
   const AMBER = 'bg-amber-500/15 text-amber-600 border-amber-500/30';
   const RED = 'bg-red-500/15 text-red-600 border-red-500/30';
 
-  const providerLabel = $derived(
-    span.provider === 'unknown' && span.agent?.name ? null : span.provider,
-  );
   const modelLabel = $derived(span.responseModel ?? span.requestModel);
-  const showAgentChip = $derived(
-    span.agent?.name &&
-      (span.provider === 'unknown' || modelLabel === 'unknown'),
-  );
+  const label = $derived(spanLabel(span));
 </script>
 
 <div
@@ -114,17 +110,19 @@
     'text-sm',
   )}
 >
-  {#if showAgentChip}
+  {#if label.kind !== 'model'}
     <span
       class={cn(CHIP, 'bg-violet-500/15 text-violet-600 border-violet-500/30')}
     >
-      <Bot size={12} />
-      agent: {span.agent!.name}
+      {#if label.kind === 'agent'}<Bot size={12} />{:else}<Wrench
+          size={12}
+        />{/if}
+      {label.text}
     </span>
   {:else}
     <span class={cn(CHIP, providerClass)}>
       <Cpu size={12} />
-      {providerLabel}
+      {span.provider}
     </span>
   {/if}
   {#if span.guard}

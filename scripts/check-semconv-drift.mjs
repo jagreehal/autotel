@@ -319,22 +319,24 @@ if (invokedDirectly) {
   if (process.argv.includes('--self-test')) {
     selfTest();
   } else {
+    const regen = process.argv.indexOf('--update-genai');
     const root =
       process.argv.find(
-        (a) =>
-          !a.startsWith('-') && a !== process.argv[0] && a !== process.argv[1],
+        (a, i) => !a.startsWith('-') && i > 1 && i !== regen + 1,
       ) ?? join(dirname(fileURLToPath(import.meta.url)), '..');
     const registry = loadRegistry(root);
     const sources = collectSemconvSources(root);
     const extensions = readExtensions(root);
     const findings = findSemconvDrift(sources, registry, extensions);
 
-    const regen = process.argv.indexOf('--update-genai');
     if (regen !== -1) {
-      const yaml = readFileSync(
-        join(process.argv[regen + 1], 'schema-snapshot', 'registry.yaml'),
-        'utf8',
-      );
+      // The upstream repo dropped its committed resolved snapshot (#327); the
+      // name fields this needs are all present in the source model YAML.
+      const modelDir = join(process.argv[regen + 1], 'model');
+      const yaml = readdirSync(modelDir, { recursive: true })
+        .filter((f) => String(f).endsWith('.yaml'))
+        .map((f) => readFileSync(join(modelDir, String(f)), 'utf8'))
+        .join('\n');
       const manifest = readFileSync(
         join(process.argv[regen + 1], 'model', 'manifest.yaml'),
         'utf8',

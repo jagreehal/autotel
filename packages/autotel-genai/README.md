@@ -4,7 +4,7 @@
 
 `autotel-genai` is the AI layer for [autotel](https://github.com/jagreehal/autotel).
 It emits the **canonical `gen_ai.*` semantic conventions** (OpenTelemetry semconv
-**v1.42.0**) for everything from a single `chat` call to a multi-agent workflow.
+**`semantic-conventions-genai`, `1.42.0-dev`**) for everything from a single `chat` call to a multi-agent workflow.
 Token usage, cost, latency metrics, content/evaluation events, and an agent
 identity / delegation / policy / audit governance layer.
 
@@ -625,7 +625,7 @@ operation-specific upstream rules: inference and embeddings use
 `... {agent.name}` when available, workflow spans use
 `invoke_workflow {workflow.name}`, and memory spans are just the bare
 operation. Usage is `input_tokens` / `output_tokens` with `cache_read` /
-`cache_creation` / `reasoning.output_tokens`; providers use the
+`cache_write` / `reasoning.output_tokens`; providers use the
 `gen_ai.provider.name` enum.
 
 ## License

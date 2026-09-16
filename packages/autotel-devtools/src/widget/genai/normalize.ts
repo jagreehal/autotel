@@ -385,6 +385,8 @@ function readUsage(attrs: Attrs): GenAiUsage {
     num(attrs['gen_ai.usage.cache_read.input_tokens']) ??
     num(attrs['cache_read_tokens']);
   const cacheCreationInputTokens =
+    num(attrs['gen_ai.usage.cache_write.input_tokens']) ??
+    // Name before the semconv rename; still present in stored traces.
     num(attrs['gen_ai.usage.cache_creation.input_tokens']) ??
     num(attrs['cache_creation_tokens']);
   // Claude Code spans (`claude_code.llm_request`) use flat names, and their
@@ -561,6 +563,7 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   'gen_ai.usage.completion_tokens',
   'gen_ai.usage.reasoning.output_tokens',
   'gen_ai.usage.cache_read.input_tokens',
+  'gen_ai.usage.cache_write.input_tokens',
   'gen_ai.usage.cache_creation.input_tokens',
   'gen_ai.usage.cost.usd',
   'gen_ai.response.time_to_first_chunk',

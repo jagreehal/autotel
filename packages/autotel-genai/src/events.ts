@@ -276,7 +276,7 @@ export function recordInferenceDetails(
   put(data, GEN_AI.USAGE_CACHE_READ_INPUT_TOKENS, event.cacheReadInputTokens);
   put(
     data,
-    GEN_AI.USAGE_CACHE_CREATION_INPUT_TOKENS,
+    GEN_AI.USAGE_CACHE_WRITE_INPUT_TOKENS,
     event.cacheCreationInputTokens,
   );
   put(data, GEN_AI.RESPONSE_FINISH_REASONS, event.finishReasons);

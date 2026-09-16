@@ -107,7 +107,7 @@ export function llmHistogramAdvice(kind: GenAiHistogramKind): {
  * - `gen_ai.client.operation.time_to_first_chunk`
  * - `gen_ai.client.operation.time_per_output_chunk`
  * - `gen_ai.client.token.usage`
- * - `gen_ai.workflow.duration`
+ * - `gen_ai.invoke_workflow.duration`
  * - `gen_ai.client.cost.usd` (autotel extension; no-op if not emitted)
  *
  * Add more instrument patterns via `extra` if you emit custom GenAI metrics.
@@ -120,7 +120,10 @@ export function genAiMetricViews(
       { instrumentName: GEN_AI_METRIC.OPERATION_DURATION, kind: 'duration' },
       { instrumentName: GEN_AI_METRIC.TIME_TO_FIRST_CHUNK, kind: 'duration' },
       { instrumentName: GEN_AI_METRIC.TIME_PER_OUTPUT_CHUNK, kind: 'duration' },
-      { instrumentName: GEN_AI_METRIC.WORKFLOW_DURATION, kind: 'duration' },
+      {
+        instrumentName: GEN_AI_METRIC.INVOKE_WORKFLOW_DURATION,
+        kind: 'duration',
+      },
       { instrumentName: GEN_AI_METRIC.TOKEN_USAGE, kind: 'tokens' },
       // Autotel-emitted cost metric. No-op if you don't emit it.
       { instrumentName: GEN_AI_METRIC.COST_USD, kind: 'cost' },
