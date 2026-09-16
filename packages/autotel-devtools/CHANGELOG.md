@@ -1,5 +1,12 @@
 # autotel-devtools
 
+## 28.0.2
+
+### Patch Changes
+
+- c6398c5: GenAI tab reads cache-write tokens from `gen_ai.usage.cache_write.input_tokens` as well as the earlier `gen_ai.usage.cache_creation.input_tokens`, so cost and usage stay correct for spans from either convention version.
+- c6398c5: GenAI tab: `execute_tool` spans are titled by tool name (`tool: cities`) in the list row and detail header, with a wrench icon, and the tool name is searchable in the filter box.
+
 ## 28.0.1
 
 ### Patch Changes
