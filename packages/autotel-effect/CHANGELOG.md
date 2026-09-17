@@ -1,5 +1,11 @@
 # autotel-effect
 
+## 5.0.1
+
+### Patch Changes
+
+- 1265f07: Document that `Data.TaggedError` must carry its detail in a `message` prop for failed `withSpan` spans to record a real `exception.message`.
+
 ## 5.0.0
 
 ### Patch Changes
