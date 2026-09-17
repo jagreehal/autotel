@@ -32,7 +32,7 @@ export function registerCorrelationTools(
         'Identify when and why a service degraded. Combines anomaly detection with cross-signal correlation.',
       annotations: READ_ONLY,
       inputSchema: z.object({
-        service: z.string().min(1),
+        serviceName: z.string().min(1),
         lookbackMinutes: z.coerce
           .number()
           .int()
@@ -42,10 +42,10 @@ export function registerCorrelationTools(
       }),
     },
     async ({
-      service,
+      serviceName: service,
       lookbackMinutes,
     }: {
-      service: string;
+      serviceName: string;
       lookbackMinutes: number;
     }) => {
       const nowMs = Date.now();

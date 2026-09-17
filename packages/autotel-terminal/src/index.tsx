@@ -2396,29 +2396,23 @@ function canAddSpanProcessor(
 /**
  * Render the terminal dashboard
  *
- * Automatically wires up a streaming processor from the current tracer provider
- * if no stream is provided. Otherwise uses the provided stream.
+ * Pass the stream of a `StreamingSpanProcessor` that was given to `init()`.
+ * Without a stream this falls back to `provider.addSpanProcessor()`, which the
+ * API's `ProxyTracerProvider` does not have and OpenTelemetry SDK 2.x removed
+ * from the real provider, so on 2.x the fallback logs an error and renders
+ * nothing.
  *
  * @param options - Dashboard configuration options
- * @param stream - Optional manual stream (for advanced use cases)
+ * @param stream - Stream from `createTerminalSpanStream(processor)`
  *
- * @example Auto-wire (recommended)
+ * @example
  * ```typescript
  * import { init } from 'autotel'
- * import { renderTerminal } from 'autotel-terminal'
+ * import { StreamingSpanProcessor, createTerminalSpanStream, renderTerminal } from 'autotel-terminal'
  *
- * init({ service: 'my-app' })
- * renderTerminal() // Automatically creates stream from current tracer provider
- * ```
- *
- * @example Manual stream
- * ```typescript
- * import { StreamingSpanProcessor } from 'autotel-terminal'
- * import { createTerminalSpanStream } from 'autotel-terminal'
- *
- * const processor = new StreamingSpanProcessor(baseProcessor)
- * const stream = createTerminalSpanStream(processor)
- * renderTerminal({}, stream)
+ * const processor = new StreamingSpanProcessor(null)
+ * init({ service: 'my-app', spanProcessors: [processor] })
+ * renderTerminal({ title: 'my-app' }, createTerminalSpanStream(processor))
  * ```
  */
 export function renderTerminal(

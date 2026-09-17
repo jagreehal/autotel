@@ -18,7 +18,7 @@ CLI for autotel: interactive setup wizard, diagnostics, incremental feature addi
 
 ```bash
 # No install needed
-npx autotel <command>
+npx autotel-cli <command>
 
 # Pin it in the project instead of installing globally, so every run and every
 # machine gets the same version
@@ -33,16 +33,16 @@ Interactive wizard that writes an instrumentation file and installs dependencies
 
 ```bash
 # Interactive (prompts for backend, plugins, etc.)
-npx autotel init
+npx autotel-cli init
 
 # Non-interactive: accept all defaults (local backend, all auto-instrumentations)
-npx autotel init --yes
+npx autotel-cli init --yes
 
 # Use a named quick preset
-npx autotel init --preset node-datadog-pino
+npx autotel-cli init --preset node-datadog-pino
 
 # Preview what would happen without writing files
-npx autotel init --dry-run
+npx autotel-cli init --dry-run
 ```
 
 **Quick presets:** `node-datadog-pino`, `node-datadog-agent`, `node-honeycomb`, `node-otlp`
@@ -81,11 +81,11 @@ tsx --import ./src/instrumentation.mts src/index.ts
 Diagnose the current autotel setup.
 
 ```bash
-npx autotel doctor             # Run all checks, human-readable output
-npx autotel doctor --json      # Machine-readable JSON
-npx autotel doctor --fix       # Auto-fix resolvable issues
-npx autotel doctor --list-checks  # Show all available check names
-npx autotel doctor --env-file .env.production  # Check a specific env file
+npx autotel-cli doctor             # Run all checks, human-readable output
+npx autotel-cli doctor --json      # Machine-readable JSON
+npx autotel-cli doctor --fix       # Auto-fix resolvable issues
+npx autotel-cli doctor --list-checks  # Show all available check names
+npx autotel-cli doctor --env-file .env.production  # Check a specific env file
 ```
 
 Exit codes: `0` = all passed, `1` = warnings, `2` = errors.
@@ -99,12 +99,12 @@ Exit codes: `0` = all passed, `1` = warnings, `2` = errors.
 Score the observability of every entry point. Static analysis of the source: nothing runs, nothing leaves the machine.
 
 ```bash
-npx autotel map                              # score + the three to fix first
-npx autotel map --all                        # every entry point as a matrix
-npx autotel map src/routes/checkout.ts       # one entry point and its fixes
-npx autotel map --json --no-write            # every finding with evidence + fix
-npx autotel map --min-score 70               # exit 1 below the threshold
-npx autotel map --baseline git:origin/main   # exit 1 when a check regresses
+npx autotel-cli map                              # score + the three to fix first
+npx autotel-cli map --all                        # every entry point as a matrix
+npx autotel-cli map src/routes/checkout.ts       # one entry point and its fixes
+npx autotel-cli map --json --no-write            # every finding with evidence + fix
+npx autotel-cli map --min-score 70               # exit 1 below the threshold
+npx autotel-cli map --baseline git:origin/main   # exit 1 when a check regresses
 ```
 
 Writes `autotel.map.json` next to `package.json`; commit it so `--baseline` has something to compare against. For the checks, scoring, and waiver comments, use skill `find-observability-gaps`.
@@ -117,22 +117,22 @@ Incrementally add a backend, subscriber, plugin, or platform to an existing inst
 
 ```bash
 # List all available presets
-npx autotel add --list
+npx autotel-cli add --list
 
 # List backends only
-npx autotel add backend --list
+npx autotel-cli add backend --list
 
 # Add Datadog backend
-npx autotel add backend datadog
+npx autotel-cli add backend datadog
 
 # Add a PostHog event subscriber
-npx autotel add subscriber posthog
+npx autotel-cli add subscriber posthog
 
 # Add Mongoose plugin
-npx autotel add plugin mongoose
+npx autotel-cli add plugin mongoose
 
 # Show help for a specific preset (packages, env vars, next steps)
-npx autotel add backend datadog --help
+npx autotel-cli add backend datadog --help
 ```
 
 **Preset types:**
@@ -158,25 +158,25 @@ Wrap existing functions in `trace()` calls, deriving span names from the functio
 
 ```bash
 # Single file
-npx autotel codemod trace src/index.ts
+npx autotel-cli codemod trace src/index.ts
 
 # Glob (quote to prevent shell expansion)
-npx autotel codemod trace "src/**/*.ts"
+npx autotel-cli codemod trace "src/**/*.ts"
 
 # All supported types
-npx autotel codemod trace "src/**/*.{ts,tsx,js,jsx}"
+npx autotel-cli codemod trace "src/**/*.{ts,tsx,js,jsx}"
 
 # Dry run — preview changes without writing
-npx autotel codemod trace "src/**/*.ts" --dry-run
+npx autotel-cli codemod trace "src/**/*.ts" --dry-run
 
 # Custom span name: {name}, {file} (basename), {path} (relative from --cwd)
-npx autotel codemod trace "src/**/*.ts" --name-pattern "{file}.{name}"
+npx autotel-cli codemod trace "src/**/*.ts" --name-pattern "{file}.{name}"
 
 # Skip functions matching a regex (repeatable, combined as OR)
-npx autotel codemod trace "src/**/*.ts" --skip "^_" --skip "test|mock"
+npx autotel-cli codemod trace "src/**/*.ts" --skip "^_" --skip "test|mock"
 
 # Print per-file summary
-npx autotel codemod trace "src/**/*.ts" --print-files
+npx autotel-cli codemod trace "src/**/*.ts" --print-files
 ```
 
 **What gets wrapped:** function declarations, arrow/function expressions in `const`/`let`/`var`, class and static methods, object method shorthand, named default export functions.
@@ -208,10 +208,10 @@ Fallback: npm.
 
 ```bash
 # Install into a specific workspace package
-npx autotel init --cwd ./packages/my-app
+npx autotel-cli init --cwd ./packages/my-app
 
 # Install at workspace root (shared instrumentation)
-npx autotel init --cwd ./packages/my-app --workspace-root
+npx autotel-cli init --cwd ./packages/my-app --workspace-root
 ```
 
 ### Generated instrumentation file structure
@@ -259,11 +259,11 @@ The instrumentation file must be loaded before any other module. The `--import` 
 
 ```bash
 # Wrong: no instrumentation file exists yet
-npx autotel add plugin mongoose
+npx autotel-cli add plugin mongoose
 
 # Correct: create the file first
-npx autotel init
-npx autotel add plugin mongoose
+npx autotel-cli init
+npx autotel-cli add plugin mongoose
 ```
 
 `add` reads and modifies the existing instrumentation file. It will fail if the file does not exist or is not CLI-owned (use `--force` for user-created files).
@@ -272,10 +272,10 @@ npx autotel add plugin mongoose
 
 ```bash
 # Wrong: shell expands the glob before the CLI sees it
-npx autotel codemod trace src/**/*.ts
+npx autotel-cli codemod trace src/**/*.ts
 
 # Correct: quote the glob so the CLI handles expansion
-npx autotel codemod trace "src/**/*.ts"
+npx autotel-cli codemod trace "src/**/*.ts"
 ```
 
 ### MEDIUM: Using `--force` on init without understanding the backup

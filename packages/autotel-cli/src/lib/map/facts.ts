@@ -375,6 +375,85 @@ function networkCallHandled(call: Node): boolean {
   return false;
 }
 
+/** One local name bound to one export of one module. `imported` is `'*'` for a namespace. */
+export interface ModuleBinding {
+  local: string;
+  imported: string;
+  specifier: string;
+}
+
+/**
+ * Every name a file binds from a module, from `import` declarations and from
+ * top-level `const x = require('m')` / `const { a, b: c } = require('m')`.
+ */
+export function moduleBindings(source: SourceFile): ModuleBinding[] {
+  const bindings: ModuleBinding[] = [];
+  const bind = (local: string, imported: string, specifier: string): void => {
+    bindings.push({ local, imported, specifier });
+  };
+
+  for (const declaration of source.getImportDeclarations()) {
+    const specifier = declaration.getModuleSpecifierValue();
+    const defaultImport = declaration.getDefaultImport();
+    if (defaultImport)
+      bind(defaultImport.getText(), defaultImport.getText(), specifier);
+    for (const named of declaration.getNamedImports()) {
+      bind(
+        named.getAliasNode()?.getText() ?? named.getName(),
+        named.getName(),
+        specifier,
+      );
+    }
+    const namespaceImport = declaration.getNamespaceImport();
+    if (namespaceImport) bind(namespaceImport.getText(), '*', specifier);
+  }
+
+  for (const statement of source.getVariableStatements()) {
+    for (const declaration of statement.getDeclarations()) {
+      const initializer = declaration.getInitializer();
+      if (!initializer?.isKind(SyntaxKind.CallExpression)) continue;
+      if (initializer.getExpression().getText() !== 'require') continue;
+      const [argument] = initializer.getArguments();
+      if (!argument?.isKind(SyntaxKind.StringLiteral)) continue;
+      const specifier = argument.getLiteralValue();
+
+      const name = declaration.getNameNode();
+      if (name.isKind(SyntaxKind.Identifier)) {
+        bind(name.getText(), '*', specifier);
+        continue;
+      }
+      if (!name.isKind(SyntaxKind.ObjectBindingPattern)) continue;
+      for (const element of name.getElements()) {
+        const local = element.getNameNode().getText();
+        const imported = element.getPropertyNameNode()?.getText() ?? local;
+        bind(local, imported, specifier);
+      }
+    }
+  }
+
+  return bindings;
+}
+
+/**
+ * Every module a file loads, whether or not the load binds a name. A
+ * side-effect `import 'passport'` or bare `require('passport')` binds nothing
+ * and still decides that the file handles auth.
+ */
+export function moduleSpecifiers(source: SourceFile): Set<string> {
+  const modules = new Set<string>();
+  for (const declaration of source.getImportDeclarations()) {
+    modules.add(declaration.getModuleSpecifierValue());
+  }
+  for (const call of source.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    if (call.getExpression().getText() !== 'require') continue;
+    const [argument] = call.getArguments();
+    if (argument?.isKind(SyntaxKind.StringLiteral)) {
+      modules.add(argument.getLiteralValue());
+    }
+  }
+  return modules;
+}
+
 /**
  * Reduce a parsed file to {@link FileFacts} in a single walk.
  *
@@ -388,22 +467,11 @@ export function buildFileFacts(
 ): FileFacts {
   const imports = new Map<string, string>();
   const importedNames = new Map<string, string>();
-  const modules = new Set<string>();
+  const modules = moduleSpecifiers(source);
 
-  for (const declaration of source.getImportDeclarations()) {
-    const specifier = declaration.getModuleSpecifierValue();
-    modules.add(specifier);
-    const bind = (name: string, importedName = name): void => {
-      imports.set(name, specifier);
-      importedNames.set(name, importedName);
-    };
-    const defaultImport = declaration.getDefaultImport();
-    if (defaultImport) bind(defaultImport.getText());
-    for (const named of declaration.getNamedImports()) {
-      bind(named.getAliasNode()?.getText() ?? named.getName(), named.getName());
-    }
-    const namespaceImport = declaration.getNamespaceImport();
-    if (namespaceImport) bind(namespaceImport.getText(), '*');
+  for (const { local, imported, specifier } of moduleBindings(source)) {
+    imports.set(local, specifier);
+    importedNames.set(local, imported);
   }
 
   const calls: CallFact[] = [];

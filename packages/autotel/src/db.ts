@@ -257,9 +257,6 @@ export function instrumentDatabase<T extends object>(
     slowQueryThresholdMs = 1000,
   } = options;
 
-  const config = getConfig();
-  const tracer = config.tracer;
-
   // Determine which methods to instrument
   const methodsToInstrument = methods || extractDatabaseMethods(client);
   const skipSet = new Set(skipMethods);
@@ -283,6 +280,9 @@ export function instrumentDatabase<T extends object>(
         ? `${dbSystem}.${operation} ${table}`
         : `${dbSystem}.${operation}`;
 
+      // Per call, so a client wrapped at module load picks up the tracer
+      // configured later.
+      const { tracer } = getConfig();
       return tracer.startActiveSpan(spanName, async (span) => {
         const startTime = performance.now();
 

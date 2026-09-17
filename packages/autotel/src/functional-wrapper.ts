@@ -418,10 +418,12 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
   options: TracingOptions<TArgs, TReturn>,
   variableName?: string,
 ): WrappedFunction<TArgs, TReturn> {
-  const { tracer, meter } = getConfig();
+  const { meter } = getConfig();
   // Resolved per call, not here: a wrapper is usually created at module load,
   // which for most apps is before `init()` has run. Reading the configured
-  // sampler at wrap time would freeze in whatever was true too early.
+  // sampler at wrap time would freeze in whatever was true too early. The
+  // tracer is read per call for the same reason: `configure({ tracer })`,
+  // which `createTraceCollector()` calls, must reach wrappers that already exist.
   const resolveSampler = (): Sampler =>
     options.sampler ?? getConfiguredSampler() ?? FALLBACK_SAMPLER;
   // SAFETY: getSpanName reads only `name` and `displayName` off the function
@@ -477,6 +479,7 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
     if (options.startNewRoot) spanOptions.root = true;
     if (options.spanKind !== undefined) spanOptions.kind = options.spanKind;
 
+    const { tracer } = getConfig();
     return tracer.startActiveSpan(
       spanName,
       spanOptions,

@@ -442,7 +442,7 @@ stream.onSpanEnd((event) => {
 
 ## Integration with autotel
 
-`autotel-terminal` is built for **autotel**. It auto-wires to the global tracer provider and expects `StreamingSpanProcessor` in your `spanProcessors` array:
+`autotel-terminal` is built for **autotel**. Create the `StreamingSpanProcessor` before `init()`, pass it in `spanProcessors`, and hand its stream to `renderTerminal()`:
 
 ```typescript
 import { init } from 'autotel';

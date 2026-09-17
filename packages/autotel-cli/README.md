@@ -13,7 +13,7 @@ For agents: see [`SKILL.md`](./SKILL.md) for the one-command bootstrap.
 ```bash
 npm install -g autotel-cli
 # or
-npx autotel <command>
+npx autotel-cli <command>
 ```
 
 ## Commands
@@ -24,16 +24,16 @@ Interactive setup wizard to initialize autotel in your project.
 
 ```bash
 # Interactive mode
-npx autotel init
+npx autotel-cli init
 
 # Use defaults (local backend, all auto-instrumentations)
-npx autotel init --yes
+npx autotel-cli init --yes
 
 # Use a quick preset
-npx autotel init --preset node-datadog-pino
+npx autotel-cli init --preset node-datadog-pino
 
 # Dry run - see what would be created
-npx autotel init --dry-run
+npx autotel-cli init --dry-run
 ```
 
 By default `autotel init` **scans your package.json** (and the workspace root
@@ -116,16 +116,16 @@ Run diagnostics on your autotel setup.
 
 ```bash
 # Run all checks
-npx autotel doctor
+npx autotel-cli doctor
 
 # Output as JSON
-npx autotel doctor --json
+npx autotel-cli doctor --json
 
 # Auto-fix resolvable issues
-npx autotel doctor --fix
+npx autotel-cli doctor --fix
 
 # List available checks
-npx autotel doctor --list-checks
+npx autotel-cli doctor --list-checks
 ```
 
 **Options:**
@@ -147,22 +147,22 @@ Add a backend, subscriber, plugin, or platform incrementally.
 
 ```bash
 # Add Datadog backend
-npx autotel add backend datadog
+npx autotel-cli add backend datadog
 
 # Add PostHog event subscriber
-npx autotel add subscriber posthog
+npx autotel-cli add subscriber posthog
 
 # Add Mongoose plugin
-npx autotel add plugin mongoose
+npx autotel-cli add plugin mongoose
 
 # List all available presets
-npx autotel add --list
+npx autotel-cli add --list
 
 # List backends only
-npx autotel add backend --list
+npx autotel-cli add backend --list
 
 # Show help for a specific preset
-npx autotel add backend datadog --help
+npx autotel-cli add backend datadog --help
 ```
 
 **Types:**
@@ -184,23 +184,23 @@ Reads your source, finds every entry point, and scores what context you would ha
 
 ```bash
 # Score the project and write autotel.map.json
-npx autotel map
+npx autotel-cli map
 
 # Every entry point as a check matrix
-npx autotel map --all
+npx autotel-cli map --all
 
 # Explain one entry point and how to fix it
-npx autotel map app/api/checkout/route.ts
-npx autotel map /api/checkout
+npx autotel-cli map app/api/checkout/route.ts
+npx autotel-cli map /api/checkout
 
 # Machine-readable, for agents and CI
-npx autotel map --json
+npx autotel-cli map --json
 
 # Fail CI below a threshold
-npx autotel map --min-score 70
+npx autotel-cli map --min-score 70
 
 # Fail CI when a check that used to pass now fails
-npx autotel map --baseline git:origin/main
+npx autotel-cli map --baseline git:origin/main
 ```
 
 **Detected frameworks:** `next`, `nitro` (Nuxt), `tanstack-start`, `sveltekit`, `hono`, `express`, `fastify`, `elysia`, `cloudflare`. Override with `--framework <name>`.
@@ -252,26 +252,26 @@ Wrap functions in `trace()` with a span name derived from the function/variable/
 
 ```bash
 # Single file (TypeScript or JavaScript)
-npx autotel codemod trace src/index.ts
-npx autotel codemod trace src/utils.js
+npx autotel-cli codemod trace src/index.ts
+npx autotel-cli codemod trace src/utils.js
 
 # Glob pattern - TypeScript only
-npx autotel codemod trace "src/**/*.ts"
+npx autotel-cli codemod trace "src/**/*.ts"
 
 # Glob pattern - all supported files
-npx autotel codemod trace "src/**/*.{ts,tsx,js,jsx}"
+npx autotel-cli codemod trace "src/**/*.{ts,tsx,js,jsx}"
 
 # Dry run - print what would change without writing
-npx autotel codemod trace "src/**/*.ts" --dry-run
+npx autotel-cli codemod trace "src/**/*.ts" --dry-run
 
 # Custom span name template: {name}, {file} (basename), {path} (relative)
-npx autotel codemod trace "src/**/*.ts" --name-pattern "{file}.{name}"
+npx autotel-cli codemod trace "src/**/*.ts" --name-pattern "{file}.{name}"
 
 # Skip functions whose name matches a regex (repeatable)
-npx autotel codemod trace "src/**/*.ts" --skip "^_" --skip "test|mock"
+npx autotel-cli codemod trace "src/**/*.ts" --skip "^_" --skip "test|mock"
 
 # Print per-file summary (wrapped count, skipped)
-npx autotel codemod trace "src/**/*.ts" --print-files
+npx autotel-cli codemod trace "src/**/*.ts" --print-files
 ```
 
 **Options:**
@@ -310,10 +310,10 @@ The CLI detects workspace roots and handles installation correctly:
 
 ```bash
 # Install at package root (default)
-npx autotel init --cwd ./packages/my-app
+npx autotel-cli init --cwd ./packages/my-app
 
 # Install at workspace root
-npx autotel init --cwd ./packages/my-app --workspace-root
+npx autotel-cli init --cwd ./packages/my-app --workspace-root
 ```
 
 ## Generated Files

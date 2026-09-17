@@ -97,6 +97,6 @@ export const NoMap: Story = {
   beforeEach: respondWith(404, {
     error: 'No instrumentation map',
     message:
-      "Run `npx autotel map` to record this project's entry points, then reload.",
+      "Run `npx autotel-cli map` to record this project's entry points, then reload.",
   }),
 };

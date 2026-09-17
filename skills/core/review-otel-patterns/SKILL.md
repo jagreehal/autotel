@@ -20,7 +20,7 @@ Review and improve OpenTelemetry instrumentation in TypeScript/JavaScript codeba
 
 ## Start with the scanner
 
-Before reviewing a whole repo by hand, run `npx autotel map --json --no-write`. It
+Before reviewing a whole repo by hand, run `npx autotel-cli map --json --no-write`. It
 finds every entry point, names which are dark, and carries a `fix` with each
 finding. Work its ranked list first, then use this skill for the judgement it
 cannot make: span naming, cardinality, what belongs in a wide event, processor
