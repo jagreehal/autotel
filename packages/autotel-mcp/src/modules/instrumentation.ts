@@ -27,11 +27,6 @@ export function scoreSpan(
     score -= 10;
   }
 
-  if (!('trace.id' in span.tags) && !('trace_id' in span.tags)) {
-    findings.push('trace correlation tag is absent');
-    score -= 10;
-  }
-
   if (
     !('http.request.method' in span.tags) &&
     !('http.method' in span.tags) &&
@@ -61,8 +56,6 @@ export function suggestInstrumentationFixes(
     suggestions.push('set service.name on the resource');
   if (!span.operationName || span.operationName === 'unknown')
     suggestions.push('use a stable operation/span name');
-  if (!('trace.id' in span.tags) && !('trace_id' in span.tags))
-    suggestions.push('ensure trace correlation is propagated');
   if (span.hasError && !('error' in span.tags))
     suggestions.push('tag error spans consistently');
   return suggestions;

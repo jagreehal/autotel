@@ -11,267 +11,527 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./diagnostics": {
-      "types": "./dist/diagnostics.d.ts",
-      "import": "./dist/diagnostics.js",
-      "require": "./dist/diagnostics.cjs"
+      "import": {
+        "types": "./dist/diagnostics.d.ts",
+        "default": "./dist/diagnostics.js"
+      },
+      "require": {
+        "types": "./dist/diagnostics.d.cts",
+        "default": "./dist/diagnostics.cjs"
+      }
     },
     "./instrumentation": {
-      "types": "./dist/instrumentation.d.ts",
-      "import": "./dist/instrumentation.js",
-      "require": "./dist/instrumentation.cjs"
+      "import": {
+        "types": "./dist/instrumentation.d.ts",
+        "default": "./dist/instrumentation.js"
+      },
+      "require": {
+        "types": "./dist/instrumentation.d.cts",
+        "default": "./dist/instrumentation.cjs"
+      }
     },
     "./logger": {
-      "types": "./dist/logger.d.ts",
-      "import": "./dist/logger.js",
-      "require": "./dist/logger.cjs"
+      "import": {
+        "types": "./dist/logger.d.ts",
+        "default": "./dist/logger.js"
+      },
+      "require": {
+        "types": "./dist/logger.d.cts",
+        "default": "./dist/logger.cjs"
+      }
     },
     "./sampling": {
-      "types": "./dist/sampling.d.ts",
-      "import": "./dist/sampling.js",
-      "require": "./dist/sampling.cjs"
+      "import": {
+        "types": "./dist/sampling.d.ts",
+        "default": "./dist/sampling.js"
+      },
+      "require": {
+        "types": "./dist/sampling.d.cts",
+        "default": "./dist/sampling.cjs"
+      }
     },
     "./analysis": {
-      "types": "./dist/analysis.d.ts",
-      "import": "./dist/analysis.js",
-      "require": "./dist/analysis.cjs"
+      "import": {
+        "types": "./dist/analysis.d.ts",
+        "default": "./dist/analysis.js"
+      },
+      "require": {
+        "types": "./dist/analysis.d.cts",
+        "default": "./dist/analysis.cjs"
+      }
     },
     "./event": {
-      "types": "./dist/event.d.ts",
-      "import": "./dist/event.js",
-      "require": "./dist/event.cjs"
+      "import": {
+        "types": "./dist/event.d.ts",
+        "default": "./dist/event.js"
+      },
+      "require": {
+        "types": "./dist/event.d.cts",
+        "default": "./dist/event.cjs"
+      }
     },
     "./event-subscriber": {
-      "types": "./dist/event-subscriber.d.ts",
-      "import": "./dist/event-subscriber.js",
-      "require": "./dist/event-subscriber.cjs"
+      "import": {
+        "types": "./dist/event-subscriber.d.ts",
+        "default": "./dist/event-subscriber.js"
+      },
+      "require": {
+        "types": "./dist/event-subscriber.d.cts",
+        "default": "./dist/event-subscriber.cjs"
+      }
     },
     "./attributes": {
-      "types": "./dist/attributes.d.ts",
-      "import": "./dist/attributes.js",
-      "require": "./dist/attributes.cjs"
+      "import": {
+        "types": "./dist/attributes.d.ts",
+        "default": "./dist/attributes.js"
+      },
+      "require": {
+        "types": "./dist/attributes.d.cts",
+        "default": "./dist/attributes.cjs"
+      }
     },
     "./event-testing": {
-      "types": "./dist/event-testing.d.ts",
-      "import": "./dist/event-testing.js",
-      "require": "./dist/event-testing.cjs"
+      "import": {
+        "types": "./dist/event-testing.d.ts",
+        "default": "./dist/event-testing.js"
+      },
+      "require": {
+        "types": "./dist/event-testing.d.cts",
+        "default": "./dist/event-testing.cjs"
+      }
     },
     "./metric": {
-      "types": "./dist/metric.d.ts",
-      "import": "./dist/metric.js",
-      "require": "./dist/metric.cjs"
+      "import": {
+        "types": "./dist/metric.d.ts",
+        "default": "./dist/metric.js"
+      },
+      "require": {
+        "types": "./dist/metric.d.cts",
+        "default": "./dist/metric.cjs"
+      }
     },
     "./slo": {
-      "types": "./dist/slo.d.ts",
-      "import": "./dist/slo.js",
-      "require": "./dist/slo.cjs"
+      "import": {
+        "types": "./dist/slo.d.ts",
+        "default": "./dist/slo.js"
+      },
+      "require": {
+        "types": "./dist/slo.d.cts",
+        "default": "./dist/slo.cjs"
+      }
     },
     "./metric-testing": {
-      "types": "./dist/metric-testing.d.ts",
-      "import": "./dist/metric-testing.js",
-      "require": "./dist/metric-testing.cjs"
+      "import": {
+        "types": "./dist/metric-testing.d.ts",
+        "default": "./dist/metric-testing.js"
+      },
+      "require": {
+        "types": "./dist/metric-testing.d.cts",
+        "default": "./dist/metric-testing.cjs"
+      }
     },
     "./metric-helpers": {
-      "types": "./dist/metric-helpers.d.ts",
-      "import": "./dist/metric-helpers.js",
-      "require": "./dist/metric-helpers.cjs"
+      "import": {
+        "types": "./dist/metric-helpers.d.ts",
+        "default": "./dist/metric-helpers.js"
+      },
+      "require": {
+        "types": "./dist/metric-helpers.d.cts",
+        "default": "./dist/metric-helpers.cjs"
+      }
     },
     "./testing": {
-      "types": "./dist/testing.d.ts",
-      "import": "./dist/testing.js",
-      "require": "./dist/testing.cjs"
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
+      }
     },
     "./exporters": {
-      "types": "./dist/exporters.d.ts",
-      "import": "./dist/exporters.js",
-      "require": "./dist/exporters.cjs"
+      "import": {
+        "types": "./dist/exporters.d.ts",
+        "default": "./dist/exporters.js"
+      },
+      "require": {
+        "types": "./dist/exporters.d.cts",
+        "default": "./dist/exporters.cjs"
+      }
     },
     "./processors": {
-      "types": "./dist/processors.d.ts",
-      "import": "./dist/processors.js",
-      "require": "./dist/processors.cjs"
+      "import": {
+        "types": "./dist/processors.d.ts",
+        "default": "./dist/processors.js"
+      },
+      "require": {
+        "types": "./dist/processors.d.cts",
+        "default": "./dist/processors.cjs"
+      }
     },
     "./config": {
-      "types": "./dist/config.d.ts",
-      "import": "./dist/config.js",
-      "require": "./dist/config.cjs"
+      "import": {
+        "types": "./dist/config.d.ts",
+        "default": "./dist/config.js"
+      },
+      "require": {
+        "types": "./dist/config.d.cts",
+        "default": "./dist/config.cjs"
+      }
     },
     "./tail-sampling-processor": {
-      "types": "./dist/tail-sampling-processor.d.ts",
-      "import": "./dist/tail-sampling-processor.js",
-      "require": "./dist/tail-sampling-processor.cjs"
+      "import": {
+        "types": "./dist/tail-sampling-processor.d.ts",
+        "default": "./dist/tail-sampling-processor.js"
+      },
+      "require": {
+        "types": "./dist/tail-sampling-processor.d.cts",
+        "default": "./dist/tail-sampling-processor.cjs"
+      }
     },
     "./filtering-span-processor": {
-      "types": "./dist/filtering-span-processor.d.ts",
-      "import": "./dist/filtering-span-processor.js",
-      "require": "./dist/filtering-span-processor.cjs"
+      "import": {
+        "types": "./dist/filtering-span-processor.d.ts",
+        "default": "./dist/filtering-span-processor.js"
+      },
+      "require": {
+        "types": "./dist/filtering-span-processor.d.cts",
+        "default": "./dist/filtering-span-processor.cjs"
+      }
     },
     "./policy": {
-      "types": "./dist/policy.d.ts",
-      "import": "./dist/policy.js",
-      "require": "./dist/policy.cjs"
+      "import": {
+        "types": "./dist/policy.d.ts",
+        "default": "./dist/policy.js"
+      },
+      "require": {
+        "types": "./dist/policy.d.cts",
+        "default": "./dist/policy.cjs"
+      }
     },
     "./span-name-normalizer": {
-      "types": "./dist/span-name-normalizer.d.ts",
-      "import": "./dist/span-name-normalizer.js",
-      "require": "./dist/span-name-normalizer.cjs"
+      "import": {
+        "types": "./dist/span-name-normalizer.d.ts",
+        "default": "./dist/span-name-normalizer.js"
+      },
+      "require": {
+        "types": "./dist/span-name-normalizer.d.cts",
+        "default": "./dist/span-name-normalizer.cjs"
+      }
     },
     "./attribute-redacting-processor": {
-      "types": "./dist/attribute-redacting-processor.d.ts",
-      "import": "./dist/attribute-redacting-processor.js",
-      "require": "./dist/attribute-redacting-processor.cjs"
+      "import": {
+        "types": "./dist/attribute-redacting-processor.d.ts",
+        "default": "./dist/attribute-redacting-processor.js"
+      },
+      "require": {
+        "types": "./dist/attribute-redacting-processor.d.cts",
+        "default": "./dist/attribute-redacting-processor.cjs"
+      }
     },
     "./exception-fingerprint": {
-      "types": "./dist/exception-fingerprint.d.ts",
-      "import": "./dist/exception-fingerprint.js",
-      "require": "./dist/exception-fingerprint.cjs"
+      "import": {
+        "types": "./dist/exception-fingerprint.d.ts",
+        "default": "./dist/exception-fingerprint.js"
+      },
+      "require": {
+        "types": "./dist/exception-fingerprint.d.cts",
+        "default": "./dist/exception-fingerprint.cjs"
+      }
     },
     "./functional": {
-      "types": "./dist/functional.d.ts",
-      "import": "./dist/functional.js",
-      "require": "./dist/functional.cjs"
+      "import": {
+        "types": "./dist/functional.d.ts",
+        "default": "./dist/functional.js"
+      },
+      "require": {
+        "types": "./dist/functional.d.cts",
+        "default": "./dist/functional.cjs"
+      }
     },
     "./http": {
-      "types": "./dist/http.d.ts",
-      "import": "./dist/http.js",
-      "require": "./dist/http.cjs"
+      "import": {
+        "types": "./dist/http.d.ts",
+        "default": "./dist/http.js"
+      },
+      "require": {
+        "types": "./dist/http.d.cts",
+        "default": "./dist/http.cjs"
+      }
     },
     "./db": {
-      "types": "./dist/db.d.ts",
-      "import": "./dist/db.js",
-      "require": "./dist/db.cjs"
+      "import": {
+        "types": "./dist/db.d.ts",
+        "default": "./dist/db.js"
+      },
+      "require": {
+        "types": "./dist/db.d.cts",
+        "default": "./dist/db.cjs"
+      }
     },
     "./trace-helpers": {
-      "types": "./dist/trace-helpers.d.ts",
-      "import": "./dist/trace-helpers.js",
-      "require": "./dist/trace-helpers.cjs"
+      "import": {
+        "types": "./dist/trace-helpers.d.ts",
+        "default": "./dist/trace-helpers.js"
+      },
+      "require": {
+        "types": "./dist/trace-helpers.d.cts",
+        "default": "./dist/trace-helpers.cjs"
+      }
     },
     "./tracer-provider": {
-      "types": "./dist/tracer-provider.d.ts",
-      "import": "./dist/tracer-provider.js",
-      "require": "./dist/tracer-provider.cjs"
+      "import": {
+        "types": "./dist/tracer-provider.d.ts",
+        "default": "./dist/tracer-provider.js"
+      },
+      "require": {
+        "types": "./dist/tracer-provider.d.cts",
+        "default": "./dist/tracer-provider.cjs"
+      }
     },
     "./semantic-helpers": {
-      "types": "./dist/semantic-helpers.d.ts",
-      "import": "./dist/semantic-helpers.js",
-      "require": "./dist/semantic-helpers.cjs"
+      "import": {
+        "types": "./dist/semantic-helpers.d.ts",
+        "default": "./dist/semantic-helpers.js"
+      },
+      "require": {
+        "types": "./dist/semantic-helpers.d.cts",
+        "default": "./dist/semantic-helpers.cjs"
+      }
     },
     "./decorators": {
-      "types": "./dist/decorators.d.ts",
-      "import": "./dist/decorators.js",
-      "require": "./dist/decorators.cjs"
+      "import": {
+        "types": "./dist/decorators.d.ts",
+        "default": "./dist/decorators.js"
+      },
+      "require": {
+        "types": "./dist/decorators.d.cts",
+        "default": "./dist/decorators.cjs"
+      }
     },
     "./register": {
-      "types": "./dist/register.d.ts",
-      "import": "./dist/register.js",
-      "require": "./dist/register.cjs"
+      "import": {
+        "types": "./dist/register.d.ts",
+        "default": "./dist/register.js"
+      },
+      "require": {
+        "types": "./dist/register.d.cts",
+        "default": "./dist/register.cjs"
+      }
     },
     "./auto": {
-      "types": "./dist/auto.d.ts",
-      "import": "./dist/auto.js",
-      "require": "./dist/auto.cjs"
+      "import": {
+        "types": "./dist/auto.d.ts",
+        "default": "./dist/auto.js"
+      },
+      "require": {
+        "types": "./dist/auto.d.cts",
+        "default": "./dist/auto.cjs"
+      }
     },
     "./hook.mjs": {
       "import": "./src/hook.mjs"
     },
     "./yaml": {
-      "types": "./dist/yaml-config.d.ts",
-      "import": "./dist/yaml-config.js",
-      "require": "./dist/yaml-config.cjs"
+      "import": {
+        "types": "./dist/yaml-config.d.ts",
+        "default": "./dist/yaml-config.js"
+      },
+      "require": {
+        "types": "./dist/yaml-config.d.cts",
+        "default": "./dist/yaml-config.cjs"
+      }
     },
     "./messaging": {
-      "types": "./dist/messaging.d.ts",
-      "import": "./dist/messaging.js",
-      "require": "./dist/messaging.cjs"
+      "import": {
+        "types": "./dist/messaging.d.ts",
+        "default": "./dist/messaging.js"
+      },
+      "require": {
+        "types": "./dist/messaging.d.cts",
+        "default": "./dist/messaging.cjs"
+      }
     },
     "./messaging-testing": {
-      "types": "./dist/messaging-testing.d.ts",
-      "import": "./dist/messaging-testing.js",
-      "require": "./dist/messaging-testing.cjs"
+      "import": {
+        "types": "./dist/messaging-testing.d.ts",
+        "default": "./dist/messaging-testing.js"
+      },
+      "require": {
+        "types": "./dist/messaging-testing.d.cts",
+        "default": "./dist/messaging-testing.cjs"
+      }
     },
     "./messaging/adapters": {
-      "types": "./dist/messaging-adapters.d.ts",
-      "import": "./dist/messaging-adapters.js",
-      "require": "./dist/messaging-adapters.cjs"
+      "import": {
+        "types": "./dist/messaging-adapters.d.ts",
+        "default": "./dist/messaging-adapters.js"
+      },
+      "require": {
+        "types": "./dist/messaging-adapters.d.cts",
+        "default": "./dist/messaging-adapters.cjs"
+      }
     },
     "./business-baggage": {
-      "types": "./dist/business-baggage.d.ts",
-      "import": "./dist/business-baggage.js",
-      "require": "./dist/business-baggage.cjs"
+      "import": {
+        "types": "./dist/business-baggage.d.ts",
+        "default": "./dist/business-baggage.js"
+      },
+      "require": {
+        "types": "./dist/business-baggage.d.cts",
+        "default": "./dist/business-baggage.cjs"
+      }
     },
     "./workflow": {
-      "types": "./dist/workflow.d.ts",
-      "import": "./dist/workflow.js",
-      "require": "./dist/workflow.cjs"
+      "import": {
+        "types": "./dist/workflow.d.ts",
+        "default": "./dist/workflow.js"
+      },
+      "require": {
+        "types": "./dist/workflow.d.cts",
+        "default": "./dist/workflow.cjs"
+      }
     },
     "./webhook": {
-      "types": "./dist/webhook.d.ts",
-      "import": "./dist/webhook.js",
-      "require": "./dist/webhook.cjs"
+      "import": {
+        "types": "./dist/webhook.d.ts",
+        "default": "./dist/webhook.js"
+      },
+      "require": {
+        "types": "./dist/webhook.d.cts",
+        "default": "./dist/webhook.cjs"
+      }
     },
     "./workflow-distributed": {
-      "types": "./dist/workflow-distributed.d.ts",
-      "import": "./dist/workflow-distributed.js",
-      "require": "./dist/workflow-distributed.cjs"
+      "import": {
+        "types": "./dist/workflow-distributed.d.ts",
+        "default": "./dist/workflow-distributed.js"
+      },
+      "require": {
+        "types": "./dist/workflow-distributed.d.cts",
+        "default": "./dist/workflow-distributed.cjs"
+      }
     },
     "./semantic-conventions": {
-      "types": "./dist/semantic-conventions.d.ts",
-      "import": "./dist/semantic-conventions.js",
-      "require": "./dist/semantic-conventions.cjs"
+      "import": {
+        "types": "./dist/semantic-conventions.d.ts",
+        "default": "./dist/semantic-conventions.js"
+      },
+      "require": {
+        "types": "./dist/semantic-conventions.d.cts",
+        "default": "./dist/semantic-conventions.cjs"
+      }
     },
     "./correlation-id": {
-      "types": "./dist/correlation-id.d.ts",
-      "import": "./dist/correlation-id.js",
-      "require": "./dist/correlation-id.cjs"
+      "import": {
+        "types": "./dist/correlation-id.d.ts",
+        "default": "./dist/correlation-id.js"
+      },
+      "require": {
+        "types": "./dist/correlation-id.d.cts",
+        "default": "./dist/correlation-id.cjs"
+      }
     },
     "./security-schema": {
-      "types": "./dist/security-schema.d.ts",
-      "import": "./dist/security-schema.js",
-      "require": "./dist/security-schema.cjs"
+      "import": {
+        "types": "./dist/security-schema.d.ts",
+        "default": "./dist/security-schema.js"
+      },
+      "require": {
+        "types": "./dist/security-schema.d.cts",
+        "default": "./dist/security-schema.cjs"
+      }
     },
     "./validate": {
-      "types": "./dist/validate.d.ts",
-      "import": "./dist/validate.js",
-      "require": "./dist/validate.cjs"
+      "import": {
+        "types": "./dist/validate.d.ts",
+        "default": "./dist/validate.js"
+      },
+      "require": {
+        "types": "./dist/validate.d.cts",
+        "default": "./dist/validate.cjs"
+      }
     },
     "./validation-attributes": {
-      "types": "./dist/validation-attributes.d.ts",
-      "import": "./dist/validation-attributes.js",
-      "require": "./dist/validation-attributes.cjs"
+      "import": {
+        "types": "./dist/validation-attributes.d.ts",
+        "default": "./dist/validation-attributes.js"
+      },
+      "require": {
+        "types": "./dist/validation-attributes.d.cts",
+        "default": "./dist/validation-attributes.cjs"
+      }
     },
     "./test-span-collector": {
-      "types": "./dist/test-span-collector.d.ts",
-      "import": "./dist/test-span-collector.js",
-      "require": "./dist/test-span-collector.cjs"
+      "import": {
+        "types": "./dist/test-span-collector.d.ts",
+        "default": "./dist/test-span-collector.js"
+      },
+      "require": {
+        "types": "./dist/test-span-collector.d.cts",
+        "default": "./dist/test-span-collector.cjs"
+      }
     },
     "./parse-error": {
-      "types": "./dist/parse-error.d.ts",
-      "import": "./dist/parse-error.js",
-      "require": "./dist/parse-error.cjs"
+      "import": {
+        "types": "./dist/parse-error.d.ts",
+        "default": "./dist/parse-error.js"
+      },
+      "require": {
+        "types": "./dist/parse-error.d.cts",
+        "default": "./dist/parse-error.cjs"
+      }
     },
     "./drain-pipeline": {
-      "types": "./dist/drain-pipeline.d.ts",
-      "import": "./dist/drain-pipeline.js",
-      "require": "./dist/drain-pipeline.cjs"
+      "import": {
+        "types": "./dist/drain-pipeline.d.ts",
+        "default": "./dist/drain-pipeline.js"
+      },
+      "require": {
+        "types": "./dist/drain-pipeline.d.cts",
+        "default": "./dist/drain-pipeline.cjs"
+      }
     },
     "./feature-flags": {
-      "types": "./dist/feature-flags.d.ts",
-      "import": "./dist/feature-flags.js",
-      "require": "./dist/feature-flags.cjs"
+      "import": {
+        "types": "./dist/feature-flags.d.ts",
+        "default": "./dist/feature-flags.js"
+      },
+      "require": {
+        "types": "./dist/feature-flags.d.cts",
+        "default": "./dist/feature-flags.cjs"
+      }
     },
     "./evidence": {
-      "types": "./dist/evidence.d.ts",
-      "import": "./dist/evidence.js",
-      "require": "./dist/evidence.cjs"
+      "import": {
+        "types": "./dist/evidence.d.ts",
+        "default": "./dist/evidence.js"
+      },
+      "require": {
+        "types": "./dist/evidence.d.cts",
+        "default": "./dist/evidence.cjs"
+      }
     },
     "./enrichers": {
-      "types": "./dist/enrichers.d.ts",
-      "import": "./dist/enrichers.js",
-      "require": "./dist/enrichers.cjs"
+      "import": {
+        "types": "./dist/enrichers.d.ts",
+        "default": "./dist/enrichers.js"
+      },
+      "require": {
+        "types": "./dist/enrichers.d.cts",
+        "default": "./dist/enrichers.cjs"
+      }
     }
   },
   "files": [
@@ -295,7 +555,7 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:all": "pnpm test && pnpm test:integration",
     "check-format": "prettier --check ./src",
-    "check-exports": "attw --pack . --ignore-rules false-esm no-resolution cjs-resolves-to-esm",
+    "check-exports": "attw --pack . --ignore-rules no-resolution",
     "clean": "rimraf dist",
     "quality": "pnpm type-check && pnpm test && pnpm lint && pnpm format:check && pnpm build && pnpm check-exports"
   },
@@ -321,6 +581,7 @@
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/api-logs": "^0.222.0",
+    "@opentelemetry/context-async-hooks": "^2.11.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.222.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.222.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
@@ -401,7 +662,6 @@
     "@arethetypeswrong/cli": "^0.18.5",
     "@edge-runtime/vm": "^5.0.0",
     "@opentelemetry/auto-instrumentations-node": "^0.80.0",
-    "@opentelemetry/context-async-hooks": "^2.11.0",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.222.0",
     "@opentelemetry/exporter-logs-otlp-proto": "^0.222.0",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.222.0",

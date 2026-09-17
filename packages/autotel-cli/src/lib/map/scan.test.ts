@@ -171,6 +171,80 @@ describe('scan', () => {
     expect(unrelated.map.routes[0]?.checks['context']?.status).toBe('fail');
   });
 
+  it('counts a side-effect import as an imported module', () => {
+    // `import 'passport'` binds nothing and still decides that /api/callback handles auth.
+    const sideEffect = scanFixture(`
+      import { Hono } from 'hono';
+      import 'passport';
+      const app = new Hono();
+      app.get('/api/callback', async (c) => c.json({ ok: true }));
+    `);
+    expect(sideEffect.map.routes[0]?.sensitivity.level).toBe('high');
+    expect(sideEffect.map.routes[0]?.checks['audit']?.status).toBe('fail');
+
+    const bareRequire = (() => {
+      const root = projectFiles({
+        'src/index.js': `
+          const { Hono } = require('hono');
+          require('passport');
+          const app = new Hono();
+          app.get('/api/callback', async (c) => c.json({ ok: true }));
+        `,
+      });
+      return scan({
+        projectRoot: root,
+        framework: 'hono',
+        project: collectProjectFacts(root),
+      });
+    })();
+    expect(bareRequire.map.routes[0]?.sensitivity.level).toBe('high');
+  });
+
+  it('reads CommonJS require() bindings the same as import declarations', () => {
+    const scanJs = (source: string) => {
+      const root = projectFiles({ 'src/index.js': source });
+      return scan({
+        projectRoot: root,
+        framework: 'hono',
+        project: collectProjectFacts(root),
+      });
+    };
+
+    const destructured = scanJs(`
+      const { Hono } = require('hono');
+      const { instrument, getRequestLogger: requestLog } = require('autotel');
+      const app = new Hono();
+      app.get('/x', instrument({ key: 'x', fn: async (c) => {
+        const log = requestLog();
+        log.set({ account: 'a1' });
+        return c.json({ ok: true });
+      }));
+    `);
+    expect(destructured.map.routes[0]?.checks['trace']?.status).toBe('pass');
+    expect(destructured.map.routes[0]?.checks['context']?.status).toBe('pass');
+    expect(destructured.map.score).toBe(100);
+
+    const namespaced = scanJs(`
+      const { Hono } = require('hono');
+      const autotel = require('autotel');
+      const app = new Hono();
+      app.get('/x', autotel.instrument({ key: 'x', fn: async (c) => {
+        autotel.getRequestLogger().set({ account: 'a1' });
+        return c.json({ ok: true });
+      }));
+    `);
+    expect(namespaced.map.routes[0]?.checks['trace']?.status).toBe('pass');
+    expect(namespaced.map.routes[0]?.checks['context']?.status).toBe('pass');
+
+    const local = scanJs(`
+      const { Hono } = require('hono');
+      const { instrument } = require('./my-helpers');
+      const app = new Hono();
+      app.get('/x', instrument({ key: 'x', fn: async (c) => c.json({ ok: true }) }));
+    `);
+    expect(local.map.routes[0]?.checks['trace']?.status).toBe('fail');
+  });
+
   it('requires an actual integration call before awarding ambient tracing', () => {
     const commentedRoot = projectFiles({
       'src/app.ts': `

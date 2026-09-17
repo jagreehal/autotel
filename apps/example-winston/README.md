@@ -82,10 +82,10 @@ Use `autotel-cli` to verify your setup:
 
 ```bash
 # From the example directory
-npx autotel doctor
+npx autotel-cli doctor
 
 # Or from workspace root
-pnpm --filter example-winston exec npx autotel doctor
+pnpm --filter example-winston exec npx autotel-cli doctor
 ```
 
 This will check:
@@ -109,7 +109,7 @@ This will check:
 A: Make sure `autoInstrumentations: ['winston']` is enabled in your `init()` call.
 
 **Q: How do I verify Winston instrumentation is working?**  
-A: Run `npx autotel doctor` - it will check your Winston configuration and auto-instrumentation setup.
+A: Run `npx autotel-cli doctor` - it will check your Winston configuration and auto-instrumentation setup.
 
 ## See Also
 

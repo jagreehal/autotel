@@ -45,7 +45,7 @@ export function registerDiagnosisTools(
         'Scan for statistical outliers: latency spikes, error rate jumps. Use after list_services to check a specific service.',
       annotations: READ_ONLY,
       inputSchema: z.object({
-        service: z.string().min(1).optional(),
+        serviceName: z.string().min(1).optional(),
         operation: z.string().min(1).optional(),
         lookbackMinutes: z.coerce
           .number()
@@ -56,11 +56,11 @@ export function registerDiagnosisTools(
       }),
     },
     async ({
-      service,
+      serviceName: service,
       operation,
       lookbackMinutes,
     }: {
-      service?: string;
+      serviceName?: string;
       operation?: string;
       lookbackMinutes: number;
     }) => {
@@ -134,7 +134,7 @@ export function registerDiagnosisTools(
         'Aggregate error spans grouped by service and operation. Use to get an overview of what is failing.',
       annotations: READ_ONLY,
       inputSchema: z.object({
-        service: z.string().min(1).optional(),
+        serviceName: z.string().min(1).optional(),
         lookbackMinutes: z.coerce
           .number()
           .int()
@@ -145,11 +145,11 @@ export function registerDiagnosisTools(
       }),
     },
     async ({
-      service,
+      serviceName: service,
       lookbackMinutes,
       limit,
     }: {
-      service?: string;
+      serviceName?: string;
       lookbackMinutes: number;
       limit: number;
     }) => {
@@ -221,7 +221,7 @@ export function registerDiagnosisTools(
         'Report SLO violations. Provide p99 latency and error rate targets.',
       annotations: READ_ONLY,
       inputSchema: z.object({
-        service: z.string().min(1),
+        serviceName: z.string().min(1),
         p99LatencyMs: z.coerce.number().positive().optional(),
         maxErrorRate: z.coerce.number().min(0).max(1).optional(),
         lookbackMinutes: z.coerce
@@ -233,12 +233,12 @@ export function registerDiagnosisTools(
       }),
     },
     async ({
-      service,
+      serviceName: service,
       p99LatencyMs,
       maxErrorRate,
       lookbackMinutes,
     }: {
-      service: string;
+      serviceName: string;
       p99LatencyMs?: number;
       maxErrorRate?: number;
       lookbackMinutes: number;

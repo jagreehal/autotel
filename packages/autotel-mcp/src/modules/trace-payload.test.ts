@@ -121,3 +121,39 @@ describe('compactSpans()', () => {
     expect(out.items[1]?.tags['db.collection.name']).toBe('posts');
   });
 });
+
+describe('a single span', () => {
+  // "Every span agrees" is vacuously true of one span, so a one-item search
+  // hoisted the span's own attributes into `resource` and handed back a span
+  // with no tags. An agent searching `order.itemCount = 0` got a resource
+  // block claiming the host had zero items.
+  const one = span('root', null, {
+    ...RESOURCE,
+    'order.customerId': 'cust_x',
+    'order.itemCount': '0',
+  });
+
+  it('keeps its own attributes on the span in a span search', () => {
+    const out = compactSpans({ items: [one], totalCount: 1 });
+
+    expect(out.items[0]?.tags['order.customerId']).toBe('cust_x');
+    expect(out.resource['order.customerId']).toBeUndefined();
+  });
+
+  it('still hoists the resource attributes', () => {
+    const out = compactSpans({ items: [one], totalCount: 1 });
+
+    expect(out.resource['service.name']).toBe('evidence-loop');
+    expect(out.resource['process.command_args']).toBe(
+      RESOURCE['process.command_args'],
+    );
+    expect(out.items[0]?.tags['service.name']).toBeUndefined();
+  });
+
+  it('behaves the same for a one-span trace', () => {
+    const out = compactTrace({ traceId: 't1', spans: [one] });
+
+    expect(out.spans[0]?.tags['order.customerId']).toBe('cust_x');
+    expect(out.resource['service.name']).toBe('evidence-loop');
+  });
+});

@@ -28,7 +28,7 @@ export function registerTools(
   registerHealthTools(server, backend);
   registerCollectorConfigTools(server);
   registerCollectorSchemaTools(server);
-  registerInstrumentationTools(server);
+  registerInstrumentationTools(server, backend);
   registerSemanticConventionTools(server);
   // Pure arithmetic over caller-supplied figures — no backend, no signals.
   registerEstimateTools(server);

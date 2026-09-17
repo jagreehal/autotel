@@ -35,6 +35,35 @@ const stream = createTerminalSpanStream(streamingProcessor);
 renderTerminal({ title: 'My App Traces' }, stream);
 ```
 
+### Embedded mode from a CommonJS app
+
+`autotel-terminal` is ESM with top-level await, so `require('autotel-terminal')`
+throws `ERR_REQUIRE_ASYNC_MODULE`. Load it with `import()`. The SDK takes span
+processors only at `init()`, so in dashboard mode `init()` waits for the module;
+wrappers created before `init()` still trace, because the tracer is resolved per
+call.
+
+```js
+const { init } = require('autotel');
+
+const config = { service: 'my-app' };
+
+if (process.env.AUTOTEL_TERMINAL === 'true') {
+  import('autotel-terminal').then(
+    ({ StreamingSpanProcessor, createTerminalSpanStream, renderTerminal }) => {
+      const processor = new StreamingSpanProcessor(null);
+      init({ ...config, spanProcessors: [processor] });
+      renderTerminal(
+        { title: 'My App Traces' },
+        createTerminalSpanStream(processor),
+      );
+    },
+  );
+} else {
+  init(config);
+}
+```
+
 ### Standalone CLI (separate terminal)
 
 ```bash
@@ -95,17 +124,14 @@ const unsubscribe = streamingProcessor.subscribe((span) => {
 // Later: unsubscribe()
 ```
 
-### Auto-wire shortcut (no stream needed)
+### No auto-wire on OpenTelemetry SDK 2.x
 
-If you call `init()` before `renderTerminal()`, autotel-terminal auto-detects the tracer provider:
-
-```typescript
-import { init } from 'autotel';
-import { renderTerminal } from 'autotel-terminal';
-
-init({ service: 'my-app' });
-renderTerminal(); // No stream arg — auto-wires from current tracer provider
-```
+`renderTerminal()` with no stream tries `provider.addSpanProcessor()`. The API
+returns a `ProxyTracerProvider`, and SDK 2.x removed `addSpanProcessor` from the
+real provider too, so the call logs
+`TracerProvider does not support addSpanProcessor. Provide a stream manually.`
+and renders nothing. Always create the `StreamingSpanProcessor` before
+`init()`, pass it in `spanProcessors`, and hand its stream to `renderTerminal()`.
 
 ### CLI options and environment variables
 

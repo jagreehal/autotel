@@ -82,10 +82,10 @@ Use `autotel-cli` to verify your setup:
 
 ```bash
 # From the example directory
-npx autotel doctor
+npx autotel-cli doctor
 
 # Or from workspace root
-pnpm --filter example-bunyan exec npx autotel doctor
+pnpm --filter example-bunyan exec npx autotel-cli doctor
 ```
 
 This will check:
@@ -111,7 +111,7 @@ This will check:
 A: Make sure `autoInstrumentations: ['bunyan']` is enabled in your `init()` call.
 
 **Q: How do I verify Bunyan instrumentation is working?**  
-A: Run `npx autotel doctor` - it will check your Bunyan configuration and auto-instrumentation setup.
+A: Run `npx autotel-cli doctor` - it will check your Bunyan configuration and auto-instrumentation setup.
 
 ## See Also
 

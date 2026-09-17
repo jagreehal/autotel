@@ -181,10 +181,10 @@ entry point for the detected framework, and reports per-check verdicts with
 evidence and a fix:
 
 ```bash
-npx autotel map --json --no-write            # whole project
-npx autotel map --json --no-write <route|file>  # one entry point
-npx autotel map --min-score 70               # CI gate (exit 1 below threshold)
-npx autotel map --baseline git:origin/main   # CI gate (exit 1 on regression)
+npx autotel-cli map --json --no-write            # whole project
+npx autotel-cli map --json --no-write <route|file>  # one entry point
+npx autotel-cli map --min-score 70               # CI gate (exit 1 below threshold)
+npx autotel-cli map --baseline git:origin/main   # CI gate (exit 1 on regression)
 ```
 
 Each entry in `map.routes[].checks` carries `status`, `message`, `evidence`

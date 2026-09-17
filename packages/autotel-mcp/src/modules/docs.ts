@@ -24,7 +24,7 @@ export function buildCollectorGuide(): string {
 
 export function buildInstrumentationGuide(): string {
   return [
-    'High-quality spans should have stable service names, useful operation names, correlation tags, and status codes.',
+    'High-quality spans should have stable service names, useful operation names, semantic convention attributes, and status codes.',
     'Semantic convention tags such as http.method, rpc.system, and db.system improve searchability.',
     'Scoring is opinionated: the goal is to surface missing context, not to grade style.',
   ].join(' ');

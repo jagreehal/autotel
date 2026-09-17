@@ -105,6 +105,6 @@ describe('GET /api/coverage', () => {
     const body = await res.json();
 
     expect(res.status).toBe(404);
-    expect(body.message).toContain('autotel map');
+    expect(body.message).toContain('autotel-cli map');
   });
 });

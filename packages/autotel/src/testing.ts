@@ -37,12 +37,15 @@ import {
   type Context as OtelContext,
   type Tracer,
   type SpanKind,
+  ROOT_CONTEXT,
+  createContextKey,
 } from '@opentelemetry/api';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import * as nodeAsyncHooks from 'node:async_hooks';
 import { type Logger } from './logger';
 import { configure } from './config';
 import type { UnknownRecord } from './values';
-import { asRecord, asString, isFunction } from './values';
+import { asRecord, asString } from './values';
 
 // Re-export events testing utilities
 export {
@@ -150,6 +153,25 @@ export interface TraceCollector {
 }
 
 /**
+ * `context.with()` propagates only through a registered context manager, and
+ * a test project that never calls `init()` has none: no active span, so the
+ * ambient `ctx` writes nowhere and spans have no parent. Register the class
+ * `init()` would register when a probe shows nothing propagates, so `bind()`
+ * on an EventEmitter works and a later `init()` changes nothing observable.
+ */
+function ensureContextManager(): void {
+  const probe = createContextKey('autotel.testing.probe');
+  const propagates = context.with(
+    ROOT_CONTEXT.setValue(probe, true),
+    () => context.active().getValue(probe) === true,
+  );
+  if (propagates) return;
+  context.setGlobalContextManager(
+    new AsyncLocalStorageContextManager().enable(),
+  );
+}
+
+/**
  * Create an in-memory trace collector for testing
  *
  * IMPORTANT: This automatically configures the global tracer to record spans.
@@ -176,6 +198,7 @@ export interface TraceCollector {
  * ```
  */
 export function createTraceCollector(): TraceCollector {
+  ensureContextManager();
   const spans: TestSpan[] = [];
   const activeMockSpanStorage = new nodeAsyncHooks.AsyncLocalStorage<Span>();
   let nextTraceId = 1;

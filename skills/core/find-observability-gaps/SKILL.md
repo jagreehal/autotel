@@ -27,7 +27,7 @@ analysis only: nothing runs, nothing leaves the machine.
 
 ## Workflow
 
-1. Run `npx autotel map --json --no-write`. An unsupported framework exits with a validation error naming the supported list; pass `--framework <name>` when detection is wrong.
+1. Run `npx autotel-cli map --json --no-write`. An unsupported framework exits with a validation error naming the supported list; pass `--framework <name>` when detection is wrong.
 2. Read `summary` (instrumented / partial / dark / exempt) and `map.score` for the shape of the problem.
 3. Work `map.routes` sorted by `score` ascending, weighting `sensitivity.level === 'high'` first. Money and auth routes count double in the project score.
 4. For each failing check apply its `fix` at its `evidence.line`. Re-run to confirm the check flipped to `pass`.
@@ -79,8 +79,8 @@ Health checks, probes, metrics endpoints, and pages that fetch nothing are exemp
 ## Gating CI
 
 ```bash
-npx autotel map --min-score 70                            # a floor
-npx autotel map --baseline git:origin/main                # a ratchet
+npx autotel-cli map --min-score 70                            # a floor
+npx autotel-cli map --baseline git:origin/main                # a ratchet
 ```
 
 `--min-score` fails below an absolute bar. `--baseline` compares check by check, so a refactor that instruments one route and breaks another still fails even though the average did not move. Turning a passing check into a disable comment counts as a regression. New dark routes are reported without failing the build; that bar belongs to `--min-score`.

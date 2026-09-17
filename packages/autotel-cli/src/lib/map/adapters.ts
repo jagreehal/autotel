@@ -6,7 +6,7 @@ import {
   type Node,
   type SourceFile,
 } from 'ts-morph';
-import { relativeFile, type Parser } from './facts';
+import { moduleBindings, relativeFile, type Parser } from './facts';
 import { fileExists, readFileSafe } from '../fs';
 import type {
   Framework,
@@ -127,18 +127,10 @@ function importedCalls(
   const locals = new Map<string, string>();
   const namespaces = new Set<string>();
 
-  for (const declaration of source.getImportDeclarations()) {
-    if (!declaration.getModuleSpecifierValue().startsWith(modulePrefix))
-      continue;
-    for (const named of declaration.getNamedImports()) {
-      if (!names.has(named.getName())) continue;
-      locals.set(
-        named.getAliasNode()?.getText() ?? named.getName(),
-        named.getName(),
-      );
-    }
-    const namespace = declaration.getNamespaceImport()?.getText();
-    if (namespace) namespaces.add(namespace);
+  for (const { local, imported, specifier } of moduleBindings(source)) {
+    if (!specifier.startsWith(modulePrefix)) continue;
+    if (imported === '*') namespaces.add(local);
+    else if (names.has(imported)) locals.set(local, imported);
   }
 
   const found = new Map<string, CallExpression>();

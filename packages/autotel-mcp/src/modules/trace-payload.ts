@@ -23,15 +23,25 @@ export interface CompactTraceResult {
  * process identity. They are a property of the trace, not of any one span, and
  * repeating them per span is what makes a 200-span trace unreadable.
  */
+/** Resource semantic-convention namespaces: identity of the process, not of one span. */
+const RESOURCE_NAMESPACE =
+  /^(service|host|process|os|container|k8s|cloud|deployment|telemetry|device|faas|datadog)\./;
+
 function hoistResource(spans: SpanRecord[]): Tags {
   const [first, ...rest] = spans;
   if (first === undefined) return {};
 
+  // "Every other span agrees" is vacuously true of a lone span. With nothing
+  // to compare against, fall back to the namespaces the resource conventions own.
+  const isShared =
+    rest.length === 0
+      ? (key: string) => RESOURCE_NAMESPACE.test(key)
+      : (key: string, value: TagValue) =>
+          rest.every((span) => span.tags[key] === value);
+
   const shared: Record<string, TagValue> = {};
   for (const [key, value] of Object.entries(first.tags)) {
-    if (rest.every((span) => span.tags[key] === value)) {
-      shared[key] = value;
-    }
+    if (isShared(key, value)) shared[key] = value;
   }
   return shared;
 }
