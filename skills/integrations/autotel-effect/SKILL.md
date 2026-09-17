@@ -148,6 +148,18 @@ Effect.fail(new Error('card declined')).pipe(
 // body: "payment failed", err: "Error: card declined\n    at ..."
 ```
 
+### Failed spans read `error.message`
+
+When a `withSpan` fails, `@effect/opentelemetry` sets the span status message and `exception.message` from `error.message`. `Data.TaggedError` populates that from a `message` prop. The `Error` constructor writes `message` as an own property, which shadows a getter on the class. An error that keeps its detail in `reason` or any other prop records an empty message, and your backend groups it as "Unknown error".
+
+```typescript
+// ✗ spans record exception.message: ""
+class NotFound extends Data.TaggedError('NotFound')<{ reason: string }> {}
+
+// ✓ spans record exception.message: "order 7 not found"
+class NotFound extends Data.TaggedError('NotFound')<{ message: string }> {}
+```
+
 ### Set `level` before expecting debug logs
 
 The stdout line defaults to `level: 'info'`, so `Effect.logDebug` never reaches stdout even when Effect's own minimum log level allows it. Pass `logs: { level: 'debug' }` for both to agree.
@@ -175,3 +187,4 @@ The package imports `@effect/opentelemetry/OtelTracer` and `.../Resource` by sub
 - `logs: { console: false }` wherever `captureConsole()` is on, or each Effect log is reported twice.
 - `Effect.runPromise(withAutotel(program))` wherever the run happens inside an autotel span, so the Effect spans join that trace.
 - Span instrumentation on an Effect comes from `Effect.fn` / `Effect.withSpan`, never from wrapping the function in `trace()`.
+- Every `Data.TaggedError` carries its detail in a `message` prop, so failed spans record a real `exception.message`.

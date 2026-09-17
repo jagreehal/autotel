@@ -170,6 +170,19 @@ HTTP GET /api/todos     (autotel node:http)
 
 Without `withAutotel`, `todo.list` is the root of a second, unrelated trace.
 
+### Failures: put the detail in `message`
+
+When a span fails, `@effect/opentelemetry` records `exception.message` and the
+span status message from `error.message`. `Data.TaggedError` sets that from a
+`message` prop. The `Error` constructor writes `message` as an own property,
+which shadows a getter on the class, so `new NotFound({ reason: "..." })`
+reaches your backend with an empty message ("Unknown error" in
+autotel-devtools). Name the prop `message`:
+
+```ts
+class NotFound extends Data.TaggedError('NotFound')<{ message: string }> {}
+```
+
 ## Example
 
 See [`apps/example-effect`](../../apps/example-effect) in the autotel monorepo.
