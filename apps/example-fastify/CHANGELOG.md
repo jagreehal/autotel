@@ -1,5 +1,12 @@
 # @jagreehal/example-fastify
 
+## 1.0.66
+
+### Patch Changes
+
+- Updated dependencies [a72aaef]
+  - autotel@7.7.1
+
 ## 1.0.65
 
 ### Patch Changes
