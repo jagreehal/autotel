@@ -1,5 +1,15 @@
 # @jagreehal/example-hono
 
+## 1.0.73
+
+### Patch Changes
+
+- Updated dependencies [a72aaef]
+  - autotel@7.7.1
+  - autotel-devtools@28.0.3
+  - autotel-adapters@2.0.20
+  - autotel-hono@0.4.62
+
 ## 1.0.72
 
 ### Patch Changes

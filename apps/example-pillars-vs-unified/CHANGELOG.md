@@ -1,5 +1,12 @@
 # @jagreehal/example-pillars-vs-unified
 
+## 1.0.7
+
+### Patch Changes
+
+- Updated dependencies [a72aaef]
+  - autotel@7.7.1
+
 ## 1.0.6
 
 ### Patch Changes
