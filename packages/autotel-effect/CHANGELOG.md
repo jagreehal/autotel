@@ -1,5 +1,11 @@
 # autotel-effect
 
+## 5.0.2
+
+### Patch Changes
+
+- f039b65: `Effect.withLogSpan` durations reach the log record as `logSpan.<label>` in milliseconds, and the record's timestamp comes from the fiber's clock.
+
 ## 5.0.1
 
 ### Patch Changes
