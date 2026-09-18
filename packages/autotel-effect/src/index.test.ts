@@ -5,6 +5,7 @@ import {
   InMemoryLogRecordExporter,
   SimpleLogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
+import * as Clock from 'effect/Clock';
 import * as Effect from 'effect/Effect';
 import type * as LogLevel from 'effect/LogLevel';
 import * as References from 'effect/References';
@@ -111,6 +112,25 @@ describe('withAutotel', () => {
     const child = exporter.findSpan('todo.count');
     expect(child!.traceId).toBe(root!.traceId);
     expect(child!.parentSpanId).toBe(root!.spanId);
+  });
+
+  it('a bare runPromise inside an autotel span starts a new trace', async () => {
+    // Effect's scheduler runs fibers outside the caller's async context, so
+    // @effect/opentelemetry misses the ambient autotel span. When this test
+    // fails, @effect/opentelemetry has fixed that and withAutotel can go.
+    await trace.run('http.bare', async () => {
+      await Effect.runPromise(
+        Effect.withSpan('todo.bare')(Effect.void).pipe(
+          Effect.provide(layer({ serviceName: 'svc-bare' })),
+        ),
+      );
+    });
+    await flush();
+
+    const root = exporter.findSpan('http.bare');
+    const child = exporter.findSpan('todo.bare');
+    expect(child!.traceId).not.toBe(root!.traceId);
+    expect(child!.parentSpanId).toBeUndefined();
   });
 
   it('runs unchanged when nothing is traced around it', async () => {
@@ -407,6 +427,34 @@ describe('loggerLayer', () => {
     );
 
     expect(records.find((r) => r.msg === 'quiet')).toBeUndefined();
+  });
+
+  it('stamps the record with the fiber clock and withLogSpan durations', async () => {
+    // With the clock fixed at 1s the record reads 1s and the log span lasts
+    // 0ms. A record stamped at emit time reads the wall clock instead.
+    const fixed: Clock.Clock = {
+      currentTimeMillisUnsafe: () => 1_000,
+      currentTimeMillis: Effect.succeed(1_000),
+      monotonicTimeNanosUnsafe: () => 1_000_000_000n,
+      monotonicTimeNanos: Effect.succeed(1_000_000_000n),
+      currentTimeNanosUnsafe: () => 1_000_000_000n,
+      currentTimeNanos: Effect.succeed(1_000_000_000n),
+      sleep: () => Effect.void,
+    };
+    await Effect.runPromise(
+      Effect.log('done').pipe(
+        Effect.withLogSpan('db'),
+        Effect.provideService(Clock.Clock, fixed),
+        Effect.provide(
+          loggerLayer({ serviceName: 'svc-clock', console: false }),
+        ),
+      ),
+    );
+    await flush();
+
+    const record = logExporter.getFinishedLogRecords()[0]!;
+    expect(record.hrTime).toEqual([1, 0]);
+    expect(record.attributes['logSpan.db']).toBe(0);
   });
 
   it('joins non-string message parts', async () => {

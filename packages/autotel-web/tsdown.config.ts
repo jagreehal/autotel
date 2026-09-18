@@ -19,5 +19,9 @@ export default defineConfig({
   minify: false, // Let consuming bundlers handle minification
   target: 'es2020',
   platform: 'browser',
+  // `platform: 'browser'` folds `process.env.NODE_ENV` to a constant at library
+  // build time, which hardcoded `isDevelopment()`. Leave it for the consuming
+  // app's bundler to substitute; `dist.test.ts` pins this.
+  define: { 'process.env.NODE_ENV': 'process.env.NODE_ENV' },
   treeshake: true,
 });

@@ -19,21 +19,20 @@ const config = defineConfig({
     conditions: ['browser', 'module', 'import', 'default'],
     tsconfigPaths: true,
   },
-  // autotel-tanstack uses package.json "browser" conditional exports
-  // but autotel (Node.js) must be externalized from client builds
-  build: {
-    rollupOptions: {
-      external: (id) => {
-        // Externalize autotel and Node.js modules for client builds
-        if (
-          id === 'autotel' ||
-          id.startsWith('autotel/') ||
-          id === 'autotel-edge' ||
-          id.startsWith('autotel-edge/')
-        ) {
-          return true
-        }
-        return false
+  // autotel stays a runtime dependency of the server bundle. Only the `ssr`
+  // environment: an external in the client bundle is left as a bare specifier
+  // the browser cannot resolve, and browser-safe subpaths (autotel-posthog
+  // imports autotel/feature-flags) must be bundled there.
+  environments: {
+    ssr: {
+      build: {
+        rollupOptions: {
+          external: (id) =>
+            id === 'autotel' ||
+            id.startsWith('autotel/') ||
+            id === 'autotel-edge' ||
+            id.startsWith('autotel-edge/'),
+        },
       },
     },
   },

@@ -122,7 +122,7 @@ export function loggerLayer(
 
   return Logger.layer(
     [
-      Logger.make(({ cause, fiber, logLevel, message }) => {
+      Logger.make(({ cause, date, fiber, logLevel, message }) => {
         const method = LEVEL_TO_METHOD[logLevel];
         if (!method) return;
 
@@ -130,6 +130,10 @@ export function loggerLayer(
         const metadata: Record<string, unknown> = {
           ...fiber.getRef(References.CurrentLogAnnotations),
         };
+        // `Effect.withLogSpan` durations in milliseconds.
+        for (const [label, start] of fiber.getRef(References.CurrentLogSpans)) {
+          metadata[`logSpan.${label}`] = date.getTime() - start;
+        }
 
         // `Effect.logError('msg', error)` puts the error in the message parts,
         // `Effect.log(...).pipe(Effect.catchCause(...))` puts it in the cause.
@@ -148,6 +152,7 @@ export function loggerLayer(
         }
         otelLogger().emit({
           body,
+          timestamp: date,
           severityNumber: logLevelToSeverityNumber(logLevel),
           severityText: logLevel,
           // Annotations are `unknown`; only what flattens to an OTel attribute

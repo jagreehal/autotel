@@ -315,6 +315,16 @@ describe('DevtoolsBackend', () => {
     expect(health.message).toContain('autotel-devtools');
   });
 
+  it('healthCheck names the URL it reached', async () => {
+    // Two devtools on one machine (a stale one on 4318, the one the app
+    // exports to on 4848) both answer "reachable", and a trace count alone
+    // cannot say which one this is.
+    const backend = new DevtoolsBackend(BASE);
+    stubFetch([]);
+    const health = await backend.healthCheck();
+    expect(health.message).toContain(BASE);
+  });
+
   it('healthCheck rejects a foreign collector squatting on the port', async () => {
     const backend = new DevtoolsBackend(BASE);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -325,14 +335,18 @@ describe('DevtoolsBackend', () => {
     expect(health.message).toContain('not autotel-devtools');
   });
 
-  it('listMetrics and searchLogs report unsupported', async () => {
+  it('searchLogs reports unsupported; listMetrics only on a devtools without the metrics API', async () => {
     const backend = new DevtoolsBackend(BASE);
-    const metrics = await backend.listMetrics({});
     const logs = await backend.searchLogs({});
-    expect(metrics.unsupported).toBe(true);
-    expect(metrics.detail).toContain('autotel-devtools');
     expect(logs.unsupported).toBe(true);
     expect(logs.detail).toContain('autotel-devtools');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('not found', { status: 404 }),
+    );
+    const metrics = await backend.listMetrics({});
+    expect(metrics.unsupported).toBe(true);
+    expect(metrics.detail).toContain('autotel-devtools');
   });
 });
 

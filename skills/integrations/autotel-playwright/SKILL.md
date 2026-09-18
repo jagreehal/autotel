@@ -232,6 +232,10 @@ API_BASE_URL=http://localhost:3000/api
 
 The fixture injects headers in the worker process per-test. The reporter creates spans in the runner process. They do not share span context. They produce separate traces. Use the fixture for test-to-API tracing; use the reporter for standalone test timing in OTLP.
 
+### MEDIUM: Expecting PostHog events from an automated browser
+
+`posthog-js` drops every event when `navigator.webdriver` is set, which Playwright always does. A spec asserting that `$pageview` or a `capture()` reached PostHog sees nothing, while `autotel-web` spans (exported by autotel, not PostHog) arrive as usual. Switch the filter off for the test: `posthog.set_config({ opt_out_useragent_filter: true })` behind a test flag in the app, or via `page.evaluate` from the spec.
+
 ### MEDIUM: Using `step()` outside a test span context
 
 `step()` creates child spans under the current active OTel span. If called outside a test that uses the autotel-playwright `test` fixture (e.g., in a `beforeAll` without a running span), the step span will be a root span, not a child.

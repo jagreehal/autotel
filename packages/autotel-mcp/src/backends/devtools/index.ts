@@ -262,9 +262,12 @@ export class DevtoolsBackend implements TelemetryBackend {
       }
       const traces = await this.fetchTraces();
       const version = health.version ? ` v${health.version}` : '';
+      // Name the URL: two devtools on one machine (a stale one on 4318, the
+      // app exporting to 4848) both answer "reachable", and the count alone
+      // cannot say which one this is.
       return {
         healthy: true,
-        message: `autotel-devtools${version} reachable — ${traces.length} trace(s) captured${this.describeQueryApi()}`,
+        message: `autotel-devtools${version} at ${this.baseUrl} reachable, ${traces.length} trace(s) captured${this.describeQueryApi()}`,
       };
     } catch (error) {
       return {
@@ -322,9 +325,8 @@ export class DevtoolsBackend implements TelemetryBackend {
       return { items, totalCount: items.length };
     }
 
-    const records = (await this.fetchTraces()).map((trace) =>
-      this.toTraceRecord(trace),
-    );
+    const traces = await this.fetchTraces();
+    const records = traces.map((trace) => this.toTraceRecord(trace));
     // traceMatchesQuery covers service/operation/error/status/duration/tags;
     // the time window is the one bound it does not apply (Jaeger pushes it
     // server-side — devtools holds everything in memory, so we filter here).
@@ -356,9 +358,11 @@ export class DevtoolsBackend implements TelemetryBackend {
       // the requested span window and still contain an in-window child.
       false,
     );
-    const records =
-      pushed ??
-      (await this.fetchTraces()).map((trace) => this.toTraceRecord(trace));
+    let records = pushed;
+    if (!records) {
+      const traces = await this.fetchTraces();
+      records = traces.map((trace) => this.toTraceRecord(trace));
+    }
     const filtered = records
       .flatMap((trace) => trace.spans)
       .filter(
@@ -370,9 +374,8 @@ export class DevtoolsBackend implements TelemetryBackend {
   }
 
   async serviceMap(_lookbackMinutes = 60, limit = 20): Promise<ServiceMap> {
-    const records = (await this.fetchTraces()).map((trace) =>
-      this.toTraceRecord(trace),
-    );
+    const traces = await this.fetchTraces();
+    const records = traces.map((trace) => this.toTraceRecord(trace));
     return buildServiceMap(records, limit);
   }
 

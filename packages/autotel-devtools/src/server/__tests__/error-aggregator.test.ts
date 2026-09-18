@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ErrorAggregator } from '../error-aggregator';
-import { makeTrace, makeErrorTrace } from './test-utils/stubs';
+import { makeTrace, makeErrorTrace, makeSpan } from './test-utils/stubs';
 
 describe('ErrorAggregator', () => {
   describe('addError', () => {
@@ -124,6 +124,60 @@ describe('ErrorAggregator', () => {
       expect(groups).toHaveLength(1);
       expect(groups[0].type).toBe('Error');
       expect(groups[0].message).toBe('internal error');
+    });
+
+    it('reads the message from the exception event when status has none', () => {
+      const agg = new ErrorAggregator();
+      const trace = makeTrace({
+        traceId: 't1',
+        status: 'ERROR',
+        rootSpan: makeSpan({
+          traceId: 't1',
+          status: { code: 'ERROR', message: '' },
+          events: [
+            {
+              name: 'exception',
+              timestamp: 150,
+              attributes: {
+                'exception.type': 'TypeError',
+                'exception.message': 'x is not a function',
+              },
+            },
+          ],
+        }),
+      });
+
+      const [group] = agg.addErrorsFromTrace(trace);
+      expect(group.type).toBe('TypeError');
+      expect(group.message).toBe('x is not a function');
+    });
+
+    it('falls back to the type, not "Unknown error", when the message is empty', () => {
+      // A TaggedError whose detail lives in another prop exports an exception
+      // event with a type and an empty message.
+      const agg = new ErrorAggregator();
+      const trace = makeTrace({
+        traceId: 't1',
+        status: 'ERROR',
+        rootSpan: makeSpan({
+          traceId: 't1',
+          status: { code: 'ERROR', message: '' },
+          events: [
+            {
+              name: 'exception',
+              timestamp: 150,
+              attributes: {
+                'exception.type': 'ValidationError',
+                'exception.message': '',
+              },
+            },
+          ],
+        }),
+      });
+
+      const [group] = agg.addErrorsFromTrace(trace);
+      expect(group.type).toBe('ValidationError');
+      expect(group.message).toBe('ValidationError');
     });
 
     it('returns empty array for successful trace', () => {

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SamplingDecision } from '@opentelemetry/sdk-trace-base';
-import { createSessionRatioSampler } from './sampler';
+import { context, trace, TraceFlags } from '@opentelemetry/api';
+import { createSessionRatioSampler, withoutResourceFetch } from './sampler';
 import { configureSession, resetSessionForTesting } from './session';
 
 const traceId = (n: number) => n.toString(16).padStart(32, '0');
@@ -66,5 +67,32 @@ describe('session-consistent sampling', () => {
 
   it('describes itself for debugging', () => {
     expect(createSessionRatioSampler(0.25).toString()).toContain('0.25');
+  });
+});
+
+describe('withoutResourceFetch', () => {
+  it('respects an unsampled parent when no inner sampler is given', () => {
+    // The provider default is parent-based always-on; the filter must not
+    // turn an unsampled parent's children into sampled ones.
+    const parent = trace.setSpanContext(context.active(), {
+      traceId: traceId(9),
+      spanId: '0000000000000001',
+      traceFlags: TraceFlags.NONE,
+    });
+    const sampler = withoutResourceFetch();
+    expect(
+      sampler.shouldSample(parent, traceId(9), 'child', 0 as never, {}, [])
+        .decision,
+    ).toBe(SamplingDecision.NOT_RECORD);
+    expect(
+      sampler.shouldSample(
+        context.active(),
+        traceId(9),
+        'root',
+        0 as never,
+        {},
+        [],
+      ).decision,
+    ).toBe(SamplingDecision.RECORD_AND_SAMPLED);
   });
 });

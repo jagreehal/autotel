@@ -35,6 +35,7 @@ initFull({
   endpoint: 'https://collector.example.com/v1/traces', // OTLP HTTP
   sampleRate: 0.1, // 10% in production
   captureNavigation: true, // document load spans (default: true)
+  captureResourceTiming: true, // one resourceFetch span per resource (default: on in production, off in development, where a dev server makes that hundreds per load)
   captureFetch: true, // fetch instrumentation (default: true)
   captureXHR: true, // XHR instrumentation (default: true)
   captureErrors: true, // unhandled errors (default: true)

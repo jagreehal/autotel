@@ -163,10 +163,14 @@ export class ErrorAggregator {
       stringAttr(exceptionEvent?.attributes, 'exception.type') ??
       'Error';
 
+    // The exception event is where the OTel SDKs put the message; an empty
+    // one (an Error subclass that never set `message`) still has a type, and
+    // grouping under that beats a group called "Unknown error".
     const errorMessage =
       span.status.message ||
       stringAttr(span.attributes, 'exception.message', 'error.message') ||
-      'Unknown error';
+      stringAttr(exceptionEvent?.attributes, 'exception.message') ||
+      errorType;
 
     const stackTrace =
       stringAttr(

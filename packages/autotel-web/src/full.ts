@@ -54,7 +54,8 @@ import {
   refreshRemoteConfig,
   resolveCaptureToggles,
 } from './remote-config';
-import { createSessionRatioSampler } from './sampler';
+import { isDevelopment } from './dev-mode';
+import { createSessionRatioSampler, withoutResourceFetch } from './sampler';
 import {
   configureSession,
   endSessionOnUnload,
@@ -188,6 +189,20 @@ export interface AutotelWebFullConfig {
 
   /** Enable document load / navigation spans. @default true */
   captureNavigation?: boolean;
+
+  /**
+   * Keep the one `resourceFetch` span per script, stylesheet and image that
+   * document-load instrumentation records under `documentLoad`.
+   *
+   * Off in development by default: a dev server serves every module as its
+   * own request, so one page load becomes hundreds of spans that describe the
+   * bundler rather than the app. `documentLoad` and `documentFetch` stay.
+   * Development is `process.env.NODE_ENV !== 'production'` where a bundler
+   * substituted one, else a page served from localhost.
+   *
+   * @default true in production, false in development
+   */
+  captureResourceTiming?: boolean;
 
   /** Enable fetch instrumentation. @default true */
   captureFetch?: boolean;
@@ -419,9 +434,14 @@ export function initFull(config: AutotelWebFullConfig): void {
   // visit is not much of a kill switch.
   const remote = config.remoteConfigUrl ? cachedRemoteConfig() : undefined;
   const sampleRate = remote?.sampleRate ?? config.sampleRate;
-  const sampler =
+  const configured =
     config.sampler ??
     (sampleRate != null ? createSessionRatioSampler(sampleRate) : undefined);
+  const captureResourceTiming =
+    config.captureResourceTiming ?? !isDevelopment();
+  const sampler = captureResourceTiming
+    ? configured
+    : withoutResourceFetch(configured);
 
   provider = new WebTracerProvider({
     resource,
