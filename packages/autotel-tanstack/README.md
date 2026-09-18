@@ -19,6 +19,25 @@ npm install autotel-tanstack autotel
 pnpm add autotel-tanstack autotel
 ```
 
+### Bundling
+
+`autotel` is Node-only and should stay a runtime dependency of the server bundle rather than be bundled. Externalize it in the **`ssr` environment only**. A top-level `build.rollupOptions.external` also applies to the client build, where an external is left as a bare specifier the browser cannot resolve. Browser-safe subpaths such as `autotel/feature-flags` (pulled in by `autotel-posthog`) must be bundled on the client.
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  environments: {
+    ssr: {
+      build: {
+        rollupOptions: {
+          external: (id) => id === 'autotel' || id.startsWith('autotel/'),
+        },
+      },
+    },
+  },
+});
+```
+
 ## Quick Start
 
 ### TanStack-Native Setup (Recommended)
@@ -247,6 +266,25 @@ describe('MyServerFunction', () => {
   });
 });
 ```
+
+### End-to-end: `E2E=1`
+
+With `E2E=1` in the server's environment, `instrument()` replaces the OTLP exporter with an `InMemorySpanExporter` on `globalThis.__testSpanExporter`, and `createTestSpansHandlers()` from `autotel-tanstack/testing` serves it as a route:
+
+```typescript
+// src/routes/api/test-spans.ts
+import { createFileRoute } from '@tanstack/react-router';
+import { createTestSpansHandlers } from 'autotel-tanstack/testing';
+
+const { GET, DELETE } = createTestSpansHandlers();
+export const Route = createFileRoute('/api/test-spans')({
+  server: { handlers: { GET, DELETE } },
+});
+```
+
+A spec `DELETE`s before acting and `GET`s after to assert on the spans a browser interaction produced. Start the app under test with `E2E=1` from Playwright's `webServer`; a dev server that is already running on the port has the OTLP exporter, not the in-memory one, and `reuseExistingServer` will pick it.
+
+`instrument()` is idempotent and `init` runs once per process, so a change to its options needs the dev server restarted rather than saved.
 
 ## Supported Frameworks
 

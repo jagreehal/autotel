@@ -203,6 +203,18 @@ When `API_BASE_URL` or `AUTOTEL_PLAYWRIGHT_API_ORIGIN` includes a path (e.g. `ht
 
 Playwright expects `globalSetup` to be a **path string** (e.g. `'./globalSetup.ts'`), not a function. Use a file that exports a default function which calls `init()`.
 
+### PostHog events never arrive from a test
+
+`posthog-js` drops every event from an automated browser: Playwright sets `navigator.webdriver`, and PostHog's bot filter reads it. A spec that asserts on `$pageview` or a `capture()` reaching PostHog sees nothing, while the trace side of an `autotel-posthog` join works as usual. Switch the filter off for the test, either in the app under a test flag or from the spec:
+
+```typescript
+await page.evaluate(() => {
+  window.posthog?.set_config({ opt_out_useragent_filter: true });
+});
+```
+
+`autotel-web` spans are unaffected: they are exported by autotel, not by PostHog.
+
 ### Fixture spans vs reporter spans
 
 - **Fixture** (worker): test span and `step()` spans run in the worker; requests to your API get trace context, so one trace = test → API. Call `init()` in a globalSetup **or** at the top of your spec so the worker process exports these spans.

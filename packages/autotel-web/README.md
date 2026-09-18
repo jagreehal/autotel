@@ -273,6 +273,20 @@ init({
 });
 ```
 
+### Sharing a page with the collector's own UI
+
+autotel-devtools serves its widget and query API from the same origin as `/v1/traces`, and the widget polls that API from your page. Fetch instrumentation would trace every poll and show each one as its own trace. Tell autotel-web the collector owns its whole origin:
+
+```typescript
+init({
+  service: 'my-spa',
+  endpoint: 'http://localhost:4318', // autotel-devtools, nothing else on that origin
+  collectorOwnsOrigin: true,
+});
+```
+
+Off by default, because an OTLP endpoint proxied through your own API origin would otherwise silence the requests the page exists to make. The page's own origin is never excluded.
+
 ### Collector Proxy
 
 Browsers can't send directly to most collectors (CORS). Add a simple proxy route to your API:
@@ -424,6 +438,18 @@ carrying the name in both `eventName` and `event.name` — query them where your
 logs are, not in trace search. Sampling (`sampleRate`) covers spans, logs and
 events alike; a custom `sampler` replaces it for spans and leaves events
 unsampled, since there is nothing to ask a span sampler about a log record.
+
+### Resource spans in development
+
+Document-load instrumentation records one `resourceFetch` span per script, stylesheet and image under `documentLoad`. A dev server serves every module as its own request, so one page load would be hundreds of spans about the bundler. In development (`process.env.NODE_ENV !== 'production'` where a bundler substituted one, otherwise a page served from localhost) those per-resource spans are off; `documentLoad` and `documentFetch` stay. `captureResourceTiming` overrides either way:
+
+```typescript
+initFull({
+  service: 'web',
+  endpoint,
+  captureResourceTiming: true, // keep them while developing too
+});
+```
 
 ## Framework Integration
 

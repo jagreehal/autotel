@@ -11,6 +11,8 @@
  */
 
 import {
+  AlwaysOnSampler,
+  ParentBasedSampler,
   SamplingDecision,
   type Sampler,
   type SamplingResult,
@@ -38,6 +40,36 @@ export function createSessionRatioSampler(ratio: number): Sampler {
     },
     toString() {
       return `SessionRatioSampler(${ratio})`;
+    },
+  };
+}
+
+/**
+ * Drops the per-resource `resourceFetch` spans that document-load
+ * instrumentation emits, keeping the `documentLoad`/`documentFetch` spans and
+ * everything else. Every other decision is delegated to `inner`, which
+ * defaults to what a provider applies with no sampler at all: parent-based
+ * always-on, so a child of an unsampled parent stays unsampled.
+ */
+export function withoutResourceFetch(
+  inner: Sampler = new ParentBasedSampler({ root: new AlwaysOnSampler() }),
+): Sampler {
+  return {
+    shouldSample(context, traceId, spanName, spanKind, attributes, links) {
+      if (spanName === 'resourceFetch') {
+        return { decision: SamplingDecision.NOT_RECORD };
+      }
+      return inner.shouldSample(
+        context,
+        traceId,
+        spanName,
+        spanKind,
+        attributes,
+        links,
+      );
+    },
+    toString() {
+      return `WithoutResourceFetch{${inner.toString()}}`;
     },
   };
 }

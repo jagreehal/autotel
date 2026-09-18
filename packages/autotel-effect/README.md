@@ -138,6 +138,8 @@ Effect.annotateLogs({ order: { id: 7 }, at: new Date(0) });
 
 Errors keep their stack: a `Cause` passed to `Effect.logError` (or an `Error`
 in the message parts) is logged as `err` rather than stringified into `msg`.
+`Effect.withLogSpan('db')` adds `logSpan.db` in milliseconds. The record's
+timestamp comes from the fiber's clock, so a test clock sets the time you see.
 
 Options: `mergeWithExisting: true` keeps Effect's console logger alongside this
 one; `level` sets the stdout minimum level (default `'info'` — leave it there

@@ -38,6 +38,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python app.py
 
 Shadow-DOM-isolated. Never leaks styles into the host page.
 
+If the same page runs `autotel-web`, pass `collectorOwnsOrigin: true` to its `init`/`initFull`: the widget polls `/api/query/*` on the devtools origin, and fetch instrumentation would otherwise export every poll as a trace of its own.
+
 ### Programmatic (Node + autotel)
 
 ```typescript

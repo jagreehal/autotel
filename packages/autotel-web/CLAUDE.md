@@ -69,6 +69,15 @@ rather than a nice-to-have.
   developer's `console.log` did not appear.
 - `src/sampling.ts` + `src/sampler.ts`: FNV-1a over `session.id`. Monotonic in
   the rate, so raising it mid-incident only ever adds sessions.
+  `withoutResourceFetch` drops the per-resource `resourceFetch` spans and
+  delegates everything else to the inner sampler, defaulting to the provider's
+  own parent-based always-on so an unsampled parent keeps its children unsampled.
+- `src/dev-mode.ts`: `isDevelopment()`, read from a bundler-substituted
+  `process.env.NODE_ENV` first and the hostname second. The library build must
+  leave `process.env.NODE_ENV` in place for the consuming bundler
+  (`tsdown.config.ts` `define`, pinned by `dist.test.ts`); rolldown's browser
+  platform folds it to a constant otherwise, which fixes the answer for every
+  consumer.
 - `src/remote-config.ts`: capture settings from a JSON file at a URL the app
   already serves. Untrusted input — only known keys with valid values survive.
   Two merge rules, deliberately different: `resolveCaptureToggles` lets remote
