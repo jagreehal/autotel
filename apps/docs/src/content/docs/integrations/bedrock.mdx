@@ -1,0 +1,101 @@
+---
+title: Amazon Bedrock
+description: The Bedrock facts no OpenTelemetry convention carries, on top of the canonical gen_ai.* spans autotel-genai records for every AI SDK call.
+---
+
+`autotel-genai` records a canonical `gen_ai.*` span for every AI SDK call against Amazon Bedrock. `autotel-bedrock` adds the Bedrock facts on top: the foundation-model id behind an inference profile or ARN, Bedrock's own stop reason and guardrail outcome, and prices for the models that only exist behind Bedrock.
+
+## Installation
+
+```bash
+npm install autotel autotel-genai autotel-bedrock
+```
+
+## Setup
+
+```typescript
+import { init } from 'autotel';
+import { registerTelemetry } from 'ai';
+import { autotelTelemetry } from 'autotel-genai/observer';
+import {
+  bedrockCompatibility,
+  bedrockProviderAttributes,
+  BEDROCK_PRICING,
+} from 'autotel-bedrock';
+
+init({
+  service: 'payments-bot',
+  spanEnrichers: [bedrockCompatibility({ region: process.env.AWS_REGION })],
+});
+
+registerTelemetry(
+  autotelTelemetry({
+    pricing: BEDROCK_PRICING,
+    providerAttributes: bedrockProviderAttributes,
+  }),
+);
+```
+
+Register the enricher under `spanEnrichers`. `spanProcessors` replaces the pipeline autotel builds, including the destinations you configured.
+
+## One model, three spellings
+
+Bedrock accepts the same model as a foundation-model id, a cross-region inference profile, or an inference-profile ARN:
+
+```
+anthropic.claude-sonnet-4-5-20250929-v1:0
+eu.anthropic.claude-sonnet-4-5-20250929-v1:0
+arn:aws:bedrock:eu-west-1:123456789012:inference-profile/eu.anthropic.claude-sonnet-4-5-20250929-v1:0
+```
+
+Dashboards group by `gen_ai.request.model` and Datadog or Langfuse price by it, so a profile or ARN splits one model into several rows and drops the cost. The enricher rewrites `gen_ai.request.model` and `gen_ai.response.model` to the foundation id and keeps the rest as their own attributes:
+
+| Attribute                              | Value                                       |
+| -------------------------------------- | ------------------------------------------- |
+| `gen_ai.request.model`                 | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
+| `aws.bedrock.model.id_raw`             | the id as the request spelled it            |
+| `aws.bedrock.model.arn`                | the ARN, when one was used                  |
+| `aws.bedrock.inference_profile.region` | `eu`, `us`, `global`…                       |
+| `aws.bedrock.model.vendor`             | `anthropic`, `amazon`, `meta`, `zai`…       |
+| `cloud.provider` / `cloud.region`      | `aws` / the option or `AWS_REGION`          |
+
+Pass `normalizeModel: false` to keep the requested spelling and add the extra attributes only.
+
+## Stop reason and guardrails
+
+The AI SDK folds Bedrock's stop reasons into its own (`guardrail_intervened` and `content_filtered` both become `content-filter`; `malformed_tool_use` and `model_context_window_exceeded` become `other`), and its lifecycle events omit the guardrail trace. `bedrockProviderAttributes` reads the model call's result, or its stream's `finish` part, and records:
+
+| Attribute                          | Value                                                         |
+| ---------------------------------- | ------------------------------------------------------------- |
+| `aws.bedrock.stop_reason`          | `end_turn`, `tool_use`, `max_tokens`, `guardrail_intervened`… |
+| `aws.bedrock.guardrail.intervened` | `true` when the guardrail stopped generation                  |
+| `aws.bedrock.guardrail.id`         | from the trace, so set `guardrailConfig.trace: 'enabled'`     |
+
+`gen_ai.response.finish_reasons` keeps the AI SDK's unified value, so a dashboard built on it keeps working. An intervention is a policy outcome: the span's status stays unset, and `guardrail.intervened / total` is one query.
+
+## Bedrock-only pricing
+
+`BEDROCK_PRICING` is a table for `autotelTelemetry({ pricing })` covering Nova, Llama, Mistral, DeepSeek and GLM. Bedrock bills Anthropic models at Anthropic's rates, and `autotel-genai` prices those by family. Keys resolve the way `autotel-genai/cost` does (exact, then prefix, tried again after each region and vendor prefix is peeled), so `eu.amazon.nova-pro-v1:0` resolves via `amazon.nova-pro`.
+
+The prices are list prices at the time of writing. Spread and override what you use:
+
+```typescript
+autotelTelemetry({
+  pricing: {
+    ...BEDROCK_PRICING,
+    'zai.glm-4.7-flash': { inputPer1M: 0.5, outputPer1M: 2 },
+  },
+});
+```
+
+Runnable example: `apps/example-bedrock` in the autotel repository, a Lambda handler around an AI SDK tool-loop agent, run in-process against Bedrock.
+
+## Already covered elsewhere
+
+| Signal                                   | Comes from                             |
+| ---------------------------------------- | -------------------------------------- |
+| `gen_ai.provider.name = aws.bedrock`     | `autotel-genai` provider normalisation |
+| AWS request id                           | `gen_ai.response.id`                   |
+| Anthropic model cost on Bedrock          | `autotel-genai/cost` family pricing    |
+| Lambda spans, cold starts, X-Ray context | `autotel-aws/lambda`                   |
+| Datadog / Langfuse ingestion             | `autotel-backends`, `autotel-langfuse` |

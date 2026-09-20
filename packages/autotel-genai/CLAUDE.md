@@ -109,7 +109,12 @@ exactly aligned with them.
     dropped. It also implements the `executeTool`/`executeLanguageModelCall` context runners
     (nested traces. Needs an ambient OTel ContextManager, which real Node apps
     have) and opt-in content capture (`captureContent`, off by default; maps AI SDK
-    messages → GenAI SemConv format via `ai-sdk-messages.ts`). `subscribeAiTelemetry`
+    messages → GenAI SemConv format via `ai-sdk-messages.ts`). `providerAttributes`
+    is the per-provider seam: `executeLanguageModelCall` keeps the raw finish reason
+    and `providerMetadata` from the call's result (or the stream's `finish` part)
+    and hands them to the hook on `onLanguageModelCallEnd`; `autotel-bedrock`
+    supplies the Bedrock one. `gen_ai.response.finish_reasons` stays the unified
+    value. `subscribeAiTelemetry`
     (`ai-sdk-channel.ts`) is the zero-config path: it subscribes to the `ai:telemetry`
     Node tracing channel (loaded edge-safely via `process.getBuiltinModule`, no
     static `node:` import), pairs `start`↔`asyncEnd` by message-object identity, and

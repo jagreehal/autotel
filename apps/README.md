@@ -340,6 +340,8 @@ pnpm start:rag          # RAG pipeline
 
 #### Vercel AI SDK as canonical `gen_ai.*` spans
 
+**`example-bedrock`** - A Lambda-hosted AI SDK tool-loop agent on Amazon Bedrock: `wrapHandler` root span and flush, `gen_ai.*` spans with cost, and `autotel-bedrock`'s foundation-model normalisation, stop reason and guardrail attributes. See [example-bedrock/README.md](./example-bedrock/README.md).
+
 **`example-ai-sdk-observer`** - Capture Vercel AI SDK + Ollama runs as canonical `gen_ai.*` spans (token usage, cost, streaming timing) via `autotel-genai`'s `autotelTelemetry()`. See [example-ai-sdk-observer/README.md](./example-ai-sdk-observer/README.md).
 
 #### Langfuse + autotel-devtools

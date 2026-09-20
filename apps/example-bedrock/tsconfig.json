@@ -1,0 +1,17 @@
+{
+  "extends": "../../packages/autotel/tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "./src",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    // Pins that autotelTelemetry() stays assignable to the AI SDK `Telemetry`
+    // interface for consumers running this flag — it broke once because the
+    // *View types declared `?: T` where the SDK passes `?: T | undefined`.
+    "exactOptionalPropertyTypes": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*"]
+}

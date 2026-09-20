@@ -13,7 +13,7 @@ import type {
 } from '@opentelemetry/sdk-trace-base';
 import type { MetricReader } from '@opentelemetry/sdk-metrics';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
-import type { NodeSDK, NodeSDKConfiguration } from '@opentelemetry/sdk-node';
+import type { AutotelSdkLike, AutotelSdkOptions } from './sdk';
 import type { Resource } from '@opentelemetry/resources';
 import type { Sampler, SamplingPreset } from './sampling';
 import type { EventSubscriber } from './event-subscriber';
@@ -122,7 +122,7 @@ export interface AutotelConfig {
    * })
    * ```
    */
-  instrumentations?: NodeSDKConfiguration['instrumentations'];
+  instrumentations?: AutotelSdkOptions['instrumentations'];
 
   /**
    * Simple names for auto-instrumentation.
@@ -463,9 +463,11 @@ export interface AutotelConfig {
   protocol?: AutotelProtocol;
 
   /**
-   * Optional factory to build a customised NodeSDK instance from our defaults.
+   * Optional factory to build a customised SDK from our defaults. The options
+   * use `NodeSDKConfiguration`'s field names, so `new NodeSDK(defaults)` from
+   * `@opentelemetry/sdk-node` is a valid return value.
    */
-  sdkFactory?: (defaults: Partial<NodeSDKConfiguration>) => NodeSDK;
+  sdkFactory?: (defaults: AutotelSdkOptions) => AutotelSdkLike;
 
   /**
    * Infrastructure metrics configuration

@@ -410,6 +410,21 @@ registerTelemetry(
 );
 ```
 
+**Provider attributes.** The lifecycle events carry the AI SDK's unified finish
+reason and nothing from `providerMetadata`. `providerAttributes` receives what
+the provider returned beside the standard response (its raw finish reason and
+`providerMetadata`, read from the model call's result or its stream's `finish`
+part) and adds attributes to the `chat` span. `autotel-bedrock` supplies one for
+Bedrock's stop reason and guardrail trace:
+
+```ts
+import { bedrockProviderAttributes } from 'autotel-bedrock';
+
+registerTelemetry(
+  autotelTelemetry({ providerAttributes: bedrockProviderAttributes }),
+);
+```
+
 **Zero-config (no `registerTelemetry`).** Subscribe to the SDK's `ai:telemetry`
 Node tracing channel instead. The SDK publishes operation spans as soon as the
 channel has a subscriber:

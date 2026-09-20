@@ -70,7 +70,7 @@ describe('subscribeAiTelemetry', () => {
         event: { callId: 'c1', modelId: 'gpt-4o', provider: 'openai' },
       },
       {
-        finishReason: 'stop',
+        finishReason: { unified: 'stop' },
         response: { id: 'r1', modelId: 'gpt-4o' },
         usage: { inputTokens: 1000, outputTokens: 500 },
       },
@@ -142,7 +142,10 @@ describe('subscribeAiTelemetry', () => {
           messages: [{ role: 'user', content: 'hi' }],
         },
       },
-      { finishReason: 'stop', content: [{ type: 'text', text: 'hello' }] },
+      {
+        finishReason: { unified: 'stop' },
+        content: [{ type: 'text', text: 'hello' }],
+      },
     );
     const chat = one('chat gpt-4o');
     const input = JSON.parse(String(chat.attributes[GEN_AI.INPUT_MESSAGES]));
@@ -151,6 +154,30 @@ describe('subscribeAiTelemetry', () => {
     ]);
     const output = JSON.parse(String(chat.attributes[GEN_AI.OUTPUT_MESSAGES]));
     expect(output[0].parts).toEqual([{ type: 'text', content: 'hello' }]);
+  });
+
+  it('records the unified finish reason, not the raw one', () => {
+    unsubscribe = subscribeAiTelemetry({ tracer });
+    trace(
+      {
+        type: 'languageModelCall',
+        event: {
+          callId: 'c7',
+          modelId: 'anthropic.claude-sonnet-4-5',
+          provider: 'amazon-bedrock',
+        },
+      },
+      {
+        finishReason: {
+          unified: 'content-filter',
+          raw: 'guardrail_intervened',
+        },
+      },
+    );
+    const chat = one('chat anthropic.claude-sonnet-4-5');
+    expect(chat.attributes[GEN_AI.RESPONSE_FINISH_REASONS]).toEqual([
+      'content-filter',
+    ]);
   });
 
   it('does not capture tool output when recordOutputs is false', () => {

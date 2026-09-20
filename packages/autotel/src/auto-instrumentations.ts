@@ -8,7 +8,7 @@
  * same library.
  */
 
-import type { NodeSDKConfiguration } from '@opentelemetry/sdk-node';
+import type { AutotelSdkOptions } from './sdk';
 import { requireModule } from './node-require';
 import { asFunction, readProperty } from './values';
 
@@ -17,7 +17,7 @@ import { asFunction, readProperty } from './values';
  * Used to detect duplicates between manual and auto instrumentations
  */
 export function getInstrumentationNames(
-  instrumentations: NodeSDKConfiguration['instrumentations'],
+  instrumentations: AutotelSdkOptions['instrumentations'],
 ): Set<string> {
   const names = new Set<string>();
 
@@ -128,7 +128,7 @@ function toPackageName(name: string): string {
  */
 export type AutoInstrumentationsLoader = (
   config?: InstrumentationSwitches,
-) => NodeSDKConfiguration['instrumentations'];
+) => AutotelSdkOptions['instrumentations'];
 
 /**
  * Detect if we're running in ESM mode
@@ -217,7 +217,7 @@ export function _resetAutoInstrumentationsLoader(): void {
 export function getAutoInstrumentations(
   integrations: string[] | boolean | InstrumentationSwitches,
   manualInstrumentationNames: Set<string> = new Set(),
-): NodeSDKConfiguration['instrumentations'] {
+): AutotelSdkOptions['instrumentations'] {
   if (integrations === false) {
     return [];
   }
