@@ -1,5 +1,12 @@
 # autotel-effect
 
+## 6.0.0
+
+### Patch Changes
+
+- Updated dependencies [c9323a9]
+  - autotel@7.8.0
+
 ## 5.0.2
 
 ### Patch Changes

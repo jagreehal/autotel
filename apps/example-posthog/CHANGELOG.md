@@ -1,5 +1,13 @@
 # @jagreehal/example-posthog
 
+## 0.0.17
+
+### Patch Changes
+
+- Updated dependencies [c9323a9]
+  - autotel@7.8.0
+  - autotel-posthog@12.0.0
+
 ## 0.0.16
 
 ### Patch Changes
