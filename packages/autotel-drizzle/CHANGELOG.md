@@ -1,5 +1,12 @@
 # autotel-drizzle
 
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies [c9323a9]
+  - autotel@7.8.0
+
 ## 0.2.4
 
 ### Patch Changes

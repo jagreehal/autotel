@@ -1,5 +1,12 @@
 # autotel-adapters
 
+## 2.0.21
+
+### Patch Changes
+
+- Updated dependencies [c9323a9]
+  - autotel@7.8.0
+
 ## 2.0.20
 
 ### Patch Changes

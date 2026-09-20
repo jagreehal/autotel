@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-bedrock",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "description": "A Lambda-hosted AI SDK tool-loop agent on Amazon Bedrock, traced with autotel-aws, autotel-genai and autotel-bedrock.",

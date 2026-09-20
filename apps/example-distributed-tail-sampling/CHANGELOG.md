@@ -1,5 +1,12 @@
 # example-distributed-tail-sampling
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [c9323a9]
+  - autotel@7.8.0
+
 ## 1.0.3
 
 ### Patch Changes
