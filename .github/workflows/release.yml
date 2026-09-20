@@ -46,11 +46,7 @@ jobs:
       - name: Upgrade npm for OIDC trusted publishing
         run: npx npm@11 install -g npm@11
 
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Install pnpm
-        run: corepack prepare pnpm@latest --activate
+      - uses: pnpm/action-setup@v4
 
       - name: Cache pnpm dependencies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
