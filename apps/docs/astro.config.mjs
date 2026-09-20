@@ -83,6 +83,7 @@ export default defineConfig({
             { label: 'Security Observability', slug: 'integrations/security' },
             { label: 'Validation Telemetry', slug: 'integrations/validation' },
             { label: 'AWS', slug: 'integrations/aws' },
+            { label: 'Amazon Bedrock', slug: 'integrations/bedrock' },
             { label: 'Prisma', slug: 'integrations/prisma' },
             { label: 'Effect', slug: 'integrations/effect' },
             { label: 'Drizzle ORM', slug: 'integrations/drizzle' },

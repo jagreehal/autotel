@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { trace, context, propagation } from '@opentelemetry/api';
-import type { NodeSDK, NodeSDKConfiguration } from '@opentelemetry/sdk-node';
+import type { AutotelSdk, AutotelSdkOptions } from './sdk';
 import type { DeepMockProxy } from 'vitest-mock-extended';
 import { mockDeep } from 'vitest-mock-extended';
 import {
@@ -20,7 +20,7 @@ import type { UnknownRecord } from './values';
 type LogFields = UnknownRecord;
 
 /** The options a constructor was called with, as this harness records them. */
-type SdkOptions = Partial<NodeSDKConfiguration>;
+type SdkOptions = AutotelSdkOptions;
 
 /** What an exporter or instrumentation was constructed with. */
 type RecordedOptions = Record<string, ConfigValue>;
@@ -39,18 +39,18 @@ type ConfigValue =
 
 type SdkRecord = {
   options: RecordedOptions;
-  instance: DeepMockProxy<NodeSDK>;
+  instance: DeepMockProxy<AutotelSdk>;
 };
 
 const mockedModules = [
-  '@opentelemetry/sdk-node',
+  './sdk',
   '@opentelemetry/exporter-trace-otlp-http',
   '@opentelemetry/exporter-metrics-otlp-http',
   '@opentelemetry/sdk-metrics',
 ];
 
 // Mock instrumentation classes with exact names from OpenTelemetry.
-// NodeSDK.start() calls lifecycle hooks on each instrumentation instance.
+// AutotelSdk.start() calls lifecycle hooks on each instrumentation instance.
 class MockInstrumentationBase implements Instrumentation {
   instrumentationName = 'mock-instrumentation';
   instrumentationVersion = '1.0.0';
@@ -89,9 +89,9 @@ async function loadInitWithMocks() {
     message: string;
   }[] = [];
 
-  class MockNodeSDK {
+  class MockSdk {
     constructor(options: RecordedOptions) {
-      const instance = mockDeep<NodeSDK>();
+      const instance = mockDeep<AutotelSdk>();
       instance.start.mockImplementation(() => {});
       instance.shutdown.mockResolvedValue();
       sdkInstances.push({ options, instance });
@@ -129,7 +129,7 @@ async function loadInitWithMocks() {
       }
 
       // Simulate returning auto-instrumentations based on config
-      const instrumentations: NodeSDKConfiguration['instrumentations'] = [];
+      const instrumentations: AutotelSdkOptions['instrumentations'] = [];
 
       // If MongoDB is not explicitly disabled, add it
       if (
@@ -178,8 +178,8 @@ async function loadInitWithMocks() {
     }),
   };
 
-  vi.doMock('@opentelemetry/sdk-node', () => ({
-    NodeSDK: MockNodeSDK,
+  vi.doMock('./sdk', () => ({
+    AutotelSdk: MockSdk,
   }));
 
   vi.doMock('@opentelemetry/exporter-trace-otlp-http', () => ({

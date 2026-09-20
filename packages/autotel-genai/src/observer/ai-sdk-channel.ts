@@ -230,9 +230,10 @@ function closeSpan(
       return;
     }
     case 'languageModelCall': {
+      const finishReason = result?.finishReason?.unified;
       const outputMessage =
         captureContent && event?.recordOutputs !== false
-          ? contentToGenAiMessage(result?.content, result?.finishReason)
+          ? contentToGenAiMessage(result?.content, finishReason)
           : undefined;
       observe({
         type: 'chat.end',
@@ -240,9 +241,7 @@ function closeSpan(
         response: {
           model: result?.response?.modelId ?? event?.modelId,
           id: result?.response?.id,
-          finishReasons: result?.finishReason
-            ? [result.finishReason]
-            : undefined,
+          finishReasons: finishReason ? [finishReason] : undefined,
         },
         usage: toTokenUsage(result?.usage),
         costModel: event?.modelId,
@@ -270,7 +269,8 @@ function closeSpan(
 
 interface ResultView {
   content?: readonly ContentPartView[];
-  finishReason?: string;
+  /** The model's own reason is `raw`; the span records the SDK's `unified`. */
+  finishReason?: { unified?: string; raw?: string };
   output?: unknown;
   response?: { id?: string; modelId?: string };
   usage?: AiSdkUsageFields;

@@ -20,6 +20,8 @@ export { autotelTelemetry } from './ai-sdk-telemetry.js';
 export type {
   AutotelTelemetryIntegration,
   AutotelTelemetryOptions,
+  JsonValue,
+  ProviderResponseView,
 } from './ai-sdk-telemetry.js';
 export { subscribeAiTelemetry } from './ai-sdk-channel.js';
 export type { SubscribeAiTelemetryOptions } from './ai-sdk-channel.js';

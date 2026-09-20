@@ -30,7 +30,7 @@ import {
   SpanStatusCode,
 } from '@opentelemetry/api';
 import type { SpanContext, Context } from '@opentelemetry/api';
-import { trace as autotelTrace, type TraceContext } from 'autotel';
+import { flush, trace as autotelTrace, type TraceContext } from 'autotel';
 import type { LambdaHandler } from './types';
 import type { LambdaEvent, LambdaContext } from '../types';
 import { extractTraceContext, detectTriggerType } from './context-extractor';
@@ -229,13 +229,25 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
       );
     };
 
-    // Execute with proper parent context if available
-    if (parentSpanContext) {
-      const parentContext = createContextWithParent(parentSpanContext);
-      return context.with(parentContext, executeWithTracing);
-    }
+    const execute = (): Promise<TResult> =>
+      parentSpanContext
+        ? context.with(
+            createContextWithParent(parentSpanContext),
+            executeWithTracing,
+          )
+        : executeWithTracing();
 
-    return executeWithTracing();
+    if (config?.flush === false) return execute();
+
+    // Flush on both paths: the root span ends inside executeWithTracing, and
+    // Lambda freezes on return, so this is the last chance to export it.
+    // flush() rejects on timeout and already logs it; telemetry must never
+    // fail the invocation or replace the handler's own error.
+    try {
+      return await execute();
+    } finally {
+      await flush().catch(() => {});
+    }
   };
 }
 
@@ -336,12 +348,24 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
       );
     };
 
-    // Execute with proper parent context if available
-    if (parentSpanContext) {
-      const parentContext = createContextWithParent(parentSpanContext);
-      return context.with(parentContext, executeWithTracing);
-    }
+    const execute = (): Promise<TResult> =>
+      parentSpanContext
+        ? context.with(
+            createContextWithParent(parentSpanContext),
+            executeWithTracing,
+          )
+        : executeWithTracing();
 
-    return executeWithTracing();
+    if (config?.flush === false) return execute();
+
+    // Flush on both paths: the root span ends inside executeWithTracing, and
+    // Lambda freezes on return, so this is the last chance to export it.
+    // flush() rejects on timeout and already logs it; telemetry must never
+    // fail the invocation or replace the handler's own error.
+    try {
+      return await execute();
+    } finally {
+      await flush().catch(() => {});
+    }
   };
 }

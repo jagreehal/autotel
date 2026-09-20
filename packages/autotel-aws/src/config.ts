@@ -89,6 +89,17 @@ export interface LambdaInstrumentationConfig {
    * Service name override
    */
   service?: string;
+
+  /**
+   * Flush pending telemetry before the handler returns.
+   *
+   * Lambda freezes the execution environment the moment the handler resolves,
+   * so spans still sitting in the batch exporter are not sent until the next
+   * invocation — or never, if the sandbox is recycled first. Leave this on
+   * unless you flush yourself (an extension or an OTel Collector sidecar).
+   * @default true
+   */
+  flush?: boolean;
 }
 
 /**

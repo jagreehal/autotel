@@ -59,6 +59,7 @@
 import {
   context as otelContext,
   trace as otelTrace,
+  type Attributes,
   type Context,
   type Span,
   type Tracer,
@@ -89,7 +90,12 @@ import type {
   GenAiObserverEvent,
   GenAiObserver,
 } from './types.js';
-import { asString, readProperty } from '../values.js';
+import {
+  asRecord,
+  asString,
+  readProperty,
+  type UnknownRecord,
+} from '../values.js';
 
 // --- Structural views of the AI SDK telemetry event shapes -----------------
 // Only the fields this integration reads. The real events are supersets, so a
@@ -142,6 +148,7 @@ interface LanguageModelCallStartEventView {
 
 interface LanguageModelCallEndEventView {
   callId: string;
+  provider?: string | undefined;
   modelId?: string | undefined;
   responseId?: string | undefined;
   finishReason?: string | undefined;
@@ -242,6 +249,30 @@ interface EmbeddingModelCallEndEventView {
   usage?: { tokens?: number | undefined } | undefined;
 }
 
+/** A JSON tree: how the AI SDK types a provider's `providerMetadata`. */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
+/**
+ * What a provider returned beside the standardised response: the finish
+ * reason in the provider's own words and its `providerMetadata`, neither of
+ * which reach the lifecycle events. Handed to
+ * {@link AutotelTelemetryOptions.providerAttributes}.
+ */
+export interface ProviderResponseView {
+  /** Normalised `gen_ai.provider.name`, e.g. `aws.bedrock`. */
+  provider?: string;
+  modelId?: string;
+  /** The provider's finish reason before the AI SDK unified it. */
+  rawFinishReason?: string;
+  providerMetadata?: { readonly [provider: string]: JsonValue };
+}
+
 /**
  * The subset of the AI SDK `Telemetry` interface this integration implements.
  * The returned object is assignable to the SDK's `Telemetry` type.
@@ -306,6 +337,15 @@ export interface AutotelTelemetryOptions {
    * `autotel-genai/cost`. See {@link GenAiObserverOptions.pricing}.
    */
   pricing?: ModelPricingTable;
+  /**
+   * Provider-specific attributes for a `chat` span, from what the provider
+   * returned beside the standard response (its raw finish reason and
+   * `providerMetadata`). `autotel-bedrock` supplies one for Bedrock's stop
+   * reason and guardrail trace. Return `undefined` to add nothing.
+   */
+  providerAttributes?: (
+    response: ProviderResponseView,
+  ) => Attributes | undefined;
 }
 
 /** Per-call correlation state, keyed by the AI SDK `callId`. */
@@ -356,6 +396,7 @@ export function autotelTelemetry(
   options: AutotelTelemetryOptions = {},
 ): AutotelTelemetryIntegration {
   const captureContent = options.captureContent ?? false;
+  const providerAttributes = options.providerAttributes;
   // When content capture is on with no explicit gate, allow all approved
   // content; an `exportContent` callback (redaction) always wins if provided.
   const exportContent =
@@ -365,6 +406,9 @@ export function autotelTelemetry(
   // Live spans by observer id, so the context runners can re-enter a span's
   // OTel context to nest provider HTTP calls / a tool's inner `generateText`.
   const spans = new Map<string, Span>();
+  // What `executeLanguageModelCall` saw come back, by chat span id, for
+  // `providerAttributes`; the lifecycle end event carries neither field.
+  const providerResponses = new Map<string, ProviderResponseView>();
 
   const observe: GenAiObserver = createGenAiObserver({
     tracer: options.tracer,
@@ -449,6 +493,19 @@ export function autotelTelemetry(
    * which reads as a fast failure and is worse than an honest overestimate.
    * The ERROR status is what marks these spans as unusable for latency.
    */
+  /**
+   * Forget a call that is ending. Model calls still open at that point never
+   * get their `onLanguageModelCallEnd`, so drop what was held for them; the
+   * observer reaps their spans on close.
+   */
+  function release(callId: string, state: CallState): void {
+    calls.delete(callId);
+    for (const id of state.openLm) {
+      spans.delete(id);
+      providerResponses.delete(id);
+    }
+  }
+
   function closeOpenEmbeds(state: CallState, error?: unknown): void {
     for (const id of state.openEmbed) {
       observe({ type: 'chat.end', id, error: error ?? ABANDONED_EMBED });
@@ -546,6 +603,24 @@ export function autotelTelemetry(
     onLanguageModelCallEnd(event) {
       const state = calls.get(event.callId);
       const id = state?.openLm.pop() ?? `${event.callId}:lm:0`;
+      const providerResponse = providerResponses.get(id);
+      providerResponses.delete(id);
+      if (providerAttributes) {
+        // The span keeps its usage and finish reason whatever the hook does.
+        try {
+          const extra = providerAttributes({
+            provider: normalizeProvider(event.provider),
+            modelId: event.modelId,
+            ...providerResponse,
+          });
+          if (extra) spans.get(id)?.setAttributes(extra);
+        } catch (error) {
+          console.error(
+            '[autotel-genai:ai-sdk] providerAttributes failed:',
+            error,
+          );
+        }
+      }
       const outputMessage =
         captureContent && event.recordOutputs !== false
           ? contentToGenAiMessage(event.content, event.finishReason)
@@ -707,7 +782,7 @@ export function autotelTelemetry(
     onEnd(event) {
       const state = calls.get(event.callId);
       if (!state) return;
-      calls.delete(event.callId);
+      release(event.callId, state);
       closeOpenEmbeds(state);
       if (!state.hasAgent) return;
       // `event.content` is the first step's content: on a tool loop that is
@@ -731,7 +806,7 @@ export function autotelTelemetry(
     onAbort(event) {
       const state = calls.get(event.callId);
       if (!state) return;
-      calls.delete(event.callId);
+      release(event.callId, state);
       const error = event.reason ?? 'aborted';
       closeOpenEmbeds(state, error);
       if (!state.hasAgent) return;
@@ -751,7 +826,7 @@ export function autotelTelemetry(
       if (callId === undefined) return;
       const state = calls.get(callId);
       if (!state) return;
-      calls.delete(callId);
+      release(callId, state);
       const error = errorValue(event) ?? event;
       closeOpenEmbeds(state, error);
       if (!state.hasAgent) return;
@@ -763,13 +838,55 @@ export function autotelTelemetry(
       spans.delete(callId);
     },
 
-    executeLanguageModelCall(options) {
+    executeLanguageModelCall<T>(options: {
+      callId: string;
+      execute: () => PromiseLike<T>;
+    }): PromiseLike<T> {
       // `onLanguageModelCallStart` already opened this call's `chat` span (it is
       // the top of the stack). Run the provider call inside it so any
       // auto-instrumented HTTP spans become its children.
       const state = calls.get(options.callId);
       const id = state?.openLm.at(-1);
-      return runInSpan(id ? spans.get(id) : undefined, options.execute);
+      const run = runInSpan(id ? spans.get(id) : undefined, options.execute);
+      if (!id || !providerAttributes) return run;
+      const remember = (response: UnknownRecord | undefined): void => {
+        // The call may have ended (error, abort) while this was in flight;
+        // nothing will read what it returned.
+        if (!spans.has(id)) return;
+        const metadata = asRecord(readProperty(response, 'providerMetadata'));
+        providerResponses.set(id, {
+          rawFinishReason: asString(
+            readProperty(readProperty(response, 'finishReason'), 'raw'),
+          ),
+          // SAFETY: the AI SDK declares `providerMetadata` as
+          // `Record<string, Record<string, JSONValue>>`; a record read from
+          // it is that JSON tree.
+          providerMetadata:
+            metadata as ProviderResponseView['providerMetadata'],
+        });
+      };
+      return run.then((result) => {
+        const stream = readProperty(result, 'stream');
+        // `doGenerate` answers with the fields on the result; `doStream` sends
+        // them in the stream's `finish` part, which the SDK reads before it
+        // emits `onLanguageModelCallEnd`.
+        if (!(stream instanceof ReadableStream)) {
+          remember(asRecord(result));
+          return result;
+        }
+        const tapped = stream.pipeThrough(
+          new TransformStream({
+            transform(part, controller) {
+              const view = asRecord(part);
+              if (view?.type === 'finish') remember(view);
+              controller.enqueue(part);
+            },
+          }),
+        );
+        // SAFETY: same object as `result` with only `stream` replaced by a
+        // pass-through of itself, so it still is what `execute` promised.
+        return { ...asRecord(result), stream: tapped } as T;
+      });
     },
 
     executeTool(options) {

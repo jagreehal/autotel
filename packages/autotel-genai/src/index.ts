@@ -188,6 +188,17 @@ export type {
   AiSdkEnrichContext,
   AutotelEnrichOptions,
 } from './ai-sdk-bridge.js';
+export {
+  wrapEvaluationModel,
+  evaluationScore,
+  GEN_AI_OPERATION_EVALUATE,
+} from './ai-sdk-evaluate.js';
+export type {
+  AiSdkEvaluationAnswer,
+  AiSdkEvaluationModel,
+  AiSdkEvaluationResult,
+  WrapEvaluationModelOptions,
+} from './ai-sdk-evaluate.js';
 
 // --- Event-stream observer adapter -----------------------------------------
 export {

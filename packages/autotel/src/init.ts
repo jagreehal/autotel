@@ -5,8 +5,7 @@
  * Replaces initInstrumentation() and separate events config.
  */
 
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import type { NodeSDKConfiguration } from '@opentelemetry/sdk-node';
+import { AutotelSdk, type AutotelSdkLike, type AutotelSdkOptions } from './sdk';
 import {
   BatchSpanProcessor,
   type SpanProcessor,
@@ -193,7 +192,7 @@ function toOtelSampler(sampler: Sampler): OtelSampler {
 let initialized = false;
 let locked = false;
 let config: AutotelConfig | null = null;
-let sdk: NodeSDK | null = null;
+let sdk: AutotelSdkLike | null = null;
 let warnedOnce = false;
 let logger: Logger = silentLogger; // Silent by default - no spam
 let validationConfig: Partial<ValidationConfig> | null = null;
@@ -651,10 +650,10 @@ export function init(cfg: AutotelConfig): void {
         headers: destination.headers,
       });
 
-      // PeriodicExportingMetricReader hardcodes 60s and only NodeSDK reads
-      // these env vars, but we build the reader ourselves — so honour them
-      // here. Without it a short-lived process exports once, on shutdown, and
-      // rate() over those metrics returns nothing.
+      // PeriodicExportingMetricReader defaults to 60s and does not read these
+      // env vars itself, so honour them here. Without it a short-lived
+      // process exports once, on shutdown, and rate() over those metrics
+      // returns nothing.
       // The keys are omitted rather than set to undefined: the SDK treats a
       // present key as explicitly provided and throws on interval < timeout.
       const exportIntervalMillis = readMillisEnv('OTEL_METRIC_EXPORT_INTERVAL');
@@ -740,7 +739,7 @@ export function init(cfg: AutotelConfig): void {
   }
 
   // Handle instrumentations: merge manual instrumentations with auto-instrumentations
-  let finalInstrumentations: NodeSDKConfiguration['instrumentations'] =
+  let finalInstrumentations: AutotelSdkOptions['instrumentations'] =
     mergedConfig.instrumentations ? [...mergedConfig.instrumentations] : [];
 
   if (
@@ -807,32 +806,21 @@ export function init(cfg: AutotelConfig): void {
     ? toOtelSampler(autotelSampler)
     : (envConfig.otelSampler ?? toOtelSampler(samplingPresets.production()));
 
-  const sdkOptions: Partial<NodeSDKConfiguration> = {
+  const sdkOptions: AutotelSdkOptions = {
     resource,
-    // NodeSDK runs its environment resource detector after merging `resource`.
-    // Passing serviceName separately reapplies the resolved Autotel value last,
+    // The SDK runs resource detection after merging `resource`. Passing
+    // serviceName separately reapplies the resolved Autotel value last,
     // preserving our documented explicit > YAML > environment precedence.
     serviceName: mergedConfig.service,
     sampler,
     instrumentations: finalInstrumentations,
   };
 
-  // Always set spanProcessors, even when nothing is being exported. Omitting
-  // the key lets NodeSDK install its own default exporter, which is OTLP over
-  // HTTP to http://localhost:4318 — so "no endpoint configured" silently became
-  // "export to localhost" rather than "do not export", which is the opposite
-  // of what resolving the endpoint above intends. On a server with nothing
-  // listening that is a doomed request per batch, forever, with no error that
-  // names the cause. It also made a caller's explicit `spanProcessors: []`
-  // useless as an off switch, since empty and absent were indistinguishable
-  // here. Point `devtools: true` or an endpoint at a local collector to send
-  // there on purpose.
-  //
-  // An empty list is not enough on its own: NodeSDK registers no TracerProvider
-  // for one, and with no provider there are no recording spans — so
-  // `traceparent` stops being injected and a service with no endpoint of its
-  // own can no longer pass the trace to the next one. Not exporting and not
-  // tracing are different things, so the no-op keeps the provider registered.
+  // Always set spanProcessors, even when nothing is being exported: "no
+  // endpoint configured" means "do not export", and a caller's explicit
+  // `spanProcessors: []` is an off switch. A `sdkFactory` handing these to
+  // NodeSDK still gets a registered TracerProvider for the no-op, so
+  // `traceparent` keeps propagating to the next service.
   sdkOptions.spanProcessors =
     spanProcessors.length > 0 ? spanProcessors : [new NoopSpanProcessor()];
 
@@ -843,21 +831,17 @@ export function init(cfg: AutotelConfig): void {
   if (logRecordProcessors && logRecordProcessors.length > 0) {
     sdkOptions.logRecordProcessors = logRecordProcessors;
   } else if (!process.env.OTEL_LOGS_EXPORTER) {
-    // Empty rather than absent, for the reason spanProcessors is: with the key
-    // absent NodeSDK configures its own OTLP log exporter to
-    // http://localhost:4318, so an app exporting traces to a real collector
-    // also posts every log record at one nobody asked for. `OTEL_LOGS_EXPORTER`
-    // is left to govern itself — that is the spec's own off switch, and someone
-    // who set it means it.
+    // Empty rather than absent, for the reason spanProcessors is; a set
+    // `OTEL_LOGS_EXPORTER` governs itself, since it is the spec's own switch.
     sdkOptions.logRecordProcessors = [];
   }
 
   sdk = mergedConfig.sdkFactory
     ? mergedConfig.sdkFactory(sdkOptions)
-    : new NodeSDK(sdkOptions);
+    : new AutotelSdk(sdkOptions);
 
   if (!sdk) {
-    throw new Error('[autotel] sdkFactory must return a NodeSDK instance');
+    throw new Error('[autotel] sdkFactory must return an SDK instance');
   }
 
   sdk.start();
@@ -873,9 +857,8 @@ export function init(cfg: AutotelConfig): void {
         ...mergedConfig.openllmetry.options,
       };
 
-      // Reuse autotel's tracer provider. getTracerProvider is not on the
-      // public NodeSDK interface, so it is read off the handle rather than
-      // called through it.
+      // Reuse autotel's tracer provider; a `sdkFactory` handle may not have
+      // getTracerProvider, so it is read off the handle.
       const getTracerProvider = asFunction(
         readProperty(sdk, 'getTracerProvider'),
       );
@@ -1052,6 +1035,6 @@ export function _getEmbeddedDevtoolsCloseForTesting():
 /**
  * Get SDK instance (for shutdown)
  */
-export function getSdk(): NodeSDK | null {
+export function getSdk(): AutotelSdkLike | null {
   return sdk;
 }

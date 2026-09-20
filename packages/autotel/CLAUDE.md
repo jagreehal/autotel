@@ -94,6 +94,7 @@ pnpm lint               # Lint package
 - `src/functional.ts` - Public façade for `trace()`, `span()`, `instrument()`, and context helpers
 - `src/functional-wrapper.ts` - Internal functional tracing lifecycle (option types, naming, sampling, metrics, finalization, flushing, and active context)
 - `src/init.ts` - OpenTelemetry SDK initialization
+- `src/sdk.ts` - `AutotelSdk`: registers the tracer, meter and logger providers from the components `init()` resolved. Replaces `@opentelemetry/sdk-node`'s `NodeSDK`, whose static exporter imports (gRPC, Prometheus, file config) landed in every bundle that contained `init()`. `sdkFactory` still accepts a `NodeSDK` built from the same options
 - `src/config.ts` - Runtime configuration
 - `src/attributes/` - Type-safe attribute builders
 - `src/node-require.ts` - Dynamic module loading helpers (CJS/ESM)

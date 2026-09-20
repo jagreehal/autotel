@@ -44,7 +44,8 @@ init({
 });
 
 export const handler = wrapHandler(async (event, context) => {
-  // Your handler code - automatically traced
+  // Your handler code - automatically traced, and telemetry is flushed
+  // before Lambda freezes the sandbox (pass { flush: false } to opt out).
   return { statusCode: 200 };
 });
 ```

@@ -1,0 +1,67 @@
+{
+  "name": "autotel-bedrock",
+  "version": "0.1.0",
+  "description": "Amazon Bedrock facts for autotel's canonical gen_ai.* spans: model-id normalisation for inference profiles and ARNs, cloud.region, and a Bedrock price table",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1"
+  },
+  "peerDependencies": {
+    "@opentelemetry/sdk-trace-base": ">=2.0.0",
+    "autotel-genai": "workspace:^"
+  },
+  "devDependencies": {
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "@types/node": "^26.1.2",
+    "autotel-genai": "workspace:*",
+    "tsdown": "^0.22.14",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "bedrock",
+    "aws",
+    "llm",
+    "gen_ai",
+    "tracing",
+    "observability",
+    "autotel"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-bedrock"
+  },
+  "peerDependenciesMeta": {
+    "autotel-genai": {
+      "optional": true
+    }
+  }
+}

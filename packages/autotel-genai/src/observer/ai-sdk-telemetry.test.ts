@@ -14,9 +14,12 @@ import {
   type ReadableSpan,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GEN_AI } from '../semconv.js';
-import { autotelTelemetry } from './ai-sdk-telemetry.js';
+import {
+  autotelTelemetry,
+  type ProviderResponseView,
+} from './ai-sdk-telemetry.js';
 
 // The context runners rely on the ambient OpenTelemetry ContextManager — the
 // same one a real Node app gets from NodeTracerProvider/sdk-node. BasicTracer
@@ -625,6 +628,156 @@ describe('autotelTelemetry — context runners', () => {
     const chat = one('chat gpt-4o');
     const http = one('provider.http');
     expect(parentIdOf(http)).toBe(chat.spanContext().spanId);
+  });
+});
+
+describe('autotelTelemetry — providerAttributes', () => {
+  it('hands the raw finish reason and providerMetadata of a generate call to the hook', async () => {
+    const seen: ProviderResponseView[] = [];
+    const t = autotelTelemetry({
+      tracer,
+      providerAttributes: (response) => {
+        seen.push(response);
+        return { 'aws.bedrock.stop_reason': response.rawFinishReason };
+      },
+    });
+    t.onStart({ callId: 'p1', operationId: 'ai.generateText', modelId: 'm' });
+    t.onLanguageModelCallStart({ callId: 'p1', modelId: 'm' });
+    await t.executeLanguageModelCall({
+      callId: 'p1',
+      execute: async () => ({
+        finishReason: {
+          unified: 'content-filter',
+          raw: 'guardrail_intervened',
+        },
+        providerMetadata: { bedrock: { trace: { guardrail: {} } } },
+      }),
+    });
+    t.onLanguageModelCallEnd({
+      callId: 'p1',
+      provider: 'amazon-bedrock',
+      modelId: 'm',
+      finishReason: 'content-filter',
+    });
+    t.onEnd({ callId: 'p1' });
+
+    expect(seen).toEqual([
+      {
+        provider: 'aws.bedrock',
+        modelId: 'm',
+        rawFinishReason: 'guardrail_intervened',
+        providerMetadata: { bedrock: { trace: { guardrail: {} } } },
+      },
+    ]);
+    const chat = one('chat m');
+    expect(chat.attributes['aws.bedrock.stop_reason']).toBe(
+      'guardrail_intervened',
+    );
+    expect(chat.attributes[GEN_AI.RESPONSE_FINISH_REASONS]).toEqual([
+      'content-filter',
+    ]);
+    expect(chat.status.code).toBe(SpanStatusCode.UNSET);
+  });
+
+  it('keeps the completion telemetry when the hook throws', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = autotelTelemetry({
+      tracer,
+      providerAttributes: () => {
+        throw new Error('hook broke');
+      },
+    });
+    t.onStart({ callId: 'p3', operationId: 'ai.generateText', modelId: 'm' });
+    t.onLanguageModelCallStart({ callId: 'p3', modelId: 'm' });
+    t.onLanguageModelCallEnd({
+      callId: 'p3',
+      modelId: 'm',
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 5 },
+    });
+    t.onEnd({ callId: 'p3' });
+
+    const chat = one('chat m');
+    expect(chat.attributes[GEN_AI.USAGE_INPUT_TOKENS]).toBe(10);
+    expect(chat.attributes[GEN_AI.RESPONSE_FINISH_REASONS]).toEqual(['stop']);
+    expect(error).toHaveBeenCalledOnce();
+  });
+
+  it('ignores what a call returned after the operation already failed', async () => {
+    const seen: ProviderResponseView[] = [];
+    const t = autotelTelemetry({
+      tracer,
+      providerAttributes: (response) => {
+        seen.push(response);
+        return {};
+      },
+    });
+    t.onStart({ callId: 'p4', operationId: 'ai.generateText', modelId: 'm' });
+    t.onLanguageModelCallStart({ callId: 'p4', modelId: 'm' });
+    const pending = t.executeLanguageModelCall({
+      callId: 'p4',
+      execute: () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ finishReason: { raw: 'late' } }), 1),
+        ),
+    });
+    t.onError({ callId: 'p4', error: new Error('response parse failed') });
+    await pending;
+    // A later model call under the same id must start clean.
+    t.onLanguageModelCallStart({ callId: 'p4', modelId: 'm' });
+    t.onLanguageModelCallEnd({ callId: 'p4', modelId: 'm' });
+
+    expect(seen.map((r) => r.rawFinishReason)).toEqual([undefined]);
+  });
+
+  it('reads a stream call from its finish part, passing the stream through intact', async () => {
+    const seen: ProviderResponseView[] = [];
+    const t = autotelTelemetry({
+      tracer,
+      providerAttributes: (response) => {
+        seen.push(response);
+        return {};
+      },
+    });
+    t.onStart({ callId: 'p2', operationId: 'ai.streamText', modelId: 'm' });
+    t.onLanguageModelCallStart({ callId: 'p2', modelId: 'm' });
+    const parts = [
+      { type: 'text-delta', delta: 'hi' },
+      {
+        type: 'finish',
+        finishReason: { unified: 'length', raw: 'max_tokens' },
+        providerMetadata: { bedrock: { serviceTier: 'default' } },
+      },
+    ];
+    const { stream } = await t.executeLanguageModelCall({
+      callId: 'p2',
+      execute: async () => ({
+        stream: new ReadableStream({
+          start(controller) {
+            for (const part of parts) controller.enqueue(part);
+            controller.close();
+          },
+        }),
+      }),
+    });
+    const received = [];
+    for await (const part of stream) received.push(part);
+    t.onLanguageModelCallEnd({
+      callId: 'p2',
+      provider: 'amazon-bedrock',
+      modelId: 'm',
+    });
+    t.onEnd({ callId: 'p2' });
+
+    expect(received).toEqual(parts);
+    expect(seen).toEqual([
+      {
+        provider: 'aws.bedrock',
+        modelId: 'm',
+        rawFinishReason: 'max_tokens',
+        providerMetadata: { bedrock: { serviceTier: 'default' } },
+      },
+    ]);
   });
 });
 

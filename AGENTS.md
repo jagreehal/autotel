@@ -74,6 +74,7 @@ autotel/
 │   ├── autotel-mcp-instrumentation/          # MCP instrumentation
 │   ├── autotel-genai/         # GenAI/LLM: traceGenAI, cost, metrics, events, ai-sdk, mastra, agent governance (autotel-genai/agent)
 │   ├── autotel-langfuse/      # Langfuse: langfuseCompatibility() enricher, langfuseScores(), langfuseMedia()
+│   ├── autotel-bedrock/       # Amazon Bedrock: bedrockCompatibility() enricher, bedrockProviderAttributes (stop reason, guardrails), BEDROCK_PRICING
 │   ├── autotel-posthog/       # PostHog join: joinPostHog() browser session/replay, PostHogSubscriber for server track()
 │   ├── autotel-subscribers/   # Event subscribers (Mixpanel, Amplitude, Segment, Slack, Loki, file, webhooks)
 │   ├── autotel-web/           # Browser SDK: traceparent + baggage, canonical browser signals, frustration/breadcrumbs/engagement

@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MetricReader } from '@opentelemetry/sdk-metrics';
-import type { NodeSDK, NodeSDKConfiguration } from '@opentelemetry/sdk-node';
+import type { AutotelSdk, AutotelSdkOptions } from './sdk';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { mock, mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import { NeverSampler } from './sampling';
 
 /** The options a constructor was called with, as this harness records them. */
-type SdkOptions = Partial<NodeSDKConfiguration>;
+type SdkOptions = AutotelSdkOptions;
 
 /**
  * What an exporter, reader or processor was constructed with. Each is an
@@ -30,7 +30,7 @@ type ConfigValue =
 
 type SdkRecord = {
   options: SdkOptions;
-  instance: DeepMockProxy<NodeSDK>;
+  instance: DeepMockProxy<AutotelSdk>;
 };
 
 async function loadInitWithMocks() {
@@ -41,9 +41,9 @@ async function loadInitWithMocks() {
   const logExporterOptions: RecordedOptions[] = [];
   const logProcessorOptions: RecordedOptions[] = [];
 
-  class MockNodeSDK {
+  class MockSdk {
     constructor(options: SdkOptions) {
-      const instance = mockDeep<NodeSDK>();
+      const instance = mockDeep<AutotelSdk>();
       instance.start.mockImplementation(() => {});
       instance.shutdown.mockResolvedValue();
       sdkInstances.push({ options, instance });
@@ -81,8 +81,8 @@ async function loadInitWithMocks() {
   // Reset modules immediately before mocking to ensure clean state
   vi.resetModules();
 
-  vi.doMock('@opentelemetry/sdk-node', () => ({
-    NodeSDK: MockNodeSDK,
+  vi.doMock('./sdk', () => ({
+    AutotelSdk: MockSdk,
   }));
 
   vi.doMock('@opentelemetry/exporter-trace-otlp-http', () => ({
@@ -246,7 +246,7 @@ describe('init() customization', () => {
   });
 
   it(
-    'passes custom instrumentations to the NodeSDK',
+    'passes custom instrumentations to the SDK',
     { timeout: 10_000 },
     async () => {
       const { init, sdkInstances } = await loadInitWithMocks();
@@ -297,7 +297,7 @@ describe('init() customization', () => {
     });
   });
 
-  it('passes the resolved service name to NodeSDK', async () => {
+  it('passes the resolved service name to the SDK', async () => {
     const previousServiceName = process.env.OTEL_SERVICE_NAME;
     process.env.OTEL_SERVICE_NAME = 'service-from-environment';
 
@@ -550,7 +550,7 @@ describe('init() customization', () => {
 
   it('supports sdkFactory overrides', async () => {
     const { init, sdkInstances } = await loadInitWithMocks();
-    const customSdk = mockDeep<NodeSDK>();
+    const customSdk = mockDeep<AutotelSdk>();
     customSdk.start.mockImplementation(() => {});
     customSdk.shutdown.mockResolvedValue();
 
