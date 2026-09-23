@@ -185,6 +185,26 @@ recordEvaluationResult(ctx, { name: 'relevance', scoreValue: 0.92 });
 recordModelWarnings(ctx, [{ type: 'unsupported-setting', setting: 'topK' }]);
 ```
 
+### Conversation signals
+
+`runConversationSignals(model, { turns })` asks five independent yes/no
+questions (`user_frustrated`, `user_follow_up`, `user_disagrees`,
+`outcome_resolved`, `agent_corrected`) over one conversation state through an
+AI SDK evaluation model such as TypeSafe Jev. Each answer lands as a
+`gen_ai.evaluation.result` event labelled `yes`/`no` from per-signal
+`thresholds` (default 0.7). For your own questions, pass
+`booleanThresholds` to `wrapEvaluationModel`.
+
+```typescript
+import { runConversationSignals } from 'autotel-genai';
+
+const { results } = await runConversationSignals(
+  typeSafeAi.evaluationModel('jev-1.13.0'),
+  { turns },
+  { thresholds: { user_frustrated: 0.8 } },
+);
+```
+
 **Binary is redacted, never recorded.** A multimodal prompt carries images and
 audio inline as base64; serialised verbatim, one call is a megabyte-scale
 attribute that collectors truncate mid-string and nobody reads. Payloads become

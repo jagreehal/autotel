@@ -58,6 +58,7 @@ class NoopSpanProcessor implements SpanProcessor {
   }
 }
 import { BaggageSpanProcessor } from './baggage-span-processor';
+import { RequestAttributesSpanProcessor } from './request-attributes';
 import { FilteringSpanProcessor } from './filtering-span-processor';
 import {
   PolicyLogRecordProcessor,
@@ -626,6 +627,14 @@ export function init(cfg: AutotelConfig): void {
   // redactor downstream then sees the attributes it added rather than missing
   // an enricher that copied a sensitive value into a new key.
   //
+  // `requestCtx` attributes describe the whole request, so the spans started
+  // inside it carry them too. An enricher like the ones below, and outside the
+  // redaction wrapper for the same reason. With nothing exporting there is no
+  // one to show them to, and `spanProcessors: []` stays an off switch.
+  if (spanProcessors.length > 0) {
+    spanProcessors.unshift(new RequestAttributesSpanProcessor());
+  }
+
   // Unlike `spanProcessors`, these add to the pipeline instead of replacing it.
   if (mergedConfig.spanEnrichers && mergedConfig.spanEnrichers.length > 0) {
     spanProcessors.unshift(...mergedConfig.spanEnrichers);

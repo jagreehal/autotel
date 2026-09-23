@@ -45,10 +45,24 @@ export interface WrapEvaluationModelOptions {
   attributes?: GenAiAttributeMap;
   /** Record `gen_ai.client.*` metrics alongside the span (default on). */
   metrics?: boolean;
+  /**
+   * Per-question P(true) cutoffs for boolean answers. When a threshold is set
+   * for an answer's name, `gen_ai.evaluation.score.label` becomes `yes` or `no`.
+   */
+  booleanThresholds?: Record<string, number>;
+}
+
+export interface EvaluationScoreOptions {
+  /** Question id; used with {@link WrapEvaluationModelOptions.booleanThresholds}. */
+  name?: string;
+  booleanThresholds?: Record<string, number>;
 }
 
 /** Score value and label for the `gen_ai.evaluation.result` event of one answer. */
-export function evaluationScore(answer: AiSdkEvaluationAnswer): {
+export function evaluationScore(
+  answer: AiSdkEvaluationAnswer,
+  options: EvaluationScoreOptions = {},
+): {
   scoreValue?: number;
   scoreLabel?: string;
 } {
@@ -63,7 +77,18 @@ export function evaluationScore(answer: AiSdkEvaluationAnswer): {
       return { scoreValue: answer.score };
     }
     case 'boolean': {
-      return { scoreValue: answer.probability };
+      const threshold =
+        options.name !== undefined
+          ? options.booleanThresholds?.[options.name]
+          : undefined;
+      return {
+        scoreValue: answer.probability,
+        ...(threshold !== undefined
+          ? {
+              scoreLabel: answer.probability >= threshold ? 'yes' : 'no',
+            }
+          : {}),
+      };
     }
   }
 }
@@ -103,7 +128,10 @@ export function wrapEvaluationModel<M extends AiSdkEvaluationModel>(
     for (const [name, answer] of Object.entries(seen.answers)) {
       recordEvaluationResult(ctx, {
         name,
-        ...evaluationScore(answer),
+        ...evaluationScore(answer, {
+          name,
+          booleanThresholds: options.booleanThresholds,
+        }),
         responseId: seen.response?.id,
       });
     }

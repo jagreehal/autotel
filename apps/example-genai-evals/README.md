@@ -55,6 +55,33 @@ rate drops below 70%" that hosted products charge for. Grafana is on
 docker compose down
 ```
 
+## Conversation signals (Jev-shaped)
+
+Cheap heuristics catch structure. Conversation signals catch tone and outcome
+when you cannot read every transcript: frustration, follow-up, disagreement,
+resolved, agent corrected — five independent yes/no judgments over one shared
+state.
+
+```bash
+EVAL_MODE=signals pnpm start
+```
+
+The demo uses an in-process fake evaluation model (planted probabilities, no
+API key). Each conversation becomes an `evaluate` span plus five
+`gen_ai.evaluation.result` events with `yes` / `no` labels.
+
+To use TypeSafe Jev for real, pass a wrapped evaluation model into
+`runConversationSignals` (pin a versioned id such as `jev-1.13.0`, not
+`jev-latest`):
+
+```typescript
+import { typeSafeAi } from '@ai-sdk/typesafe-ai';
+import { wrapEvaluationModel, runConversationSignals } from 'autotel-genai';
+
+const model = wrapEvaluationModel(typeSafeAi.evaluationModel('jev-1.13.0'));
+await runConversationSignals(model, { turns });
+```
+
 ## The evaluators
 
 None of them calls a model. An LLM judge is the expensive option, so let the
