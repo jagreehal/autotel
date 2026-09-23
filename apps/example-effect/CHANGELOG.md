@@ -1,5 +1,13 @@
 # @jagreehal/example-effect
 
+## 1.0.72
+
+### Patch Changes
+
+- Updated dependencies [5c6efd2]
+  - autotel@7.9.0
+  - autotel-effect@7.0.0
+
 ## 1.0.71
 
 ### Patch Changes

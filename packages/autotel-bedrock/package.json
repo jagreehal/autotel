@@ -1,6 +1,6 @@
 {
   "name": "autotel-bedrock",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Amazon Bedrock facts for autotel's canonical gen_ai.* spans: model-id normalisation for inference profiles and ARNs, cloud.region, and a Bedrock price table",
   "type": "module",
   "sideEffects": false,
