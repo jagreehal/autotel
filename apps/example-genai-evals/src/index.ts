@@ -6,6 +6,7 @@
  * answering. This is the second half.
  *
  * Run: pnpm start
+ * Conversation signals (fake Jev): EVAL_MODE=signals pnpm start
  */
 
 import {
@@ -22,14 +23,20 @@ import {
   recordGenAiResponse,
   recordGenAiUsage,
   recordEvaluationResult,
+  runConversationSignals,
   GEN_AI_OPERATION,
 } from 'autotel-genai';
 
 import { evaluate, type Answer } from './evaluators.js';
 import { CONVERSATIONS } from './conversations.js';
+import {
+  SIGNAL_CONVERSATIONS,
+  fakeConversationSignalModel,
+} from './fake-signal-model.js';
 
 /** Fraction of answers to score. Drop it when traffic grows. */
 const SAMPLE_RATE = Number(process.env.EVAL_SAMPLE_RATE ?? 0.5);
+const EVAL_MODE = process.env.EVAL_MODE ?? 'heuristic';
 
 init({
   service: 'support-agent',
@@ -82,7 +89,7 @@ function score(ctx: TraceContext, result: Answer): number {
   return failures;
 }
 
-async function main() {
+async function runHeuristicEvals() {
   console.log(
     `\nAnswering ${CONVERSATIONS.length} questions, scoring ${Math.round(SAMPLE_RATE * 100)}% of them\n`,
   );
@@ -122,9 +129,55 @@ async function main() {
   console.log('Grafana: http://localhost:3000\n');
 }
 
+/**
+ * Conversation signals: one evaluate pass per transcript, five yes/no events.
+ * Uses an in-process fake model so the demo needs no TypeSafe key. Swap for
+ * `typeSafeAi.evaluationModel('jev-1.13.0')` (pinned) in production.
+ */
+async function runSignalEvals() {
+  const model = fakeConversationSignalModel();
+
+  console.log(
+    `\nScoring ${SIGNAL_CONVERSATIONS.length} conversations for conversation signals\n`,
+  );
+
+  let yesCount = 0;
+
+  for (const fixture of SIGNAL_CONVERSATIONS) {
+    await span({ name: 'invoke_agent support-agent' }, async () => {
+      const ctx = getActiveTraceContext()!;
+      ctx.setAttribute('gen_ai.operation.name', GEN_AI_OPERATION.INVOKE_AGENT);
+      ctx.setAttribute('gen_ai.agent.name', 'support-agent');
+      ctx.setAttribute('gen_ai.conversation.id', fixture.id);
+
+      const { results } = await runConversationSignals(model, fixture.input, {
+        cost: { recordCost: false },
+      });
+
+      const raised = results.filter((r) => r.scoreLabel === 'yes');
+      yesCount += raised.length;
+      console.log(
+        `  ${fixture.id}: ${raised.map((r) => r.name).join(', ') || '(none)'}`,
+      );
+    });
+  }
+
+  await flush();
+  await shutdown();
+
+  console.log(`\n${yesCount} yes-labeled signals across the run.\n`);
+  console.log('Signal rate in Loki (example: frustration):');
+  console.log(
+    '  sum(count_over_time({service="support-agent"} | json | gen_ai_evaluation_name="user_frustrated" | gen_ai_evaluation_score_label="yes" [15m]))\n',
+  );
+  console.log('Grafana: http://localhost:3000\n');
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+const main = EVAL_MODE === 'signals' ? runSignalEvals : runHeuristicEvals;
 
 main().catch((err) => {
   console.error(err);

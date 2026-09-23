@@ -198,7 +198,24 @@ export type {
   AiSdkEvaluationModel,
   AiSdkEvaluationResult,
   WrapEvaluationModelOptions,
+  EvaluationScoreOptions,
 } from './ai-sdk-evaluate.js';
+export {
+  CONVERSATION_SIGNAL_NAMES,
+  CONVERSATION_SIGNAL_QUESTIONS,
+  DEFAULT_CONVERSATION_SIGNAL_THRESHOLDS,
+  conversationSignalState,
+  conversationSignalResults,
+  runConversationSignals,
+} from './conversation-signals.js';
+export type {
+  ConversationSignalTurn,
+  ConversationSignalInput,
+  ConversationSignalQuestion,
+  ConversationSignalName,
+  ConversationSignalResult,
+  RunConversationSignalsOptions,
+} from './conversation-signals.js';
 
 // --- Event-stream observer adapter -----------------------------------------
 export {

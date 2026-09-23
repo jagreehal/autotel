@@ -905,6 +905,32 @@ of the call it judges, which turns pass rate into a query you can alert on.
 runs three model-free evaluators over a sample of answers and charts the result
 in Grafana. Events reach a backend through a subscriber, so configure one or
 `recordEvaluationResult` is a no-op.
+
+For conversation signals at production volume (frustration, follow-up,
+disagreement, resolved, agent corrected), use `runConversationSignals` with an
+evaluation model such as TypeSafe Jev. One shared conversation state, several
+independent boolean questions in one pass, each becoming a
+`gen_ai.evaluation.result` with a yes/no label from your threshold:
+
+```typescript
+import { runConversationSignals } from 'autotel-genai';
+
+// Pin a versioned id (not jev-latest) when wiring a real evaluation model.
+const { results } = await runConversationSignals(
+  typeSafeAi.evaluationModel('jev-1.13.0'),
+  {
+    turns: [
+      { role: 'user', text: 'Rebook my flight' },
+      { role: 'assistant', text: 'Cancelled.' },
+      { role: 'user', text: 'No — rebook, not cancel' },
+    ],
+  },
+);
+// results: [{ name: 'user_frustrated', scoreValue, scoreLabel: 'yes'|'no' }, ...]
+```
+
+`EVAL_MODE=signals pnpm start` in the example app demos the same path with an
+in-process fake model (no API key).
 :::
 
 ```typescript

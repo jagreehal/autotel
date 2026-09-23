@@ -148,6 +148,40 @@ describe('wrapEvaluationModel', () => {
         'gen_ai.evaluation.score.value': 1.4,
       }),
     ]);
+    expect(events[0]).not.toHaveProperty('gen_ai.evaluation.score.label');
+  });
+
+  it('labels boolean answers when booleanThresholds are set', async () => {
+    await wrapEvaluationModel(fakeModel(), {
+      cost: { recordCost: false },
+      booleanThresholds: { urgent: 0.9 },
+    }).doEvaluate({ state: 's', questions: {} });
+
+    const events = fakeCtx.track.mock.calls
+      .filter(([name]) => name === 'gen_ai.evaluation.result')
+      .map(([, data]) => data);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          'gen_ai.evaluation.name': 'urgent',
+          'gen_ai.evaluation.score.value': 0.97,
+          'gen_ai.evaluation.score.label': 'yes',
+        }),
+        expect.objectContaining({
+          'gen_ai.evaluation.name': 'team',
+          'gen_ai.evaluation.score.label': 'engineering',
+        }),
+      ]),
+    );
+  });
+
+  it('labels a boolean answer no when probability is below its threshold', () => {
+    expect(
+      evaluationScore(
+        { type: 'boolean', probability: 0.4 },
+        { name: 'urgent', booleanThresholds: { urgent: 0.7 } },
+      ),
+    ).toEqual({ scoreValue: 0.4, scoreLabel: 'no' });
   });
 
   it('prices usage through the cost table when the model is known', async () => {

@@ -682,7 +682,11 @@ describe('init() customization', () => {
 
     // init() constructs exactly one SDK, so the last record is this run's.
     const options = sdkInstances.at(-1)!.options;
-    expect(options.spanProcessors).toEqual([customProcessor]);
+    // Behind the request-attributes enricher init() always adds.
+    expect(options.spanProcessors?.[0]?.constructor.name).toBe(
+      'RequestAttributesSpanProcessor',
+    );
+    expect(options.spanProcessors?.slice(1)).toEqual([customProcessor]);
   });
 
   it('adds spanEnrichers to the destination pipeline instead of replacing it', async () => {
@@ -782,9 +786,13 @@ describe('init() customization', () => {
     expect(processors[0]?.constructor.name).not.toBe(
       'AttributeRedactingProcessor',
     );
+    // So is the request-attributes enricher, for the same reason.
+    expect(processors[1]?.constructor.name).toBe(
+      'RequestAttributesSpanProcessor',
+    );
     // The exporting processors are still wrapped.
-    expect(processors.length).toBeGreaterThan(1);
-    expect(processors[1]?.constructor.name).toBe('AttributeRedactingProcessor');
+    expect(processors.length).toBeGreaterThan(2);
+    expect(processors[2]?.constructor.name).toBe('AttributeRedactingProcessor');
   });
 
   it('supports singular spanProcessor alias', async () => {
@@ -797,7 +805,11 @@ describe('init() customization', () => {
 
     // init() constructs exactly one SDK, so the last record is this run's.
     const options = sdkInstances.at(-1)!.options;
-    expect(options.spanProcessors).toEqual([customProcessor]);
+    // Behind the request-attributes enricher init() always adds.
+    expect(options.spanProcessors?.[0]?.constructor.name).toBe(
+      'RequestAttributesSpanProcessor',
+    );
+    expect(options.spanProcessors?.slice(1)).toEqual([customProcessor]);
   });
 
   it('prefers plural spanProcessors over singular spanProcessor when both are set', async () => {
@@ -817,7 +829,11 @@ describe('init() customization', () => {
 
     // init() constructs exactly one SDK, so the last record is this run's.
     const options = sdkInstances.at(-1)!.options;
-    expect(options.spanProcessors).toEqual([pluralProcessor]);
+    // Behind the request-attributes enricher init() always adds.
+    expect(options.spanProcessors?.[0]?.constructor.name).toBe(
+      'RequestAttributesSpanProcessor',
+    );
+    expect(options.spanProcessors?.slice(1)).toEqual([pluralProcessor]);
   });
 
   it('supports singular spanExporter alias', async () => {

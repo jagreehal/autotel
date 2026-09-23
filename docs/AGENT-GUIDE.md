@@ -6,35 +6,35 @@ This document gives AI coding agents **before/after examples**, **when-to-use-wh
 
 ## When to Use What
 
-| Scenario                                                      | Use                                                                         | Example                                  |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------- |
-| Wrap an async function with a span                            | `trace(fn)` or `span('Name', fn)`                                           | Handlers, use-case functions, workers    |
-| Wrap with explicit name/key                                   | `trace('checkout', fn)` or `instrument({ key: 'checkout', fn })`            | When name inference is unreliable        |
-| Run named work now with span context                          | `trace.run('checkout', async (ctx) => { ctx.setAttribute(...); ... })`      | One-off operations, run right here       |
-| Read the active span inside a traced body                     | ambient `ctx` import: `ctx.setAttribute(...)`, `ctx.track(...)`             | Attributes from any depth, no plumbing   |
-| Reusable handler with an explicit context argument            | `withTracing({})((ctx) => async (args) => { ctx.setAttribute(...); ... })`  | Wrappers that need the handle passed in  |
-| Tag the whole request from a shared middleware                | ambient `requestCtx` import: `requestCtx.setAttributes({ user })`           | Auth/tenant middleware, framework layers |
-| One snapshot per request (attributes + correlated log events) | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()` | HTTP request handlers, background jobs   |
-| Throw an error with why/fix/link                              | `createStructuredError({ message, why?, fix?, link?, status?, cause? })`    | API routes, services, validation         |
-| Show API error in UI (client)                                 | `parseError(caught)` → use `message`, `why`, `fix`, `link`                  | Toasts, error banners, forms             |
-| Product/analytics events                                      | `track('event.name', attributes)` or `Event` from `autotel/event`           | Clicks, signups, conversions             |
-| Record error on current span                                  | `recordStructuredError(ctx, error)` or request logger `.error()`            | Inside catch blocks when you have a span |
-| Security decision point                                       | `securityEvent()` from `autotel-audit`                                      | Login failure, `access.tenant.violation` |
-| Wrap a sensitive operation                                    | `withSecurity()` from `autotel-audit`                                       | API key creation                         |
-| Correlate actor without raw PII                               | `hashIdentifier()` from `autotel-audit`                                     | Email or IP in `actorId`                 |
-| Validation mismatch observability                             | `defineValidator()` from `autotel/validate`                                 | POST body shape at boundary              |
-| Zero-code probe/401/LLM signals                               | `createSecuritySignalProcessor()` in `init({ spanProcessors })`             | Scanner traffic, credential stuffing     |
-| Join PostHog session to traces                                | `joinPostHog(posthog)` from `autotel-posthog` in `spanEnrichers`            | Browser + PostHog on the same page       |
-| Name which arm a request took                                 | `experiment({ name, variant, expect? })` from `autotel`                     | A/B test, migration, cache on or off     |
-| Make a number comparable across requests                      | `bucket(value, boundaries)` from `autotel/analysis`                         | Duration, payload size, item count       |
-| Keep a trace the sampler would drop                           | `forceKeep()` from `autotel`, or `autotel.debug` baggage on the request     | Payments, audits, debugging a live user  |
-| Record which flag variant a request branched on               | `recordFeatureFlag()` from `autotel/feature-flags`                          | Rollouts, kill switches, experiments     |
-| Record every flag evaluation automatically                    | `autotelOpenFeatureHook()` from `autotel/feature-flags`                     | Any OpenFeature provider                 |
-| Find clicks that achieved nothing                             | `captureFrustration: true` in `initFull()` (`autotel-web/full`)             | Broken buttons, dead UI, rage clicks     |
-| Explain an error with what led to it                          | `breadcrumbs: true` + `addBreadcrumb()` from `autotel-web`                  | Browser exceptions with no reproduction  |
-| Measure how much of a page was read                           | `captureEngagement: true` in `initFull()`                                   | Content, landing pages, docs             |
-| Ship browser console output to a log backend                  | `captureConsoleLogs: true` in `initFull()`                                  | Loki, any OTLP logs pipeline             |
-| Change capture settings without a release                     | `remoteConfigUrl` in `initFull()`                                           | Sampling, noisy-error suppression        |
+| Scenario                                                      | Use                                                                         | Example                                                          |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Wrap an async function with a span                            | `trace(fn)` or `span('Name', fn)`                                           | Handlers, use-case functions, workers                            |
+| Wrap with explicit name/key                                   | `trace('checkout', fn)` or `instrument({ key: 'checkout', fn })`            | When name inference is unreliable                                |
+| Run named work now with span context                          | `trace.run('checkout', async (ctx) => { ctx.setAttribute(...); ... })`      | One-off operations, run right here                               |
+| Read the active span inside a traced body                     | ambient `ctx` import: `ctx.setAttribute(...)`, `ctx.track(...)`             | Attributes from any depth, no plumbing                           |
+| Reusable handler with an explicit context argument            | `withTracing({})((ctx) => async (args) => { ctx.setAttribute(...); ... })`  | Wrappers that need the handle passed in                          |
+| Tag the whole request from a shared middleware                | ambient `requestCtx` import: `requestCtx.setAttributes({ user })`           | Auth/tenant middleware; later child spans inherit the attributes |
+| One snapshot per request (attributes + correlated log events) | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()` | HTTP request handlers, background jobs                           |
+| Throw an error with why/fix/link                              | `createStructuredError({ message, why?, fix?, link?, status?, cause? })`    | API routes, services, validation                                 |
+| Show API error in UI (client)                                 | `parseError(caught)` → use `message`, `why`, `fix`, `link`                  | Toasts, error banners, forms                                     |
+| Product/analytics events                                      | `track('event.name', attributes)` or `Event` from `autotel/event`           | Clicks, signups, conversions                                     |
+| Record error on current span                                  | `recordStructuredError(ctx, error)` or request logger `.error()`            | Inside catch blocks when you have a span                         |
+| Security decision point                                       | `securityEvent()` from `autotel-audit`                                      | Login failure, `access.tenant.violation`                         |
+| Wrap a sensitive operation                                    | `withSecurity()` from `autotel-audit`                                       | API key creation                                                 |
+| Correlate actor without raw PII                               | `hashIdentifier()` from `autotel-audit`                                     | Email or IP in `actorId`                                         |
+| Validation mismatch observability                             | `defineValidator()` from `autotel/validate`                                 | POST body shape at boundary                                      |
+| Zero-code probe/401/LLM signals                               | `createSecuritySignalProcessor()` in `init({ spanProcessors })`             | Scanner traffic, credential stuffing                             |
+| Join PostHog session to traces                                | `joinPostHog(posthog)` from `autotel-posthog` in `spanEnrichers`            | Browser + PostHog on the same page                               |
+| Name which arm a request took                                 | `experiment({ name, variant, expect? })` from `autotel`                     | A/B test, migration, cache on or off                             |
+| Make a number comparable across requests                      | `bucket(value, boundaries)` from `autotel/analysis`                         | Duration, payload size, item count                               |
+| Keep a trace the sampler would drop                           | `forceKeep()` from `autotel`, or `autotel.debug` baggage on the request     | Payments, audits, debugging a live user                          |
+| Record which flag variant a request branched on               | `recordFeatureFlag()` from `autotel/feature-flags`                          | Rollouts, kill switches, experiments                             |
+| Record every flag evaluation automatically                    | `autotelOpenFeatureHook()` from `autotel/feature-flags`                     | Any OpenFeature provider                                         |
+| Find clicks that achieved nothing                             | `captureFrustration: true` in `initFull()` (`autotel-web/full`)             | Broken buttons, dead UI, rage clicks                             |
+| Explain an error with what led to it                          | `breadcrumbs: true` + `addBreadcrumb()` from `autotel-web`                  | Browser exceptions with no reproduction                          |
+| Measure how much of a page was read                           | `captureEngagement: true` in `initFull()`                                   | Content, landing pages, docs                                     |
+| Ship browser console output to a log backend                  | `captureConsoleLogs: true` in `initFull()`                                  | Loki, any OTLP logs pipeline                                     |
+| Change capture settings without a release                     | `remoteConfigUrl` in `initFull()`                                           | Sampling, noisy-error suppression                                |
 
 **Rule of thumb**: If there is an HTTP request or a "job", create a span via `trace()` or framework middleware, and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents. For new event emission, prefer correlated logs over direct span events.
 

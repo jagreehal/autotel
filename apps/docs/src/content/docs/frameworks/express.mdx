@@ -129,6 +129,11 @@ app.use((req, _res, next) => {
 });
 ```
 
+Every span the request starts after that call - the route handler, its database
+queries, outgoing HTTP - carries `user.id` too, so you can filter on it anywhere
+in the trace. A span's own value for the same key wins. The copy stays
+in-process: unlike baggage, nothing is sent to downstream services.
+
 `requestCtx` falls back to the active span outside a request - a queue consumer
 or a cron job has no request span - and no-ops when nothing is active, so it is
 safe in a test run that never loaded the SDK.

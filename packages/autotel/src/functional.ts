@@ -35,7 +35,6 @@
 
 import {
   SpanStatusCode,
-  createContextKey,
   trace as otelTrace,
   context,
   propagation,
@@ -50,7 +49,11 @@ import {
   getContextStorage,
 } from './trace-context';
 import { runInOperationContext } from './operation-context';
-import { isFunction, readProperty } from './values';
+import { flattenToAttributes } from './flatten-attributes';
+import {
+  getRequestSpanIn,
+  rememberRequestAttributes,
+} from './request-attributes';
 import {
   FUNCTIONAL_ERROR_MESSAGE_LIMIT,
   runWithTraceContext,
@@ -277,33 +280,6 @@ function createCtxProxy(resolve: () => TraceContext | null): TraceContext {
 export const ctx = createCtxProxy(getCtxValue);
 
 /**
- * The key `@opentelemetry/core` publishes RPC metadata under. `createContextKey`
- * is `Symbol.for`, so this reads exactly what `instrumentation-http` (and every
- * framework instrumentation that renames the route) wrote, without taking a
- * dependency on core.
- */
-const RPC_METADATA_KEY = createContextKey(
-  'OpenTelemetry SDK Context Key RPC_METADATA',
-);
-
-/**
- * The span the current request is being recorded on, or the active span when
- * there is no request - a queue consumer or a cron job has none, and an
- * attribute belongs somewhere real rather than nowhere.
- */
-function getRequestSpan(): Span | undefined {
-  const requestSpan = readProperty(
-    context.active().getValue(RPC_METADATA_KEY),
-    'span',
-  );
-  // SAFETY: RPC metadata carries the server span; anything else under that key
-  // is not one, and takes the active-span path below.
-  return isFunction(readProperty(requestSpan, 'spanContext'))
-    ? (requestSpan as Span)
-    : otelTrace.getActiveSpan();
-}
-
-/**
  * The ambient {@link ctx}, aimed at the **request** span rather than at
  * whatever span the calling code happens to be inside.
  *
@@ -326,8 +302,24 @@ function getRequestSpan(): Span | undefined {
  * ```
  */
 export const requestCtx: TraceContext = createCtxProxy(() => {
-  const span = getRequestSpan();
-  return span ? createTraceContext(span) : null;
+  const span = getRequestSpanIn() ?? otelTrace.getActiveSpan();
+  if (!span) return null;
+  const traceCtx = createTraceContext(span);
+  // Also remembered for the spans started under it afterwards (see
+  // `request-attributes.ts`).
+  return {
+    ...traceCtx,
+    setAttribute: (key, value) => {
+      const attrs = flattenToAttributes({ [key]: value });
+      span.setAttributes(attrs);
+      rememberRequestAttributes(span, attrs);
+    },
+    setAttributes: (attrs) => {
+      const flattened = flattenToAttributes(attrs);
+      span.setAttributes(flattened);
+      rememberRequestAttributes(span, flattened);
+    },
+  } satisfies TraceContext;
 });
 
 /**
