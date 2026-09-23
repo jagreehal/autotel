@@ -1,5 +1,13 @@
 # @jagreehal/example-elysia
 
+## 0.1.24
+
+### Patch Changes
+
+- Updated dependencies [5c6efd2]
+  - autotel@7.9.0
+  - autotel-adapters@2.0.22
+
 ## 0.1.23
 
 ### Patch Changes
