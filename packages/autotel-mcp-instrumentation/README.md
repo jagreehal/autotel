@@ -228,6 +228,8 @@ Wraps an MCP client to create spans and inject trace context into every request.
 
 Client spans carry the same attributes as server spans, with `SpanKind.CLIENT`.
 
+**Hosted servers.** When the server runs inside a request that is already traced in the caller's trace (a Lambda invocation, an HTTP server span), tool, resource and prompt spans parent on that host span: caller → host → tool. Baggage from `_meta` still applies. With no host span, or a host in another trace, the `_meta` context is the parent.
+
 ### Context Utilities
 
 #### `extractOtelContextFromMeta(meta?)`

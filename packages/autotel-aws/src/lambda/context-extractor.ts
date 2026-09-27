@@ -3,8 +3,9 @@
  */
 
 import { context, propagation, trace } from '@opentelemetry/api';
-import type { SpanContext } from '@opentelemetry/api';
+import type { Context, SpanContext } from '@opentelemetry/api';
 import type { LambdaEvent } from '../types';
+import type { LambdaInstrumentationConfig } from '../config';
 import { AWSXRayPropagator } from '@opentelemetry/propagator-aws-xray';
 
 /**
@@ -20,6 +21,12 @@ import { AWSXRayPropagator } from '@opentelemetry/propagator-aws-xray';
 export function extractTraceContext(
   event: LambdaEvent,
 ): SpanContext | undefined {
+  const extracted = extractEventContext(event);
+  return extracted ? trace.getSpanContext(extracted) : undefined;
+}
+
+/** Keep the full context internally so baggage survives extraction. */
+function extractEventContext(event: LambdaEvent): Context | undefined {
   // API Gateway - W3C Trace Context
   if (event.headers?.traceparent) {
     const carrier: Record<string, string> = {};
@@ -29,8 +36,7 @@ export function extractTraceContext(
     if (event.headers.baggage) carrier.baggage = event.headers.baggage;
 
     const extractedContext = propagation.extract(context.active(), carrier);
-    const spanContext = trace.getSpanContext(extractedContext);
-    return spanContext;
+    return extractedContext;
   }
 
   // SQS - message attributes
@@ -50,8 +56,7 @@ export function extractTraceContext(
     }
 
     const extractedContext = propagation.extract(context.active(), carrier);
-    const spanContext = trace.getSpanContext(extractedContext);
-    return spanContext;
+    return extractedContext;
   }
 
   // SNS - message attributes
@@ -71,8 +76,7 @@ export function extractTraceContext(
     }
 
     const extractedContext = propagation.extract(context.active(), carrier);
-    const spanContext = trace.getSpanContext(extractedContext);
-    return spanContext;
+    return extractedContext;
   }
 
   // X-Ray header (Lambda integration)
@@ -101,13 +105,12 @@ export function extractTraceContext(
       carrier,
       getter,
     );
-    const spanContext = trace.getSpanContext(extractedContext);
-    return spanContext;
+    return extractedContext;
   }
 
   // Step Functions - payload context
   if (event._autotel_trace_context) {
-    return event._autotel_trace_context as SpanContext;
+    return trace.setSpanContext(context.active(), event._autotel_trace_context);
   }
 
   return undefined;
@@ -145,4 +148,34 @@ export function detectTriggerType(
   }
 
   return 'other';
+}
+
+/**
+ * The invocation's parent: from a caller-supplied carrier when one is configured
+ * and yields a valid span context, else from wherever AWS put it.
+ */
+export function parentContextOf<TEvent>(
+  event: TEvent,
+  option?: LambdaInstrumentationConfig<TEvent>['extractTraceContext'],
+): Context | undefined {
+  if (option === false) return undefined;
+
+  if (option !== undefined && option !== true) {
+    const carrier = option(event);
+    // Drop only the active span so the carrier alone decides the parent;
+    // baggage, suppression and app context stay.
+    const fromCarrier = carrier
+      ? propagation.extract(trace.deleteSpan(context.active()), carrier)
+      : undefined;
+
+    const spanContext = fromCarrier
+      ? trace.getSpanContext(fromCarrier)
+      : undefined;
+    if (spanContext && trace.isSpanContextValid(spanContext))
+      return fromCarrier;
+  }
+
+  // SAFETY: extractEventContext only probes optional fields (headers, Records,
+  // X-Ray) and returns undefined for an event that has none of them.
+  return extractEventContext(event as LambdaEvent);
 }

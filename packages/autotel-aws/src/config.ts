@@ -69,10 +69,17 @@ export interface AWSInitConfig {
   resourceAttributes?: Record<string, string>;
 }
 
+/** W3C Trace Context fields, as found in headers or any other carrier. */
+export type TraceCarrier = {
+  traceparent?: string;
+  tracestate?: string;
+  baggage?: string;
+};
+
 /**
  * Lambda instrumentation configuration
  */
-export interface LambdaInstrumentationConfig {
+export interface LambdaInstrumentationConfig<TEvent = unknown> {
   /**
    * Capture response in span attributes
    * @default false
@@ -80,10 +87,16 @@ export interface LambdaInstrumentationConfig {
   captureResponse?: boolean;
 
   /**
-   * Extract trace context from event
+   * Extract trace context from the event.
+   *
+   * `true` reads the places AWS puts it: API Gateway headers, SQS/SNS message
+   * attributes, X-Ray. Pass a function when the protocol carries it somewhere
+   * else, e.g. MCP's W3C context in the JSON body's `params._meta`: return a
+   * W3C carrier (`traceparent`, and `tracestate`/`baggage` if present), or
+   * `undefined` to fall back to the built-in extraction.
    * @default true
    */
-  extractTraceContext?: boolean;
+  extractTraceContext?: boolean | ((event: TEvent) => TraceCarrier | undefined);
 
   /**
    * Service name override

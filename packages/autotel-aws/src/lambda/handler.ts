@@ -24,16 +24,11 @@
  * ```
  */
 
-import {
-  context,
-  trace as otelTrace,
-  SpanStatusCode,
-} from '@opentelemetry/api';
-import type { SpanContext, Context } from '@opentelemetry/api';
+import { context, SpanStatusCode } from '@opentelemetry/api';
 import { flush, trace as autotelTrace, type TraceContext } from 'autotel';
 import type { LambdaHandler } from './types';
 import type { LambdaEvent, LambdaContext } from '../types';
-import { extractTraceContext, detectTriggerType } from './context-extractor';
+import { parentContextOf, detectTriggerType } from './context-extractor';
 import { buildLambdaAttributes } from '../attributes';
 import type { LambdaInstrumentationConfig } from '../config';
 
@@ -45,19 +40,6 @@ const coldStartMap = new Map<string, boolean>();
  * Maximum error message length to prevent span attribute bloat
  */
 const MAX_ERROR_MESSAGE_LENGTH = 500;
-
-/**
- * Create an OpenTelemetry context with the given span context as parent
- *
- * This properly sets up the parent-child relationship for distributed tracing
- * by creating a context that contains the extracted span context.
- */
-function createContextWithParent(parentSpanContext: SpanContext): Context {
-  // Create a non-recording span that carries the parent context
-  // This is the standard OTel pattern for context propagation
-  const parentSpan = otelTrace.wrapSpanContext(parentSpanContext);
-  return otelTrace.setSpan(context.active(), parentSpan);
-}
 
 /**
  * Truncate error message to prevent span bloat
@@ -122,7 +104,7 @@ function extractAccountIdFromArn(arn: string): string | undefined {
  */
 export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
   handler: LambdaHandler<TEvent, TResult>,
-  config?: LambdaInstrumentationConfig,
+  config?: LambdaInstrumentationConfig<TEvent>,
 ): LambdaHandler<TEvent, TResult> {
   // Return the wrapped handler
   return async (
@@ -138,10 +120,7 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
     }
 
     // Extract parent trace context from event (if enabled, default: true)
-    const shouldExtractContext = config?.extractTraceContext !== false;
-    const parentSpanContext = shouldExtractContext
-      ? extractTraceContext(event as LambdaEvent)
-      : undefined;
+    const parentContext = parentContextOf(event, config?.extractTraceContext);
 
     // Detect trigger type for semantic attributes
     const trigger = detectTriggerType(event as LambdaEvent);
@@ -230,11 +209,8 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
     };
 
     const execute = (): Promise<TResult> =>
-      parentSpanContext
-        ? context.with(
-            createContextWithParent(parentSpanContext),
-            executeWithTracing,
-          )
+      parentContext
+        ? context.with(parentContext, executeWithTracing)
         : executeWithTracing();
 
     if (config?.flush === false) return execute();
@@ -288,7 +264,7 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
  */
 export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
   factory: (ctx: TraceContext) => LambdaHandler<TEvent, TResult>,
-  config?: LambdaInstrumentationConfig,
+  config?: LambdaInstrumentationConfig<TEvent>,
 ): LambdaHandler<TEvent, TResult> {
   return async (
     event: TEvent,
@@ -303,10 +279,7 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
     }
 
     // Extract parent trace context
-    const shouldExtractContext = config?.extractTraceContext !== false;
-    const parentSpanContext = shouldExtractContext
-      ? extractTraceContext(event as LambdaEvent)
-      : undefined;
+    const parentContext = parentContextOf(event, config?.extractTraceContext);
 
     // Detect trigger type
     const trigger = detectTriggerType(event as LambdaEvent);
@@ -349,11 +322,8 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
     };
 
     const execute = (): Promise<TResult> =>
-      parentSpanContext
-        ? context.with(
-            createContextWithParent(parentSpanContext),
-            executeWithTracing,
-          )
+      parentContext
+        ? context.with(parentContext, executeWithTracing)
         : executeWithTracing();
 
     if (config?.flush === false) return execute();

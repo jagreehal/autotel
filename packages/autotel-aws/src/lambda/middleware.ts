@@ -41,14 +41,10 @@ import {
   trace as otelTrace,
   SpanStatusCode,
 } from '@opentelemetry/api';
-import type {
-  Span,
-  SpanContext,
-  Context as OtelContext,
-} from '@opentelemetry/api';
+import type { Span, Context as OtelContext } from '@opentelemetry/api';
 import type { LambdaEvent } from '../types';
 import type { LambdaInstrumentationConfig } from '../config';
-import { extractTraceContext, detectTriggerType } from './context-extractor';
+import { parentContextOf, detectTriggerType } from './context-extractor';
 import { buildLambdaAttributes } from '../attributes';
 
 // Symbol to store span on request object
@@ -62,14 +58,6 @@ const coldStartMap = new Map<string, boolean>();
  * Maximum error message length to prevent span attribute bloat
  */
 const MAX_ERROR_MESSAGE_LENGTH = 500;
-
-/**
- * Create an OpenTelemetry context with the given span context as parent
- */
-function createContextWithParent(parentSpanContext: SpanContext): OtelContext {
-  const parentSpan = otelTrace.wrapSpanContext(parentSpanContext);
-  return otelTrace.setSpan(context.active(), parentSpan);
-}
 
 /**
  * Truncate error message to prevent span bloat
@@ -130,7 +118,7 @@ interface TracingRequest<
  * - `cloud.account.id` - AWS account ID (extracted from ARN)
  */
 export function tracingMiddleware(
-  config?: LambdaInstrumentationConfig,
+  config?: LambdaInstrumentationConfig<LambdaEvent>,
 ): MiddlewareObj<LambdaEvent, unknown, Error, AWSLambdaContext> {
   const tracer = otelTrace.getTracer('autotel-aws');
 
@@ -146,19 +134,16 @@ export function tracingMiddleware(
       }
 
       // Extract parent trace context from event
-      const shouldExtractContext = config?.extractTraceContext !== false;
-      const parentSpanContext = shouldExtractContext
-        ? extractTraceContext(event)
-        : undefined;
+      const extractedContext = parentContextOf(
+        event,
+        config?.extractTraceContext,
+      );
 
       // Detect trigger type
       const trigger = detectTriggerType(event);
 
       // Create parent context if available
-      let parentContext = context.active();
-      if (parentSpanContext) {
-        parentContext = createContextWithParent(parentSpanContext);
-      }
+      const parentContext = extractedContext ?? context.active();
 
       // Start span with parent context
       const span = tracer.startSpan(

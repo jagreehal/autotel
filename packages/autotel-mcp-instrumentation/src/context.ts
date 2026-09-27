@@ -1,4 +1,4 @@
-import { context, propagation, type Context } from '@opentelemetry/api';
+import { context, propagation, trace, type Context } from '@opentelemetry/api';
 import type { McpTraceMeta } from './types';
 
 /**
@@ -113,4 +113,31 @@ export function activateTraceContext(
   meta?: Record<string, unknown> | McpTraceMeta,
 ): Context {
   return extractOtelContextFromMeta(meta);
+}
+
+/**
+ * The parent for a server-side span: the caller's context from `_meta`, unless
+ * the host already traces this request in that same trace (a Lambda or HTTP
+ * span that joined the caller's trace). Then the host's span is the parent, so
+ * the hierarchy reads caller → host → tool. A host span in another trace, or
+ * none, leaves `_meta` as the parent.
+ */
+export function serverParentContext(
+  meta?: Record<string, unknown> | McpTraceMeta,
+): Context {
+  const active = context.active();
+  const fromMeta = extractOtelContextFromMeta(meta);
+  const host = trace.getSpanContext(active);
+  const caller = trace.getSpanContext(fromMeta);
+
+  const hostJoinedCallersTrace =
+    host !== undefined &&
+    caller !== undefined &&
+    trace.isSpanContextValid(host) &&
+    host.traceId === caller.traceId;
+
+  // Retain extracted baggage while restoring the host as the parent span.
+  return hostJoinedCallersTrace
+    ? trace.setSpan(fromMeta, trace.getSpan(active)!)
+    : fromMeta;
 }
