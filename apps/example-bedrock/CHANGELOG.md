@@ -1,5 +1,12 @@
 # @jagreehal/example-bedrock
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [381a9b2]
+  - autotel-aws@1.3.0
+
 ## 0.0.3
 
 ### Patch Changes

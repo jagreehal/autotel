@@ -1,5 +1,12 @@
 # @jagreehal/example-agent-security
 
+## 0.0.36
+
+### Patch Changes
+
+- Updated dependencies [381a9b2]
+  - autotel-mcp-instrumentation@59.0.1
+
 ## 0.0.35
 
 ### Patch Changes
