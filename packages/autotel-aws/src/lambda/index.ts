@@ -19,4 +19,5 @@ export {
   getContextFromRequest,
 } from './middleware';
 export { extractTraceContext, detectTriggerType } from './context-extractor';
+export type { LambdaInstrumentationConfig, TraceCarrier } from '../config';
 export type * from './types';

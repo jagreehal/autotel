@@ -54,6 +54,10 @@ vi.mock('./context', () => ({
     hoisted.extractedMeta.push(meta);
     return {};
   },
+  serverParentContext: (meta: unknown) => {
+    hoisted.extractedMeta.push(meta);
+    return {};
+  },
 }));
 
 vi.mock('./metrics', () => ({

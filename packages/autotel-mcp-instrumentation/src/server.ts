@@ -1,6 +1,6 @@
 import { context, SpanStatusCode } from '@opentelemetry/api';
 import { withTracing, SpanKind, type TraceContext } from 'autotel';
-import { extractOtelContextFromMeta } from './context';
+import { serverParentContext } from './context';
 import {
   applyFailureGrouping,
   classifyFailure,
@@ -311,8 +311,9 @@ function wrapHandler<T extends (...args: any[]) => any>(
     const request = readRequestFacts(args);
     const callPayload = readCallPayload(args, request);
 
-    // Extract parent context from _meta field
-    const parentContext = extractOtelContextFromMeta(request.meta);
+    // Parent: the caller's context from _meta, or the host's span when the
+    // host has already joined that trace (see serverParentContext).
+    const parentContext = serverParentContext(request.meta);
 
     // Run handler in parent context
     return context.with(parentContext, async () => {

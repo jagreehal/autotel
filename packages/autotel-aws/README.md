@@ -50,6 +50,25 @@ export const handler = wrapHandler(async (event, context) => {
 });
 ```
 
+### Trace Context From the Payload
+
+`extractTraceContext` reads API Gateway headers, SQS/SNS message attributes and X-Ray by default. When the caller's W3C context travels in the payload, such as MCP's `params._meta`, pass a function that returns the carrier. Return `undefined` to fall back to the built-in extraction. Baggage flows into the invocation and downstream calls.
+
+```typescript
+import { wrapHandler } from 'autotel-aws/lambda';
+import type { APIGatewayProxyEvent } from 'aws-lambda';
+
+export const handler = wrapHandler(
+  async (event: APIGatewayProxyEvent) => ({ statusCode: 200 }),
+  {
+    extractTraceContext: (event) =>
+      event.body ? JSON.parse(event.body).params?._meta : undefined,
+  },
+);
+```
+
+`traceLambda` and the Middy `tracingMiddleware` accept the same option.
+
 ### Zero-Config Mode
 
 ```typescript

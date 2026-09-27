@@ -62,6 +62,13 @@ baggage), not in HTTP headers, so it works with any MCP transport (stdio,
 Streamable HTTP, custom). Init autotel or autotel-edge before instrumenting the
 server or client.
 
+When the server already runs inside a traced request in the caller's trace (a
+Lambda invocation or HTTP server span), tool, resource and prompt spans parent
+on that host span, so the trace reads caller → host → tool. The `_meta` baggage
+still applies. With no host span, or a host in another trace, `_meta` is the
+parent. For Lambda, pair with `autotel-aws`'s `extractTraceContext: (event) =>
+carrier` so the invocation span joins the caller's trace from the body.
+
 The `_meta` keys are the bare `traceparent` / `tracestate` / `baggage` names,
 NOT the reserved `io.modelcontextprotocol/*` envelope namespace — that is what
 lets them survive the v2 SDK's envelope lift.

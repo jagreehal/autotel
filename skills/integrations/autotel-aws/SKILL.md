@@ -67,11 +67,11 @@ export const handler = traceLambda((ctx) => async (event, lambdaContext) => {
 
 **LambdaInstrumentationConfig options:**
 
-| Option                | Default | Description                                                                 |
-| --------------------- | ------- | --------------------------------------------------------------------------- |
-| `captureResponse`     | `false` | Serialise response into `lambda.response` attribute (capped at 4 096 bytes) |
-| `extractTraceContext` | `true`  | Extract W3C / X-Ray trace context from the incoming event                   |
-| `service`             | —       | Override service name                                                       |
+| Option                | Default | Description                                                                                                                                                                                      |
+| --------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `captureResponse`     | `false` | Serialise response into `lambda.response` attribute (capped at 4 096 bytes)                                                                                                                      |
+| `extractTraceContext` | `true`  | Extract W3C / X-Ray trace context from the incoming event. Pass `(event) => carrier` to read it from elsewhere (e.g. MCP `_meta` in the body); `undefined` falls back to the built-in extraction |
+| `service`             | —       | Override service name                                                                                                                                                                            |
 
 ### AWS SDK v3 instrumentation
 
