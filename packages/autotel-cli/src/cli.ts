@@ -486,7 +486,11 @@ export async function run(): Promise<void> {
   const telemetryView = {
     name: () => program.name(),
     version: () => program.version() ?? '',
-    parseAsync: (argv: string[]) => program.parseAsync(argv),
+    // CommanderLike's parseAsync resolves to the object it was called on.
+    async parseAsync(argv: string[]) {
+      await program.parseAsync(argv);
+      return this;
+    },
   };
   const parseWithTelemetry = withCommanderTelemetry(telemetryView, {
     name: 'autotel',

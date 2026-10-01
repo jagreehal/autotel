@@ -20,6 +20,7 @@ Autotel is a monorepo containing multiple packages that provide ergonomic OpenTe
 - **Monorepo**: pnpm workspaces + Turborepo
 - **Language**: TypeScript 5.0+ (ESM-first, CJS fallback)
 - **Build**: tsup (bundling), vitest (testing)
+- **Lint / types**: oxlint (each package's `oxlint.json` extends `tools/oxlint/base.json`, plus `unicorn.json`; root `.oxlintrc.json` is the separate anti-slop set) and `tsc --noEmit` for type-check. TypeScript is 7 (the native compiler) everywhere except where a tool still needs the TS 6 JS API: `autotel-devtools` (svelte-check), `apps/example-nextjs` (next build), `apps/example-sveltekit` (@sveltejs/kit). Move those to 7 once their tools support it
 - **Package Manager**: pnpm
 - **Key Dependencies**: OpenTelemetry SDK, Node.js 22+, Edge runtimes (fetch, AsyncLocalStorage)
 

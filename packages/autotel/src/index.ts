@@ -276,6 +276,7 @@ export {
   setAutotelTracerProvider,
   getAutotelTracerProvider,
   getAutotelTracer,
+  hasTracerProvider,
 } from './tracer-provider';
 
 // Semantic convention helpers (GenAI/LLM helpers moved to `autotel-genai`).

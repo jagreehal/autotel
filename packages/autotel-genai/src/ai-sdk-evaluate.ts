@@ -78,16 +78,16 @@ export function evaluationScore(
     }
     case 'boolean': {
       const threshold =
-        options.name !== undefined
-          ? options.booleanThresholds?.[options.name]
-          : undefined;
+        options.name === undefined
+          ? undefined
+          : options.booleanThresholds?.[options.name];
       return {
         scoreValue: answer.probability,
-        ...(threshold !== undefined
-          ? {
+        ...(threshold === undefined
+          ? {}
+          : {
               scoreLabel: answer.probability >= threshold ? 'yes' : 'no',
-            }
-          : {}),
+            }),
       };
     }
   }

@@ -26,7 +26,7 @@
     "build": "tsdown",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src/**/*.ts",
+    "lint": "oxlint -c oxlint.json --disable-nested-config src",
     "type-check": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -53,10 +53,10 @@
   "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-webmcp#readme",
   "devDependencies": {
     "autotel-web": "workspace:*",
-    "happy-dom": "20.11.6",
-    "tsdown": "^0.22.14",
-    "typescript": "6.0.3",
-    "vitest": "^4.1.10",
-    "webmcp-types": "0.1.5"
+    "happy-dom": "20.14.5",
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2",
+    "webmcp-types": "0.1.10"
   }
 }

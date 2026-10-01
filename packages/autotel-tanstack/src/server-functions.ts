@@ -44,6 +44,7 @@ import { type TraceServerFnConfig, SPAN_ATTRIBUTES } from './types';
  * );
  * ```
  */
+// oxlint-disable-next-line typescript/no-explicit-any -- Generic function-wrapper constraint: must accept any user function signature and invoke it with its own arguments; `never`/`unknown` params would make the wrapped call uncallable.
 export function traceServerFn<T extends (...args: any[]) => any>(
   serverFn: T,
   config: TraceServerFnConfig = {},
@@ -159,6 +160,7 @@ export function traceServerFn<T extends (...args: any[]) => any>(
  * ```
  */
 export function createTracedServerFnFactory<
+  // oxlint-disable-next-line typescript/no-explicit-any -- Generic function-wrapper constraint: must accept any user function signature and invoke it with its own arguments; `never`/`unknown` params would make the wrapped call uncallable.
   TCreateServerFn extends (...args: any[]) => any,
 >(
   createServerFnOriginal: TCreateServerFn,

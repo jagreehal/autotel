@@ -82,9 +82,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import { traceLoader } from 'autotel-tanstack/loaders'
 
 export const Route = createFileRoute('/users/$userId')({
-  loader: traceLoader(async ({ params }) => {
-    return await getUser(params.userId)
-  }),
+  loader: (ctx) =>
+    traceLoader(ctx, async ({ params }) => {
+      return await getUser(params.userId)
+    }),
 })
 ```
 
@@ -95,11 +96,12 @@ import { traceBeforeLoad } from 'autotel-tanstack/loaders'
 import { redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/dashboard')({
-  beforeLoad: traceBeforeLoad(async ({ context }) => {
-    if (!context.auth.isAuthenticated) {
-      throw redirect({ to: '/login' })
-    }
-  }),
+  beforeLoad: (ctx) =>
+    traceBeforeLoad(ctx, async ({ context }) => {
+      if (!context.auth.isAuthenticated) {
+        throw redirect({ to: '/login' })
+      }
+    }),
 })
 ```
 

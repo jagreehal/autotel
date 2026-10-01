@@ -117,14 +117,18 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { traceLoader, traceBeforeLoad } from 'autotel-tanstack/loaders';
 
 export const Route = createFileRoute('/users/$userId')({
-  beforeLoad: traceBeforeLoad(async ({ context }) => {
-    if (!context.auth.isAuthenticated) throw redirect({ to: '/login' });
-  }),
-  loader: traceLoader(async ({ params }) => {
-    return await getUser(params.userId);
-  }),
+  beforeLoad: (ctx) =>
+    traceBeforeLoad(ctx, async ({ context }) => {
+      if (!context.auth.isAuthenticated) throw redirect({ to: '/login' });
+    }),
+  loader: (ctx) =>
+    traceLoader(ctx, async ({ params }) => {
+      return await getUser(params.userId);
+    }),
 });
 ```
+
+Pass the route's `ctx` through. TanStack Router types `params`, `search` and the context from the function you write, and the traced function receives them typed.
 
 ## Middleware options
 

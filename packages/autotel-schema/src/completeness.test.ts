@@ -94,7 +94,7 @@ describe('scoreGenAiCompleteness', () => {
   it('scores an empty trace zero rather than throwing', () => {
     const result = scoreGenAiCompleteness([]);
     expect(result.score).toBe(0);
-    expect(result.missing).toEqual(GENAI_COMPLETENESS_FIELDS.slice());
+    expect(result.missing).toEqual([...GENAI_COMPLETENESS_FIELDS]);
   });
 
   it('treats an empty-string attribute as absent, not present', () => {

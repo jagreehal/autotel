@@ -146,23 +146,27 @@ export const sensitiveOperation = createServerFn({ method: 'POST' })
 
 ### Route Loaders
 
-Use `traceLoader` and `traceBeforeLoad` for route-level tracing:
+Use `traceLoader` and `traceBeforeLoad` for route-level tracing. Call them from inside the route's own `beforeLoad` / `loader`, passing the context through:
 
 ```typescript
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { traceLoader, traceBeforeLoad } from 'autotel-tanstack/loaders';
 
 export const Route = createFileRoute('/users/$userId')({
-  beforeLoad: traceBeforeLoad(async ({ context }) => {
-    if (!context.auth.isAuthenticated) {
-      throw redirect({ to: '/login' });
-    }
-  }),
-  loader: traceLoader(async ({ params }) => {
-    return await getUser(params.userId);
-  }),
+  beforeLoad: (ctx) =>
+    traceBeforeLoad(ctx, async ({ context }) => {
+      if (!context.auth.isAuthenticated) {
+        throw redirect({ to: '/login' });
+      }
+    }),
+  loader: (ctx) =>
+    traceLoader(ctx, async ({ params }) => {
+      return await getUser(params.userId);
+    }),
 });
 ```
+
+TanStack Router types each route's `beforeLoad` and `loader` from the function you write. Passing `ctx` through keeps that inference, so `params`, `search` and the context `beforeLoad` returns stay typed inside the traced function.
 
 ## Configuration
 

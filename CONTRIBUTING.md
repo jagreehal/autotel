@@ -80,7 +80,7 @@ Branch naming conventions:
 ### 2. Make Your Changes
 
 - Write clear, concise code
-- Follow existing code style (enforced by ESLint + Prettier)
+- Follow existing code style (enforced by oxlint + Prettier)
 - Add tests for new features
 - Update documentation as needed
 

@@ -6,10 +6,11 @@ export const Route = createFileRoute('/demo/start/ssr/data-only')({
   ssr: 'data-only',
   component: RouteComponent,
   // Example: Using traceLoader for route loaders
-  loader: traceLoader(async () => await getPunkSongs(), {
-    name: 'loadPunkSongs',
-    captureResult: false, // Don't capture large result data
-  }),
+  loader: (ctx) =>
+    traceLoader(ctx, async () => await getPunkSongs(), {
+      name: 'loadPunkSongs',
+      captureResult: false, // Don't capture large result data
+    }),
 })
 
 function RouteComponent() {

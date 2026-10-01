@@ -18,6 +18,7 @@
 import { Event } from 'autotel/event';
 import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 import { PostHog } from 'posthog-node';
+import { pathToFileURL } from 'node:url';
 
 // ============================================================================
 // Example 1: Basic Event Tracking
@@ -424,7 +425,10 @@ async function main() {
 }
 
 // Run if this file is executed directly
-if (require.main === module) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   main().catch(console.error);
 }
 

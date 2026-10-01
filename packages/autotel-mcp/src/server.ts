@@ -31,7 +31,8 @@ async function main() {
       console.error(`autotel-mcp: ${error}`);
     }
     console.error('\nRun `autotel-mcp --help` for usage.');
-    process.exit(2);
+    process.exitCode = 2;
+    return;
   }
 
   const app = await createApp({ config: resolveConfig(parsed) });
@@ -98,13 +99,13 @@ async function main() {
       }
       res.writeHead(404);
       res.end('Not Found');
-    } catch (err) {
-      console.error('[autotel-mcp] request error:', err);
+    } catch (error) {
+      console.error('[autotel-mcp] request error:', error);
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
-            error: err instanceof Error ? err.message : String(err),
+            error: error instanceof Error ? error.message : String(error),
           }),
         );
       }
@@ -143,6 +144,7 @@ function installShutdown(app: App, closeTransport: () => Promise<void> | void) {
   const shutdown = async () => {
     await closeTransport();
     await app.stop();
+    // oxlint-disable-next-line unicorn/no-process-exit -- Signal handler for the CLI entry: installing a SIGINT/SIGTERM listener replaces Node's default termination, so the process must exit explicitly once shutdown completes.
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
@@ -170,14 +172,15 @@ async function handleHealth(app: App, res: ServerResponse): Promise<void> {
   res.end(JSON.stringify(body));
 }
 
-main().catch((err) => {
+main().catch((error) => {
   // A settings mistake gets its message and nothing else; the stack points at
   // the parser, not at the line the operator has to change. Anything else is a
   // crash, and its stack is the useful part.
-  if (err instanceof ConfigError) {
-    console.error(err.message);
+  if (error instanceof ConfigError) {
+    console.error(error.message);
   } else {
-    console.error('Fatal:', err);
+    console.error('Fatal:', error);
   }
+  // oxlint-disable-next-line unicorn/no-process-exit -- CLI entry's last-resort handler: a failed startup may leave transports or the issue watcher holding the event loop open, so exit rather than hang.
   process.exit(1);
 });

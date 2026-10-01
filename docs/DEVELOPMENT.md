@@ -34,7 +34,7 @@ npx vitest run src/functional.test.ts
 ### Linting & Formatting
 
 ```bash
-pnpm lint               # Lint all packages (ESLint)
+pnpm lint               # Lint all packages (oxlint; each package's oxlint.json extends tools/oxlint/)
 pnpm format             # Format with Prettier
 pnpm type-check         # TypeScript type checking
 ```

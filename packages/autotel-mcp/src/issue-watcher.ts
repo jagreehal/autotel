@@ -170,7 +170,7 @@ export function createIssueWatcher(options: IssueWatcherOptions) {
 
   return {
     /** Recent sends, newest first. */
-    runs: (): WatcherRun[] => [...snapshot.runs].reverse(),
+    runs: (): WatcherRun[] => snapshot.runs.toReversed(),
 
     async poll(now = Date.now()): Promise<WatcherRun[]> {
       // Look back far enough to see the quiet gap that defines a regression.

@@ -93,8 +93,8 @@ describe('context', () => {
   // The browser build is swapped in via package.json "browser" exports, so an
   // export present in only one half is a runtime crash on the other.
   it('server and browser builds expose the same exports', () => {
-    expect(Object.keys(serverContext).sort()).toEqual(
-      Object.keys(browserContext).sort(),
+    expect(Object.keys(serverContext).toSorted()).toEqual(
+      Object.keys(browserContext).toSorted(),
     );
   });
 

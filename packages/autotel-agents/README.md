@@ -4,7 +4,7 @@ Browser-safe domain layer for **observing coding agents**, Claude Code, opencode
 
 It turns a stream of decoded OTLP records into a session-centric model you can render: who did what, which tools and MCP servers were used, how many tokens/dollars, accept vs reject.
 
-> This package does **no I/O**. The [`autotel-devtools`](../autotel-devtools) server decodes OTLP (JSON/protobuf), feeds plain objects in, and the devtools widget renders the resulting sessions. Nothing here imports `node:*`, `protobufjs`, or `ws`, enforced by an ESLint browser-safety guard, so the same code runs in the browser and on the server.
+> This package does **no I/O**. The [`autotel-devtools`](../autotel-devtools) server decodes OTLP (JSON/protobuf), feeds plain objects in, and the devtools widget renders the resulting sessions. Nothing here imports `node:*`, `protobufjs`, or `ws`, enforced by an oxlint browser-safety guard, so the same code runs in the browser and on the server.
 
 ## Why this exists
 

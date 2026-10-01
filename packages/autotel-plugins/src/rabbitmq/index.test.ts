@@ -444,10 +444,8 @@ describe('extractBatchLineage', () => {
   });
 
   it('should use default maxLinks of 128', () => {
-    const batch = Array.from({ length: 200 }).fill({ headers: {} });
-    const result = extractBatchLineage(
-      batch as Array<{ headers: Record<string, string> }>,
-    );
+    const batch = Array.from({ length: 200 }, () => ({ headers: {} }));
+    const result = extractBatchLineage(batch);
     expect(result.links.length).toBeLessThanOrEqual(128);
   });
 });

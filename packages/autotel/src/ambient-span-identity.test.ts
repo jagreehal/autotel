@@ -53,7 +53,7 @@ describe('ambient span identity inside nested traced functions', () => {
 
   const waitForSpans = async (count: number) => {
     await expect
-      .poll(() => exporter.getFinishedSpans().length, { timeout: 1_000 })
+      .poll(() => exporter.getFinishedSpans().length, { timeout: 1000 })
       .toBe(count);
   };
 

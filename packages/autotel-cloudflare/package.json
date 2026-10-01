@@ -65,8 +65,8 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix",
+    "lint": "oxlint -c oxlint.json --disable-nested-config src",
+    "lint:fix": "pnpm lint --fix",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -95,7 +95,7 @@
     "@opentelemetry/resources": "^2.11.0"
   },
   "peerDependencies": {
-    "@cloudflare/workers-types": "^5.20260728.1",
+    "@cloudflare/workers-types": "^5.20260928.1",
     "autotel-edge": "workspace:*",
     "autotel-genai": "workspace:*"
   },
@@ -108,16 +108,16 @@
     }
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260728.1",
+    "@cloudflare/workers-types": "^5.20260928.1",
     "@opentelemetry/context-async-hooks": "^2.11.0",
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.6.3",
     "autotel-edge": "workspace:*",
     "autotel-genai": "workspace:*",
     "rimraf": "^6.1.3",
-    "tsdown": "^0.22.14",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.10",
-    "vitest-mock-extended": "^5.1.0"
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2",
+    "vitest-mock-extended": "^5.1.1"
   },
   "repository": {
     "type": "git",

@@ -118,7 +118,10 @@ export function getStructuredErrorAttributes(error: Error) {
   // Error read through it simply has none of them - which is what each check
   // below is for.
   const structured = error as StructuredError;
+  // Starts empty so the binding keeps its declared type (anti-slop
+  // no-known-value-widening); fields are added below, some conditionally.
   const attributes: ErrorAttributes = {};
+  // oxlint-disable-next-line unicorn/no-immediate-mutation -- see above
   attributes['error.type'] = error.name || 'Error';
   attributes['error.message'] = error.message;
 

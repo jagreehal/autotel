@@ -106,7 +106,7 @@ Breakdown keys are wire values — a model id, a tool name, a skill. `__proto__`
 
 ### MEDIUM: Importing `node:*` or OTLP decoders into this layer
 
-The browser-safety ESLint guard fails the build. Decode OTLP in the devtools server and pass plain `{ eventName, attributes, resource, scope }` objects in.
+The browser-safety lint guard (oxlint `no-restricted-imports`) fails the build. Decode OTLP in the devtools server and pass plain `{ eventName, attributes, resource, scope }` objects in.
 
 ## Version
 

@@ -399,7 +399,8 @@ describe('checkScenario — polling with an observation budget', () => {
         { budgetMs: 20, pollIntervalMs: 100 },
       );
       await vi.advanceTimersByTimeAsync(20);
-      expect((await resultPromise).outcome).toBe('incomplete');
+      const result = await resultPromise;
+      expect(result.outcome).toBe('incomplete');
     } finally {
       vi.useRealTimers();
     }

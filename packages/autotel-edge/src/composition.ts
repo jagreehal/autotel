@@ -60,8 +60,8 @@ export function composeSubscribers(
     for (const subscriber of subscribers) {
       try {
         await subscriber(event);
-      } catch (err) {
-        console.error(`[autotel-edge/${label}] subscriber failed:`, err);
+      } catch (error) {
+        console.error(`[autotel-edge/${label}] subscriber failed:`, error);
       }
     }
   };
@@ -80,8 +80,8 @@ export function composePostProcessors(
     for (const processor of processors) {
       try {
         current = processor(current);
-      } catch (err) {
-        console.error('[autotel-edge/compose-post-processors] failed:', err);
+      } catch (error) {
+        console.error('[autotel-edge/compose-post-processors] failed:', error);
       }
     }
     return current;
@@ -102,8 +102,8 @@ export function composeSpanProcessors(
   const safe = (label: string, fn: () => Awaitable<void>) =>
     Promise.resolve()
       .then(fn)
-      .catch((err) => {
-        console.error(`[autotel-edge/compose-span-processors:${label}]`, err);
+      .catch((error) => {
+        console.error(`[autotel-edge/compose-span-processors:${label}]`, error);
       });
 
   return {
@@ -114,8 +114,11 @@ export function composeSpanProcessors(
             span as unknown as SdkReadableSpan & Span,
             parentContext,
           );
-        } catch (err) {
-          console.error('[autotel-edge/compose-span-processors:onStart]', err);
+        } catch (error) {
+          console.error(
+            '[autotel-edge/compose-span-processors:onStart]',
+            error,
+          );
         }
       }
     },
@@ -123,8 +126,8 @@ export function composeSpanProcessors(
       for (const processor of processors) {
         try {
           processor.onEnd(span);
-        } catch (err) {
-          console.error('[autotel-edge/compose-span-processors:onEnd]', err);
+        } catch (error) {
+          console.error('[autotel-edge/compose-span-processors:onEnd]', error);
         }
       }
     },

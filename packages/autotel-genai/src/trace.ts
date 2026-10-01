@@ -252,7 +252,7 @@ export function traceGenAI(config: TraceGenAIConfig) {
           ...agentAttributes,
           ...toolAttributes,
           ...workflowAttributes,
-          ...(config.attributes ?? {}),
+          ...config.attributes,
         });
         const handler = factory(ctx);
         if (!isFunction(handler)) {

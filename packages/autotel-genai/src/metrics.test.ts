@@ -15,7 +15,7 @@ describe('bucket arrays', () => {
       GEN_AI_COST_USD_BUCKETS,
     ]) {
       expect(Object.isFrozen(arr)).toBe(true);
-      const sorted = [...arr].sort((a, b) => a - b);
+      const sorted = arr.toSorted((a, b) => a - b);
       expect([...arr]).toEqual(sorted);
     }
   });

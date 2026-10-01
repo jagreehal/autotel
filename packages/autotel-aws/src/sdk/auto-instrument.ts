@@ -18,11 +18,23 @@
  * ```
  */
 
+import { createRequire } from 'node:module';
 // Type-only import from optional peer dependency
 // @ts-expect-error - Optional peer dependency, may not be installed
 import type { Client, Command } from '@aws-sdk/smithy-client';
 import { wrapSDKClient } from '../common/sdk-wrapper';
 import type { SDKInstrumentationConfig } from '../config';
+
+// Synchronous require that works in both the ESM and CJS builds. See
+// packages/autotel/src/node-require.ts for the __filename / import.meta.url
+// fallback. Built on first use so importing this module stays side-effect-free.
+declare const __filename: string | undefined;
+function loadModule(id: string): any {
+  return createRequire(
+    /* oxlint-disable-next-line anti-slop/no-runtime-typeof -- Probing which module format this build is running as. `__filename` is bound only in the CJS output; the presence of the binding is the fact being read. */
+    typeof __filename === 'string' ? __filename : import.meta.url,
+  )(id);
+}
 
 // Symbol to mark clients as instrumented (prevents double-wrapping)
 const INSTRUMENTED_SYMBOL = Symbol.for('autotel-aws.instrumented');
@@ -189,13 +201,11 @@ export function autoInstrumentAWS(config?: SDKInstrumentationConfig): void {
   let SmithyClient: any;
   try {
     // Dynamic require to avoid bundling issues
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    SmithyClient = require('@aws-sdk/smithy-client').Client;
+    SmithyClient = loadModule('@aws-sdk/smithy-client').Client;
   } catch {
     // Try the core package (newer SDK versions)
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      SmithyClient = require('@smithy/smithy-client').Client;
+      SmithyClient = loadModule('@smithy/smithy-client').Client;
     } catch {
       console.warn(
         '[autotel-aws] autoInstrumentAWS() requires @aws-sdk/smithy-client or @smithy/smithy-client. ' +
@@ -258,12 +268,10 @@ export function disableAutoInstrumentAWS(): void {
 
   let SmithyClient: any;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    SmithyClient = require('@aws-sdk/smithy-client').Client;
+    SmithyClient = loadModule('@aws-sdk/smithy-client').Client;
   } catch {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      SmithyClient = require('@smithy/smithy-client').Client;
+      SmithyClient = loadModule('@smithy/smithy-client').Client;
     } catch {
       return;
     }

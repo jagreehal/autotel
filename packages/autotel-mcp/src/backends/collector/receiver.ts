@@ -414,8 +414,8 @@ export class OtlpReceiver {
       }
 
       sendJson(res, 404, { error: 'Not found' });
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+    } catch (error) {
+      sendJson(res, 500, { error: String(error) });
     }
   }
 

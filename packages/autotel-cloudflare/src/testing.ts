@@ -3,4 +3,4 @@
  * Entry point: autotel-cloudflare/testing
  */
 
-export * from 'autotel-edge/testing';
+export type * from 'autotel-edge/testing';

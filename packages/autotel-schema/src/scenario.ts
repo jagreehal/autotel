@@ -208,13 +208,14 @@ export function validateScenarioSpec(name: string, spec: ScenarioSpec): void {
     `${scope} completion budget must be a positive number of milliseconds`,
   );
   switch (spec.completion.mode) {
-    case 'terminal-event':
+    case 'terminal-event': {
       assert(
         typeof spec.completion.event === 'string' &&
           spec.completion.event.length > 0,
         `${scope} terminal-event completion must declare a non-empty event`,
       );
       break;
+    }
   }
   assert(
     spec.events &&
@@ -229,6 +230,7 @@ export function validateScenarioSpec(name: string, spec: ScenarioSpec): void {
       } catch (error) {
         throw new Error(
           `autotel-schema: ${scope} event "${event}": ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
         );
       }
     }
@@ -257,13 +259,16 @@ export function isScenarioClosed(
 ): boolean {
   const { completion } = spec;
   switch (completion.mode) {
-    case 'externally-reconciled':
+    case 'externally-reconciled': {
       return false;
-    case 'root-span-closed':
+    }
+    case 'root-span-closed': {
       // Only finished spans reach a collector, so a present root = a closed root.
       return spans.some((s) => !s.parentSpanId);
-    case 'terminal-event':
+    }
+    case 'terminal-event': {
       return spans.some((s) => s.name === completion.event);
+    }
   }
 }
 

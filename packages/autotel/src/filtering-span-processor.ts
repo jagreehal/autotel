@@ -68,14 +68,14 @@ export interface FilteringSpanProcessorOptions {
  */
 export class FilteringSpanProcessor implements SpanProcessor {
   private readonly wrappedProcessor: SpanProcessor;
-  private readonly filter: SpanFilterPredicate;
+  private readonly predicate: SpanFilterPredicate;
 
   constructor(
     wrappedProcessor: SpanProcessor,
     options: FilteringSpanProcessorOptions,
   ) {
     this.wrappedProcessor = wrappedProcessor;
-    this.filter = options.filter;
+    this.predicate = options.filter;
   }
 
   /**
@@ -91,7 +91,7 @@ export class FilteringSpanProcessor implements SpanProcessor {
    */
   onEnd(span: ReadableSpan): void {
     try {
-      if (this.filter(span)) {
+      if (this.predicate(span)) {
         this.wrappedProcessor.onEnd(span);
       }
       // If filter returns false, span is silently dropped

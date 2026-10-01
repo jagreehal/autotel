@@ -643,7 +643,7 @@ describe('Functional API', () => {
     });
 
     it('rejects invalid single-function options', () => {
-      expect(() => instrument({ key: '', fn: () => undefined })).toThrow(
+      expect(() => instrument({ key: '', fn: () => {} })).toThrow(
         '"key" must be a non-empty string',
       );
       expect(() =>

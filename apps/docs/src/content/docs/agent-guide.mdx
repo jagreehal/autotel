@@ -312,9 +312,9 @@ See [Audit Logging](/autotel/integrations/audit/) and [Security Observability](/
 
 Audit and agent telemetry is observability. A missing trace context must never crash the business logic it wraps. `withAudit`, `withAgentAction`, `withAgentToolCall`, `recordPolicyDecision`, and `securityEvent` / `withSecurity` no longer throw into your handler when there is no active trace context. An `onMissingContext` option (on each wrapper's options arg) controls the behaviour:
 
-- `'warn'` (default): run the wrapped handler un-audited and log one warning per action.
+- `'warn'` (default): run the wrapped handler un-audited and log one warning per action. `withAudit` and `securityEvent` / `withSecurity` default to `'skip'` instead when telemetry is off (no `init()`, no tracer provider).
 - `'skip'`: run un-audited, silently.
-- `'throw'`: previous fail-fast behaviour: opt in when telemetry is mandatory.
+- `'throw'`: fail fast. Opt in when telemetry is mandatory.
 
 This makes the agent layer safe to drop into a production hot path with no surrounding `trace()` and no `try`/`catch`.
 

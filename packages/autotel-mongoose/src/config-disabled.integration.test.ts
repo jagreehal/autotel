@@ -19,7 +19,8 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true },
 });
 
-let User: mongoose.Model<any>;
+const userModel = () => mongoose.model('User', userSchema);
+let User: ReturnType<typeof userModel>;
 
 const supportsLocalServer = await canListenOnLoopback();
 
@@ -38,7 +39,7 @@ beforeAll(async () => {
   mongod = await startMongo('config_disabled');
   instrumentMongoose(mongoose, { dbStatementSerializer: false });
   await mongoose.connect(mongod.uri);
-  User = mongoose.model('User', userSchema);
+  User = userModel();
 });
 
 afterAll(async () => {

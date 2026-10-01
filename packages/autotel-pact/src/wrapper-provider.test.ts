@@ -66,7 +66,7 @@ describe('withProviderVerification', () => {
 
     const entries = readLedger({ runId: 'prov-ok' });
     expect(entries).toHaveLength(2);
-    expect(entries.every(isInteractionLedgerEntry)).toBe(true);
+    expect(entries.every((e) => isInteractionLedgerEntry(e))).toBe(true);
     expect(
       entries.every((e) => e.role === 'provider' && e.outcome === 'passed'),
     ).toBe(true);
@@ -113,7 +113,7 @@ describe('withProviderVerification', () => {
 
     const entries = readLedger({ runId: 'prov-skip' });
     expect(entries).toHaveLength(2);
-    expect(entries.every(isInteractionLedgerEntry)).toBe(true);
+    expect(entries.every((e) => isInteractionLedgerEntry(e))).toBe(true);
     expect(
       entries.every((e) => e.role === 'provider' && e.outcome === 'passed'),
     ).toBe(true);

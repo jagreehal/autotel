@@ -48,9 +48,10 @@ export const getUser = traceServerFn(
 
 // Route loader
 export const Route = createFileRoute('/users/$userId')({
-  loader: traceLoader(async ({ params }) => {
-    return db.users.findUnique({ where: { id: params.userId } });
-  }),
+  loader: (ctx) =>
+    traceLoader(ctx, async ({ params }) => {
+      return db.users.findUnique({ where: { id: params.userId } });
+    }),
 });
 
 // Request handler

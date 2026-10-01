@@ -390,7 +390,7 @@ pnpm build
 pnpm test
 
 # Type check
-pnpm typecheck
+pnpm type-check
 ```
 
 ## License

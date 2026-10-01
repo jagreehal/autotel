@@ -216,11 +216,11 @@ const INACTIVE_CTX_METHODS: Record<string, (...args: never[]) => unknown> = {
   recordError: noop,
   track: noop,
   isRecording: () => false,
-  getBaggage: () => undefined,
+  getBaggage: () => {},
   setBaggage: (_key: never, value: never) => value,
   deleteBaggage: noop,
   getAllBaggage: () => new Map(),
-  getTypedBaggage: () => undefined,
+  getTypedBaggage: () => {},
   setTypedBaggage: noop,
 };
 

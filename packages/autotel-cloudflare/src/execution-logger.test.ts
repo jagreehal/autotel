@@ -89,7 +89,7 @@ describe('cloudflare execution logger aliases', () => {
       value: {
         colo: 'LHR',
         country: 'GB',
-        asn: 13335,
+        asn: 13_335,
         city: 'London',
         region: 'England',
       },
@@ -113,7 +113,7 @@ describe('cloudflare execution logger aliases', () => {
     expect(fields.traceparent).toBe('00-abc-def-01');
     expect(fields.colo).toBe('LHR');
     expect(fields.country).toBe('GB');
-    expect(fields.asn).toBe(13335);
+    expect(fields.asn).toBe(13_335);
   });
 
   it('createWorkersLogger honors explicit requestId override', () => {

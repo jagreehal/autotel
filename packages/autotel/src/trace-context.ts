@@ -4,7 +4,6 @@
 
 import type {
   AttributeValue as OtelAttributeValue,
-  Attributes,
   Span,
   SpanStatusCode,
   BaggageEntry,

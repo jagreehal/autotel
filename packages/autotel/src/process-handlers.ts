@@ -1,4 +1,4 @@
-import { constants } from 'node:os';
+import * as os from 'node:os';
 
 let removeOwnedHandlers: Array<() => void> = [];
 
@@ -40,7 +40,7 @@ function runShutdownOnce(
   // still draining. The race below still bounds the pair.
   const shutdownAttempt = Promise.resolve(exitFlushInFlight)
     .then(shutdown)
-    .catch(() => undefined);
+    .catch(() => {});
   const timeout = new Promise<void>((resolve) => {
     timeoutHandle = setTimeout(resolve, timeoutMs);
     timeoutHandle.unref();
@@ -66,7 +66,7 @@ export interface ProcessHandlersConfig {
 const DEFAULT_SIGNALS: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
 
 function signalExitCode(signal: NodeJS.Signals): number {
-  return 128 + constants.signals[signal];
+  return 128 + os.constants.signals[signal];
 }
 
 /**
@@ -187,7 +187,7 @@ export function installExitFlush(
       process.exit(process.exitCode ?? code);
     }, timeoutMs);
     exitFlushInFlight = flushTelemetry()
-      .catch(() => undefined)
+      .catch(() => {})
       .finally(() => {
         clearTimeout(deadline);
       });

@@ -38,16 +38,14 @@ describe('loaders', () => {
   });
 
   describe('traceLoader', () => {
-    it('should wrap a loader function', async () => {
+    it('should trace a loader and return its result', async () => {
       const loaderFn = vi.fn().mockResolvedValue({ data: 'test' });
-      const tracedLoader = traceLoader(loaderFn);
-
       const context = {
         params: { userId: '123' },
         route: { id: '/users/$userId' },
       };
 
-      const result = await tracedLoader(context);
+      const result = await traceLoader(context, loaderFn);
 
       expect(loaderFn).toHaveBeenCalledWith(context);
       expect(result).toEqual({ data: 'test' });
@@ -55,40 +53,34 @@ describe('loaders', () => {
 
     it('should use custom name if provided', async () => {
       const loaderFn = vi.fn().mockResolvedValue({ data: 'test' });
-      const tracedLoader = traceLoader(loaderFn, { name: 'customLoader' });
-
-      await tracedLoader({ route: { id: '/test' } });
+      await traceLoader({ route: { id: '/test' } }, loaderFn, {
+        name: 'customLoader',
+      });
       expect(loaderFn).toHaveBeenCalled();
     });
 
     it('should propagate errors', async () => {
       const error = new Error('Loader error');
       const loaderFn = vi.fn().mockRejectedValue(error);
-      const tracedLoader = traceLoader(loaderFn);
-
-      await expect(tracedLoader({})).rejects.toThrow('Loader error');
+      await expect(traceLoader({}, loaderFn)).rejects.toThrow('Loader error');
     });
 
     it('should handle missing route id', async () => {
       const loaderFn = vi.fn().mockResolvedValue({ data: 'test' });
-      const tracedLoader = traceLoader(loaderFn);
-
-      const result = await tracedLoader({});
+      const result = await traceLoader({}, loaderFn);
       expect(result).toEqual({ data: 'test' });
     });
   });
 
   describe('traceBeforeLoad', () => {
-    it('should wrap a beforeLoad function', async () => {
+    it('should trace a beforeLoad and return its result', async () => {
       const beforeLoadFn = vi.fn().mockResolvedValue({ auth: true });
-      const tracedBeforeLoad = traceBeforeLoad(beforeLoadFn);
-
       const context = {
         params: { userId: '123' },
         route: { id: '/users/$userId' },
       };
 
-      const result = await tracedBeforeLoad(context);
+      const result = await traceBeforeLoad(context, beforeLoadFn);
 
       expect(beforeLoadFn).toHaveBeenCalledWith(context);
       expect(result).toEqual({ auth: true });
@@ -98,44 +90,42 @@ describe('loaders', () => {
       const redirectError = new Error('Redirect');
       redirectError.name = 'RedirectError';
       const beforeLoadFn = vi.fn().mockRejectedValue(redirectError);
-      const tracedBeforeLoad = traceBeforeLoad(beforeLoadFn);
 
-      await expect(tracedBeforeLoad({})).rejects.toThrow('Redirect');
+      await expect(traceBeforeLoad({}, beforeLoadFn)).rejects.toThrow(
+        'Redirect',
+      );
     });
 
     it('should handle notFound errors gracefully', async () => {
       const notFoundError = new Error('Not Found');
       notFoundError.name = 'NotFoundError';
       const beforeLoadFn = vi.fn().mockRejectedValue(notFoundError);
-      const tracedBeforeLoad = traceBeforeLoad(beforeLoadFn);
 
-      await expect(tracedBeforeLoad({})).rejects.toThrow('Not Found');
+      await expect(traceBeforeLoad({}, beforeLoadFn)).rejects.toThrow(
+        'Not Found',
+      );
     });
   });
 
   describe('createTracedRoute', () => {
-    it('should create loader and beforeLoad wrappers', () => {
+    it('should create loader and beforeLoad tracers', () => {
       const traced = createTracedRoute('/users/$userId');
 
       expect(traced.loader).toBeDefined();
       expect(traced.beforeLoad).toBeDefined();
     });
 
-    it('should wrap loader with route id in span name', async () => {
+    it('should trace loader with route id in span name', async () => {
       const traced = createTracedRoute('/users/$userId');
       const loaderFn = vi.fn().mockResolvedValue({ user: {} });
-      const tracedLoader = traced.loader(loaderFn);
-
-      await tracedLoader({ params: { userId: '123' } });
+      await traced.loader({ params: { userId: '123' } }, loaderFn);
       expect(loaderFn).toHaveBeenCalled();
     });
 
-    it('should wrap beforeLoad with route id in span name', async () => {
+    it('should trace beforeLoad with route id in span name', async () => {
       const traced = createTracedRoute('/dashboard');
       const beforeLoadFn = vi.fn().mockResolvedValue({});
-      const tracedBeforeLoad = traced.beforeLoad(beforeLoadFn);
-
-      await tracedBeforeLoad({});
+      await traced.beforeLoad({}, beforeLoadFn);
       expect(beforeLoadFn).toHaveBeenCalled();
     });
   });

@@ -130,19 +130,14 @@ export function scoreGenAiCompleteness(
   spans: ScenarioSpan[],
   options: CompletenessOptions = {},
 ): CompletenessResult {
-  const fields: FieldScore[] = [];
-
-  fields.push(
+  const fields: FieldScore[] = [
     anySpanHas(spans, 'gen_ai.input.messages')
       ? score('llm_input', 1, 'gen_ai.input.messages present')
       : score('llm_input', 0, 'no span carries gen_ai.input.messages'),
-  );
-
-  fields.push(
     anySpanHas(spans, 'gen_ai.output.messages')
       ? score('llm_output', 1, 'gen_ai.output.messages present')
       : score('llm_output', 0, 'no span carries gen_ai.output.messages'),
-  );
+  ];
 
   const hasResponseModel = anySpanHas(spans, 'gen_ai.response.model');
   const hasRequestModel = anySpanHas(spans, 'gen_ai.request.model');

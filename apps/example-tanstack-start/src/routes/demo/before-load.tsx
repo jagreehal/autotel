@@ -30,45 +30,37 @@ export const Route = createFileRoute('/demo/before-load')({
     userId: Array.isArray(search.userId) ? search.userId[0] : search.userId,
   }),
 
-  // Example: Using traceBeforeLoad for auth/redirect logic
-  // Types are preserved - search, context, params are all typed by TanStack
-  beforeLoad: traceBeforeLoad(async ({ search }) => {
-    const userId = search.userId
-    const isAuthenticated = await checkAuth(userId)
+  // Example: Using traceBeforeLoad for auth/redirect logic.
+  // Pass the context through, so TanStack still types search, context and params.
+  beforeLoad: (ctx) =>
+    traceBeforeLoad(ctx, async ({ search }) => {
+      const userId = search.userId
+      const isAuthenticated = await checkAuth(userId)
 
-    if (!isAuthenticated) {
-      // Redirects are expected control flow, not errors
-      throw redirect({
-        to: '/',
-        search: {
-          error: 'unauthorized',
-        },
-      })
-    }
+      if (!isAuthenticated) {
+        // Redirects are expected control flow, not errors
+        throw redirect({
+          to: '/',
+          search: {
+            error: 'unauthorized',
+          },
+        })
+      }
 
-    // Return context for loader - this merges into loader's context
-    return {
-      userId,
-      isAuthenticated,
-    }
-  }),
+      // Return context for loader - this merges into loader's context
+      return {
+        userId,
+        isAuthenticated,
+      }
+    }),
 
   // Example: Loader that depends on beforeLoad context
   // The context includes what beforeLoad returned (userId, isAuthenticated)
-  loader: traceLoader(({ context }) => {
-    // SAFETY: beforeLoad above returns exactly { userId, isAuthenticated } and
-    // TanStack merges that return value into the loader's context. The assertion
-    // stands in for the generated route types, which this example does not build.
-    const { userId, isAuthenticated } = context as {
-      userId?: string
-      isAuthenticated: boolean
-    }
-
-    return {
-      message: `Welcome, ${userId || 'user'}!`,
-      authenticated: isAuthenticated,
-    }
-  }),
+  loader: (ctx) =>
+    traceLoader(ctx, ({ context }) => ({
+      message: `Welcome, ${context.userId || 'user'}!`,
+      authenticated: context.isAuthenticated,
+    })),
 
   component: BeforeLoadDemo,
 })

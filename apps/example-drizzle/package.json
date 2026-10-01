@@ -11,16 +11,16 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@libsql/client": "^0.17.4",
+    "@libsql/client": "^0.18.0",
     "autotel": "workspace:*",
     "autotel-drizzle": "workspace:*",
-    "dotenv": "^17.4.2",
-    "drizzle-orm": "^0.45.2"
+    "dotenv": "^18.0.4",
+    "drizzle-orm": "^0.45.3"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "drizzle-kit": "^0.31.10",
-    "tsx": "^4.23.1",
-    "typescript": "^6.0.3"
+    "@types/node": "^26.6.3",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

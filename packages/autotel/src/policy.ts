@@ -294,7 +294,7 @@ type RecordValue = AttributeValue | AnyValue | UnknownRecord | undefined;
 
 function toText(value: RecordValue): string | undefined {
   if (value === undefined || value === null) return undefined;
-  if (Array.isArray(value)) return value.map((item) => String(item)).join(',');
+  if (Array.isArray(value)) return value.map(String).join(',');
   // A nested object has no single text form to match against.
   return asRecord(value) ? undefined : String(value);
 }
@@ -374,6 +374,7 @@ function matchesAll(matchers: PolicyMatcher[], view: RecordView): boolean {
 function hashUnitInterval(value: string): number {
   let hash = 2_166_136_261;
   for (let index = 0; index < value.length; index++) {
+    // oxlint-disable-next-line unicorn/prefer-code-point -- FNV-1a over UTF-16 code units; codePointAt would change hashes (and keep decisions) for non-BMP input
     hash ^= value.charCodeAt(index);
     hash = Math.imul(hash, 16_777_619);
   }
@@ -428,7 +429,7 @@ function spanView(span: ReadableSpan): RecordView {
           return span.status.message;
         }
         default: {
-          return undefined;
+          return;
         }
       }
     },
@@ -491,7 +492,7 @@ function logView(record: SdkLogRecord): RecordView {
           return record.spanContext?.spanId;
         }
         default: {
-          return undefined;
+          return;
         }
       }
     },

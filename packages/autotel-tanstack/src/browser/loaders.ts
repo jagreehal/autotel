@@ -19,27 +19,31 @@ interface LoaderContext {
 }
 
 /**
- * Browser stub: Returns the loader function unchanged
+ * Browser stub: Runs the loader logic untraced
  */
-export function traceLoader<
-  T extends (context: LoaderContext) => Promise<unknown>,
->(loaderFn: T, config?: TraceLoaderConfig): T {
+export function traceLoader<TContext extends LoaderContext, TResult>(
+  context: TContext,
+  loaderFn: (context: TContext) => TResult,
+  config?: TraceLoaderConfig,
+): TResult {
   void config;
-  return loaderFn;
+  return loaderFn(context);
 }
 
 /**
- * Browser stub: Returns the beforeLoad function unchanged
+ * Browser stub: Runs the beforeLoad logic untraced
  */
-export function traceBeforeLoad<
-  T extends (context: LoaderContext) => Promise<unknown>,
->(beforeLoadFn: T, config?: TraceLoaderConfig): T {
+export function traceBeforeLoad<TContext extends LoaderContext, TResult>(
+  context: TContext,
+  beforeLoadFn: (context: TContext) => TResult,
+  config?: TraceLoaderConfig,
+): TResult {
   void config;
-  return beforeLoadFn;
+  return beforeLoadFn(context);
 }
 
 /**
- * Browser stub: Returns object with pass-through wrappers
+ * Browser stub: Returns object with untraced runners
  */
 export function createTracedRoute(
   routeId: string,
@@ -48,15 +52,17 @@ export function createTracedRoute(
   void routeId;
   void config;
   return {
-    loader<T extends (context: LoaderContext) => Promise<unknown>>(
-      loaderFn: T,
-    ): T {
-      return loaderFn;
+    loader<TContext extends LoaderContext, TResult>(
+      context: TContext,
+      loaderFn: (context: TContext) => TResult,
+    ): TResult {
+      return loaderFn(context);
     },
-    beforeLoad<T extends (context: LoaderContext) => Promise<unknown>>(
-      beforeLoadFn: T,
-    ): T {
-      return beforeLoadFn;
+    beforeLoad<TContext extends LoaderContext, TResult>(
+      context: TContext,
+      beforeLoadFn: (context: TContext) => TResult,
+    ): TResult {
+      return beforeLoadFn(context);
     },
   };
 }

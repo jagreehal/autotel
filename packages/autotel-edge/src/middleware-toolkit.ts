@@ -77,8 +77,8 @@ export async function runMiddlewareFinishPipeline<TEvent, TRequest = unknown>(
   for (const enrich of options.enrichers ?? []) {
     try {
       await enrich(ctx);
-    } catch (err) {
-      logger.error('[autotel-edge/middleware] enricher failed:', err);
+    } catch (error) {
+      logger.error('[autotel-edge/middleware] enricher failed:', error);
     }
   }
 
@@ -89,8 +89,8 @@ export async function runMiddlewareFinishPipeline<TEvent, TRequest = unknown>(
     drains.map(async (drain) => {
       try {
         await drain(ctx);
-      } catch (err) {
-        logger.error('[autotel-edge/middleware] drain failed:', err);
+      } catch (error) {
+        logger.error('[autotel-edge/middleware] drain failed:', error);
       }
     }),
   );

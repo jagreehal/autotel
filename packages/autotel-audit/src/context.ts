@@ -1,4 +1,9 @@
-import { getTraceContext, otelTrace } from 'autotel';
+import {
+  getTraceContext,
+  hasTracerProvider,
+  isInitialized,
+  otelTrace,
+} from 'autotel';
 
 export interface AuditContext {
   traceId: string;
@@ -58,13 +63,38 @@ export { MISSING_CONTEXT_MESSAGE };
  * How instrumentation should behave when no trace context is available.
  *
  * - `throw` — fail fast (original behaviour). Use when telemetry is mandatory.
- * - `warn` — run the wrapped handler un-audited and log one warning per action (default).
+ * - `warn` — run the wrapped handler un-audited and log one warning per action.
  * - `skip` — run the wrapped handler un-audited, silently.
  *
  * Telemetry is observability: a missing context should never crash the business
- * logic it wraps, so the default is best-effort (`warn`).
+ * logic it wraps, so the default is best-effort: `skip` when telemetry is off
+ * (no autotel init(), no tracer provider: nothing could be recorded anyway),
+ * `warn` otherwise.
  */
 export type OnMissingContext = 'throw' | 'warn' | 'skip';
+
+let defaultOnMissingContext: OnMissingContext | undefined;
+
+/**
+ * Process-wide defaults. A per-call `onMissingContext` still wins; pass
+ * `undefined` to restore the built-in default.
+ */
+export function configureAudit(options: {
+  onMissingContext?: OnMissingContext;
+}): void {
+  defaultOnMissingContext = options.onMissingContext;
+}
+
+/** Per-call option, then configureAudit(), then skip-if-telemetry-off-else-warn. */
+export function resolveOnMissingContext(
+  explicit?: OnMissingContext,
+): OnMissingContext {
+  return (
+    explicit ??
+    defaultOnMissingContext ??
+    (isInitialized() || hasTracerProvider() ? 'warn' : 'skip')
+  );
+}
 
 /** A no-op {@link AuditContext} whose attribute setters do nothing. */
 export function noopAuditContext(): AuditContext {

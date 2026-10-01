@@ -10,6 +10,7 @@ import {
   MISSING_CONTEXT_MESSAGE,
   noopAuditContext,
   resolveContextSafe,
+  resolveOnMissingContext,
   toAttributeValue,
   warnMissingContextOnce,
   warnMissingLoggerOnce,
@@ -18,6 +19,7 @@ import {
 } from './context';
 
 export type { AuditContext, OnMissingContext } from './context';
+export { configureAudit } from './context';
 export * from './security';
 export * from './security-signals';
 export * from './security-heartbeat';
@@ -54,8 +56,9 @@ export interface WithAuditOptions {
   forceKeep?: boolean;
   logger?: RequestLogger;
   /**
-   * Behaviour when no trace context can be resolved. Defaults to `warn`
-   * (best-effort: run un-audited, warn once). See {@link OnMissingContext}.
+   * Behaviour when no trace context can be resolved. Defaults to the
+   * configureAudit() value, else `skip` when telemetry is off and `warn`
+   * otherwise. See {@link OnMissingContext}.
    */
   onMissingContext?: OnMissingContext;
 }
@@ -107,7 +110,7 @@ export async function withAudit<T>(
   // No trace context: degrade per onMissingContext instead of throwing into
   // business logic. Audit is observability — it must never crash the caller.
   if (!traceCtx) {
-    const mode = options.onMissingContext ?? 'warn';
+    const mode = resolveOnMissingContext(options.onMissingContext);
     if (mode === 'throw') {
       throw new Error(MISSING_CONTEXT_MESSAGE);
     }
@@ -128,7 +131,7 @@ export async function withAudit<T>(
   // the canonical log line — never throw.
   let logger = options.logger ?? getRequestLoggerSafe() ?? undefined;
   if (!logger) {
-    if ((options.onMissingContext ?? 'warn') === 'warn') {
+    if (resolveOnMissingContext(options.onMissingContext) === 'warn') {
       warnMissingLoggerOnce(metadata.action);
     }
     logger = createNoopRequestLogger();
