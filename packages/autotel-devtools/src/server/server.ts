@@ -4,6 +4,11 @@ import { encodeTraces } from '../wire/wire';
 import type { Server as HTTPServer } from 'node:http';
 import { createServer } from 'node:http';
 import { ErrorAggregator } from './error-aggregator';
+import { IssueEngine } from './issue-engine';
+import {
+  createSourceMapResolver,
+  type SourceMapResolverOptions,
+} from './sourcemap';
 import { foldWebMcpTools, type WebMcpInventory } from './webmcp-aggregator';
 import {
   ingestAgentEvents,
@@ -84,6 +89,18 @@ export interface DevtoolsServerOptions {
    * batch.
    */
   retentionIntervalMs?: number;
+  /**
+   * Where stack traces are source-mapped from: frame files inside `roots`
+   * (their `sourceMappingURL` or `<file>.map`), then `mapsDir/<basename>.map`.
+   * Omit to leave stacks as received.
+   */
+  sourceMaps?: SourceMapResolverOptions;
+  /** `fetch` used to deliver issues to destinations. Tests inject one. */
+  issueFetch?: typeof fetch;
+  /** Retry backoff for issue deliveries, ms. */
+  issueBackoffMs?: number;
+  /** Base URL of this devtools, for links in issues sent to destinations. */
+  publicUrl?: string;
 }
 
 /** How often the store is pruned past its caps. */
@@ -120,6 +137,13 @@ export class DevtoolsServer {
    * on every ingest; neither is derived from the other.
    */
   private store: DevtoolsStore;
+  /** Failures → issues → automations. See `issue-engine.ts`. */
+  readonly issueEngine: IssueEngine;
+
+  /** Issue state: status, occurrences, destinations, automations, runs. */
+  get issueStore() {
+    return this.store.issues;
+  }
   private retentionTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: DevtoolsServerOptions = {}) {
@@ -132,6 +156,16 @@ export class DevtoolsServer {
       maxTraces: options.maxTraces,
       maxLogs: options.maxLogs,
       maxBytes: options.maxDbBytes,
+    });
+    this.issueEngine = new IssueEngine({
+      store: this.store,
+      resolver: options.sourceMaps
+        ? createSourceMapResolver(options.sourceMaps)
+        : undefined,
+      fetch: options.issueFetch,
+      backoffMs: options.issueBackoffMs,
+      baseUrl: () => options.publicUrl,
+      log: (message) => this.log(message),
     });
     this.startRetentionLoop(options.retentionIntervalMs);
 
@@ -223,6 +257,8 @@ export class DevtoolsServer {
   }
 
   addTrace(trace: TraceData): void {
+    // Before anything stores or shows the stack: see IssueEngine.resolveStacks.
+    this.issueEngine.resolveStacks(trace.spans);
     // Merge if trace already exists (out-of-order spans). Spans for one trace
     // arrive across multiple batches and services, so the root span and timing
     // must be recomputed from the merged span set — the first batch to arrive
@@ -268,15 +304,15 @@ export class DevtoolsServer {
       );
     }
 
-    // Exporters retry batches. Only newly observed span identities contribute
-    // error occurrences; the durable store follows the same idempotent rule.
-    if (newSpans.length > 0) {
-      this.errorAggregator.addErrorsFromTrace({ ...trace, spans: newSpans });
-    }
+    // The merged trace, idempotent by trace id: exporters retry batches, and
+    // a throw site arriving after its 500 regroups the trace.
+    if (newSpans.length > 0) this.errorAggregator.addTrace(merged);
     // Persist the merged trace, not the incoming batch: the store's upsert
     // widens a trace's bounds as spans arrive, and handing it the merged view
     // keeps the stored root span in step with the one clients were shown.
     this.store.ingestTraces([merged]);
+    // The merged trace, so a throw site arriving after its 500 regroups it.
+    if (newSpans.length > 0) this.issueEngine.ingestTrace(merged);
     // Broadcast the merged trace (not just the incoming batch) so live clients
     // and any client that reconnects mid-trace converge on the full picture.
     this.broadcast({
@@ -296,6 +332,8 @@ export class DevtoolsServer {
   addLog(log: LogData): void {
     this.logs = appendWithLimit(this.logs, log, this.limits.maxLogCount);
     this.store.ingestLogs([log]);
+    this.issueEngine.ingestLog(log);
+    this.errorAggregator.addLog(log);
     this.broadcast({
       traces: [],
       logs: [log],
@@ -306,6 +344,10 @@ export class DevtoolsServer {
   addLogs(logs: LogData[]): void {
     this.logs = appendManyWithLimit(this.logs, logs, this.limits.maxLogCount);
     this.store.ingestLogs(logs);
+    for (const log of logs) {
+      this.issueEngine.ingestLog(log);
+      this.errorAggregator.addLog(log);
+    }
     this.broadcast({
       traces: [],
       logs,
@@ -463,11 +505,31 @@ export class DevtoolsServer {
     do {
       const result = this.store.queryTraces({ ...args, cursor });
       if (result.errors) return { errors: [], errors_parse: result.errors };
-      for (const trace of result.traces) aggregator.addErrorsFromTrace(trace);
+      for (const trace of result.traces) aggregator.addTrace(trace);
       cursor = result.nextCursor ?? undefined;
       if (cursor && seenCursors.has(cursor)) break;
       if (cursor) seenCursors.add(cursor);
     } while (cursor);
+    // Error logs outside any trace are issues too; a trace query cannot
+    // select them, so they join only the unfiltered view. Every page, and the
+    // shared rule decides what counts (`occurrenceFromLog`: severity number
+    // when present, else the text), exactly as the live path does.
+    if (!args.query?.trim()) {
+      const seenLogCursors = new Set<string>();
+      let logCursor: string | undefined;
+      do {
+        const page = this.store.queryLogs({
+          query: '',
+          window: args.window,
+          limit: 1_000,
+          cursor: logCursor,
+        });
+        for (const log of page.logs) aggregator.addLog(log);
+        logCursor = page.nextCursor ?? undefined;
+        if (logCursor && seenLogCursors.has(logCursor)) break;
+        if (logCursor) seenLogCursors.add(logCursor);
+      } while (logCursor);
+    }
     return { errors: aggregator.getErrorGroups() };
   }
 
@@ -566,6 +628,7 @@ export class DevtoolsServer {
     this.retentionTimer = setInterval(() => {
       try {
         this.store.enforceRetention();
+        this.issueEngine.enforceRetention();
       } catch (error) {
         this.log(`retention failed: ${String(error)}`);
       }
@@ -612,8 +675,7 @@ export class DevtoolsServer {
     let cursor: string | undefined;
     do {
       const page = this.store.queryTraces({ query: '', limit: 1_000, cursor });
-      for (const trace of page.traces)
-        this.errorAggregator.addErrorsFromTrace(trace);
+      for (const trace of page.traces) this.errorAggregator.addTrace(trace);
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
     return deleted;

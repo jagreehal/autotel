@@ -37,6 +37,16 @@
       "types": "./dist/wire/index.d.ts",
       "import": "./dist/wire/index.js",
       "require": "./dist/wire/index.cjs"
+    },
+    "./issues": {
+      "types": "./dist/issues/index.d.ts",
+      "import": "./dist/issues/index.js",
+      "require": "./dist/issues/index.cjs"
+    },
+    "./sourcemaps": {
+      "types": "./dist/server/sourcemap.d.ts",
+      "import": "./dist/server/sourcemap.js",
+      "require": "./dist/server/sourcemap.cjs"
     }
   },
   "main": "./dist/index.js",

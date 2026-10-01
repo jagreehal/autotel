@@ -66,6 +66,22 @@ export interface AutotelConfig {
   flushOnExit?: boolean;
 
   /**
+   * Record `console.error(...)` calls made inside a span as an exception on
+   * that span, leaving its status alone (the error was handled). Read from
+   * Node's `console.*` diagnostics channels; `console` is never patched.
+   * Default: `true`.
+   */
+  captureConsoleErrors?: boolean;
+
+  /**
+   * Record one `autotel.LogFlood` exception on the active span when a single
+   * log template (digits, UUIDs and hex ids collapsed) is written more than
+   * this many times in one trace — logging inside a loop. Default: `100`;
+   * `0` disables.
+   */
+  logFloodThreshold?: number;
+
+  /**
    * Local developer UX for autotel-devtools.
    *
    * - `true`: send traces, metrics, and logs to `http://127.0.0.1:4318`

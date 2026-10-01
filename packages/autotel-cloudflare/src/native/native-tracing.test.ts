@@ -6,7 +6,14 @@ import {
 
 function ctxWithTracing() {
   const enterSpan = vi.fn((_name: string, cb: (s: any) => unknown) =>
-    cb({ isTraced: true, setAttribute: vi.fn() }),
+    cb({
+      isTraced: true,
+      setAttribute: vi.fn(),
+      setAttributes: vi.fn(),
+      setStatus: vi.fn(),
+      recordException: vi.fn(),
+      updateName: vi.fn(),
+    }),
   );
   return {
     tracing: { enterSpan },

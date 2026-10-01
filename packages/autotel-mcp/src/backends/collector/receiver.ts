@@ -1,6 +1,8 @@
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { CollectorStore } from './store';
+import { exceptionTags } from '../span-mapping';
+import type { SourceMapResolver } from 'autotel-devtools/sourcemaps';
 import type {
   SpanRecord,
   MetricSeries,
@@ -106,8 +108,39 @@ interface OtlpSpan {
   name?: string;
   startTimeUnixNano?: string | number;
   endTimeUnixNano?: string | number;
-  status?: { code?: number };
+  status?: { code?: number; message?: string };
   attributes?: OtlpKeyValue[];
+  events?: Array<{ name?: string; attributes?: OtlpKeyValue[] }>;
+}
+
+/**
+ * Span tags: the span's attributes, plus the recorded `exception` event
+ * (type, message, stacktrace) and the resource's `service.version`, which
+ * issue grouping needs and which otherwise never reach a SpanRecord.
+ */
+function spanTags(
+  s: OtlpSpan,
+  resource: OtlpKeyValue[] | undefined,
+  resolver: SourceMapResolver | undefined,
+): Record<string, TagValue> {
+  const version = resource?.find((kv) => kv.key === 'service.version');
+  const tags: Record<string, TagValue> = {
+    ...(version ? { 'service.version': decodeAnyValue(version.value) } : {}),
+    ...exceptionTags(
+      s.events?.map((e) => ({
+        name: e.name,
+        attributes: attrsToRecord(e.attributes),
+      })),
+      s.status?.message,
+    ),
+    ...attrsToRecord(s.attributes),
+  };
+  // Map bundle frames back to source before anything groups or shows them.
+  const stack = tags['exception.stacktrace'];
+  if (resolver && typeof stack === 'string') {
+    tags['exception.stacktrace'] = resolver.resolveStack(stack);
+  }
+  return tags;
 }
 
 interface OtlpScopeSpans {
@@ -123,7 +156,10 @@ interface OtlpTracesPayload {
   resourceSpans?: OtlpResourceSpans[];
 }
 
-function parseTraces(body: OtlpTracesPayload): SpanRecord[] {
+function parseTraces(
+  body: OtlpTracesPayload,
+  resolver?: SourceMapResolver,
+): SpanRecord[] {
   const spans: SpanRecord[] = [];
   for (const rs of body.resourceSpans ?? []) {
     const serviceName = getServiceName(rs.resource?.attributes);
@@ -147,7 +183,7 @@ function parseTraces(body: OtlpTracesPayload): SpanRecord[] {
           startTimeUnixMs: startMs,
           durationMs,
           statusCode,
-          tags: attrsToRecord(s.attributes),
+          tags: spanTags(s, rs.resource?.attributes, resolver),
           hasError: statusCode === 'ERROR',
         });
       }
@@ -324,7 +360,11 @@ export class OtlpReceiver {
   private port: number;
   private server: http.Server;
 
-  constructor(store: CollectorStore, port: number) {
+  constructor(
+    store: CollectorStore,
+    port: number,
+    private readonly resolver?: SourceMapResolver,
+  ) {
     this.store = store;
     this.port = port;
     this.server = http.createServer(this.handleRequest.bind(this));
@@ -343,7 +383,7 @@ export class OtlpReceiver {
         // parser reads is optional, so a payload of another shape yields no
         // traces rather than a bad read.
         const body = JSON.parse(raw) as OtlpTracesPayload;
-        const spans = parseTraces(body);
+        const spans = parseTraces(body, this.resolver);
         await this.store.insertSpans(spans);
         sendJson(res, 200, {});
         return;

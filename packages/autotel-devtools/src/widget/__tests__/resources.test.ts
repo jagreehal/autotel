@@ -85,6 +85,7 @@ describe('resource utilities', () => {
       errors: [
         {
           fingerprint: 'err-1',
+          source: 'exception' as const,
           type: 'QueryError',
           message: 'failed',
           count: 1,

@@ -46,6 +46,5 @@ export type {
   TraceData,
   LogData,
   ErrorGroup,
-  ErrorOccurrence,
   DevtoolsData,
 } from './types';

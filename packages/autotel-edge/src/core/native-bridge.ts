@@ -12,8 +12,8 @@
  * with {@link withNativeTracer}, and the functional API reads it back with
  * {@link getActiveNativeTracer}.
  *
- * Native span surfaces are deliberately minimal (Cloudflare's `Span` exposes
- * only `setAttribute` + `isTraced`), so the adapters below degrade autotel's
+ * Native span surfaces are thinner than OTel (no span ids, events or links on
+ * Cloudflare), so the adapters below degrade autotel's
  * richer `TraceContext` / OTel `Span` API gracefully. See the degradation map
  * in `docs/CLOUDFLARE-NATIVE-TRACING.md`.
  */
@@ -27,9 +27,12 @@ import {
   type Context,
   type Span,
   type SpanContext,
+  type SpanStatus,
 } from '@opentelemetry/api';
 import type { Attributes, Exception, TimeInput } from '@opentelemetry/api';
 import type { TraceContext } from './trace-context';
+import { runInternal } from './console-signals';
+import { ensureGlobalContextManager } from './context';
 
 /**
  * The minimal span surface every native runtime is expected to provide.
@@ -40,6 +43,23 @@ export interface NativeSpanHandle {
   readonly isTraced: boolean;
   /** Set a single primitive attribute. `undefined` is a no-op. */
   setAttribute(key: string, value: string | number | boolean | undefined): void;
+  // Optional: present on newer Cloudflare runtimes only, and `setStatus` /
+  // `updateName` are not in Cloudflare's documented custom-span API at all.
+  // Every adapter below checks before calling and degrades to attributes, so
+  // a missing method can never turn a successful span into a TypeError.
+  setAttributes?(
+    attributes: Record<string, string | number | boolean | undefined>,
+  ): void;
+  setStatus?(status: {
+    code: 'unset' | 'ok' | 'error';
+    message?: string;
+  }): void;
+  recordException?(exception: {
+    name?: string;
+    message?: string;
+    stack?: string;
+  }): void;
+  updateName?(name: string): void;
   /**
    * Optional — not provided by Cloudflare today, but reserved so autotel
    * auto-upgrades to real trace/span ids the moment the platform exposes them,
@@ -55,6 +75,8 @@ export interface NativeSpanHandle {
  */
 export interface NativeTracer {
   enterSpan<T>(name: string, callback: (span: NativeSpanHandle) => T): T;
+  /** The currently active span; outside custom spans, the invocation root. */
+  getActiveSpan?(): NativeSpanHandle | undefined;
   /**
    * Optional per-request correlation id surfaced as `ctx.correlationId` (and a
    * `correlation.id` span attribute) when the platform does not yet expose
@@ -113,17 +135,47 @@ export function withNativeTracer(
   return context.setValue(NATIVE_TRACER_KEY, tracer);
 }
 
+const NATIVE_DISABLED = Symbol('autotel-native-disabled');
+let defaultNativeTracer: NativeTracer | null = null;
+
 /**
- * Read the native tracer from the active context, if one was installed.
- * Returns `null` when running without a native tracer (other edge runtimes,
- * native tracing disabled, local dev) — callers then fall back to the OTel path.
+ * Register a process-wide native tracer used when no wrapper installed one:
+ * code outside any autotel handler wrapper (Durable Object RPC methods,
+ * entrypoints, module helpers) still nests in the platform waterfall.
+ */
+export function setDefaultNativeTracer(tracer: NativeTracer | null): void {
+  defaultNativeTracer = tracer;
+  // Code reaching the default tracer never passed through a handler wrapper,
+  // the usual place a context manager is registered (Durable Objects and
+  // Workflows under native tracing, RPC entrypoints). Without one, ambient
+  // ctx and the request logger see nothing inside trace()/span().
+  if (tracer) ensureGlobalContextManager();
+}
+
+/**
+ * Return a context that opts out of native routing (including the default
+ * tracer). OTLP-mode wrappers run handlers in it so their spans stay on
+ * autotel's own pipeline.
+ */
+export function withoutNativeTracer(
+  context: Context = api_context.active(),
+): Context {
+  return context.setValue(NATIVE_TRACER_KEY, NATIVE_DISABLED);
+}
+
+/**
+ * Read the native tracer from the active context, falling back to the default
+ * one. Returns `null` when running without a native tracer (other edge
+ * runtimes, native tracing disabled, OTLP mode) — callers then use OTel.
  */
 export function getActiveNativeTracer(): NativeTracer | null {
-  // SAFETY: this key is written by createNativeTraceContext below and read
-  // only here; a context that never carried one reads undefined.
+  // SAFETY: this key is written only by withNativeTracer/withoutNativeTracer.
   const value = api_context.active().getValue(NATIVE_TRACER_KEY) as
-    NativeTracer | undefined;
-  return value ?? null;
+    NativeTracer | typeof NATIVE_DISABLED | undefined;
+  if (value === NATIVE_DISABLED) {
+    return null;
+  }
+  return value ?? defaultNativeTracer;
 }
 
 /**
@@ -177,47 +229,88 @@ function coerceAttribute(
 }
 
 function applyAttributes(span: NativeSpanHandle, attributes: Attributes): void {
+  const coerced: Record<string, string | number | boolean | undefined> = {};
   for (const [key, value] of Object.entries(attributes)) {
-    span.setAttribute(key, coerceAttribute(value));
+    coerced[key] = coerceAttribute(value);
+  }
+  if (typeof span.setAttributes === 'function') {
+    span.setAttributes(coerced);
+    return;
+  }
+  for (const [key, value] of Object.entries(coerced)) {
+    span.setAttribute(key, value);
   }
 }
 
-// Degradation primitives shared by the TraceContext and OTel-Span adapters,
-// so both surfaces map onto the thin native span identically.
+// Primitives shared by the TraceContext and OTel-Span adapters, so both
+// surfaces map onto the native span identically.
 
-function nativeSetErrorStatus(span: NativeSpanHandle, message?: string): void {
-  span.setAttribute('otel.status_code', 'ERROR');
-  span.setAttribute('error', true);
-  if (message) {
-    span.setAttribute('otel.status_description', message);
+function nativeSetStatus(span: NativeSpanHandle, status: SpanStatus): void {
+  if (typeof span.setStatus !== 'function') {
+    // The platform marks success itself; only an error needs recording.
+    if (status.code === SpanStatusCode.ERROR) {
+      span.setAttribute('otel.status_code', 'ERROR');
+      span.setAttribute('error', true);
+      if (status.message) {
+        span.setAttribute('otel.status_description', status.message);
+      }
+    }
+    return;
   }
+  span.setStatus({
+    code:
+      status.code === SpanStatusCode.ERROR
+        ? 'error'
+        : status.code === SpanStatusCode.OK
+          ? 'ok'
+          : 'unset',
+    message: status.message,
+  });
 }
 
-function nativeRecordException(
+/**
+ * Record an exception on a native span, degrading to `exception.*` attributes
+ * where the runtime has no `recordException`.
+ */
+export function nativeRecordException(
   span: NativeSpanHandle,
   exception: Exception,
 ): void {
   const error =
     exception instanceof Error ? exception : new Error(String(exception));
-  span.setAttribute('exception.type', error.name);
-  span.setAttribute('exception.message', error.message);
-  // Platform attributes console output to the active native span.
-  console.error(error);
+  if (typeof span.recordException !== 'function') {
+    span.setAttribute('exception.type', error.name);
+    span.setAttribute('exception.message', error.message);
+    span.setAttribute('exception.stacktrace', error.stack);
+    return;
+  }
+  span.recordException({
+    name: error.name,
+    message: error.message,
+    stack: error.stack,
+  });
+}
+
+function nativeUpdateName(span: NativeSpanHandle, name: string): void {
+  if (typeof span.updateName === 'function') span.updateName(name);
 }
 
 function nativeAddEvent(
   eventName: string,
   attributesOrStartTime?: Attributes | TimeInput,
 ): void {
-  if (
-    attributesOrStartTime &&
-    typeof attributesOrStartTime === 'object' &&
-    !Array.isArray(attributesOrStartTime)
-  ) {
-    console.log(eventName, attributesOrStartTime);
-  } else {
-    console.log(eventName);
-  }
+  // Not app logging: keep it out of log-flood counting.
+  runInternal(() => {
+    if (
+      attributesOrStartTime &&
+      typeof attributesOrStartTime === 'object' &&
+      !Array.isArray(attributesOrStartTime)
+    ) {
+      console.log(eventName, attributesOrStartTime);
+    } else {
+      console.log(eventName);
+    }
+  });
 }
 
 /**
@@ -229,10 +322,9 @@ function nativeAddEvent(
  * - `correlationId` → real-id-derived when available, else the supplied
  *   `correlationId` (e.g. Cloudflare `cf-ray`). Also written as a
  *   `correlation.id` span attribute so it is queryable in the backend.
- * - `setStatus(ERROR)` → records `otel.status_code` + `error` attributes.
- * - `recordException` → attributes + `console.error` (attributed to the span).
+ * - `setStatus` / `recordException` / `updateName` → native span methods.
  * - `addEvent` → `console.log(name, attrs)` (attributed to the span).
- * - `addLink`/`addLinks`/`updateName` → no-ops.
+ * - `addLink`/`addLinks` → no-ops.
  */
 export function createNativeTraceContext(
   span: NativeSpanHandle,
@@ -251,17 +343,13 @@ export function createNativeTraceContext(
     setAttribute: (key, value) =>
       span.setAttribute(key, coerceAttribute(value)),
     setAttributes: (attrs) => applyAttributes(span, attrs),
-    setStatus: (status) => {
-      if (status.code === SpanStatusCode.ERROR) {
-        nativeSetErrorStatus(span, status.message);
-      }
-    },
+    setStatus: (status) => nativeSetStatus(span, status),
     recordException: (exception) => nativeRecordException(span, exception),
     addEvent: (eventName, attributesOrStartTime) =>
       nativeAddEvent(eventName, attributesOrStartTime),
     addLink: () => {},
     addLinks: () => {},
-    updateName: () => {},
+    updateName: (newName) => nativeUpdateName(span, newName),
     isRecording: () => span.isTraced,
   };
 }
@@ -305,12 +393,13 @@ export function createNativeSpanShim(
     addLink: () => shim,
     addLinks: () => shim,
     setStatus(status) {
-      if (status.code === SpanStatusCode.ERROR) {
-        nativeSetErrorStatus(span, status.message);
-      }
+      nativeSetStatus(span, status);
       return shim;
     },
-    updateName: () => shim,
+    updateName(newName) {
+      nativeUpdateName(span, newName);
+      return shim;
+    },
     end: () => {},
     isRecording: () => span.isTraced,
     recordException: (exception) => nativeRecordException(span, exception),

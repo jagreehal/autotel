@@ -457,7 +457,7 @@ init({
 | `autotel-bedrock`             | Amazon Bedrock: `bedrockCompatibility()` enricher, `bedrockProviderAttributes` (stop reason, guardrails), `BEDROCK_PRICING`          |
 | `autotel-schema`              | Telemetry surface as a typed, versioned contract: declare, validate, diff for breaking changes                                       |
 | `autotel-agents`              | Coding-agent observability: turns Claude Code / opencode / Codex signals into a session model                                        |
-| `autotel-devtools`            | Local devtools widget and server                                                                                                     |
+| `autotel-devtools`            | Local devtools: traces, logs, issues (status, automations, source maps)                                                              |
 | `autotel-web`                 | Browser SDK: trace propagation, browser spans, and the RUM signals a backend cannot derive for itself                                |
 | `autotel-playwright`          | Playwright fixture (one span per test) and `withBrowserSession()` for browser sessions outside tests                                 |
 

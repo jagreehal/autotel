@@ -7,10 +7,15 @@ import tailwindcss from '@tailwindcss/postcss';
  * Modules the embedded build swaps for a reduced `.lean.ts` sibling.
  *
  *  - `views/registry`: the reduced view set — traces, logs, errors, resources.
+ *  - `issue-panels`: no destinations/automations setup in the embedded widget.
  *  - `webmcp`: no WebMCP tools off the embedded widget, so none of their
  *    definitions ship in its bundle.
  */
-const LEAN_MODULES = ['src/widget/views/registry', 'src/widget/webmcp'];
+const LEAN_MODULES = [
+  'src/widget/views/registry',
+  'src/widget/webmcp',
+  'src/widget/issue-panels',
+];
 
 /**
  * Swap each module above for its reduced sibling.

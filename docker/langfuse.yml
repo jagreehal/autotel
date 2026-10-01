@@ -176,7 +176,9 @@ services:
       - langfuse
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # quay.io/minio no longer serves public images; Langfuse upstream uses this.
+    # Pinned by digest (latest as of 2026-10-01); bump deliberately.
+    image: cgr.dev/chainguard/minio@sha256:4692462f35d97d7e82c30371d82f057703c5d9489bcae726010594c812f2d285
     container_name: autotel-langfuse-minio
     restart: always
     entrypoint: sh

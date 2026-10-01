@@ -25,9 +25,16 @@ everywhere else (other edge runtimes, native off, local `wrangler dev`).
 2. Keep using your handler wrapper as-is: `instrument`, `wrapModule`,
    `defineWorkerFetch`, or `wrapDurableObject`. On each request the wrapper
    detects `ctx.tracing`, wraps it as a `NativeTracer`, and installs it into the
-   active context. Your `trace()` / `span()` / `enterSpan()` calls. Even deep
-   inside utility functions and libraries. Then route to Cloudflare's native
+   active context. Your `trace()` / `span()` / `enterSpan()` calls, even deep
+   inside utility functions and libraries, then route to Cloudflare's native
    tracer and nest in the platform waterfall.
+
+3. Code outside any wrapper (Durable Object RPC methods, `WorkerEntrypoint`s,
+   module helpers) uses the module-level `tracing` export of
+   `cloudflare:workers`, so its spans nest too. `wrapDurableObject` /
+   `instrumentDO` return the object untouched under native tracing (Cloudflare
+   traces DO fetch, alarm, RPC and storage), and `instrumentWorkflow` only adds
+   a named span per `step.do()` (Cloudflare records the step RPC, not its name).
 
 When native tracing is active autotel **defers to the platform**:
 
@@ -35,6 +42,42 @@ When native tracing is active autotel **defers to the platform**:
   (KV/R2/D1/…). Cloudflare already traces them natively.
 - **No second pipeline.** autotel does not register its own provider/exporter or
   flush spans; Cloudflare exports everything.
+- **Handler body = root span.** Outside any `trace()`, the ambient ctx,
+  `getRequestLogger()` and `createWorkersLogger()` write to Cloudflare's root
+  invocation span. That is the span [Workers Issues](https://developers.cloudflare.com/workers/observability/issues/)
+  shows with each occurrence, so `user.id` / `account.id` / the logger's wide
+  event (route, colo, country, plan, …) arrive with every grouped error.
+
+### No SDK at all
+
+Workers that cannot or should not carry the SDK can still be observed: list a
+Tail Worker built with `autotel-cloudflare/tail` in `tail_consumers`, and every
+invocation reaches autotel-devtools / autotel-mcp as OTLP, issues included.
+See the package README.
+
+### What autotel still adds on top of native
+
+- One `trace()` / `span()` API that runs on Workers, Node, Deno, Bun and in
+  tests, choosing native or OTLP per invocation.
+- The request logger / wide events, typed attributes, sampling, subscribers
+  (product events), and `correlation.id` (`cf-ray`) on every custom span.
+- **Distributed traces.** Native tracing does not propagate `traceparent`
+  (verified: outbound `fetch()` carries none and Cloudflare exposes no span ids).
+  Set `nativeTracing: 'off'` when a Worker must join traces with non-Cloudflare
+  services.
+- Named Workflow steps (see above).
+- **Issue signals Cloudflare records from logs, as span exceptions** (both
+  modes; in native mode they land on the platform span):
+  - `console.error(...)` inside an invocation records an exception on the
+    active span without setting error status (it was handled). Opt out with
+    `captureConsoleErrors: false`.
+  - One log template (digits, UUIDs, hex ids collapsed) written more than
+    `logFloodThreshold` times (default `100`, `0` disables) in one invocation
+    records a single `autotel.LogFlood` exception.
+  - A Durable Object whose `alarm()` runs more than `maxRuns` times within
+    `windowMs` records one `autotel.RunawayAlarm` exception per window.
+    `runawayAlarm: { maxRuns: 10, windowMs: 60_000 }` by default; `false`
+    disables.
 
 ## Configuration: `nativeTracing`
 
@@ -62,39 +105,47 @@ export default wrapModule(
 
 ### Local development with autotel-devtools
 
-`wrangler dev` typically does not export native traces to a local receiver, so
-use the OTLP fallback to stream to autotel-devtools:
+`wrangler dev` now exposes `ctx.tracing` too, so in `'auto'` mode local spans go
+to Cloudflare's Local Explorer (`/cdn-cgi/explorer`), not to your exporter.
+autotel prints a one-time hint when that happens. To stream to autotel-devtools
+instead, switch native off in `.dev.vars`, which only `wrangler dev` reads, so
+production stays native:
 
 ```bash
 npx autotel-devtools          # OTLP receiver + UI on :4318
+echo 'NATIVE_TRACING=off' >> .dev.vars
 ```
 
 ```toml
 # wrangler.toml [vars]
 OTLP_ENDPOINT = "http://localhost:4318/v1/traces"
-NATIVE_TRACING = "off"        # force autotel's OTLP exporter locally
 ```
+
+and pass `nativeTracing: env.NATIVE_TRACING` in your config.
 
 For a remote shared devtools instance, point `exporter` at the
 `DevtoolsRemoteExporter` endpoint (`{endpoint}/ingest/traces`) or any OTLP URL.
 
 ## Graceful degradation
 
-Cloudflare's custom-span `Span` is intentionally minimal. Only
-`setAttribute(key, value)` and a readonly `isTraced`. autotel's `TraceContext`
-is richer, so the bridge degrades gracefully when running natively:
+The bridge calls each span method only when the runtime has it.
+Cloudflare documents `setAttribute`, `setAttributes`, `recordException`,
+`isTraced` and `end`; some runtimes also expose `setStatus` and `updateName`.
+Anything missing degrades to attributes, so a span never throws for lack of
+a method:
 
-| autotel API                           | Native behaviour                                                                                                                           |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `setAttribute`                        | native `setAttribute`                                                                                                                      |
-| `setAttributes` (bulk)                | looped `setAttribute` (primitives; objects JSON-stringified)                                                                               |
-| `isRecording()`                       | native `isTraced`                                                                                                                          |
-| `setStatus(ERROR)` / thrown error     | `otel.status_code` + `error` attributes; error rethrows (CF marks the outcome)                                                             |
-| `recordException(e)`                  | `exception.type` / `exception.message` attributes + `console.error(e)`                                                                     |
-| `addEvent(name, attrs)`               | `console.log(name, attrs)` (Cloudflare attributes console output to the span)                                                              |
-| `correlationId`                       | the `cf-ray` id (fallback uuid for non-fetch triggers), also written as a `correlation.id` span attribute: a real, queryable key **today** |
-| `traceId` / `spanId`                  | `''` until Cloudflare exposes `spanContext()`; **auto-upgrades** to real ids with no API change once it does                               |
-| `addLink` / `addLinks` / `updateName` | no-op                                                                                                                                      |
+| autotel API                | Native behaviour                                                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `setAttribute`             | native `setAttribute`                                                                                                                      |
+| `setAttributes` (bulk)     | native `setAttributes` (objects JSON-stringified); looped `setAttribute` when absent                                                       |
+| `isRecording()`            | native `isTraced`                                                                                                                          |
+| `setStatus` / thrown error | native `setStatus` when present, else `otel.status_code` / `error` attributes; the original error rethrows                                 |
+| `recordException(e)`       | native `recordException` (name, message, stack as a span event), else `exception.*` attributes                                             |
+| `updateName`               | native `updateName` when present, else a no-op                                                                                             |
+| `addEvent(name, attrs)`    | `console.log(name, attrs)` (Cloudflare attributes console output to the span)                                                              |
+| `correlationId`            | the `cf-ray` id (fallback uuid for non-fetch triggers), also written as a `correlation.id` span attribute: a real, queryable key **today** |
+| `traceId` / `spanId`       | `''` until Cloudflare exposes `spanContext()`; **auto-upgrades** to real ids with no API change once it does                               |
+| `addLink` / `addLinks`     | no-op                                                                                                                                      |
 
 > **Correlation today, real ids tomorrow.** Cloudflare's actual trace/span ids
 > aren't readable in-code yet, so `ctx.traceId`/`spanId` are `''` under native.

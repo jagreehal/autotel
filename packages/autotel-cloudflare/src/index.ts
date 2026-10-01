@@ -60,7 +60,11 @@ export {
 } from './wrappers';
 
 // Cloudflare-specific handlers
-export { instrumentDO, instrumentWorkflow } from './handlers';
+export {
+  instrumentDO,
+  instrumentWorkflow,
+  RUNAWAY_ALARM_EXCEPTION,
+} from './handlers';
 
 // Cloudflare-specific bindings
 export {

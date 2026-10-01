@@ -12,6 +12,7 @@
  * works in Cloudflare Workers and similar edge runtimes.
  */
 
+import { getActiveNativeTraceContext } from '../core/native-bridge';
 import {
   trace,
   context as api_context,
@@ -263,6 +264,14 @@ function getTraceContext(): {
   spanId: string;
   correlationId: string;
 } | null {
+  const native = getActiveNativeTraceContext();
+  if (native) {
+    return {
+      traceId: native.traceId,
+      spanId: native.spanId,
+      correlationId: native.correlationId,
+    };
+  }
   const span = trace.getActiveSpan();
   if (!span) return null;
 

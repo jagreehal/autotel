@@ -18,7 +18,7 @@ Autotel still owns export. `@effect/opentelemetry` still owns the Effect tracer 
 
 ## Requirements
 
-- Effect **v4** (`^4.0.0-rc.112`)
+- Effect **v4** (`^4.0.0`)
 - `@effect/opentelemetry` v4 (peer dependency)
 - autotel `init()` loaded **before** your app (see below)
 

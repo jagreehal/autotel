@@ -103,33 +103,9 @@ export interface WidgetData {
   agents?: AgentSession[];
 }
 
-/**
- * Aggregated error group - groups similar errors together
- */
-export interface ErrorGroup {
-  /** Unique fingerprint for this error group (hash of stack trace) */
-  fingerprint: string;
-  /** Error type/class name */
-  type: string;
-  /** Error message (first occurrence) */
-  message: string;
-  /** Normalized stack trace (first few frames) */
-  stackTrace?: string;
-  /** Number of occurrences */
-  count: number;
-  /** Timestamp of first occurrence */
-  firstSeen: number;
-  /** Timestamp of most recent occurrence */
-  lastSeen: number;
-  /** Sample of affected trace IDs (last N) */
-  affectedTraces: string[];
-  /** Sample of affected span names */
-  affectedSpans: string[];
-  /** Service where error originated */
-  service?: string;
-  /** Additional attributes from the error spans */
-  attributes?: SpanAttributes;
-}
+/** One live issue group; the server's shape, shared rather than copied. */
+import type { ErrorGroup } from '../server/types';
+export type { ErrorGroup };
 
 export type TabType =
   | 'traces'

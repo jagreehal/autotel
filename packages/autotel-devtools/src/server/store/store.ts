@@ -17,6 +17,7 @@
  */
 
 import { DatabaseSync } from 'node:sqlite';
+import { IssueStore } from './issues';
 import { compileWhere, type SignalSchema } from '../../query/compile';
 import { parse } from '../../query/parse';
 import { createHash } from 'node:crypto';
@@ -466,6 +467,8 @@ CREATE INDEX IF NOT EXISTS idx_span_links_target ON span_links(linked_trace_id);
 
 export class DevtoolsStore {
   private readonly db: DatabaseSync;
+  /** Issue state (status, automations, runs) on the same file. */
+  readonly issues: IssueStore;
   private readonly maxTraces: number;
   private readonly maxMetricPoints: number;
   private readonly maxLogs: number;
@@ -485,6 +488,7 @@ export class DevtoolsStore {
     this.backfillAttributeDictionary();
     this.backfillSpanChildren();
     this.registerRegexp();
+    this.issues = new IssueStore(this.db);
     this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   }
 

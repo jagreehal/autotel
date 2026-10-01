@@ -338,6 +338,35 @@ An unrecognised flag is reported on stderr and ignored, not treated as an error:
 this binary read no `argv` at all until recently, and client configs in the wild
 carry flags it never defined.
 
+### Issue automations
+
+`list_issues` / `get_issue` use the same grouping as autotel-devtools
+(`autotel-devtools/issues`). Against the devtools backend they read its stored
+issues, with status; on other backends issues are grouped from the window and
+read as active.
+
+For backends without their own automations, set a destination and the server
+polls and sends an issue, with the context `get_issue` returns, when it reaches
+`AUTOTEL_ISSUES_THRESHOLD` occurrences (default 5) or returns after
+`AUTOTEL_ISSUES_QUIET_MINUTES` of silence (default 60):
+
+- `AUTOTEL_ISSUES_DESTINATION`: JSON, any destination devtools supports, e.g.
+  `{"type":"claude-code","routineId":"trig_…","token":"…"}`, `cursor`, `devin`,
+  `slack`, `pagerduty`, `webhook`.
+- `AUTOTEL_ISSUES_WEBHOOK` (+ `AUTOTEL_ISSUES_WEBHOOK_SECRET` for HMAC
+  signing): shorthand for a webhook.
+
+Sends are retried up to three times. `AUTOTEL_ISSUES_INTERVAL_MS` sets the poll
+interval (default 60000). Environment only: destinations carry credentials.
+What was sent, and a history of the last 200 sends, persist to
+`AUTOTEL_ISSUES_STATE` (a JSON file), or beside the `--persist` database
+(`<db>.issues.json`) when there is one, so a restart neither re-sends open
+issues nor forgets them. Without either, state is in memory.
+
+The collector source-maps exception stacks at ingest: frames from bundles on
+this machine map through the maps beside them, and `AUTOTEL_SOURCEMAPS` names a
+directory of production `.map` files.
+
 ### Embedding
 
 `createApp()` reads no `argv` of its own, so a host CLI's flags cannot collide
@@ -461,6 +490,8 @@ them can run an investigation without stopping to ask about each query.
 - **find_anomalies**: Scan for statistical outliers: latency spikes, error rate jumps
 - **find_root_cause**: Walk a trace span tree to identify the bottleneck span
 - **find_errors**: Aggregate error spans grouped by service and operation
+- **list_issues**: Failures (thrown and handled exceptions, HTTP 5xx, error logs, log floods, runaway alarms) grouped into issues with status, count, first/last seen, trend, regression, versions and affected users/accounts/sessions
+- **get_issue**: One issue's stack trace, latest trace and its logs, and the service logs around it: the context to hand a coding agent
 - **check_slos**: Report SLO violations given p99 latency and error rate targets
 
 </details>

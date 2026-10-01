@@ -53,6 +53,8 @@ function classify(file: string): StackFrameKind {
 const NAMED_FRAME = /^\s*at\s+(?:async\s+)?(.+?)\s+\((.+?):(\d+):(\d+)\)$/;
 // Anonymous frame — no function, no parens: `at file:line:col`.
 const ANON_FRAME = /^\s*at\s+(?:async\s+)?(.+?):(\d+):(\d+)$/;
+// Firefox / Safari: `fn@file:line:col`, or `@file:line:col` when anonymous.
+const BROWSER_FRAME = /^\s*([^@\s]*)@(.+?):(\d+):(\d+)$/;
 
 /** `file:///a/b.ts` → `/a/b.ts`. Left untouched when it is not a file URL. */
 function toPath(specifier: string): string {
@@ -91,6 +93,19 @@ export function parseStackTrace(stack: string): StackFrame[] {
         file,
         line: Number(anon[2]),
         column: Number(anon[3]),
+        kind: classify(file),
+      });
+      continue;
+    }
+
+    const browser = BROWSER_FRAME.exec(rawLine);
+    if (browser) {
+      const file = toPath(browser[2]);
+      frames.push({
+        ...(browser[1] ? { function: browser[1] } : {}),
+        file,
+        line: Number(browser[3]),
+        column: Number(browser[4]),
         kind: classify(file),
       });
     }

@@ -2663,6 +2663,20 @@ export async function handleRequest(req: Request) {
 
 **Key Principle:** All these primitives work together - spans automatically capture context, metrics and events inherit trace IDs, and everything flows through the same configured exporters and adapters. Build what you need, when you need it.
 
+## Console Signals
+
+`init()` listens on Node's `console.*` diagnostics channels (nothing is
+patched) and records two signals on the active span:
+
+- `console.error(...)` inside a span → an exception event (the Error argument
+  if there is one, else the formatted message), status untouched because the
+  error was handled. `captureConsoleErrors: false` opts out.
+- Logging in a loop → one `autotel.LogFlood` exception per trace and template
+  once a template (digits, UUIDs, hex ids collapsed) passes
+  `logFloodThreshold` (default `100`; `0` disables).
+
+autotel's own `[autotel…]` messages are never recorded.
+
 ## Serverless & Short-lived Processes
 
 A script that finishes and returns gets one flush for free. Autotel listens for

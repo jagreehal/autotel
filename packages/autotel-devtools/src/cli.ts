@@ -224,6 +224,13 @@ interface RunningReceiver {
 async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
   const httpServer = createServer();
   const loopbackOnly = hostHeaderIsLoopback(options.host);
+  // Lets the Errors tab show the line that threw. See `resolveSourceRoot`.
+  const sourceRoot = resolveSourceRoot(
+    process.env.AUTOTEL_DEVTOOLS_SOURCE_ROOT,
+    process.cwd(),
+    loopbackOnly,
+  );
+  const mapsDir = process.env.AUTOTEL_DEVTOOLS_SOURCEMAPS;
   const wsServer = new DevtoolsServer({
     server: httpServer,
     host: options.host,
@@ -231,13 +238,14 @@ async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
     dbPath: options.dbPath,
     maxTraces: options.maxTraces,
     maxDbBytes: options.maxDbBytes,
+    // Stacks from local bundles (wrangler, vite) map back through the maps
+    // beside them; production maps can be dropped in AUTOTEL_DEVTOOLS_SOURCEMAPS.
+    sourceMaps: {
+      roots: sourceRoot ? [sourceRoot] : [],
+      ...(mapsDir ? { mapsDir } : {}),
+    },
+    publicUrl: `http://${options.host === '0.0.0.0' ? '127.0.0.1' : options.host}:${options.port}`,
   });
-  // Lets the Errors tab show the line that threw. See `resolveSourceRoot`.
-  const sourceRoot = resolveSourceRoot(
-    process.env.AUTOTEL_DEVTOOLS_SOURCE_ROOT,
-    process.cwd(),
-    loopbackOnly,
-  );
   attachDevtoolsRoutes(httpServer, wsServer, {
     loopbackOnly,
     title: options.title,

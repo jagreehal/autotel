@@ -237,6 +237,24 @@ interface EdgeConfigBase {
    * @see NativeTracingMode
    */
   nativeTracing?: NativeTracingMode;
+  /**
+   * Record `console.error(...)` calls made inside a span as an exception on
+   * that span (status unchanged: the error was handled). Default `true`.
+   */
+  captureConsoleErrors?: boolean;
+  /**
+   * Record one `autotel.LogFlood` exception when a single log template is
+   * written more than this many times in one invocation (logging in a loop).
+   * Default `100`; `0` disables.
+   */
+  logFloodThreshold?: number;
+  /**
+   * Durable Object alarm loop detection (autotel-cloudflare `instrumentDO`):
+   * record one `autotel.RunawayAlarm` exception per window when one object's
+   * `alarm()` runs more than `maxRuns` times within `windowMs`.
+   * Default `{ maxRuns: 10, windowMs: 60_000 }`; `false` disables.
+   */
+  runawayAlarm?: { maxRuns?: number; windowMs?: number } | false;
 }
 
 interface EdgeConfigSpanProcessors extends EdgeConfigBase {

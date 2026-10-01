@@ -82,7 +82,30 @@ With `[observability.traces] enabled = true` in `wrangler`, Cloudflare instrumen
 | `'on'`          | Prefer native; warn once and fall back when absent.        |
 | `'off'`         | Always autotel's OTLP exporter.                            |
 
-Leave it at `'auto'`. `wrangler dev` does not export native traces locally, so the fallback carries local development to `npx autotel-devtools`.
+Leave it at `'auto'`. Outside any wrapper (Durable Object RPC methods, entrypoints), `trace()` uses the `tracing` export of `cloudflare:workers`, so those spans nest too. The handler body writes to Cloudflare's root span, so `user.id` set through the request logger shows up in Workers Issues.
+
+`wrangler dev` runs native tracing as well and sends spans to the Local Explorer. To stream local spans to `npx autotel-devtools`, put `NATIVE_TRACING=off` in `.dev.vars` and pass `nativeTracing: env.NATIVE_TRACING`.
+
+## No SDK: Tail Worker
+
+To observe a Worker without changing its code, deploy a Tail Worker and list it in the Worker's `tail_consumers`:
+
+```ts
+import { createTailHandler } from 'autotel-cloudflare/tail';
+export default {
+  tail: createTailHandler({ endpoint: (env) => env.OTLP_ENDPOINT }),
+};
+```
+
+Each invocation arrives as an OTLP span plus logs: outcome, uncaught exceptions, `console.error` errors, status and version. Tail Workers need the Workers Paid plan.
+
+## Failure signals
+
+- `console.error(err)` inside a span records a handled exception (`captureConsoleErrors`, default on).
+- One log line repeated past `logFloodThreshold` (100) in an invocation records `autotel.LogFlood`.
+- A Durable Object alarm running past `runawayAlarm` (10 runs in 60s) records `autotel.RunawayAlarm`.
+
+autotel-devtools and autotel-mcp group all of these into issues.
 
 ## Handler Types
 

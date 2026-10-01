@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { instrument } from './instrument';
-import { span } from 'autotel-edge';
+import { span, getActiveTraceContext } from 'autotel-edge';
 import { isWrapped } from '../bindings/common';
 import type { IncomingRequestCfProperties } from '@cloudflare/workers-types';
 
@@ -28,7 +28,14 @@ function nativeCtx() {
     tracing: {
       enterSpan: vi.fn((name: string, cb: (s: any) => unknown) => {
         enteredSpans.push(name);
-        return cb({ isTraced: true, setAttribute: vi.fn() });
+        return cb({
+          isTraced: true,
+          setAttribute: vi.fn(),
+          setAttributes: vi.fn(),
+          setStatus: vi.fn(),
+          recordException: vi.fn(),
+          updateName: vi.fn(),
+        });
       }),
     },
   };
@@ -86,6 +93,10 @@ describe('instrument() with Cloudflare native tracing (auto)', () => {
             setAttribute(k: string, v: unknown) {
               attrs[k] = v;
             },
+            setAttributes: vi.fn(),
+            setStatus: vi.fn(),
+            recordException: vi.fn(),
+            updateName: vi.fn(),
           }),
         ),
       },
@@ -172,5 +183,38 @@ describe('instrument() with nativeTracing: "off"', () => {
     expect(isWrapped(seenBinding)).toBe(true);
     // Native tracer was never used.
     expect(ctx.tracing.enterSpan).not.toHaveBeenCalled();
+  });
+});
+
+describe('instrument() binds the handler body to the native root span', () => {
+  it('ambient ctx writes land on ctx.tracing.getActiveSpan()', async () => {
+    const root = {
+      isTraced: true,
+      setAttribute: vi.fn(),
+      setAttributes: vi.fn(),
+      setStatus: vi.fn(),
+      recordException: vi.fn(),
+      updateName: vi.fn(),
+    };
+    const ctx = {
+      waitUntil() {},
+      passThroughOnException() {},
+      tracing: { enterSpan: vi.fn(), getActiveSpan: () => root },
+    };
+    const handler = instrument(
+      {
+        async fetch() {
+          getActiveTraceContext()?.setAttributes({ 'user.id': 'u-1' });
+          return new Response('ok');
+        },
+      },
+      baseConfig,
+    );
+    await handler.fetch!(
+      new Request('https://x/'),
+      {},
+      ctx as unknown as ExecutionContext,
+    );
+    expect(root.setAttributes).toHaveBeenCalledWith({ 'user.id': 'u-1' });
   });
 });

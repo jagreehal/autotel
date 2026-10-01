@@ -2,6 +2,7 @@
 
 import type { SpanStatusCode, TagValue } from '../types';
 import { asNumber, asTagValue } from '../lib/values';
+import { primaryException } from 'autotel-devtools/issues';
 
 /**
  * Shared helpers for mapping raw backend payloads into the canonical
@@ -61,4 +62,22 @@ export function inferErrorStatusFromTags(
   }
 
   return 'UNSET';
+}
+
+/**
+ * Tags a span's `exception` event and status message contribute: type,
+ * message and stacktrace live on the event in OTel, not the attributes, and
+ * issue grouping needs them. Span attributes win on a clash.
+ */
+export function exceptionTags(
+  events:
+    Array<{ name?: string; attributes?: Record<string, unknown> }> | undefined,
+  statusMessage: string | undefined,
+): Record<string, TagValue> {
+  // Same choice as the issue core: a detector report outranks the first one.
+  const exception = primaryException(events);
+  return {
+    ...(statusMessage ? { 'otel.status_description': statusMessage } : {}),
+    ...normalizeTags(exception?.attributes),
+  };
 }

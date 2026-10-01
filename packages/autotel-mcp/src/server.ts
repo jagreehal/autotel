@@ -12,6 +12,7 @@ import { createApp, type App } from './app';
 import { helpText, parseCliArgs } from './cli-args';
 import { ConfigError, resolveConfig } from './config';
 import { VERSION } from './version';
+import { startIssueWatcher } from './issue-watcher';
 
 async function main() {
   const parsed = parseCliArgs(process.argv.slice(2));
@@ -35,6 +36,7 @@ async function main() {
 
   const app = await createApp({ config: resolveConfig(parsed) });
   await app.start();
+  startIssueWatcher(app.backend, process.env, app.config.persist);
 
   if (app.config.transport === 'stdio') {
     // The factory is called once per connection here, and once per request

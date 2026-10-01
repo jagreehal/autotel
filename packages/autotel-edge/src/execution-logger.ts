@@ -1,4 +1,5 @@
 import type { UnknownRecord } from './values';
+import { getActiveNativeTraceContext } from './core/native-bridge';
 import {
   asFunction,
   asRecord,
@@ -195,6 +196,9 @@ function getErrorAttributes(error: Error) {
 
 function resolveContext(ctx?: TraceContext): TraceContext {
   if (ctx) return ctx;
+
+  const nativeContext = getActiveNativeTraceContext();
+  if (nativeContext) return nativeContext;
 
   const span = otelTrace.getActiveSpan();
   if (!span) {

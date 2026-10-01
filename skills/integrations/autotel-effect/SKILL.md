@@ -10,7 +10,7 @@ Bridges [Effect v4](https://effect.website/) and autotel. `Effect.withSpan` span
 
 It is wiring, not a tracer. Autotel owns export; `@effect/opentelemetry` owns the Effect tracer implementation. This package only connects them, so the same layer graph is not copied into every app.
 
-**Effect v4 only** (`^4.0.0-rc.112`). v3 is not supported.
+**Effect v4 only** (`^4.0.0`). v3 is not supported.
 
 ## Setup
 

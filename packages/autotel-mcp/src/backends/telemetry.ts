@@ -19,6 +19,7 @@ import type {
   ServiceMap,
   TraceSummary,
 } from '../types';
+import type { Issue } from 'autotel-devtools/issues';
 
 export interface TelemetryBackend {
   readonly kind: string;
@@ -43,4 +44,17 @@ export interface TelemetryBackend {
   searchLogs(query?: LogSearchQuery): Promise<LogSearchResult>;
 
   getCorrelatedSignals(traceId: string): Promise<CorrelatedSignals>;
+
+  /**
+   * Stored issues, with status, for backends that keep issue state (devtools).
+   * `undefined` means "not supported here": callers group issues themselves.
+   */
+  listIssues?(query: IssueListQuery): Promise<Issue[] | undefined>;
+}
+
+export interface IssueListQuery {
+  service?: string;
+  start: number;
+  end: number;
+  quietMs: number;
 }

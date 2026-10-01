@@ -21,6 +21,7 @@ import {
 } from './otlp-proto';
 import { DEVTOOLS_IDENTITY } from './identity';
 import { allowSensitiveRequest } from './origin-guard';
+import { handleIssueRoutes } from './issues-http';
 import { readSourceWindow } from './source-file';
 import type { DevtoolsServer } from './server';
 import { joinCoverage, type MapRoute } from './coverage/coverage';
@@ -222,6 +223,10 @@ export function attachDevtoolsRoutes(
       }
 
       const url = req.url || '/';
+
+      if (url.startsWith('/api/issue')) {
+        if (await handleIssueRoutes(req, res, devtools, loopbackOnly)) return;
+      }
 
       // GET / — fullpage HTML
       if (req.method === 'GET' && url === '/') {

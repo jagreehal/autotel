@@ -24,6 +24,8 @@ export default defineConfig({
     agents: 'src/agents.ts',
     native: 'src/native.ts',
     'parse-error': 'src/parse-error.ts',
+    // No-SDK path: a Tail Worker that ships observed invocations as OTLP.
+    tail: 'src/tail.ts',
   },
   format: ['esm'], // ESM-only for edge runtimes
   dts: true,

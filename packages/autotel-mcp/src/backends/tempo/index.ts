@@ -31,7 +31,11 @@ import {
 } from '../../modules/query-filters';
 import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
-import { inferErrorStatusFromTags, readNumericTag } from '../span-mapping';
+import {
+  exceptionTags,
+  inferErrorStatusFromTags,
+  readNumericTag,
+} from '../span-mapping';
 import type { TelemetryBackend } from '../telemetry';
 import { asNumber, asString, tagKind } from '../../lib/values';
 
@@ -69,6 +73,7 @@ type OtlpSpan = {
   endTimeUnixNano?: string | number;
   attributes?: OtlpAttribute[];
   status?: { code?: string | number; message?: string };
+  events?: Array<{ name?: string; attributes?: OtlpAttribute[] }>;
 };
 
 type OtlpScopeSpans = {
@@ -374,7 +379,18 @@ function parseOtlpSpan(
   traceIdHint: string,
 ): SpanRecord | null {
   if (!span.spanId) return null;
-  const tags = parseOtlpAttributes(span.attributes);
+  // The `exception` event (handled errors, autotel detector reports) and the
+  // status message live outside the attributes in OTLP; issues need both.
+  const tags = {
+    ...exceptionTags(
+      span.events?.map((event) => ({
+        name: event.name,
+        attributes: parseOtlpAttributes(event.attributes),
+      })),
+      span.status?.message,
+    ),
+    ...parseOtlpAttributes(span.attributes),
+  };
   const startNs = toNumber(span.startTimeUnixNano) ?? 0;
   const endNs = toNumber(span.endTimeUnixNano) ?? startNs;
   const durationMs = Math.max(0, (endNs - startNs) / 1_000_000);

@@ -11,20 +11,27 @@ import {
   type NativeSpanHandle,
 } from './native-bridge';
 
-function fakeSpan(isTraced = true): NativeSpanHandle & {
-  attributes: Attributes;
-} {
+function fakeSpan(isTraced = true) {
   const attributes: Attributes = {};
-  return {
+  const span = {
     isTraced,
     attributes,
-    setAttribute(key, value) {
+    setAttribute(key: string, value: string | number | boolean | undefined) {
       // Cloudflare semantics: undefined is a no-op.
       if (value !== undefined) {
         attributes[key] = value;
       }
     },
-  };
+    setAttributes: vi.fn(
+      (attrs: Record<string, string | number | boolean | undefined>) => {
+        for (const [k, v] of Object.entries(attrs)) span.setAttribute(k, v);
+      },
+    ),
+    setStatus: vi.fn(),
+    recordException: vi.fn(),
+    updateName: vi.fn(),
+  } satisfies NativeSpanHandle & { attributes: Attributes };
+  return span;
 }
 
 function fakeTracer(
@@ -123,33 +130,6 @@ describe('native-bridge: createNativeTraceContext', () => {
     );
   });
 
-  it('records error status as attributes', () => {
-    const span = fakeSpan();
-    const ctx = createNativeTraceContext(span, 'work');
-    ctx.setStatus({ code: SpanStatusCode.ERROR, message: 'boom' });
-    expect(span.attributes['otel.status_code']).toBe('ERROR');
-    expect(span.attributes['error']).toBe(true);
-    expect(span.attributes['otel.status_description']).toBe('boom');
-  });
-
-  it('ignores OK status (platform marks success automatically)', () => {
-    const span = fakeSpan();
-    const ctx = createNativeTraceContext(span, 'work');
-    ctx.setStatus({ code: SpanStatusCode.OK });
-    expect(span.attributes['otel.status_code']).toBeUndefined();
-  });
-
-  it('records exceptions as attributes and console.error', () => {
-    const span = fakeSpan();
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const ctx = createNativeTraceContext(span, 'work');
-    ctx.recordException(new TypeError('nope'));
-    expect(span.attributes['exception.type']).toBe('TypeError');
-    expect(span.attributes['exception.message']).toBe('nope');
-    expect(errSpy).toHaveBeenCalled();
-    errSpy.mockRestore();
-  });
-
   it('emits events via console.log (platform-attributed)', () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const ctx = createNativeTraceContext(fakeSpan(), 'work');
@@ -158,12 +138,11 @@ describe('native-bridge: createNativeTraceContext', () => {
     logSpy.mockRestore();
   });
 
-  it('treats addLink/addLinks/updateName as no-ops', () => {
+  it('treats addLink/addLinks as no-ops', () => {
     const ctx = createNativeTraceContext(fakeSpan(), 'work');
     expect(() => {
       ctx.addLink({ context: { traceId: '', spanId: '', traceFlags: 0 } });
       ctx.addLinks([]);
-      ctx.updateName('renamed');
     }).not.toThrow();
   });
 });
@@ -189,5 +168,35 @@ describe('native-bridge: createNativeSpanShim', () => {
     const sc = shim.spanContext();
     expect(sc.traceId).toBe('00000000000000000000000000000000');
     expect(sc.spanId).toBe('0000000000000000');
+  });
+});
+
+describe('native-bridge: native Span methods', () => {
+  it('routes status, exceptions, bulk attributes and renames to the native span', () => {
+    const span = fakeSpan();
+    const ctx = createNativeTraceContext(span, 'work');
+    ctx.setAttributes({ a: 1, tags: ['x'] });
+    ctx.setStatus({ code: SpanStatusCode.ERROR, message: 'boom' });
+    ctx.recordException(new TypeError('nope'));
+    ctx.updateName('renamed');
+
+    expect(span.setAttributes).toHaveBeenCalledWith({ a: 1, tags: '["x"]' });
+    expect(span.setStatus).toHaveBeenCalledWith({
+      code: 'error',
+      message: 'boom',
+    });
+    expect(span.recordException).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'TypeError', message: 'nope' }),
+    );
+    expect(span.updateName).toHaveBeenCalledWith('renamed');
+  });
+
+  it('shim maps OK status to native ok', () => {
+    const span = fakeSpan();
+    createNativeSpanShim(span).setStatus({ code: SpanStatusCode.OK });
+    expect(span.setStatus).toHaveBeenCalledWith({
+      code: 'ok',
+      message: undefined,
+    });
   });
 });

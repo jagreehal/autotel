@@ -93,6 +93,7 @@ import {
   installProcessHandlers,
   uninstallProcessHandlers,
 } from './process-handlers';
+import { installConsoleSignals } from './console-signals';
 import { flush, shutdown } from './shutdown';
 import type { AutotelConfig } from './autotel-config';
 import {
@@ -899,6 +900,10 @@ export function init(cfg: AutotelConfig): void {
   }
 
   initialized = true;
+  installConsoleSignals({
+    captureConsoleErrors: mergedConfig.captureConsoleErrors,
+    logFloodThreshold: mergedConfig.logFloodThreshold,
+  });
   const processHandlers = mergedConfig.processHandlers;
   const handlersConfig =
     processHandlers && processHandlers !== true ? processHandlers : {};

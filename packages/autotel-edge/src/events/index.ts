@@ -1,4 +1,5 @@
 import { trace } from '@opentelemetry/api';
+import { getActiveNativeTraceContext } from '../core/native-bridge';
 import type { Attributes } from '@opentelemetry/api';
 import { getActiveConfig } from '../core/config';
 import type {
@@ -123,9 +124,12 @@ function createBaseEvent(
   };
 
   if (options.includeTraceContext ?? true) {
+    const native = getActiveNativeTraceContext();
     const span = trace.getActiveSpan();
     const spanContext = span?.spanContext();
-    if (spanContext) {
+    if (native) {
+      baseEvent.correlationId = native.correlationId;
+    } else if (spanContext) {
       baseEvent.traceId = spanContext.traceId;
       baseEvent.spanId = spanContext.spanId;
       baseEvent.correlationId = spanContext.traceId.slice(0, 16);

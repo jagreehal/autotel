@@ -42,8 +42,12 @@ minimumReleaseAge: 4320
 # the point of this repo: a semconv rename or an SDK fix has to be reachable the
 # day it ships, not three days later. scripts/check-semconv-drift.mjs is what
 # catches an upstream change here, and it can only see the version we install.
+# `effect` / `@effect/*`: autotel-effect bridges Effect's tracer and logger, so
+# it has to build and test against an Effect release the day it ships.
 minimumReleaseAgeExclude:
   - '@opentelemetry/*'
+  - effect
+  - '@effect/*'
   - webmcpable
   - ai
   - ai-sdk-ollama

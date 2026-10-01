@@ -37,9 +37,9 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - name: Cache pnpm store
         uses: actions/cache@v6
@@ -160,7 +160,7 @@ jobs:
       - name: Post sticky PR comment
         id: comment
         continue-on-error: true
-        uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
         with:
           header: autotel-eventcatalog-drift
           path: ${{ steps.drift.outputs.report }}
