@@ -359,6 +359,20 @@ trace waterfall in production and export over OTLP locally. Config:
 `nativeTracing: 'auto' | 'on' | 'off'` (default `'auto'`). See
 [docs/CLOUDFLARE-NATIVE-TRACING.md](../../docs/CLOUDFLARE-NATIVE-TRACING.md).
 
+### Console signals
+
+Handler wrappers patch `console` once (the original always runs) and record on
+the active span, native or OTLP:
+
+- `console.error(...)` → an exception event, status untouched (handled error).
+  The Error argument if there is one, else the message (max 500 chars).
+  `captureConsoleErrors: false` opts out.
+- Logging in a loop → one `autotel.LogFlood` exception per invocation and
+  template once a template passes `logFloodThreshold` (default `100`; `0`
+  disables).
+
+autotel's own `[autotel…]` messages are never counted or recorded.
+
 ## Bundle Size
 
 - **Core:** ~20KB minified (~8KB gzipped)

@@ -2,5 +2,5 @@
  * Handler instrumentation for Cloudflare Workers
  */
 
-export { instrumentDO } from './durable-objects';
+export { instrumentDO, RUNAWAY_ALARM_EXCEPTION } from './durable-objects';
 export { instrumentWorkflow } from './workflows';

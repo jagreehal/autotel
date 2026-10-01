@@ -61,8 +61,9 @@ auto-detects which to use:
   curl http://localhost:8787/native
   ```
 
-  Set `NATIVE_TRACING = "off"` in `wrangler.toml [vars]` to force the OTLP
-  exporter even when the runtime exposes native tracing. See
+  `wrangler dev` exposes native tracing too, so to stream local spans to
+  autotel-devtools put `NATIVE_TRACING=off` in `.dev.vars` (read only by
+  `wrangler dev`, so production stays native). See
   [`docs/CLOUDFLARE-NATIVE-TRACING.md`](../../docs/CLOUDFLARE-NATIVE-TRACING.md).
 
 ## What Gets Traced

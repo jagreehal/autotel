@@ -60,12 +60,17 @@ export {
 export {
   withNativeTracer,
   getActiveNativeTracer,
+  setDefaultNativeTracer,
+  withoutNativeTracer,
+  runWithNativeTraceContext,
+  nativeRecordException,
   createNativeTraceContext,
   createNativeSpanShim,
   type NativeTracer,
   type NativeSpanHandle,
 } from './core/native-bridge';
 export type { NativeTracingMode } from './types';
+export { LOG_FLOOD_EXCEPTION } from './core/console-signals';
 
 export {
   getExecutionLogger,

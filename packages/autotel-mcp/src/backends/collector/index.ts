@@ -1,4 +1,8 @@
 import type { TelemetryBackend } from '../telemetry';
+import {
+  createSourceMapResolver,
+  type SourceMapResolverOptions,
+} from 'autotel-devtools/sourcemaps';
 import { CollectorStore } from './store';
 import { OtlpReceiver } from './receiver';
 import type {
@@ -34,6 +38,8 @@ export interface CollectorBackendOptions {
   maxTraces: number;
   retentionMs: number;
   persist?: string;
+  /** Source-map exception stacks at ingest. See `autotel-devtools/sourcemaps`. */
+  sourceMaps?: SourceMapResolverOptions;
 }
 
 export class CollectorBackend implements TelemetryBackend {
@@ -48,7 +54,11 @@ export class CollectorBackend implements TelemetryBackend {
       retentionMs: opts.retentionMs,
       url,
     });
-    this.receiver = new OtlpReceiver(this.store, opts.port);
+    this.receiver = new OtlpReceiver(
+      this.store,
+      opts.port,
+      opts.sourceMaps ? createSourceMapResolver(opts.sourceMaps) : undefined,
+    );
   }
 
   async start(): Promise<void> {

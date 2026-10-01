@@ -231,15 +231,28 @@ export class AsyncLocalStorageContextManager extends AbstractAsyncHooksContextMa
 let globalContextManager: AsyncLocalStorageContextManager | undefined;
 
 /**
- * Ensure a global AsyncLocalStorage context manager is registered, returning it.
- * Idempotent.
+ * Make sure ambient context propagates: if `context.with` already reaches
+ * `context.active()` (someone registered a working manager), leave it;
+ * otherwise register ours. Checked by behaviour, not by a module flag, so a
+ * manager disabled or replaced elsewhere is noticed. Idempotent.
  */
-export function ensureGlobalContextManager(): AsyncLocalStorageContextManager {
-  if (!globalContextManager) {
-    const manager = new AsyncLocalStorageContextManager();
-    manager.enable();
-    otelContext.setGlobalContextManager(manager);
-    globalContextManager = manager;
-  }
-  return globalContextManager;
+export function ensureGlobalContextManager(): void {
+  if (contextPropagates()) return;
+  const manager = globalContextManager ?? new AsyncLocalStorageContextManager();
+  manager.enable();
+  // A registration (even a disabled one) blocks setGlobalContextManager.
+  otelContext.disable();
+  otelContext.setGlobalContextManager(manager);
+  globalContextManager = manager;
+}
+
+const PROBE = Symbol('autotel-context-probe');
+
+/** Whether `context.with` reaches `context.active()`: a real manager is live. */
+function contextPropagates(): boolean {
+  return (
+    otelContext.with(ROOT_CONTEXT.setValue(PROBE, true), () =>
+      otelContext.active().getValue(PROBE),
+    ) === true
+  );
 }

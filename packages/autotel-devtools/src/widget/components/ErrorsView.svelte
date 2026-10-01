@@ -42,6 +42,14 @@
   import type { ErrorGroup } from '../types';
   import StackTracePanel from './StackTracePanel.svelte';
   import { loadSourceWindow } from '../source-client';
+  import { IssueActions, IssueAutomations } from '../issue-panels';
+  import {
+    fetchAutomations,
+    fetchDestinations,
+    fetchIssueStatuses,
+    type IssueSummary,
+  } from '../issues-client';
+  import type { Automation, Destination, IssueStatus } from '../../issues';
 
   function errorGroupMatches(group: ErrorGroup, query: string): boolean {
     return matchesNeedle(query.toLowerCase(), [
@@ -57,6 +65,39 @@
   let expandedGroup = $state<string | null>(null);
   let query = $state('');
   let listRef: HTMLDivElement | undefined = $state();
+  // Issue state from the receiver. A group the receiver has no issue for (an
+  // ancestor span, or a receiver without the issues API) counts as active.
+  let statuses = $state(new Map<string, IssueSummary>());
+  let statusFilter = $state<IssueStatus | 'all'>('active');
+  let destinations = $state<Destination[]>([]);
+  let automations = $state<Automation[]>([]);
+  let showAutomations = $state(false);
+
+  const statusOf = (fingerprint: string): IssueStatus =>
+    statuses.get(fingerprint)?.status ?? 'active';
+
+  async function refreshConfig() {
+    [destinations, automations] = await Promise.all([
+      fetchDestinations(),
+      fetchAutomations(),
+    ]);
+  }
+
+  // Re-read statuses as new errors arrive: a new occurrence can reopen one.
+  $effect(() => {
+    void totalErrorCountSignal.value;
+    void fetchIssueStatuses().then((next) => (statuses = next));
+  });
+  $effect(() => {
+    void refreshConfig();
+  });
+
+  function onStatusChange(fingerprint: string, status: IssueStatus) {
+    const current = statuses.get(fingerprint);
+    if (current) {
+      statuses = new Map(statuses).set(fingerprint, { ...current, status });
+    }
+  }
 
   const errorGroups = $derived(
     sortMode === 'recent'
@@ -64,9 +105,14 @@
       : errorGroupsByFrequencySignal.value,
   );
   const filteredGroups = $derived(
-    errorGroups.filter((group) => errorGroupMatches(group, query)),
+    errorGroups.filter(
+      (group) =>
+        errorGroupMatches(group, query) &&
+        (statusFilter === 'all' ||
+          statusOf(group.fingerprint) === statusFilter),
+    ),
   );
-  const isFiltered = $derived(query.length > 0);
+  const isFiltered = $derived(query.length > 0 || statusFilter !== 'all');
   const totalErrors = $derived(totalErrorCountSignal.value);
   const recentErrors = $derived(recentErrorCountSignal.value);
 
@@ -143,6 +189,20 @@
               {group.service}
             </span>
           {/if}
+          {#if group.source && group.source !== 'exception'}
+            <span
+              class="px-1.5 py-0.5 text-xs font-medium bg-hover text-fg-muted rounded"
+            >
+              {group.source.replaceAll('_', ' ')}
+            </span>
+          {/if}
+          {#if statusOf(group.fingerprint) !== 'active'}
+            <span
+              class="px-1.5 py-0.5 text-xs font-medium bg-hover text-fg-subtle rounded"
+            >
+              {statusOf(group.fingerprint)}
+            </span>
+          {/if}
         </div>
 
         <!-- Error message -->
@@ -172,6 +232,15 @@
     <!-- Expanded content -->
     {#if isExpanded}
       <div class="border-t border-line p-3 bg-subtle space-y-3">
+        {#if IssueActions && statuses.has(group.fingerprint)}
+          <IssueActions
+            fingerprint={group.fingerprint}
+            status={statusOf(group.fingerprint)}
+            {destinations}
+            onStatusChange={(status) =>
+              onStatusChange(group.fingerprint, status)}
+          />
+        {/if}
         <!-- Stack trace -->
         {#if group.stackTrace}
           <div>
@@ -295,6 +364,24 @@
     </h3>
     <div class="flex items-center gap-2">
       <select
+        aria-label="Issue status"
+        class="text-xs border border-line rounded px-2 py-1 bg-surface text-fg-muted"
+        bind:value={statusFilter}
+      >
+        <option value="active">Active</option>
+        <option value="resolved">Resolved</option>
+        <option value="ignored">Ignored</option>
+        <option value="all">All</option>
+      </select>
+      {#if IssueAutomations}
+        <button
+          class="text-xs border border-line rounded px-2 py-1 bg-surface text-fg-muted hover:bg-hover"
+          aria-expanded={showAutomations}
+          onclick={() => (showAutomations = !showAutomations)}
+          >Automations</button
+        >
+      {/if}
+      <select
         class="text-xs border border-line rounded px-2 py-1 bg-surface text-fg-muted"
         value={sortMode}
         onchange={(e) =>
@@ -305,6 +392,12 @@
       </select>
     </div>
   </div>
+
+  {#if showAutomations && IssueAutomations}
+    <div class="mb-4 p-3 bg-subtle rounded-md border border-line">
+      <IssueAutomations {destinations} {automations} onChange={refreshConfig} />
+    </div>
+  {/if}
 
   <!-- Filter bar -->
   {#if errorGroups.length > 0}

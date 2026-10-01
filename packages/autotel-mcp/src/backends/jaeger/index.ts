@@ -28,6 +28,7 @@ import {
 import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
 import {
+  exceptionTags,
   inferErrorStatusFromTags,
   normalizeTagValue,
   readNumericTag,
@@ -59,6 +60,11 @@ type JaegerTraceData = {
     startTime: number;
     duration: number;
     tags?: Array<{ key: string; type: string; value: unknown }>;
+    /** Span events, Jaeger-style: `event` names one, the rest are its attributes. */
+    logs?: Array<{
+      timestamp: number;
+      fields?: Array<{ key: string; type: string; value: unknown }>;
+    }>;
   }>;
   processes?: Record<string, { serviceName: string }>;
 };
@@ -261,9 +267,23 @@ export class JaegerBackend implements TelemetryBackend {
       const serviceName = span.processID
         ? (processEntries[span.processID]?.serviceName ?? 'unknown')
         : 'unknown';
-      const tags = Object.fromEntries(
-        (span.tags ?? []).map((tag) => [tag.key, normalizeTagValue(tag.value)]),
-      );
+      // Exception events arrive as logs with `event: exception`; flatten the
+      // chosen one the way every backend does, so issues see handled errors.
+      const events = (span.logs ?? []).map((log) => {
+        const fields = Object.fromEntries(
+          (log.fields ?? []).map((f) => [f.key, normalizeTagValue(f.value)]),
+        );
+        return { name: asString(fields.event), attributes: fields };
+      });
+      const tags = {
+        ...exceptionTags(events, undefined),
+        ...Object.fromEntries(
+          (span.tags ?? []).map((tag) => [
+            tag.key,
+            normalizeTagValue(tag.value),
+          ]),
+        ),
+      };
       const childOfRef = span.references?.find(
         (ref) => ref.refType === 'CHILD_OF',
       );

@@ -730,9 +730,7 @@ async function queryRemoteBackend(): Promise<void> {
           devtools.addTraces(remoteTraces);
         } else {
           traces = [...traces, ...remoteTraces];
-          for (const trace of remoteTraces) {
-            errorAggregator.addErrorsFromTrace(trace);
-          }
+          for (const trace of remoteTraces) errorAggregator.addTrace(trace);
           rebuildSpanIndex();
           refreshTreeViews();
         }
@@ -763,9 +761,9 @@ function onReceiverData(incremental: DevtoolsData): void {
   traces = data.traces;
   logs = data.logs;
   rebuildSpanIndex();
-  for (const trace of incremental.traces) {
-    errorAggregator.addErrorsFromTrace(trace);
-  }
+  // Idempotent per trace, so a trace re-broadcast as it grows counts once.
+  for (const trace of incremental.traces) errorAggregator.addTrace(trace);
+  for (const log of incremental.logs) errorAggregator.addLog(log);
   updateStatusBar('running');
   refreshTreeViews();
 }

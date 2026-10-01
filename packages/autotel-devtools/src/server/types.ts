@@ -1,3 +1,4 @@
+import type { IssueSource } from '../issues';
 // src/server/types.ts
 import type { AgentSession } from 'autotel-agents';
 import type { SpanAttributes } from '../widget/types.js';
@@ -62,6 +63,8 @@ export interface LogData {
 
 export interface ErrorGroup {
   fingerprint: string;
+  /** What kind of failure: thrown, handled, 5xx, error log, log flood, runaway alarm. */
+  source: IssueSource;
   type: string;
   message: string;
   stackTrace?: string;
@@ -71,27 +74,6 @@ export interface ErrorGroup {
   affectedTraces: string[];
   affectedSpans: string[];
   service?: string;
-  attributes?: SpanAttributes;
-}
-
-export interface ErrorOccurrence {
-  traceId: string;
-  spanId: string;
-  spanName: string;
-  service: string;
-  timestamp: number;
-  error: {
-    type: string;
-    message: string;
-    stackTrace?: string;
-    /**
-     * Grouping key the emitting SDK already decided on (`exception.fingerprint`,
-     * written by autotel's `exceptionFingerprint()` enricher). When present the
-     * aggregator groups by it instead of re-deriving one from the stack string,
-     * so this tab agrees with every other backend receiving the same spans.
-     */
-    fingerprint?: string;
-  };
   attributes?: SpanAttributes;
 }
 

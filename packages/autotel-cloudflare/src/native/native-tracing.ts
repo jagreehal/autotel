@@ -14,22 +14,24 @@
  * platform's trace waterfall (fetch / KV / R2 / D1 / handler spans), exported
  * by Cloudflare to whichever destination is configured in Wrangler.
  *
- * No `cloudflare:workers` import is required here: the native tracer travels
- * through autotel's AsyncLocalStorage context, so code without access to `ctx`
- * still picks it up via `getActiveNativeTracer()`.
+ * Code outside any wrapper (Durable Object RPC methods, entrypoints, helpers)
+ * falls back to the module-level `tracing` export of `cloudflare:workers`,
+ * registered below as autotel-edge's default native tracer.
  */
 
-import type { NativeTracer, NativeSpanHandle } from 'autotel-edge';
+import { tracing as moduleTracing } from 'cloudflare:workers';
+import {
+  setDefaultNativeTracer,
+  type NativeTracer,
+  type NativeSpanHandle,
+} from 'autotel-edge';
 
 /**
- * Cloudflare's native custom-span surface. Declared locally because it is not
- * yet present in `@cloudflare/workers-types`. Structurally compatible with
- * autotel-edge's {@link NativeSpanHandle}.
+ * Cloudflare's native custom-span surface. Declared locally so we don't depend
+ * on `@cloudflare/workers-types`. Older runtimes only have `isTraced` +
+ * `setAttribute`; the rest (Sept 2026+) are picked up by the bridge when present.
  */
-interface CloudflareSpan {
-  readonly isTraced: boolean;
-  setAttribute(key: string, value: string | number | boolean | undefined): void;
-}
+type CloudflareSpan = NativeSpanHandle;
 
 /**
  * Cloudflare's `tracing` object, available as `ctx.tracing` on the
@@ -41,6 +43,7 @@ interface CloudflareTracing {
     callback: (span: CloudflareSpan, ...args: A) => T,
     ...args: A
   ): T;
+  getActiveSpan?(): CloudflareSpan | undefined;
 }
 
 type MaybeTracingCarrier = { tracing?: CloudflareTracing } | null | undefined;
@@ -79,5 +82,16 @@ export function getNativeTracerFromCtx(
     correlationId,
     enterSpan: <T>(name: string, callback: (span: NativeSpanHandle) => T): T =>
       tracing.enterSpan(name, callback as (span: CloudflareSpan) => T),
+    getActiveSpan: () => tracing.getActiveSpan?.(),
   };
 }
+
+/**
+ * The isolate-wide native tracer from `cloudflare:workers`, or `null` when the
+ * runtime has no tracing API. Registered as the default so `trace()`/`span()`
+ * nest in the platform waterfall even where no wrapper installed one.
+ */
+export const platformNativeTracer = getNativeTracerFromCtx({
+  tracing: moduleTracing,
+});
+setDefaultNativeTracer(platformNativeTracer);

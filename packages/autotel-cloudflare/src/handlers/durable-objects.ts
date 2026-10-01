@@ -13,8 +13,14 @@ import {
   SpanStatusCode,
   SpanKind,
 } from '@opentelemetry/api';
-import type { ConfigurationOption } from 'autotel-edge';
-import { createInitialiser, setConfig } from 'autotel-edge';
+import type { ConfigurationOption, ResolvedEdgeConfig } from 'autotel-edge';
+import {
+  createInitialiser,
+  setConfig,
+  nativeRecordException,
+  withoutNativeTracer,
+} from 'autotel-edge';
+import { platformNativeTracer } from '../native/native-tracing';
 import { wrap } from '../bindings/common';
 import { toException } from '../exception.js';
 import { workerTracer } from '../tracer.js';
@@ -37,6 +43,69 @@ function isColdStart(doClass: any): boolean {
   return false;
 }
 
+type RunawayAlarmConfig = ResolvedEdgeConfig['runawayAlarm'];
+
+/** `exception.type` of the alarm-loop signal. */
+export const RUNAWAY_ALARM_EXCEPTION = 'autotel.RunawayAlarm';
+
+// Recent alarm start times per object id, bounded to maxRuns + 1 each.
+const alarmRuns = new Map<string, { times: number[]; firedAt?: number }>();
+
+/**
+ * Note one alarm run. Returns the `autotel.RunawayAlarm` exception when the
+ * object's alarm has run more than `maxRuns` times within `windowMs`, at most
+ * once per window.
+ */
+export function checkRunawayAlarm(
+  id: DurableObjectId,
+  config: RunawayAlarmConfig,
+  now = Date.now(),
+): Error | undefined {
+  if (config === false) return undefined;
+  const maxRuns = config?.maxRuns ?? 10;
+  const windowMs = config?.windowMs ?? 60_000;
+  const key = id.toString();
+  const entry = alarmRuns.get(key) ?? { times: [] };
+  alarmRuns.set(key, entry);
+  entry.times = entry.times.filter((t) => now - t < windowMs);
+  entry.times.push(now);
+  if (entry.times.length > maxRuns + 1) entry.times.shift();
+  if (entry.times.length <= maxRuns) return undefined;
+  if (entry.firedAt !== undefined && now - entry.firedAt < windowMs) {
+    return undefined;
+  }
+  entry.firedAt = now;
+  const error = new Error(
+    `Durable Object ${id.name || key} alarm ran ${entry.times.length} times in ${windowMs / 1000}s`,
+  );
+  error.name = RUNAWAY_ALARM_EXCEPTION;
+  return error;
+}
+
+/**
+ * Native tracing mode: shadow the instance's `alarm` with a Proxy over the
+ * original, so the runaway check lands on Cloudflare's alarm span. The
+ * instance itself stays unproxied (private fields keep working).
+ */
+function watchNativeAlarm(
+  doInstance: any,
+  id: DurableObjectId,
+  config: RunawayAlarmConfig,
+): void {
+  const alarm = asFunction(member(doInstance, 'alarm'));
+  if (!alarm || config === false) return;
+  doInstance.alarm = new Proxy(alarm, {
+    apply(target, thisArg, args) {
+      const runaway = checkRunawayAlarm(id, config);
+      if (runaway) {
+        const span = platformNativeTracer?.getActiveSpan?.();
+        if (span) nativeRecordException(span, runaway);
+      }
+      return Reflect.apply(target, thisArg, args);
+    },
+  });
+}
+
 /**
  * Instrument a Durable Object fetch method
  */
@@ -53,7 +122,7 @@ function instrumentDOFetch(
 
     // Extract parent context from request headers
     const parentContext = propagation.extract(
-      api_context.active(),
+      withoutNativeTracer(),
       request.headers,
     );
 
@@ -111,6 +180,7 @@ function instrumentDOAlarm(
   alarmFn: DOAlarmFn,
   id: DurableObjectId,
   doClass: any,
+  runawayAlarm: RunawayAlarmConfig,
 ): DOAlarmFn {
   return async function instrumentedAlarm(this: any): Promise<void> {
     const tracer = workerTracer('autotel-edge');
@@ -128,7 +198,10 @@ function instrumentDOAlarm(
           'faas.coldstart': isColdStart(doClass),
         },
       },
+      withoutNativeTracer(),
       async (span) => {
+        const runaway = checkRunawayAlarm(id, runawayAlarm);
+        if (runaway) span.recordException(runaway);
         try {
           await alarmFn.call(this);
           span.setStatus({ code: SpanStatusCode.OK });
@@ -153,8 +226,8 @@ function instrumentDOAlarm(
 function instrumentDOInstance(
   doInstance: any,
   state: DurableObjectState,
-  _env: any,
   doClass: any,
+  runawayAlarm: RunawayAlarmConfig,
 ): any {
   const instanceHandler: ProxyHandler<any> = {
     get(target, prop) {
@@ -177,6 +250,7 @@ function instrumentDOInstance(
           method.bind(target) as DOAlarmFn,
           state.id,
           doClass,
+          runawayAlarm,
         );
       }
 
@@ -251,8 +325,20 @@ export function instrumentDO<C extends new (...args: any[]) => any>(
         return new target(state, env);
       });
 
+      // Native tracing: Cloudflare already traces DO fetch/alarm/RPC and
+      // storage, and trace()/span() inside route to the platform tracer.
+      if (platformNativeTracer && doConfig.nativeTracing !== 'off') {
+        watchNativeAlarm(doInstance, state.id, doConfig.runawayAlarm);
+        return doInstance;
+      }
+
       // Instrument the instance
-      return instrumentDOInstance(doInstance, state, env, doClass);
+      return instrumentDOInstance(
+        doInstance,
+        state,
+        doClass,
+        doConfig.runawayAlarm,
+      );
     },
   };
 

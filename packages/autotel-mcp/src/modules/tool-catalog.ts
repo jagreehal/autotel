@@ -60,6 +60,18 @@ export function buildToolCatalog(): ToolCatalogEntry[] {
       intent: 'debug failures',
     },
     {
+      name: 'list_issues',
+      description:
+        'Group failures into fingerprinted issues with counts, trend and regressions.',
+      intent: 'triage what is broken',
+    },
+    {
+      name: 'get_issue',
+      description:
+        'Stack trace, latest trace and surrounding logs for one issue.',
+      intent: 'hand an issue to a fixer',
+    },
+    {
       name: 'list_llm_models',
       description: 'Discover LLM models in use and their usage frequency.',
       intent: 'track model adoption',

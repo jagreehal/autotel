@@ -42,6 +42,9 @@ import {
   getServiceForPath,
   shouldInstrumentPath,
   withNativeTracer,
+  withoutNativeTracer,
+  runWithNativeTraceContext,
+  createNativeTraceContext,
   ensureGlobalContextManager,
   type Initialiser,
   type NativeTracer,
@@ -603,6 +606,7 @@ function createHandlerFlow<T extends Trigger, E, R>(
 }
 
 let warnedMissingNative = false;
+let warnedLocalNative = false;
 
 /**
  * Resolve whether this invocation should use Cloudflare's native tracer.
@@ -635,6 +639,23 @@ function resolveNativeTracer(
         'Falling back to the autotel OTLP exporter.',
     );
   }
+  if (
+    nativeTracer &&
+    mode === 'auto' &&
+    !warnedLocalNative &&
+    config.spanProcessors.length > 0 &&
+    trigger instanceof Request &&
+    /^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(trigger.url).hostname)
+  ) {
+    // wrangler dev exposes ctx.tracing too: tell the developer where their
+    // spans went and how to send them to a local exporter instead.
+    warnedLocalNative = true;
+    console.warn(
+      '[autotel-cloudflare] Cloudflare native tracing is on in wrangler dev, so spans go to the ' +
+        'Local Explorer (/cdn-cgi/explorer), not your exporter. To stream to autotel-devtools, ' +
+        'set NATIVE_TRACING=off in .dev.vars (or nativeTracing: "off").',
+    );
+  }
   return nativeTracer;
 }
 
@@ -662,7 +683,18 @@ function runWithNativeTracing<T extends Trigger, E, R>(
   // enterSpan. Bindings are NOT proxied: Cloudflare instruments them natively.
   ensureGlobalContextManager();
   const nativeContext = withNativeTracer(nativeTracer, setConfig(config));
-  return api_context.with(nativeContext, () => handlerFn(trigger, env, ctx));
+  const run = () => handlerFn(trigger, env, ctx);
+  // Bind the handler body to Cloudflare's root invocation span, so the request
+  // logger and ambient ctx annotate the span Issues and the dashboard show.
+  const root = nativeTracer.getActiveSpan?.();
+  return api_context.with(nativeContext, () =>
+    root
+      ? runWithNativeTraceContext(
+          createNativeTraceContext(root, 'handler', nativeTracer.correlationId),
+          run,
+        )
+      : run(),
+  );
 }
 
 /**
@@ -701,7 +733,8 @@ function createHandlerProxy<T extends Trigger, E, R>(
     // in a proxy of its own type - so the env it returns is the caller's E.
     const instrumentedEnv = instrumentBindings(env as WorkerEnv) as E;
 
-    const configContext = setConfig(config);
+    // OTLP mode: keep user spans on autotel's pipeline, not the platform's.
+    const configContext = withoutNativeTracer(setConfig(config));
 
     // Initialize provider on first call
     initProvider(config);
@@ -772,7 +805,8 @@ function createHandlerProxyWithConfig<T extends Trigger, E, R>(
     // in a proxy of its own type - so the env it returns is the caller's E.
     const instrumentedEnv = instrumentBindings(env as WorkerEnv) as E;
 
-    const configContext = setConfig(config);
+    // OTLP mode: keep user spans on autotel's pipeline, not the platform's.
+    const configContext = withoutNativeTracer(setConfig(config));
 
     // Initialize provider on first call
     initProvider(config);

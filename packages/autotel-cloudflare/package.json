@@ -47,6 +47,10 @@
       "types": "./dist/native.d.ts",
       "import": "./dist/native.js"
     },
+    "./tail": {
+      "types": "./dist/tail.d.ts",
+      "import": "./dist/tail.js"
+    },
     "./parse-error": {
       "types": "./dist/parse-error.d.ts",
       "import": "./dist/parse-error.js"

@@ -1,7 +1,7 @@
 import { mountWidget } from './mount';
 import { registerElement } from './element';
 import { parseNavHash, type NavState } from './url-sync';
-import cssText from './styles.css?inline';
+import { styleShadowRoot } from './shadow-styles';
 
 // Capture script element synchronously — it's null after IIFE finishes
 const _currentScript = document.currentScript as HTMLScriptElement | null;
@@ -53,10 +53,7 @@ function init(): void {
 
   const shadow = container.attachShadow({ mode: 'open' });
 
-  // Inject styles
-  const style = document.createElement('style');
-  style.textContent = cssText;
-  shadow.appendChild(style);
+  styleShadowRoot(shadow);
 
   mountWidget(shadow, { mode, wsUrl, deepLink });
 }

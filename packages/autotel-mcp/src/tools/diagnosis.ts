@@ -5,6 +5,7 @@ import { detectAnomalies } from '../modules/anomaly';
 import { findRootCause } from '../modules/correlator';
 import { findRepeatedQueries } from '../modules/repeated-queries';
 import { compactTrace } from '../modules/trace-payload';
+import { issueContext, loadIssues } from '../modules/issues';
 import { respondJSON, READ_ONLY } from './shared';
 import { nonEmptyString } from '../lib/values';
 
@@ -211,6 +212,102 @@ export function registerDiagnosisTools(
         totalTraces: result.totalCount,
         groups: aggregated,
       });
+    },
+  );
+
+  const issueWindow = {
+    serviceName: z.string().min(1).optional(),
+    lookbackMinutes: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(7 * 24 * 60)
+      .default(24 * 60),
+    quietMinutes: z.coerce.number().int().positive().default(60),
+  };
+
+  server.registerTool(
+    'list_issues',
+    {
+      description:
+        'Failures grouped into issues by fingerprint (service + exception type + top app stack frames, or the normalised message when there is no stack) — the same key autotel-devtools uses. Covers thrown and handled exceptions, HTTP 5xx, error logs, and autotel log-flood / runaway-alarm reports. Each issue has status (active/resolved/ignored; stored by devtools, otherwise active), count, first/last seen, trend buckets, regression (came back after quietMinutes of silence), versions, affected users/accounts/sessions and sample trace IDs. Use to triage what is broken; follow with get_issue.',
+      annotations: READ_ONLY,
+      inputSchema: z.object({
+        ...issueWindow,
+        status: z
+          .enum(['active', 'resolved', 'ignored', 'all'])
+          .default('active'),
+        minCount: z.coerce.number().int().positive().default(1),
+        limit: z.coerce.number().int().positive().max(100).default(20),
+      }),
+    },
+    async ({
+      serviceName,
+      lookbackMinutes,
+      quietMinutes,
+      status,
+      minCount,
+      limit,
+    }: {
+      serviceName?: string;
+      lookbackMinutes: number;
+      quietMinutes: number;
+      status: 'active' | 'resolved' | 'ignored' | 'all';
+      minCount: number;
+      limit: number;
+    }) => {
+      const result = await loadIssues(backend, {
+        service: serviceName,
+        lookbackMinutes,
+        quietMinutes,
+        status,
+      });
+      const issues = result.issues
+        .filter((issue) => issue.count >= minCount)
+        .slice(0, limit)
+        // The stack belongs in get_issue; the list stays scannable.
+        .map(({ latestStack: _stack, ...issue }) => issue);
+      return respondJSON({ ...result, issues });
+    },
+  );
+
+  server.registerTool(
+    'get_issue',
+    {
+      description:
+        'Everything needed to fix one issue from list_issues: the grouped summary, latest stack trace, the latest occurrence trace (compacted) and its logs, plus the service logs just before and after it. Hand this to a coding agent.',
+      annotations: READ_ONLY,
+      inputSchema: z.object({
+        fingerprint: z.string().min(1),
+        ...issueWindow,
+        contextSeconds: z.coerce.number().int().positive().max(600).default(30),
+      }),
+    },
+    async ({
+      fingerprint,
+      serviceName,
+      lookbackMinutes,
+      quietMinutes,
+      contextSeconds,
+    }: {
+      fingerprint: string;
+      serviceName?: string;
+      lookbackMinutes: number;
+      quietMinutes: number;
+      contextSeconds: number;
+    }) => {
+      const { issues } = await loadIssues(backend, {
+        service: serviceName,
+        lookbackMinutes,
+        quietMinutes,
+      });
+      const issue = issues.find((i) => i.fingerprint === fingerprint);
+      if (!issue) {
+        return respondJSON({
+          error: `Issue not found in the last ${lookbackMinutes} minutes: ${fingerprint}`,
+        });
+      }
+      return respondJSON(await issueContext(backend, issue, contextSeconds));
     },
   );
 

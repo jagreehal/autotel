@@ -75,13 +75,15 @@ Tools are registered per backend capability. Agents only see tools the backend c
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Trace investigation       | `search_traces`, `search_spans`, `get_trace`, `summarize_trace`                                                                                                                       |
 | Topology / discovery      | `list_services`, `list_operations`, `service_map`, `discover_services`, `discover_trace_fields`, `discover_log_fields`                                                                |
-| Diagnosis                 | `find_errors`, `find_anomalies`, `find_root_cause`, `check_slos`, `explain_slowdown`                                                                                                  |
+| Diagnosis                 | `list_issues`, `get_issue`, `find_errors`, `find_anomalies`, `find_root_cause`, `check_slos`, `explain_slowdown`                                                                      |
 | Cross-signal              | `correlate` (trace + metrics + logs for a traceId)                                                                                                                                    |
 | LLM analytics             | `get_llm_usage` (with USD cost), `get_llm_expensive_traces` (ranked by USD), `get_llm_slow_traces`, `get_llm_model_stats`, `list_llm_models`, `list_llm_tools`                        |
 | Metrics / logs            | `list_metrics`, `search_logs`                                                                                                                                                         |
 | OTel semantic conventions | `semconv_list_namespaces`, `semconv_get_namespace`, `semconv_refresh_cache`                                                                                                           |
 | Collector schema          | `collector_list_components`, `collector_component_schema`, `collector_component_readme`, `collector_validate_component_config`, `collector_get_versions`, `collector_refresh_catalog` |
 | Health                    | `backend_health`, `backend_capabilities`, `list_capabilities`                                                                                                                         |
+
+Start triage with `list_issues` (grouped failures with status, count, trend, versions and affected users), then `get_issue` for the stack, latest trace and nearby logs.
 
 ## Resources
 
@@ -112,6 +114,12 @@ Tools are registered per backend capability. Agents only see tools the backend c
 | `PROMETHEUS_BASE_URL`           | `http://localhost:9090`  | Prometheus backend                                                                          |
 | `LOKI_BASE_URL`                 | `http://localhost:3100`  | Loki backend                                                                                |
 | `AUTOTEL_LLM_PRICES_JSON`       | —                        | Path to custom model pricing JSON                                                           |
+| `AUTOTEL_SOURCEMAPS`            | —                        | Directory of production `.map` files for source-mapping exception stacks                    |
+| `AUTOTEL_ISSUES_DESTINATION`    | —                        | JSON destination (webhook, claude-code, cursor, devin, slack, pagerduty) for issue sends    |
+| `AUTOTEL_ISSUES_WEBHOOK`        | —                        | Webhook shorthand; `AUTOTEL_ISSUES_WEBHOOK_SECRET` signs it with HMAC-SHA256                |
+| `AUTOTEL_ISSUES_THRESHOLD`      | `5`                      | Occurrences before an issue is sent                                                         |
+| `AUTOTEL_ISSUES_QUIET_MINUTES`  | `60`                     | Silence after which a new occurrence counts as a recurrence                                 |
+| `AUTOTEL_ISSUES_STATE`          | beside `--persist`       | JSON file for sent-state and run history                                                    |
 
 ## LLM Cost Attribution
 

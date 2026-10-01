@@ -18,6 +18,10 @@ export default defineConfig({
     // The wire codec is shared: the widget decodes the live tail with it, and
     // anyone writing their own /ws client needs the same function.
     'wire/index': 'src/wire/index.ts',
+    // Issue grouping and destinations are shared: autotel-mcp groups with the
+    // same fingerprint, so one failure is one issue wherever it is viewed.
+    'issues/index': 'src/issues/index.ts',
+    'server/sourcemap': 'src/server/sourcemap.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

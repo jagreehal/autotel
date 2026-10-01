@@ -15,7 +15,13 @@ import {
 } from '@opentelemetry/api';
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 import type { ConfigurationOption, WorkflowTrigger } from 'autotel-edge';
-import { createInitialiser, setConfig } from 'autotel-edge';
+import {
+  createInitialiser,
+  setConfig,
+  withoutNativeTracer,
+  type NativeTracer,
+} from 'autotel-edge';
+import { platformNativeTracer } from '../native/native-tracing';
 import { wrap } from '../bindings/common';
 import { toException } from '../exception.js';
 import { workerTracer } from '../tracer.js';
@@ -218,6 +224,7 @@ function instrumentWorkflowRun(
           'faas.coldstart': isColdStart(workflowClass),
         },
       },
+      withoutNativeTracer(),
       async (span) => {
         try {
           const result = await runFn.call(this, event, instrumentedStep);
@@ -236,6 +243,55 @@ function instrumentWorkflowRun(
       },
     );
   };
+}
+
+/**
+ * Native tracing: Cloudflare traces the run and step RPC calls but not step
+ * names, so wrap only `step.do()` in a named native span.
+ */
+function nativeWorkflowInstance(
+  workflowInstance: Record<string, unknown>,
+  workflowName: string,
+  tracer: NativeTracer,
+): Record<string, unknown> {
+  return wrap(workflowInstance, {
+    get(target, prop) {
+      const value = member(target, prop);
+      const method = asFunction(value);
+      if (prop !== 'run' || !method) {
+        return method ? method.bind(target) : value;
+      }
+      return (event: Readonly<WorkflowEvent<unknown>>, step: WorkflowStep) =>
+        method.call(
+          target,
+          event,
+          wrap(step, {
+            get(stepTarget, stepProp) {
+              const stepValue = member(stepTarget, stepProp);
+              const stepMethod = asFunction(stepValue);
+              // `step` is an RPC stub: `.bind`/`.apply` on its members would
+              // be sent as RPC calls, so pass through and use Reflect.apply.
+              if (stepProp !== 'do' || !stepMethod) {
+                return stepValue;
+              }
+              return (...args: unknown[]) => {
+                const [stepName] = trapArgs<[string, ...unknown[]]>(args);
+                return tracer.enterSpan(
+                  `Workflow ${workflowName}: ${stepName}`,
+                  (span) => {
+                    // setAttribute: the one span method every runtime has.
+                    span.setAttribute('workflow.name', workflowName);
+                    span.setAttribute('workflow.step.name', stepName);
+                    span.setAttribute('workflow.instance_id', event.instanceId);
+                    return Reflect.apply(stepMethod, stepTarget, args);
+                  },
+                );
+              };
+            },
+          }),
+        );
+    },
+  });
 }
 
 /**
@@ -331,6 +387,14 @@ export function instrumentWorkflow<C extends new (...args: any[]) => any>(
       const workflowInstance = api_context.with(context, () => {
         return new target(...args);
       });
+
+      if (platformNativeTracer && workflowConfig.nativeTracing !== 'off') {
+        return nativeWorkflowInstance(
+          workflowInstance,
+          workflowName,
+          platformNativeTracer,
+        );
+      }
 
       // Instrument the instance
       return instrumentWorkflowInstance(

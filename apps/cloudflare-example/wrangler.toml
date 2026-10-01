@@ -29,7 +29,8 @@ enabled = true
 # Used only when native tracing is OFF (local dev / nativeTracing:'off') — point
 # at autotel-devtools or any OTLP collector.
 OTLP_ENDPOINT = "http://localhost:4318/v1/traces"
-# NATIVE_TRACING = "off"   # force the autotel OTLP exporter (e.g. for devtools)
+# NATIVE_TRACING: put NATIVE_TRACING=off in .dev.vars (local only) to stream
+#   wrangler dev spans to autotel-devtools instead of the Local Explorer.
 # ENVIRONMENT = "production"
 # DISABLE_INSTRUMENTATION = "true"
 

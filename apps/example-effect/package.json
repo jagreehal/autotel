@@ -7,11 +7,11 @@
     "start": "tsx --import ./instrumentation.ts src/index.ts"
   },
   "dependencies": {
-    "@effect/opentelemetry": "4.0.0-rc.112",
+    "@effect/opentelemetry": "4.0.0",
     "autotel": "workspace:*",
     "autotel-effect": "workspace:*",
     "dotenv": "^17.4.2",
-    "effect": "4.0.0-rc.112"
+    "effect": "4.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

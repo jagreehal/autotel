@@ -1,5 +1,7 @@
 /* oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-known-value-widening -- These types describe the autotel devtools payload as it arrives on the wire, where an attribute bag genuinely is an open dictionary of unread values. The tag maps built from them are open by the same token: an attribute set is not a fixed field list. */
 
+import type { Issue } from 'autotel-devtools/issues';
+import type { IssueListQuery } from '../telemetry';
 import { HttpError, jsonGet, jsonPost } from '../../lib/http';
 import { compileTraceQuery } from './query-pushdown';
 import {
@@ -32,7 +34,11 @@ import type {
   TraceSearchResult,
   TraceSummary,
 } from '../../types';
-import { inferErrorStatusFromTags, normalizeTags } from '../span-mapping';
+import {
+  exceptionTags,
+  inferErrorStatusFromTags,
+  normalizeTags,
+} from '../span-mapping';
 import type { TelemetryBackend } from '../telemetry';
 import { nonEmptyString } from '../../lib/values';
 
@@ -56,6 +62,7 @@ interface DevtoolsSpan {
   attributes?: Record<string, unknown>;
   status?: { code: 'OK' | 'ERROR' | 'UNSET'; message?: string };
   scope?: { name?: string; version?: string };
+  events?: Array<{ name?: string; attributes?: Record<string, unknown> }>;
 }
 
 interface DevtoolsTrace {
@@ -160,6 +167,35 @@ export class DevtoolsBackend implements TelemetryBackend {
   private hasQueryApi: boolean | undefined;
 
   constructor(private readonly baseUrl: string) {}
+
+  private hasIssuesApi: boolean | undefined;
+
+  /** Devtools keeps issue state (status, lifetime counts); read it rather than regroup. */
+  async listIssues(query: IssueListQuery): Promise<Issue[] | undefined> {
+    if (this.hasIssuesApi === false) return undefined;
+    const params = new URLSearchParams({
+      start: String(query.start),
+      end: String(query.end),
+      quietMs: String(query.quietMs),
+      limit: '500',
+      ...(query.service ? { service: query.service } : {}),
+    });
+    try {
+      const data = await jsonGet<{ issues?: Issue[] }>(
+        `${this.baseUrl}/api/issues?${params}`,
+      );
+      // A server that predates the issues API answers something else, or 404s.
+      if (!Array.isArray(data.issues)) {
+        this.hasIssuesApi = false;
+        return undefined;
+      }
+      this.hasIssuesApi = true;
+      return data.issues;
+    } catch {
+      this.hasIssuesApi = false;
+      return undefined;
+    }
+  }
 
   private async fetchTraces(): Promise<DevtoolsTrace[]> {
     const data = await jsonGet<DevtoolsTracesResponse>(
@@ -499,7 +535,10 @@ export class DevtoolsBackend implements TelemetryBackend {
 
   toTraceRecord(trace: DevtoolsTrace): TraceRecord {
     const spans: SpanRecord[] = trace.spans.map((span) => {
-      const tags = normalizeTags(span.attributes);
+      const tags = {
+        ...exceptionTags(span.events, span.status?.message),
+        ...normalizeTags(span.attributes),
+      };
       const statusCode = resolveStatus(span.status?.code, tags);
       return {
         traceId: span.traceId,

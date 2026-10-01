@@ -9,6 +9,7 @@ function makeErrorGroup(overrides: Partial<ErrorGroup> = {}): ErrorGroup {
     fingerprint:
       overrides.fingerprint ??
       `fp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    source: overrides.source ?? 'exception',
     type: overrides.type ?? 'Error',
     message: overrides.message ?? 'Something went wrong',
     stackTrace: overrides.stackTrace,

@@ -40,6 +40,12 @@ export interface CreateDevtoolsOptions {
   maxDbBytes?: number;
   /** How often to prune the store past its caps, in ms. `0` disables it. */
   retentionIntervalMs?: number;
+  /**
+   * Directory of production `.map` files, matched to stack frames by file
+   * basename. Frames inside `sourceRoot` are mapped from the maps beside them
+   * without this. Defaults to `AUTOTEL_DEVTOOLS_SOURCEMAPS`.
+   */
+  sourceMapsDir?: string;
 }
 
 export interface DevtoolsInstance {
@@ -65,6 +71,18 @@ export function createDevtools(
   // surface; an explicit non-loopback bind is an opt-in to network exposure.
   const loopbackOnly = hostHeaderIsLoopback(host);
 
+  // `false` and the env var's "off" spellings are the same answer, so both go
+  // through one resolver rather than being special-cased here.
+  const sourceRoot = resolveSourceRoot(
+    options.sourceRoot === false
+      ? 'false'
+      : (options.sourceRoot ?? process.env.AUTOTEL_DEVTOOLS_SOURCE_ROOT),
+    process.cwd(),
+    loopbackOnly,
+  );
+  const mapsDir =
+    options.sourceMapsDir ?? process.env.AUTOTEL_DEVTOOLS_SOURCEMAPS;
+
   const httpServer = createServer();
   const wsServer = new DevtoolsServer({
     server: httpServer,
@@ -79,16 +97,12 @@ export function createDevtools(
     maxLogs: options.maxLogs,
     maxDbBytes: options.maxDbBytes,
     retentionIntervalMs: options.retentionIntervalMs,
+    // The source root is also where local bundles and their maps live.
+    sourceMaps: {
+      roots: sourceRoot ? [sourceRoot] : [],
+      ...(mapsDir ? { mapsDir } : {}),
+    },
   });
-  // `false` and the env var's "off" spellings are the same answer, so both go
-  // through one resolver rather than being special-cased here.
-  const sourceRoot = resolveSourceRoot(
-    options.sourceRoot === false
-      ? 'false'
-      : (options.sourceRoot ?? process.env.AUTOTEL_DEVTOOLS_SOURCE_ROOT),
-    process.cwd(),
-    loopbackOnly,
-  );
   attachDevtoolsRoutes(httpServer, wsServer, { loopbackOnly, sourceRoot });
 
   // Bind both loopback families when host is loopback, so a `localhost` client

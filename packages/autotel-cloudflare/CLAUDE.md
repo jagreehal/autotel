@@ -38,6 +38,7 @@ You are working on the Cloudflare Workers package. You understand Cloudflare Wor
 - `autotel-cloudflare/events` - Re-export from autotel-edge
 - `autotel-cloudflare/logger` - Re-export from autotel-edge
 - `autotel-cloudflare/testing` - Re-export from autotel-edge
+- `autotel-cloudflare/tail` - No-SDK path: `createTailHandler()` for a Tail Worker, converting observed invocations (outcome, exceptions, console + errorInfo, status) to OTLP. Dependency-free; keep it that way
 - `autotel-cloudflare/native` - Native-tracing detection helpers (`isNativeTracingAvailable`, `getNativeTracerFromCtx`); normally auto-wired by the handler wrappers
 
 ## Commands

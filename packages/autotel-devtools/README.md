@@ -365,6 +365,58 @@ else's page, where `document.modelContext` belongs to that page. Registered
 against the browser's WebMCP API directly, with no runtime dependency; in a
 browser without WebMCP nothing is registered.
 
+## Issues
+
+Failures are grouped into **issues**, the way Cloudflare Workers Issues and
+error trackers do, for every runtime autotel instruments:
+
+- **What counts:** thrown exceptions (span status ERROR), handled errors
+  (`console.error` inside a span, recorded by autotel as an exception without
+  failing the span), HTTP 5xx responses, error-level logs outside any trace,
+  and autotel's own detectors: `autotel.LogFlood` (one log line repeated 100+
+  times in an invocation) and `autotel.RunawayAlarm` (a Durable Object alarm
+  rescheduling in a loop). One trace is one occurrence, so a throw and the 500
+  it caused are counted once.
+- **Grouping:** service + exception type + the top three app stack frames
+  (function and file name only, so rebuilds and unrelated edits keep the
+  issue), or the normalised message without a stack. An
+  `exception.fingerprint` attribute overrides it. The same key is used by the
+  Errors tab and by autotel-mcp (`autotel-devtools/issues`).
+- **Source maps:** stacks are mapped before grouping, from the maps beside
+  local bundles (`wrangler dev`, Vite, esbuild) inside the source root, or from
+  `AUTOTEL_DEVTOOLS_SOURCEMAPS` for production bundles.
+- **Status:** active, resolved, ignored. A newer occurrence reopens a resolved
+  issue; ignored stays ignored. Occurrence details are kept 7 days; issues stay
+  listed after they expire.
+- **Automations:** send an issue when it reaches N occurrences, or when it
+  returns after a quiet period (1 hour to 365 days). Destinations: webhook
+  (HMAC-signed), Claude Code routine, Cursor, Devin, Slack, PagerDuty. Each
+  send is retried up to three times and recorded as a run; "Send" on an issue
+  sends it now. Configure them from the Errors tab (full viewer) or the API.
+
+```text
+GET    /api/issues?status=active&service=api&start=&end=
+GET    /api/issues/:fingerprint              issue + latest trace + nearby logs + runs
+POST   /api/issues/:fingerprint/status       { "status": "resolved" }
+POST   /api/issues/:fingerprint/send         { "destinationId": "…" }
+GET|POST /api/issue-destinations             credentials are never returned
+DELETE /api/issue-destinations/:id
+GET|POST /api/issue-automations              { "trigger": { "type": "threshold", "count": 5 }, "destinationId": "…" }
+DELETE /api/issue-automations/:id
+GET    /api/issue-runs?fingerprint=
+```
+
+**Without changing app code:** Node apps start with
+`node --import autotel/auto app.js` and the standard `OTEL_SERVICE_NAME` /
+`OTEL_EXPORTER_OTLP_ENDPOINT` variables. Cloudflare Workers add a Tail Worker
+built with `autotel-cloudflare/tail` to `tail_consumers`. Spans Cloudflare
+exports itself count too: an invocation whose `cloudflare.outcome` is not `ok`
+is a failure.
+
+Webhooks carry `x-autotel-timestamp` and `x-autotel-signature:
+sha256=HMAC_SHA256(secret, "<timestamp>.<body>")`; verify both and reject old
+timestamps.
+
 ## Configuration
 
 ### Environment Variables
@@ -380,6 +432,7 @@ AUTOTEL_DEVTOOLS_DB_MAX_SIZE=2gb # Logical sqlite retention cap
 AUTOTEL_DEVTOOLS_HOST=127.0.0.1  # Bind host (default: 127.0.0.1)
 AUTOTEL_DEVTOOLS_TITLE="My App"  # Dashboard title (optional)
 AUTOTEL_DEVTOOLS_SOURCE_ROOT=.   # Root GET /source may read (default: cwd on a loopback bind, else off; `false` disables)
+AUTOTEL_DEVTOOLS_SOURCEMAPS=./maps  # Production .map files, matched to stack frames by bundle file name
 ```
 
 ### CLI Options

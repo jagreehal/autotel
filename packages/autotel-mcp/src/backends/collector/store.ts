@@ -56,6 +56,25 @@ export class CollectorStore {
   }
 
   async init(): Promise<void> {
+    // A `--persist` file from before spans were keyed by (trace_id, span_id)
+    // let two traces sharing a span id overwrite each other. Move its rows
+    // into the new shape: rename, create, copy, drop, in one transaction.
+    const keyed = await this.db.execute(
+      "SELECT COUNT(*) AS n FROM pragma_table_info('spans') WHERE pk > 0",
+    );
+    if (Number(keyed.rows[0]?.n) === 1) {
+      await this.db.executeMultiple(`
+        BEGIN;
+        ALTER TABLE spans RENAME TO spans_span_id_keyed;
+        DROP INDEX IF EXISTS idx_spans_trace_id;
+        DROP INDEX IF EXISTS idx_spans_service;
+        DROP INDEX IF EXISTS idx_spans_start_time;
+        ${SCHEMA_SQL}
+        INSERT OR REPLACE INTO spans SELECT * FROM spans_span_id_keyed;
+        DROP TABLE spans_span_id_keyed;
+        COMMIT;
+      `);
+    }
     await this.db.executeMultiple(SCHEMA_SQL);
   }
 

@@ -1,7 +1,7 @@
 export const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS spans (
     trace_id TEXT NOT NULL,
-    span_id TEXT NOT NULL PRIMARY KEY,
+    span_id TEXT NOT NULL,
     parent_span_id TEXT,
     operation_name TEXT NOT NULL,
     service_name TEXT NOT NULL,
@@ -9,7 +9,9 @@ export const SCHEMA_SQL = `
     duration_ms REAL NOT NULL,
     status_code TEXT NOT NULL DEFAULT 'UNSET',
     tags TEXT NOT NULL DEFAULT '{}',
-    has_error INTEGER NOT NULL DEFAULT 0
+    has_error INTEGER NOT NULL DEFAULT 0,
+    -- A span id is unique within its trace, not across traces.
+    PRIMARY KEY (trace_id, span_id)
   );
 
   CREATE INDEX IF NOT EXISTS idx_spans_trace_id ON spans(trace_id);

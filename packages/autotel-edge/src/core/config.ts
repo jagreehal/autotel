@@ -2,6 +2,8 @@
  * Configuration system for autotel-edge
  */
 
+import { getActiveNativeTracer } from './native-bridge';
+import { installConsoleSignals } from './console-signals';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import {
   ParentBasedSampler,
@@ -94,8 +96,10 @@ export function parseConfig(config: EdgeConfig): ResolvedEdgeConfig {
 
   // A service-only config (no exporter, no spanProcessors) is valid for
   // tests, but in production it silently drops every span — warn once.
+  // Not when a platform tracer (Cloudflare native tracing) does the export.
   if (
     !missingExporterWarningEmitted &&
+    !(getActiveNativeTracer() && config.nativeTracing !== 'off') &&
     !isSpanProcessorConfig(config) &&
     !config.exporter
   ) {
@@ -147,7 +151,14 @@ export function parseConfig(config: EdgeConfig): ResolvedEdgeConfig {
     subscribers: config.subscribers ?? [],
     dataSafety: config.dataSafety,
     nativeTracing: config.nativeTracing ?? 'auto',
+    captureConsoleErrors: config.captureConsoleErrors ?? true,
+    logFloodThreshold: config.logFloodThreshold ?? 100,
+    runawayAlarm: config.runawayAlarm,
   };
+
+  if (resolved.captureConsoleErrors || (resolved.logFloodThreshold ?? 0) > 0) {
+    installConsoleSignals(getActiveConfig);
+  }
 
   return resolved;
 }

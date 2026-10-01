@@ -3,8 +3,13 @@ import { gzipSync } from 'node:zlib';
 import { resolve } from 'node:path';
 
 const budgets = [
-  { file: 'widget.global.js', raw: 500_000, gzip: 145_000 },
-  { file: 'fullpage.global.js', raw: 700_000, gzip: 210_000 },
+  // gzip +1 KB: issue status in the Errors tab, plus registering Tailwind's
+  // @property variables on the document (without it every transform, border
+  // and ring utility is a no-op inside the shadow root). 145,085 measured.
+  { file: 'widget.global.js', raw: 500_000, gzip: 146_000 },
+  // +15 KB raw for the Issues automations UI (destinations, triggers, runs),
+  // which only the full viewer carries: 698,127 → 708,754 bytes measured.
+  { file: 'fullpage.global.js', raw: 715_000, gzip: 212_000 },
 ];
 
 let failed = false;

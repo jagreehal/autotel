@@ -349,6 +349,7 @@ describe('windowedErrorGroupsSignal', () => {
   function group(fingerprint: string, firstSeen: number, lastSeen: number) {
     return {
       fingerprint,
+      source: 'exception' as const,
       type: 'Error',
       message: 'boom',
       count: 1,

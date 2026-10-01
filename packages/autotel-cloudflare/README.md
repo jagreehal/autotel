@@ -40,6 +40,8 @@ enabled = true
 
 When native tracing is active, autotel **defers to the platform**: it does not proxy-instrument bindings (no duplicate spans) and does not run its own exporter. It routes your custom spans to `tracing.enterSpan()` and surfaces the `cf-ray` id as `ctx.correlationId` + a `correlation.id` span attribute. Controlled by `nativeTracing: 'auto' | 'on' | 'off'` (default `'auto'`).
 
+In both modes autotel also records the issue signals Workers Issues derives from logs, as span exceptions: `console.error(...)` (status untouched, `captureConsoleErrors: false` to opt out), `autotel.LogFlood` for logging in a loop (`logFloodThreshold`, default `100`), and `autotel.RunawayAlarm` when a Durable Object's `alarm()` runs more than 10 times in 60s (`runawayAlarm: { maxRuns, windowMs }` or `false`).
+
 ### Same code, both modes: captured evidence
 
 This is real output from [`apps/cloudflare-example`](../../apps/cloudflare-example) (`node scripts/capture-evidence.mjs`). Identical business logic, two runtimes:
@@ -67,6 +69,44 @@ This is real output from [`apps/cloudflare-example`](../../apps/cloudflare-examp
 Note the native tree has **no `KV MY_KV: get` span**. Cloudflare emits that natively (your custom spans nest above it on deploy), so there are no duplicates.
 
 Full details, degradation map, and the forward-compatible trace-id story: [docs/CLOUDFLARE-NATIVE-TRACING.md](../../docs/CLOUDFLARE-NATIVE-TRACING.md).
+
+## No SDK: a Tail Worker
+
+Observe a Worker without changing its code. A [Tail Worker](https://developers.cloudflare.com/workers/observability/logs/tail-workers/)
+receives every invocation of the Workers that list it: outcome, uncaught
+exceptions, console output (with the exception behind each `console.error`
+argument), the request and response status, and the version that ran.
+`autotel-cloudflare/tail` turns each invocation into an OTLP span and its
+console output into OTLP logs, so autotel-devtools and autotel-mcp group them
+into issues (with source maps and automations) exactly as for an instrumented
+app. A request carrying `traceparent` joins the caller's trace.
+
+```ts
+// tail-worker/src/index.ts
+import { createTailHandler } from 'autotel-cloudflare/tail';
+
+export default {
+  tail: createTailHandler({
+    endpoint: (env) => env.OTLP_ENDPOINT, // posts to /v1/traces and /v1/logs
+    headers: (env) => ({ authorization: `Bearer ${env.OTLP_TOKEN}` }),
+  }),
+};
+```
+
+```jsonc
+// the observed Worker's wrangler.jsonc: no code change
+{ "tail_consumers": [{ "service": "tail-worker" }] }
+```
+
+It also reports logging in a loop (`autotel.LogFlood`) and Durable Object
+alarms firing in a loop (`autotel.RunawayAlarm`). Tail Workers need the Workers
+Paid plan in production. Under `wrangler dev` (run both with
+`wrangler dev -c app/wrangler.jsonc -c tail/wrangler.jsonc`), wrangler's error
+middleware turns an uncaught exception into a plain 500 before the tail sees it
+and events carry no script name, so pass `serviceName`; deployed, the
+exception and the Worker's name arrive as-is. What the tail cannot see are
+attributes set inside the Worker (`user.id` and the like): add those with the
+SDK or Cloudflare's `tracing.getActiveSpan()`.
 
 ## Installation
 

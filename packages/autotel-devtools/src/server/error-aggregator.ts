@@ -1,35 +1,31 @@
 /**
- * Error Aggregator
+ * Live issue groups for the Errors tab and the WebSocket full-state broadcast.
  *
- * Groups similar errors together based on stack trace fingerprinting.
- * Tracks error frequency, first/last occurrence, and affected traces.
+ * The same rules as the stored issues (`src/issues`): one occurrence per
+ * trace, picked by `occurrenceFromTrace`, plus error logs outside any trace.
+ * So everything the Issues store records (thrown and handled exceptions, 5xx,
+ * log floods, runaway alarms, standalone error logs) shows up here too, under
+ * the same fingerprint, which is what lets the tab resolve and send it.
+ *
+ * In memory and bounded; the store (`store/issues.ts`) is what persists.
  *
  * @example
  * ```typescript
  * const aggregator = new ErrorAggregator({ maxGroups: 100 });
- *
- * // Add errors from spans
- * aggregator.addError({
- *   traceId: '123',
- *   spanId: '456',
- *   spanName: 'api.createUser',
- *   service: 'user-service',
- *   timestamp: Date.now(),
- *   error: {
- *     type: 'ValidationError',
- *     message: 'Invalid email format',
- *     stackTrace: 'Error: Invalid email...'
- *   }
- * });
- *
- * // Get aggregated error groups
- * const groups = aggregator.getErrorGroups();
+ * aggregator.addTrace(trace); // idempotent: call again as the trace grows
+ * aggregator.addLog(log);
+ * aggregator.getErrorGroups();
  * ```
  */
 
-import type { ErrorGroup, ErrorOccurrence, SpanData, TraceData } from './types';
-import type { SpanAttributes } from '../widget/types.js';
-import { stringAttr } from '../widget/attrs.js';
+import {
+  occurrenceFromLog,
+  occurrenceFromTrace,
+  type IssueSource,
+  type Occurrence,
+} from '../issues';
+import { traceToIssueSpans, logToIssueLog } from './issue-input';
+import type { ErrorGroup, LogData, TraceData } from './types';
 
 /** How many errors the aggregator is holding, and what they are. */
 export interface ErrorStats {
@@ -40,468 +36,210 @@ export interface ErrorStats {
 }
 
 export interface ErrorAggregatorOptions {
-  /**
-   * Maximum number of error groups to track (default: 100)
-   * Oldest groups are evicted when limit is reached
-   */
+  /** Maximum groups tracked; the least recently seen is evicted. Default 100. */
   maxGroups?: number;
-
-  /**
-   * Maximum number of affected traces to keep per group (default: 10)
-   */
+  /** Trace ids kept per group, newest last. Default 10. */
   maxAffectedTraces?: number;
-
-  /**
-   * Maximum number of affected span names to keep per group (default: 5)
-   */
+  /** Operation names kept per group. Default 5. */
   maxAffectedSpans?: number;
+}
 
-  /**
-   * Number of stack frames to use for fingerprinting (default: 5)
-   */
-  stackFramesForFingerprint?: number;
+/** What to call a failure that carried no exception type. */
+const DEFAULT_TYPE: Record<IssueSource, string> = {
+  exception: 'Error',
+  handled_exception: 'Error',
+  http_5xx: 'HTTP 5xx',
+  error_log: 'Error log',
+  log_flood: 'autotel.LogFlood',
+  runaway_alarm: 'autotel.RunawayAlarm',
+};
+
+/** Which trace counted toward which group, so a re-sent trace counts once. */
+const MAX_REMEMBERED_TRACES = 10_000;
+
+function pushBounded<T>(list: T[], value: T, max: number): void {
+  if (list.includes(value)) return;
+  list.push(value);
+  if (list.length > max) list.shift();
 }
 
 export class ErrorAggregator {
-  private errorGroups: Map<string, ErrorGroup> = new Map();
-  private options: Required<ErrorAggregatorOptions>;
+  private readonly groups = new Map<string, ErrorGroup>();
+  private readonly counted = new Map<string, string>();
+  private readonly options: Required<ErrorAggregatorOptions>;
 
   constructor(options: ErrorAggregatorOptions = {}) {
     this.options = {
       maxGroups: options.maxGroups ?? 100,
       maxAffectedTraces: options.maxAffectedTraces ?? 10,
       maxAffectedSpans: options.maxAffectedSpans ?? 5,
-      stackFramesForFingerprint: options.stackFramesForFingerprint ?? 5,
     };
   }
 
   /**
-   * Add an error occurrence to the aggregator
+   * Count a trace's failure, if it has one. Idempotent by trace id: call it
+   * again with the merged trace as batches arrive. When a later batch changes
+   * which group the trace belongs to (the throw site arrived after its 500),
+   * the count moves.
    */
-  addError(occurrence: ErrorOccurrence): ErrorGroup {
-    const fingerprint = this.generateFingerprint(occurrence);
-    const existing = this.errorGroups.get(fingerprint);
+  addTrace(trace: TraceData): ErrorGroup | undefined {
+    const occurrence = occurrenceFromTrace(
+      trace.traceId,
+      traceToIssueSpans(trace),
+    );
+    return occurrence ? this.add(occurrence) : undefined;
+  }
 
-    if (existing) {
-      // Update existing group
-      existing.count++;
-      existing.lastSeen = occurrence.timestamp;
+  /** Count an error-level log outside any trace. */
+  addLog(log: LogData): ErrorGroup | undefined {
+    const occurrence = occurrenceFromLog(logToIssueLog(log));
+    return occurrence ? this.add(occurrence) : undefined;
+  }
 
-      // Add trace ID if not already present (keep last N)
-      if (!existing.affectedTraces.includes(occurrence.traceId)) {
-        existing.affectedTraces.push(occurrence.traceId);
-        if (existing.affectedTraces.length > this.options.maxAffectedTraces) {
-          existing.affectedTraces.shift();
-        }
+  add(occurrence: Occurrence): ErrorGroup {
+    const previous = this.counted.get(occurrence.id);
+    if (previous === occurrence.fingerprint) {
+      return this.groups.get(previous) ?? this.create(occurrence);
+    }
+    if (previous) {
+      const old = this.groups.get(previous);
+      if (old) {
+        old.count -= 1;
+        if (old.count <= 0) this.groups.delete(previous);
       }
-
-      // Add span name if not already present
-      if (!existing.affectedSpans.includes(occurrence.spanName)) {
-        existing.affectedSpans.push(occurrence.spanName);
-        if (existing.affectedSpans.length > this.options.maxAffectedSpans) {
-          existing.affectedSpans.shift();
-        }
-      }
-
-      return existing;
+    }
+    this.counted.set(occurrence.id, occurrence.fingerprint);
+    if (this.counted.size > MAX_REMEMBERED_TRACES) {
+      this.counted.delete(this.counted.keys().next().value as string);
     }
 
-    // Create new group
-    const newGroup: ErrorGroup = {
-      fingerprint,
-      type: occurrence.error.type,
-      message: occurrence.error.message,
-      stackTrace: this.normalizeStackTrace(occurrence.error.stackTrace),
+    const group = this.groups.get(occurrence.fingerprint);
+    if (!group) return this.create(occurrence);
+    group.count += 1;
+    // Batches arrive out of order: seen-times are bounds, not "latest write".
+    group.firstSeen = Math.min(group.firstSeen, occurrence.timestamp);
+    if (occurrence.timestamp >= group.lastSeen) {
+      group.lastSeen = occurrence.timestamp;
+      group.message = occurrence.message;
+      if (occurrence.stack) group.stackTrace = trimStack(occurrence.stack);
+    }
+    if (occurrence.traceId) {
+      pushBounded(
+        group.affectedTraces,
+        occurrence.traceId,
+        this.options.maxAffectedTraces,
+      );
+    }
+    if (occurrence.operation) {
+      pushBounded(
+        group.affectedSpans,
+        occurrence.operation,
+        this.options.maxAffectedSpans,
+      );
+    }
+    return group;
+  }
+
+  private create(occurrence: Occurrence): ErrorGroup {
+    if (this.groups.size >= this.options.maxGroups) this.evictOldest();
+    const attributes = Object.fromEntries(
+      Object.entries({
+        'user.id': occurrence.userId,
+        'account.id': occurrence.accountId,
+        'session.id': occurrence.sessionId,
+        'service.version': occurrence.version,
+        'code.function': occurrence.culprit,
+      }).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    );
+    const group: ErrorGroup = {
+      fingerprint: occurrence.fingerprint,
+      source: occurrence.source,
+      type: occurrence.type ?? DEFAULT_TYPE[occurrence.source],
+      message: occurrence.message,
+      stackTrace: occurrence.stack ? trimStack(occurrence.stack) : undefined,
       count: 1,
       firstSeen: occurrence.timestamp,
       lastSeen: occurrence.timestamp,
-      affectedTraces: [occurrence.traceId],
-      affectedSpans: [occurrence.spanName],
+      affectedTraces: occurrence.traceId ? [occurrence.traceId] : [],
+      affectedSpans: occurrence.operation ? [occurrence.operation] : [],
       service: occurrence.service,
-      attributes: occurrence.attributes,
+      ...(Object.keys(attributes).length > 0 ? { attributes } : {}),
     };
+    this.groups.set(occurrence.fingerprint, group);
+    return group;
+  }
 
-    // Evict oldest group if at capacity
-    if (this.errorGroups.size >= this.options.maxGroups) {
-      this.evictOldestGroup();
+  private evictOldest(): void {
+    let oldest: ErrorGroup | undefined;
+    for (const group of this.groups.values()) {
+      if (!oldest || group.lastSeen < oldest.lastSeen) oldest = group;
     }
-
-    this.errorGroups.set(fingerprint, newGroup);
-    return newGroup;
+    if (oldest) this.groups.delete(oldest.fingerprint);
   }
 
-  /**
-   * Extract errors from a trace and add them to the aggregator
-   */
-  addErrorsFromTrace(trace: TraceData): ErrorGroup[] {
-    const addedGroups: ErrorGroup[] = [];
-
-    for (const span of trace.spans) {
-      if (span.status.code === 'ERROR') {
-        const occurrence = this.extractErrorFromSpan(span, trace);
-        if (occurrence) {
-          const group = this.addError(occurrence);
-          addedGroups.push(group);
-        }
-      }
-    }
-
-    return addedGroups;
-  }
-
-  /**
-   * Extract error occurrence from a span
-   */
-  private extractErrorFromSpan(
-    span: SpanData,
-    trace: TraceData,
-  ): ErrorOccurrence | null {
-    // Try to get error info from span attributes or events
-    const exceptionEvent = span.events?.find((e) => e.name === 'exception');
-    const errorType =
-      stringAttr(span.attributes, 'exception.type', 'error.type') ??
-      stringAttr(exceptionEvent?.attributes, 'exception.type') ??
-      'Error';
-
-    // The exception event is where the OTel SDKs put the message; an empty
-    // one (an Error subclass that never set `message`) still has a type, and
-    // grouping under that beats a group called "Unknown error".
-    const errorMessage =
-      span.status.message ||
-      stringAttr(span.attributes, 'exception.message', 'error.message') ||
-      stringAttr(exceptionEvent?.attributes, 'exception.message') ||
-      errorType;
-
-    const stackTrace =
-      stringAttr(
-        span.attributes,
-        'exception.stacktrace',
-        'exception.stack',
-        // `autotel`'s structured errors write the stack here rather than
-        // emitting an `exception` event, so without this the Errors tab showed
-        // no frames for them at all.
-        'error.stack',
-      ) ?? this.extractStackFromEvents(span);
-
-    return {
-      traceId: trace.traceId,
-      spanId: span.spanId,
-      spanName: span.name,
-      service: trace.service,
-      timestamp: span.endTime,
-      error: {
-        type: errorType,
-        message: errorMessage,
-        stackTrace,
-        fingerprint:
-          stringAttr(span.attributes, 'exception.fingerprint') ??
-          stringAttr(exceptionEvent?.attributes, 'exception.fingerprint'),
-      },
-      attributes: this.extractRelevantAttributes(span.attributes),
-    };
-  }
-
-  /**
-   * Extract stack trace from span events (exception events)
-   */
-  private extractStackFromEvents(span: SpanData): string | undefined {
-    if (!span.events) return undefined;
-
-    const exceptionEvent = span.events.find((e) => e.name === 'exception');
-    if (exceptionEvent?.attributes) {
-      return stringAttr(
-        exceptionEvent.attributes,
-        'exception.stacktrace',
-        'exception.stack',
-      );
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Extract relevant attributes for error context
-   */
-  private extractRelevantAttributes(
-    attributes: SpanAttributes,
-  ): SpanAttributes {
-    const relevant: SpanAttributes = {};
-    const keepKeys = [
-      'http.method',
-      'http.url',
-      'http.route',
-      'http.response.status_code',
-      'http.status_code',
-      'db.system.name',
-      'db.system',
-      'db.operation.name',
-      'db.operation',
-      'rpc.method',
-      'rpc.service',
-      'code.function',
-      'code.filepath',
-      'user.id',
-      'operation.name',
-    ];
-
-    for (const key of keepKeys) {
-      if (key in attributes) {
-        relevant[key] = attributes[key];
-      }
-    }
-
-    return relevant;
-  }
-
-  /**
-   * Generate a fingerprint for error grouping
-   *
-   * Uses error type + first N stack frames (normalized)
-   */
-  private generateFingerprint(occurrence: ErrorOccurrence): string {
-    // The emitter had the real Error object; this only ever had the stack
-    // string it chose to serialize. Where it made the call, defer to it — that
-    // is what makes this tab group identically to whatever else is receiving
-    // the same spans.
-    if (occurrence.error.fingerprint) return occurrence.error.fingerprint;
-
-    const parts: string[] = [occurrence.error.type];
-
-    if (occurrence.error.stackTrace) {
-      const frames = this.extractStackFrames(
-        occurrence.error.stackTrace,
-        this.options.stackFramesForFingerprint,
-      );
-      parts.push(...frames);
-    } else {
-      // Fallback to error message if no stack trace
-      parts.push(this.normalizeMessage(occurrence.error.message));
-    }
-
-    // Simple hash function
-    return this.simpleHash(parts.join('|'));
-  }
-
-  /**
-   * Extract and normalize stack frames from a stack trace
-   */
-  private extractStackFrames(stackTrace: string, count: number): string[] {
-    const lines = stackTrace.split('\n');
-    const frames: string[] = [];
-
-    for (const line of lines) {
-      if (frames.length >= count) break;
-
-      // Match common stack trace patterns
-      const trimmed = line.trim();
-
-      // Node.js style: "at functionName (file:line:col)"
-      const nodeMatch = trimmed.match(/^at\s+(.+?)\s+\((.+?):(\d+):\d+\)$/);
-      if (nodeMatch) {
-        frames.push(`${nodeMatch[1]}@${this.normalizeFilePath(nodeMatch[2])}`);
-        continue;
-      }
-
-      // Anonymous function style: "at file:line:col"
-      const anonMatch = trimmed.match(/^at\s+(.+?):(\d+):\d+$/);
-      if (anonMatch) {
-        frames.push(`anonymous@${this.normalizeFilePath(anonMatch[1])}`);
-        continue;
-      }
-
-      // Browser style: "functionName@file:line:col"
-      const browserMatch = trimmed.match(/^(.+?)@(.+?):(\d+):\d+$/);
-      if (browserMatch) {
-        frames.push(
-          `${browserMatch[1]}@${this.normalizeFilePath(browserMatch[2])}`,
-        );
-        continue;
-      }
-    }
-
-    return frames;
-  }
-
-  /**
-   * Normalize file path by removing absolute path prefixes and node_modules paths
-   */
-  private normalizeFilePath(filePath: string): string {
-    // Remove node_modules paths (keep package name)
-    const nodeModulesMatch = filePath.match(
-      /node_modules\/(@[^/]+\/[^/]+|[^/]+)/,
-    );
-    if (nodeModulesMatch) {
-      return `[npm]/${nodeModulesMatch[1]}`;
-    }
-
-    // Remove common absolute path prefixes
-    return filePath
-      .replace(/^.*?\/src\//, 'src/')
-      .replace(/^.*?\/dist\//, 'dist/')
-      .replace(/^.*?\/lib\//, 'lib/')
-      .replace(/^file:\/\//, '');
-  }
-
-  /**
-   * Normalize error message by removing dynamic parts
-   */
-  private normalizeMessage(message: string): string {
-    return (
-      message
-        // Remove UUIDs
-        .replaceAll(
-          /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
-          '[UUID]',
-        )
-        // Remove hex IDs
-        .replaceAll(/\b[0-9a-f]{16,}\b/gi, '[ID]')
-        // Remove numbers. Deliberately unbounded: there is no word boundary
-        // between a digit and a letter, so `\b\d+\b` leaves `37ms` and `412ms`
-        // intact and two occurrences of one timeout never group. (The SQL
-        // normalisers elsewhere in the monorepo keep the bounded form on
-        // purpose — there it protects identifiers like `col1`. Message text has
-        // no such thing to protect.)
-        .replaceAll(/\d+/g, '[N]')
-        // Remove quoted strings
-        .replaceAll(/"[^"]*"/g, '"[STR]"')
-        .replaceAll(/'[^']*'/g, "'[STR]'")
-        // Truncate long messages
-        .slice(0, 200)
-    );
-  }
-
-  /**
-   * Normalize stack trace for display
-   */
-  private normalizeStackTrace(stackTrace?: string): string | undefined {
-    if (!stackTrace) return undefined;
-
-    const lines = stackTrace.split('\n').slice(0, 10); // Keep first 10 lines
-    return lines.join('\n');
-  }
-
-  /**
-   * Simple hash function for fingerprinting
-   */
-  private simpleHash(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash).toString(16).padStart(8, '0');
-  }
-
-  /**
-   * Evict the oldest error group
-   */
-  private evictOldestGroup(): void {
-    let oldest: { fingerprint: string; lastSeen: number } | null = null;
-
-    for (const [fingerprint, group] of this.errorGroups) {
-      if (!oldest || group.lastSeen < oldest.lastSeen) {
-        oldest = { fingerprint, lastSeen: group.lastSeen };
-      }
-    }
-
-    if (oldest) {
-      this.errorGroups.delete(oldest.fingerprint);
-    }
-  }
-
-  /**
-   * Get all error groups, sorted by most recent
-   */
+  /** All groups, most recent first. */
   getErrorGroups(): ErrorGroup[] {
-    return [...this.errorGroups.values()].sort(
-      (a, b) => b.lastSeen - a.lastSeen,
-    );
+    return [...this.groups.values()].sort((a, b) => b.lastSeen - a.lastSeen);
   }
 
-  /**
-   * Get error groups sorted by count (most frequent first)
-   */
+  /** All groups, most frequent first. */
   getErrorGroupsByFrequency(): ErrorGroup[] {
-    return [...this.errorGroups.values()].sort((a, b) => b.count - a.count);
+    return [...this.groups.values()].sort((a, b) => b.count - a.count);
   }
 
-  /**
-   * Get a specific error group by fingerprint
-   */
   getErrorGroup(fingerprint: string): ErrorGroup | undefined {
-    return this.errorGroups.get(fingerprint);
+    return this.groups.get(fingerprint);
   }
 
-  /**
-   * Get error groups for a specific service
-   */
   getErrorGroupsByService(service: string): ErrorGroup[] {
     return this.getErrorGroups().filter((g) => g.service === service);
   }
 
-  /**
-   * Get total error count across all groups
-   */
   getTotalErrorCount(): number {
     let total = 0;
-    for (const group of this.errorGroups.values()) {
-      total += group.count;
-    }
+    for (const group of this.groups.values()) total += group.count;
     return total;
   }
 
-  /**
-   * Get error statistics
-   */
   getStats(): ErrorStats {
-    const now = Date.now();
-    const oneHourAgo = now - 60 * 60 * 1000;
-
+    const oneHourAgo = Date.now() - 3_600_000;
     let recentErrors = 0;
     const typeCount = new Map<string, number>();
-
-    for (const group of this.errorGroups.values()) {
-      if (group.lastSeen > oneHourAgo) {
-        recentErrors += group.count;
-      }
-      typeCount.set(group.type, (typeCount.get(group.type) || 0) + group.count);
+    for (const group of this.groups.values()) {
+      if (group.lastSeen > oneHourAgo) recentErrors += group.count;
+      typeCount.set(group.type, (typeCount.get(group.type) ?? 0) + group.count);
     }
-
-    const topErrorTypes = [...typeCount.entries()]
-      .map(([type, count]) => ({ type, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-
     return {
-      totalGroups: this.errorGroups.size,
+      totalGroups: this.groups.size,
       totalErrors: this.getTotalErrorCount(),
       recentErrors,
-      topErrorTypes,
+      topErrorTypes: [...typeCount.entries()]
+        .map(([type, count]) => ({ type, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5),
     };
   }
 
-  /**
-   * Clear all error groups
-   */
   clear(): void {
-    this.errorGroups.clear();
+    this.groups.clear();
+    this.counted.clear();
   }
 
-  /**
-   * Clear old error groups (not seen in given time window)
-   */
+  /** Drop groups not seen within `maxAgeMs`. Returns how many went. */
   clearOlderThan(maxAgeMs: number): number {
     const cutoff = Date.now() - maxAgeMs;
     let cleared = 0;
-
-    for (const [fingerprint, group] of this.errorGroups) {
+    for (const [fingerprint, group] of this.groups) {
       if (group.lastSeen < cutoff) {
-        this.errorGroups.delete(fingerprint);
-        cleared++;
+        this.groups.delete(fingerprint);
+        cleared += 1;
       }
     }
-
     return cleared;
   }
+}
+
+/** Ten lines are enough to show where it threw; the issue store keeps it all. */
+function trimStack(stack: string): string {
+  return stack.split('\n').slice(0, 10).join('\n');
 }

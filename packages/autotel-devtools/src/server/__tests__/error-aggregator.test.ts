@@ -1,353 +1,266 @@
 import { describe, it, expect } from 'vitest';
 import { ErrorAggregator } from '../error-aggregator';
 import { makeTrace, makeErrorTrace, makeSpan } from './test-utils/stubs';
+import type { LogData, SpanData } from '../types';
+
+const failing = (overrides: Partial<SpanData> = {}) =>
+  makeSpan({ status: { code: 'ERROR', message: 'fail' }, ...overrides });
+
+const traceOf = (traceId: string, spans: SpanData[]) =>
+  makeTrace({
+    traceId,
+    status: 'ERROR',
+    rootSpan: spans[0],
+    spans: spans.map((s) => ({ ...s, traceId })),
+  });
+
+const exceptionEvent = (attributes: Record<string, string>) => ({
+  name: 'exception',
+  timestamp: 150,
+  attributes,
+});
 
 describe('ErrorAggregator', () => {
-  describe('addError', () => {
-    it('groups errors by fingerprint', () => {
-      const agg = new ErrorAggregator();
-      const occ = {
-        traceId: 't1',
-        spanId: 's1',
-        spanName: 'GET /api',
-        service: 'svc',
-        timestamp: Date.now(),
-        error: {
-          type: 'Error',
-          message: 'fail',
-          stackTrace: 'Error: fail\n  at foo (app.js:1:1)',
-        },
-      };
-
-      const group1 = agg.addError(occ);
-      expect(group1.count).toBe(1);
-      expect(group1.type).toBe('Error');
-      expect(group1.message).toBe('fail');
-
-      const group2 = agg.addError({ ...occ, traceId: 't2', spanId: 's2' });
-      expect(group2.fingerprint).toBe(group1.fingerprint);
-      expect(group2.count).toBe(2);
-    });
-
-    it('groups stackless errors that differ only in a number with a unit suffix', () => {
-      // With no stack trace the normalised message IS the fingerprint, so any
-      // run-specific value it fails to strip splits one bug into a new group
-      // per occurrence — and a duration is the most common such value.
-      const agg = new ErrorAggregator();
-      const base = {
-        spanName: 'GET /api',
-        service: 'svc',
-        timestamp: Date.now(),
-      };
-
-      const first = agg.addError({
-        ...base,
-        traceId: 't1',
-        spanId: 's1',
-        error: {
-          type: 'TimeoutError',
-          message: 'upstream timed out after 37ms',
-        },
-      });
-      const second = agg.addError({
-        ...base,
-        traceId: 't2',
-        spanId: 's2',
-        error: {
-          type: 'TimeoutError',
-          message: 'upstream timed out after 412ms',
-        },
-      });
-
-      expect(second.fingerprint).toBe(first.fingerprint);
-      expect(second.count).toBe(2);
-      expect(agg.getErrorGroups()).toHaveLength(1);
-    });
-
-    it('creates separate groups for different error types', () => {
-      const agg = new ErrorAggregator();
-
-      agg.addError({
-        traceId: 't1',
-        spanId: 's1',
-        spanName: 'GET /api',
-        service: 'svc',
-        timestamp: Date.now(),
-        error: { type: 'TypeError', message: 'cannot read property' },
-      });
-
-      const group = agg.addError({
-        traceId: 't2',
-        spanId: 's2',
-        spanName: 'GET /api',
-        service: 'svc',
-        timestamp: Date.now(),
-        error: { type: 'ReferenceError', message: 'x is not defined' },
-      });
-
-      expect(group.count).toBe(1);
-      expect(agg.getErrorGroups()).toHaveLength(2);
-    });
+  it('groups failures by the shared issue fingerprint', () => {
+    const agg = new ErrorAggregator();
+    const stack = 'Error: fail\n    at foo (/app/src/app.ts:1:1)';
+    const span = failing({ attributes: { 'exception.stacktrace': stack } });
+    const first = agg.addTrace(traceOf('t1', [span]))!;
+    const second = agg.addTrace(traceOf('t2', [span]))!;
+    expect(second.fingerprint).toBe(first.fingerprint);
+    expect(second.count).toBe(2);
+    expect(second.affectedTraces).toEqual(['t1', 't2']);
   });
 
-  describe('addErrorsFromTrace', () => {
-    it('extracts errors from trace with exception event', () => {
-      const agg = new ErrorAggregator();
-      const trace = makeErrorTrace('t1', 'something broke');
-
-      const groups = agg.addErrorsFromTrace(trace);
-      expect(groups.length).toBeGreaterThan(0);
-      expect(groups[0].type).toBe('Error');
-      expect(groups[0].message).toBe('something broke');
-    });
-
-    it('extracts errors from trace status without events', () => {
-      const agg = new ErrorAggregator();
-      const trace = makeTrace({
-        traceId: 't1',
-        status: 'ERROR',
-        rootSpan: {
-          traceId: 't1',
-          spanId: 's1',
-          name: 'GET /api',
-          kind: 'SERVER',
-          startTime: 100,
-          endTime: 200,
-          duration: 100,
-          attributes: {},
-          status: { code: 'ERROR', message: 'internal error' },
-          events: [],
-        },
+  it('groups stackless errors that differ only in a number with a unit suffix', () => {
+    // Without a stack the normalised message is the fingerprint, so durations
+    // have to normalise for repeats to share a group.
+    const agg = new ErrorAggregator();
+    const timeout = (ms: number) =>
+      failing({
+        status: { code: 'ERROR', message: `upstream timed out after ${ms}ms` },
+        attributes: { 'exception.type': 'TimeoutError' },
       });
+    agg.addTrace(traceOf('t1', [timeout(37)]));
+    agg.addTrace(traceOf('t2', [timeout(412)]));
+    expect(agg.getErrorGroups()).toHaveLength(1);
+  });
 
-      const groups = agg.addErrorsFromTrace(trace);
-      expect(groups).toHaveLength(1);
-      expect(groups[0].type).toBe('Error');
-      expect(groups[0].message).toBe('internal error');
-    });
+  it('keeps different error types apart', () => {
+    const agg = new ErrorAggregator();
+    agg.addTrace(
+      traceOf('t1', [
+        failing({ attributes: { 'exception.type': 'TypeError' } }),
+      ]),
+    );
+    agg.addTrace(
+      traceOf('t2', [
+        failing({ attributes: { 'exception.type': 'RangeError' } }),
+      ]),
+    );
+    expect(agg.getErrorGroups()).toHaveLength(2);
+  });
 
-    it('reads the message from the exception event when status has none', () => {
-      const agg = new ErrorAggregator();
-      const trace = makeTrace({
-        traceId: 't1',
-        status: 'ERROR',
-        rootSpan: makeSpan({
-          traceId: 't1',
-          status: { code: 'ERROR', message: '' },
-          events: [
-            {
-              name: 'exception',
-              timestamp: 150,
-              attributes: {
+  it('reads type and message from the exception event, falling back sensibly', () => {
+    const agg = new ErrorAggregator();
+    expect(agg.addTrace(makeErrorTrace('t1', 'something broke'))).toMatchObject(
+      {
+        type: 'Error',
+        message: 'something broke',
+        source: 'exception',
+      },
+    );
+    expect(
+      agg.addTrace(
+        traceOf('t2', [
+          failing({ status: { code: 'ERROR', message: 'internal error' } }),
+        ]),
+      ),
+    ).toMatchObject({ type: 'Error', message: 'internal error' });
+    expect(
+      agg.addTrace(
+        traceOf('t3', [
+          failing({
+            status: { code: 'ERROR', message: '' },
+            events: [
+              exceptionEvent({
                 'exception.type': 'TypeError',
                 'exception.message': 'x is not a function',
-              },
-            },
-          ],
-        }),
-      });
-
-      const [group] = agg.addErrorsFromTrace(trace);
-      expect(group.type).toBe('TypeError');
-      expect(group.message).toBe('x is not a function');
-    });
-
-    it('falls back to the type, not "Unknown error", when the message is empty', () => {
-      // A TaggedError whose detail lives in another prop exports an exception
-      // event with a type and an empty message.
-      const agg = new ErrorAggregator();
-      const trace = makeTrace({
-        traceId: 't1',
-        status: 'ERROR',
-        rootSpan: makeSpan({
-          traceId: 't1',
-          status: { code: 'ERROR', message: '' },
-          events: [
-            {
-              name: 'exception',
-              timestamp: 150,
-              attributes: {
+              }),
+            ],
+          }),
+        ]),
+      ),
+    ).toMatchObject({ type: 'TypeError', message: 'x is not a function' });
+    // An empty message falls back to the type, not "Unknown error".
+    expect(
+      agg.addTrace(
+        traceOf('t4', [
+          failing({
+            status: { code: 'ERROR', message: '' },
+            events: [
+              exceptionEvent({
                 'exception.type': 'ValidationError',
                 'exception.message': '',
-              },
-            },
-          ],
-        }),
-      });
-
-      const [group] = agg.addErrorsFromTrace(trace);
-      expect(group.type).toBe('ValidationError');
-      expect(group.message).toBe('ValidationError');
-    });
-
-    it('returns empty array for successful trace', () => {
-      const agg = new ErrorAggregator();
-      const trace = makeTrace({ traceId: 't1' });
-
-      const groups = agg.addErrorsFromTrace(trace);
-      expect(groups).toHaveLength(0);
-    });
+              }),
+            ],
+          }),
+        ]),
+      ),
+    ).toMatchObject({ type: 'ValidationError', message: 'ValidationError' });
+    expect(agg.addTrace(makeTrace({ traceId: 'ok' }))).toBeUndefined();
   });
 
-  describe('maxGroups limit', () => {
-    it('respects maxGroups limit', () => {
-      const agg = new ErrorAggregator({ maxGroups: 2 });
-
-      for (let i = 0; i < 5; i++) {
-        agg.addError({
-          traceId: `t${i}`,
-          spanId: `s${i}`,
-          spanName: 'test',
-          service: 'svc',
-          timestamp: Date.now(),
-          error: {
-            type: `Error${i}`,
-            message: `msg${i}`,
-            stackTrace: `Error${i}: msg${i}\n  at unique${i} (file${i}.js:1:1)`,
-          },
-        });
-      }
-
-      expect(agg.getErrorGroups().length).toBeLessThanOrEqual(2);
-    });
-  });
-
-  describe('clear', () => {
-    it('clears all error groups', () => {
-      const agg = new ErrorAggregator();
-      agg.addError({
-        traceId: 't1',
-        spanId: 's1',
-        spanName: 'test',
-        service: 'svc',
-        timestamp: Date.now(),
-        error: { type: 'Error', message: 'fail' },
-      });
-
-      expect(agg.getErrorGroups().length).toBe(1);
-      agg.clear();
-      expect(agg.getErrorGroups().length).toBe(0);
-    });
-  });
-
-  describe('getErrorGroups', () => {
-    it('returns groups sorted by last seen time', () => {
-      const agg = new ErrorAggregator();
-
-      agg.addError({
-        traceId: 't1',
-        spanId: 's1',
-        spanName: 'test',
-        service: 'svc',
-        timestamp: 100,
-        error: { type: 'Error', message: 'first' },
-      });
-
-      agg.addError({
-        traceId: 't2',
-        spanId: 's2',
-        spanName: 'test',
-        service: 'svc',
-        timestamp: 200,
-        error: { type: 'Error', message: 'second' },
-      });
-
-      const groups = agg.getErrorGroups();
-      expect(groups).toHaveLength(2);
-    });
-  });
-});
-
-describe('stack traces written as error.stack', () => {
-  // `autotel`'s structured errors put the stack on the span as `error.stack`
-  // (packages/autotel/src/structured-error.ts), not as an `exception` event.
-  // Without this in the fallback chain the Errors tab has no frames to show,
-  // and the source peek has nothing to open.
-  it('picks up error.stack when there is no exception event', () => {
+  it('shows what the Issues store records, not only failed spans', () => {
     const agg = new ErrorAggregator();
-    const trace = makeTrace({
-      traceId: 't-structured',
-      status: 'ERROR',
-      rootSpan: {
-        traceId: 't-structured',
-        spanId: 's1',
-        name: 'POST /quote',
-        kind: 'SERVER',
-        startTime: 100,
-        endTime: 200,
-        duration: 100,
+    const ok = (traceId: string, attributes: Record<string, string>) =>
+      traceOf(traceId, [makeSpan({ events: [exceptionEvent(attributes)] })]);
+    agg.addTrace(
+      ok('h', {
+        'exception.type': 'Error',
+        'exception.message': 'fallback used',
+      }),
+    );
+    agg.addTrace(
+      ok('f', {
+        'exception.type': 'autotel.LogFlood',
+        'exception.message': '"x" logged 100+ times in one invocation',
+      }),
+    );
+    agg.addTrace(
+      ok('a', {
+        'exception.type': 'autotel.RunawayAlarm',
+        'exception.message': 'alarm loop',
+      }),
+    );
+    agg.addTrace(
+      traceOf('5', [
+        makeSpan({ attributes: { 'http.response.status_code': 503 } }),
+      ]),
+    );
+    const log: LogData = {
+      id: 'l1',
+      body: 'queue consumer crashed',
+      timestamp: 300,
+      severityText: 'ERROR',
+      severityNumber: 17,
+      resourceName: 'worker',
+    };
+    agg.addLog(log);
+    agg.addLog({ ...log, id: 'l2', traceId: 'in-a-trace' }); // the trace is the failure
+    expect(
+      agg
+        .getErrorGroups()
+        .map((g) => [g.source, g.type])
+        .sort(),
+    ).toEqual([
+      ['error_log', 'Error log'],
+      ['handled_exception', 'Error'],
+      ['http_5xx', 'HTTP 5xx'],
+      ['log_flood', 'autotel.LogFlood'],
+      ['runaway_alarm', 'autotel.RunawayAlarm'],
+    ]);
+  });
+
+  it('counts a trace once as it grows, and moves it when the throw site arrives', () => {
+    const agg = new ErrorAggregator();
+    const root = makeSpan({
+      spanId: 'root',
+      attributes: { 'http.response.status_code': 500 },
+    });
+    agg.addTrace(traceOf('t1', [root]));
+    agg.addTrace(traceOf('t1', [root])); // exporter retry
+    expect(agg.getErrorGroups()).toMatchObject([
+      { source: 'http_5xx', count: 1 },
+    ]);
+
+    const leaf = failing({
+      spanId: 'leaf',
+      parentSpanId: 'root',
+      attributes: {
+        'exception.type': 'TypeError',
+        'exception.stacktrace':
+          'TypeError: nope\n    at charge (/app/src/pay.ts:3:9)',
+      },
+    });
+    agg.addTrace(traceOf('t1', [root, leaf]));
+    expect(agg.getErrorGroups()).toMatchObject([
+      { source: 'exception', type: 'TypeError', count: 1 },
+    ]);
+  });
+
+  it('counts one failure per trace, not one per span it unwound through', () => {
+    const agg = new ErrorAggregator();
+    const stack = 'TypeError: nope\n    at charge (/app/src/pay.ts:3:9)';
+    const at = (spanId: string, parentSpanId?: string) =>
+      failing({
+        spanId,
+        parentSpanId,
         attributes: {
-          'error.type': 'ValidationError',
-          'error.message': 'shipment is required',
-          'error.stack':
-            'ValidationError: shipment is required\n    at validate (/proj/src/validate.ts:12:9)',
+          'exception.type': 'TypeError',
+          'exception.stacktrace': stack,
         },
-        status: { code: 'ERROR', message: 'shipment is required' },
-        events: [],
-      },
-    });
-
-    const [group] = agg.addErrorsFromTrace(trace);
-    expect(group.stackTrace).toContain('/proj/src/validate.ts:12:9');
-  });
-});
-
-describe('exception.fingerprint from the emitting SDK', () => {
-  // `exceptionFingerprint()` in autotel (and autotel-web's error tracking)
-  // stamps the grouping key on the span. Honouring it is what makes this tab
-  // group identically to every other backend receiving the same spans.
-  const base = {
-    spanName: 'GET /api',
-    service: 'svc',
-    timestamp: Date.now(),
-  };
-
-  it('groups by the emitted fingerprint even when the stacks differ', () => {
-    const agg = new ErrorAggregator();
-
-    const first = agg.addError({
-      ...base,
-      traceId: 't1',
-      spanId: 's1',
-      error: {
-        type: 'Error',
-        message: 'fail',
-        stackTrace: 'Error: fail\n  at foo (/a/src/one.ts:1:1)',
-        fingerprint: 'sdk-decided',
-      },
-    });
-    const second = agg.addError({
-      ...base,
-      traceId: 't2',
-      spanId: 's2',
-      error: {
-        type: 'Error',
-        message: 'fail',
-        stackTrace: 'Error: fail\n  at bar (/b/src/two.ts:9:9)',
-        fingerprint: 'sdk-decided',
-      },
-    });
-
-    expect(first.fingerprint).toBe('sdk-decided');
-    expect(second.fingerprint).toBe('sdk-decided');
-    expect(second.count).toBe(2);
+      });
+    for (const traceId of ['t1', 't2']) {
+      agg.addTrace(
+        traceOf(traceId, [at('root'), at('mid', 'root'), at('leaf', 'mid')]),
+      );
+    }
+    expect(agg.getErrorGroups()).toMatchObject([{ count: 2 }]);
   });
 
-  it('still derives one for spans that arrive without it', () => {
+  it('keeps first/last seen as bounds when batches arrive out of order', () => {
     const agg = new ErrorAggregator();
+    agg.addTrace(traceOf('new', [failing({ startTime: 2000 })]));
+    const group = agg.addTrace(traceOf('old', [failing({ startTime: 1000 })]))!;
+    expect(group.firstSeen).toBe(1000);
+    expect(group.lastSeen).toBe(2000);
+  });
 
-    const group = agg.addError({
-      ...base,
-      traceId: 't3',
-      spanId: 's3',
-      error: {
-        type: 'Error',
-        message: 'fail',
-        stackTrace: 'Error: fail\n  at foo (/a/src/one.ts:1:1)',
-      },
-    });
+  it('groups by an emitted exception.fingerprint even when stacks differ', () => {
+    const agg = new ErrorAggregator();
+    const withStack = (traceId: string, line: number) =>
+      traceOf(traceId, [
+        failing({
+          attributes: {
+            'exception.fingerprint': 'sdk-decided',
+            'exception.stacktrace': `Error: x\n    at f${line} (/app/src/a.ts:${line}:1)`,
+          },
+        }),
+      ]);
+    agg.addTrace(withStack('t1', 1));
+    agg.addTrace(withStack('t2', 2));
+    expect(agg.getErrorGroups()).toMatchObject([
+      { fingerprint: 'sdk-decided', count: 2 },
+    ]);
+  });
 
-    expect(group.fingerprint).toBeTruthy();
-    expect(group.fingerprint).not.toBe('sdk-decided');
+  it('reads a stack written as error.stack', () => {
+    const agg = new ErrorAggregator();
+    const group = agg.addTrace(
+      traceOf('t1', [
+        failing({
+          attributes: {
+            'error.stack': 'Error: x\n    at boom (/app/src/b.ts:2:1)',
+          },
+        }),
+      ]),
+    )!;
+    expect(group.stackTrace).toContain('at boom');
+    expect(group.attributes?.['code.function']).toBe('boom (b.ts)');
+  });
+
+  it('evicts the least recently seen group past maxGroups, and clears', () => {
+    const agg = new ErrorAggregator({ maxGroups: 2 });
+    for (const [i, type] of ['A', 'B', 'C'].entries()) {
+      agg.addTrace(
+        traceOf(`t${i}`, [
+          failing({ startTime: i, attributes: { 'exception.type': type } }),
+        ]),
+      );
+    }
+    expect(agg.getErrorGroups().map((g) => g.type)).toEqual(['C', 'B']);
+    agg.clear();
+    expect(agg.getErrorGroups()).toEqual([]);
   });
 });

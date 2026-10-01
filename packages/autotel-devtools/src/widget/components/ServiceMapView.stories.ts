@@ -236,6 +236,7 @@ export const WithLogsAndErrors: Story = {
       errors: [
         {
           fingerprint: 'fp1',
+          source: 'exception',
           type: 'Error',
           message: 'Something failed',
           count: 2,

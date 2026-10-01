@@ -29,6 +29,13 @@ pnpm test:dist          # Built ESM smoke test + widget raw/gzip budgets
 - `./server`: `DevtoolsServer`, exporters, OTLP parsing (`parseOtlpTraces`, `parseOtlpLogs`), HTTP routes (`attachDevtoolsRoutes`, `createDevtoolsHttpServer`), telemetry limits (`resolveTelemetryLimits`, `appendWithLimit`), `DevtoolsStore`
 - `./exporter`: `DevtoolsSpanExporter` (standalone)
 
+## Issues
+
+- **`src/issues/` is the one definition of an issue** (fingerprint, occurrence rules, grouping, automation triggers, destination payloads), browser-safe and exported as `autotel-devtools/issues`. The Errors-tab aggregator, the issue engine and autotel-mcp all use it; never add a second fingerprint.
+- `src/server/issue-engine.ts` runs ingest → occurrence → `IssueStore` (`store/issues.ts`, additive tables on the same sqlite file) → automations. Stacks are source-mapped in place (`sourcemap.ts`, `node:module` SourceMap, reads only inside configured roots) before anything stores or shows them.
+- Routes live in `issues-http.ts` behind the same origin guard; destination credentials never leave the server (`redactDestination`, redacted placeholders keep the stored value on edit).
+- Triage UI (`IssueActions`, `IssueAutomations`) comes through `src/widget/issue-panels.ts`, swapped for `.lean.ts` in the embedded bundle to stay inside its size budget.
+
 ## Key Files
 
 - `src/index.ts`: Main entry, `createDevtools()` factory

@@ -35,6 +35,8 @@ export function buildCapabilitiesDocument(
           'service_map',
           'get_llm_usage',
           'find_errors',
+          'list_issues',
+          'get_issue',
           'list_llm_models',
           'get_llm_model_stats',
           'get_llm_expensive_traces',

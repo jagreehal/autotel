@@ -133,8 +133,11 @@ vi.mock('node:http', () => {
 
 vi.mock('autotel-devtools/server', () => {
   class ErrorAggregator {
-    addErrorsFromTrace() {
-      return [];
+    addTrace() {
+      return undefined;
+    }
+    addLog() {
+      return undefined;
     }
     getErrorGroupsByFrequency() {
       return [];

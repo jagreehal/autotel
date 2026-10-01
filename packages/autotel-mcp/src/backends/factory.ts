@@ -31,6 +31,15 @@ export async function createBackend(config: AppConfig): Promise<BackendHandle> {
     case 'collector': {
       const collector = new CollectorBackend({
         port: config.collectorPort,
+        // The receiver binds to loopback, so frames from this machine's
+        // builds map through the maps beside them; production maps go in
+        // AUTOTEL_SOURCEMAPS, matched by bundle file name.
+        sourceMaps: {
+          roots: [process.cwd()],
+          ...(process.env.AUTOTEL_SOURCEMAPS
+            ? { mapsDir: process.env.AUTOTEL_SOURCEMAPS }
+            : {}),
+        },
         maxTraces: config.maxTraces,
         retentionMs: config.retentionMs!,
         persist: config.persist,

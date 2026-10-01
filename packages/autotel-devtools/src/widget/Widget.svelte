@@ -1,6 +1,7 @@
 <script lang="ts">
   import { DevtoolsWebSocketClient } from './websocket';
   import { configureSourceLoader, httpBaseFromWsUrl } from './source-client';
+  import { configureIssuesClient } from './issues-client';
   import {
     updateWidgetData,
     loadPersistedState,
@@ -169,6 +170,7 @@
     // The receiver that serves telemetry is also the only thing that can read
     // source off disk, so the source loader is bound to the same URL.
     configureSourceLoader(httpBaseFromWsUrl(wsUrl));
+    configureIssuesClient(httpBaseFromWsUrl(wsUrl));
 
     const wsClient = new DevtoolsWebSocketClient(wsUrl);
     connectionStatusSignal.value = 'connecting';
