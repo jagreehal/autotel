@@ -112,13 +112,14 @@ export function recordValidationMismatch(mismatch: ValidationMismatch): void {
 
     const span = trace.getActiveSpan();
     if (span) {
-      const attributes: Attributes = {};
-      attributes[VALIDATION_ATTR.name] = mismatch.name;
-      attributes[VALIDATION_ATTR.boundary] = mismatch.boundary;
-      attributes[VALIDATION_ATTR.mode] = mismatch.mode;
-      attributes[VALIDATION_ATTR.issueCount] = mismatch.issues.length;
-      attributes[VALIDATION_ATTR.issuePaths] = truncate(paths);
-      attributes[VALIDATION_ATTR.issueCodes] = truncate(codes);
+      const attributes: Attributes = {
+        [VALIDATION_ATTR.name]: mismatch.name,
+        [VALIDATION_ATTR.boundary]: mismatch.boundary,
+        [VALIDATION_ATTR.mode]: mismatch.mode,
+        [VALIDATION_ATTR.issueCount]: mismatch.issues.length,
+        [VALIDATION_ATTR.issuePaths]: truncate(paths),
+        [VALIDATION_ATTR.issueCodes]: truncate(codes),
+      };
       if (mismatch.hash) attributes[VALIDATION_ATTR.hash] = mismatch.hash;
       if (mismatch.severity) {
         attributes[VALIDATION_ATTR.severity] = mismatch.severity;

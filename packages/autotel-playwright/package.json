@@ -36,14 +36,14 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src",
+    "lint": "oxlint -c oxlint.json --disable-nested-config src",
     "clean": "rimraf dist"
   },
   "dependencies": {
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "@playwright/test": ">=1.62.0"
+    "@playwright/test": ">=1.63.0"
   },
   "peerDependenciesMeta": {
     "@playwright/test": {
@@ -51,11 +51,11 @@
     }
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.0",
-    "@types/node": "^26.1.2",
-    "tsdown": "^0.22.14",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.3",
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
   },
   "repository": {
     "type": "git",

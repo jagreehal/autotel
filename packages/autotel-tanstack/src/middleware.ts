@@ -447,10 +447,12 @@ export function functionTracingMiddleware<TContext = unknown>(
  */
 export function createTracingServerHandler<TContext = unknown>(
   config?: TracingMiddlewareConfig,
+  // oxlint-disable-next-line typescript/no-explicit-any -- Adapter for TanStack's createMiddleware().server(), whose opts/return types vary by middleware kind and version; kept loose so it is assignable wherever TanStack expects a server handler.
 ): (opts: any) => any {
   const handler = createTracingMiddleware<TContext>(config);
 
   // Adapt TanStack's signature to our handler
+  // oxlint-disable-next-line typescript/no-explicit-any -- Same TanStack adapter boundary as the return type above.
   return async (opts: any) => {
     return handler(opts);
   };

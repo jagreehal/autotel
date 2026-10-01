@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
+// ts-morph's own compiler API: the same parser the codemod runs on.
+import { ts } from 'ts-morph';
 import { transformFile } from './codemod-trace';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

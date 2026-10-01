@@ -10,12 +10,12 @@
     "clean": "rm -rf dist .astro"
   },
   "dependencies": {
-    "@astrojs/preact": "^6.0.2",
-    "@astrojs/starlight": "^0.41.5",
+    "@astrojs/preact": "^6.0.5",
+    "@astrojs/starlight": "^0.42.4",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
-    "astro": "^7.1.5",
-    "preact": "^10.29.7",
-    "sharp": "^0.35.3"
+    "astro": "^7.3.5",
+    "preact": "^10.29.8",
+    "sharp": "^0.35.5"
   }
 }

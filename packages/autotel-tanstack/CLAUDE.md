@@ -85,7 +85,8 @@ export const getUser = traceServerFn(
 );
 
 export const Route = createFileRoute('/users/$userId')({
-  loader: traceLoader(async ({ params }) => { ... }),
+  // Pass ctx through so TanStack keeps typing params, search and context
+  loader: (ctx) => traceLoader(ctx, async ({ params }) => { ... }),
 });
 ```
 

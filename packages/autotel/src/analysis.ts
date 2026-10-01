@@ -239,7 +239,7 @@ export function bucket(value: number, boundaries: readonly number[]): string {
   if (!Number.isFinite(value) || boundaries.length === 0) return 'unknown';
   // Sorted, so a caller who lists boundaries out of order still gets the
   // ranges they meant rather than a label that overlaps its neighbours.
-  const ordered = [...boundaries].sort((a, b) => a - b);
+  const ordered = boundaries.toSorted((a, b) => a - b);
   for (const [index, boundary] of ordered.entries()) {
     if (value < boundary) {
       const lower = ordered[index - 1];

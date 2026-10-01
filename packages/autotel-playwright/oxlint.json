@@ -1,0 +1,48 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "extends": ["../../tools/oxlint/base.json"],
+  "plugins": ["typescript", "unicorn"],
+  "categories": {
+    "correctness": "off"
+  },
+  "options": {
+    "typeAware": true
+  },
+  "env": {
+    "builtin": true
+  },
+  "ignorePatterns": ["dist/**"],
+  "rules": {
+    "no-unused-vars": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-this-alias": "error"
+  },
+  "overrides": [
+    {
+      "files": ["src/**/*.ts"],
+      "rules": {
+        "no-unused-vars": [
+          "error",
+          {
+            "argsIgnorePattern": "^_"
+          }
+        ],
+        "typescript/no-explicit-any": "warn",
+        "typescript/consistent-type-exports": "error"
+      }
+    },
+    {
+      "files": ["src/**/*.test.ts", "src/**/*.integration.test.ts"],
+      "rules": {
+        "no-unused-vars": [
+          "error",
+          {
+            "argsIgnorePattern": "^_"
+          }
+        ],
+        "typescript/no-explicit-any": "off",
+        "typescript/consistent-type-exports": "off"
+      }
+    }
+  ]
+}

@@ -1,3 +1,6 @@
+// Each test needs a fresh module (vi.resetModules()) for the process-wide
+// handler state, which only a dynamic import provides.
+/* eslint-disable eslint-js/no-restricted-syntax */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { returnsInstead, sdkDouble } from './testing/doubles.js';
 import { toError } from './values';
@@ -68,7 +71,7 @@ describe('process handler lifecycle', () => {
     const sdk = {
       start: vi.fn(),
       shutdown: vi.fn().mockResolvedValue(undefined),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const sigtermListeners = process.listenerCount('SIGTERM');
     const sigintListeners = process.listenerCount('SIGINT');
@@ -98,7 +101,7 @@ describe('process handler lifecycle', () => {
     const sdk = {
       start: vi.fn(),
       shutdown: vi.fn().mockResolvedValue(undefined),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const sigtermListeners = process.listenerCount('SIGTERM');
     const uncaughtExceptionListeners =
@@ -124,7 +127,7 @@ describe('process handler lifecycle', () => {
     const sdk = {
       start: vi.fn(),
       shutdown: vi.fn().mockResolvedValue(undefined),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const exit = vi
       .spyOn(process, 'exit')
@@ -158,7 +161,7 @@ describe('process handler lifecycle', () => {
     const sdk = {
       start: vi.fn(),
       shutdown: vi.fn(() => new Promise<void>(() => {})),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const exit = vi
       .spyOn(process, 'exit')
@@ -188,7 +191,7 @@ describe('process handler lifecycle', () => {
     const sdk = {
       start: vi.fn(),
       shutdown: vi.fn().mockResolvedValue(undefined),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const exit = vi
       .spyOn(process, 'exit')
@@ -236,7 +239,7 @@ describe('process handler lifecycle', () => {
     const sdk = {
       start: vi.fn(),
       shutdown: vi.fn().mockResolvedValue(undefined),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const exit = vi
       .spyOn(process, 'exit')
@@ -282,7 +285,7 @@ describe('process handler lifecycle', () => {
     const sdk = {
       start: vi.fn(),
       shutdown: vi.fn().mockResolvedValue(undefined),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const sigtermListeners = process.listenerCount('SIGTERM');
     const uncaughtExceptionListeners =
@@ -315,7 +318,7 @@ describe('process handler lifecycle', () => {
     const sdk = {
       start: vi.fn(),
       shutdown: vi.fn().mockResolvedValue(undefined),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const sigtermListeners = process.listenerCount('SIGTERM');
     const uncaughtExceptionListeners =
@@ -348,7 +351,7 @@ describe('process handler lifecycle', () => {
     const sdk = {
       start: vi.fn(),
       shutdown: vi.fn().mockResolvedValue(undefined),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const sigtermListeners = process.listenerCount('SIGTERM');
     const uncaughtExceptionListeners =
@@ -378,7 +381,7 @@ describe('process handler lifecycle', () => {
     const sdk = {
       start: vi.fn(),
       shutdown: vi.fn().mockResolvedValue(undefined),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const exit = vi
       .spyOn(process, 'exit')
@@ -422,7 +425,7 @@ describe('process handler lifecycle', () => {
           cause: { code: 'ECONNREFUSED' },
         }),
       ),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const { init, shutdown } = await import('./index');
 
@@ -443,7 +446,7 @@ describe('process handler lifecycle', () => {
       shutdown: vi
         .fn()
         .mockRejectedValue(new Error('exporter is misconfigured')),
-      getTracerProvider: () => undefined,
+      getTracerProvider: () => {},
     };
     const { init, shutdown } = await import('./index');
 

@@ -364,10 +364,8 @@ describe('extractBatchLineage', () => {
 
   it('should use default maxLinks of 128', () => {
     // Create batch with more items than default limit
-    const batch = Array.from({ length: 200 }).fill({ headers: {} });
-    const result = extractBatchLineage(
-      batch as Array<{ headers: Record<string, string> }>,
-    );
+    const batch = Array.from({ length: 200 }, () => ({ headers: {} }));
+    const result = extractBatchLineage(batch);
     // Without valid trace contexts, links will be empty regardless
     expect(result.links.length).toBeLessThanOrEqual(128);
   });

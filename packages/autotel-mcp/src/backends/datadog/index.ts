@@ -428,7 +428,7 @@ function datadogTags(
   return Object.fromEntries(
     tags.map((tag) => {
       const separator = tag.indexOf(':');
-      return separator < 0
+      return separator === -1
         ? [tag, true]
         : [tag.slice(0, separator), tag.slice(separator + 1)];
     }),

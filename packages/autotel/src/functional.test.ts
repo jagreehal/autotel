@@ -149,6 +149,7 @@ describe('Functional API', () => {
       // The lazy builder drizzle, knex and Prisma return: a thenable that is
       // not a native Promise, and does no work until something awaits it.
       const builder = {
+        // oxlint-disable-next-line unicorn/no-thenable -- deliberately a non-Promise thenable, to test thenable handling
         then(onFulfilled: (value: string) => unknown) {
           return Promise.resolve().then(() => {
             span('child.query', () => 'rows');
@@ -166,6 +167,7 @@ describe('Functional API', () => {
 
     it('resolves to the thenable value', async () => {
       const builder = {
+        // oxlint-disable-next-line unicorn/no-thenable -- deliberately a non-Promise thenable, to test thenable handling
         then: (onFulfilled: (value: string) => unknown) =>
           Promise.resolve().then(() => onFulfilled('rows')),
       };
@@ -176,6 +178,7 @@ describe('Functional API', () => {
     it('marks the span failed when a thenable rejects', async () => {
       const collector = createTraceCollector();
       const failing = {
+        // oxlint-disable-next-line unicorn/no-thenable -- deliberately a non-Promise thenable, to test thenable handling
         then: (
           _onFulfilled: (value: never) => unknown,
           onRejected?: (reason: unknown) => unknown,
@@ -195,6 +198,7 @@ describe('Functional API', () => {
     it('reads a thenable getter once, like native promise assimilation', async () => {
       let reads = 0;
       const thenable = {
+        // oxlint-disable-next-line unicorn/no-thenable -- deliberately a non-Promise thenable, to test thenable handling
         get then() {
           reads++;
           return (onFulfilled: (value: string) => unknown) =>
@@ -212,6 +216,7 @@ describe('Functional API', () => {
   describe('thenable results across the wrappers', () => {
     // Same lazy-builder shape as the span() tests: an ORM query builder.
     const lazyBuilder = (onRun: () => void) => ({
+      // oxlint-disable-next-line unicorn/no-thenable -- deliberately a non-Promise thenable, to test thenable handling
       then(onFulfilled: (value: string) => unknown) {
         return Promise.resolve().then(() => {
           onRun();

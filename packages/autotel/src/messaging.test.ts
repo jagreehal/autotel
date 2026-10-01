@@ -395,6 +395,8 @@ describe('Messaging Helpers', () => {
         headersFrom,
       };
 
+      expect(config.headersFrom).toBe(headersFrom);
+
       const headers = headersFrom({
         MessageAttributes: {
           traceparent: { StringValue: '00-abc-def-01' },

@@ -58,8 +58,8 @@ export const GEN_AI_DURATION_BUCKETS_SECONDS: readonly number[] = Object.freeze(
  * published advice — tiny prompts through million-token context windows.
  */
 export const GEN_AI_TOKEN_USAGE_BUCKETS: readonly number[] = Object.freeze([
-  1, 4, 16, 64, 256, 1_024, 4_096, 16_384, 65_536, 262_144, 1_048_576,
-  4_194_304, 16_777_216, 67_108_864,
+  1, 4, 16, 64, 256, 1024, 4096, 16_384, 65_536, 262_144, 1_048_576, 4_194_304,
+  16_777_216, 67_108_864,
 ]);
 
 /**
@@ -67,7 +67,7 @@ export const GEN_AI_TOKEN_USAGE_BUCKETS: readonly number[] = Object.freeze([
  * small call) up to tens of dollars (batch jobs, Opus/o-series runs).
  */
 export const GEN_AI_COST_USD_BUCKETS: readonly number[] = Object.freeze([
-  0.000_01, 0.000_1, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50,
+  0.00001, 0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50,
 ]);
 
 /** Histogram bucket family. */

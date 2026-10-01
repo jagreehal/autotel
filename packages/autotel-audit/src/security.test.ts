@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { hasTracerProvider, otelTrace } from 'autotel';
 import type { SecurityAttributeValue } from './security.js';
-import type { AuditContext } from './index.js';
+import { configureAudit, type AuditContext } from './index.js';
 import {
   hashIdentifier,
   securityEvent,
@@ -45,6 +46,8 @@ vi.mock('autotel', () => ({
   getRequestLoggerSafe: vi.fn(() => logger),
   createNoopRequestLogger: vi.fn(() => logger),
   getTraceContext: vi.fn(() => mockCtx),
+  isInitialized: vi.fn(() => false),
+  hasTracerProvider: vi.fn(() => true),
   otelTrace: {
     getActiveSpan: vi.fn(() => ({
       setAttribute,
@@ -359,5 +362,62 @@ describe('hashIdentifier', () => {
     expect(digest).toHaveLength(16);
     expect(digest).not.toContain('user');
     expect(digest).toMatch(/^[0-9a-f]+$/);
+  });
+});
+
+describe('securityEvent default onMissingContext', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(otelTrace.getActiveSpan).mockReturnValue(undefined);
+  });
+  afterEach(() => {
+    vi.mocked(otelTrace.getActiveSpan).mockReset();
+    vi.mocked(hasTracerProvider).mockReturnValue(true);
+    configureAudit({ onMissingContext: undefined });
+    vi.restoreAllMocks();
+  });
+
+  const event = (name: string) =>
+    ({ name, category: 'authentication', outcome: 'failure' }) as const;
+  const telemetryOff = () =>
+    vi.mocked(hasTracerProvider).mockReturnValue(false);
+  const spyWarn = () => vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  it('is silent when telemetry is off (no init, no provider)', () => {
+    telemetryOff();
+    const warn = spyWarn();
+    securityEvent(event('off.silent'));
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('warns once per event when a provider is registered but no span is active', () => {
+    const warn = spyWarn();
+    securityEvent(event('on.outside'));
+    securityEvent(event('on.outside'));
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('still warns with an explicit "warn" when telemetry is off', () => {
+    telemetryOff();
+    const warn = spyWarn();
+    securityEvent(event('off.explicit-warn'), { onMissingContext: 'warn' });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('still throws with an explicit "throw" when telemetry is off', () => {
+    telemetryOff();
+    expect(() =>
+      securityEvent(event('off.throw'), { onMissingContext: 'throw' }),
+    ).toThrow('No active trace context');
+  });
+
+  it('applies the configureAudit default, overridden per call', () => {
+    configureAudit({ onMissingContext: 'throw' });
+    expect(() => securityEvent(event('cfg.throw'))).toThrow(
+      'No active trace context',
+    );
+    expect(() =>
+      securityEvent(event('cfg.override'), { onMissingContext: 'skip' }),
+    ).not.toThrow();
   });
 });

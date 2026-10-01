@@ -435,7 +435,7 @@ describe('runtime environment (mcp / plugin / hook events)', () => {
         server_name: 'plugin:context7:context7',
         transport_type: 'stdio',
         status: 'disconnected',
-        duration_ms: 13011,
+        duration_ms: 13_011,
       }),
     );
     const info =

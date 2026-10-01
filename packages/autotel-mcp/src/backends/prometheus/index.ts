@@ -265,5 +265,5 @@ function escapePromMetric(name: string): string {
 }
 
 function escapePromLabelValue(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return value.replace(/\\/g, String.raw`\\`).replace(/"/g, String.raw`\"`);
 }

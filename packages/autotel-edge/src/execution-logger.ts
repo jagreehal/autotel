@@ -155,7 +155,10 @@ function flattenToAttributes(fields: UnknownRecord, prefix = '') {
 type ErrorAttributes = Record<string, AttributeValue>;
 
 function getErrorAttributes(error: Error) {
+  // Starts empty so the binding keeps its declared type (anti-slop
+  // no-known-value-widening); fields are added below, some conditionally.
   const attributes: ErrorAttributes = {};
+  // oxlint-disable-next-line unicorn/no-immediate-mutation -- see above
   attributes['error.type'] = error.name || 'Error';
   attributes['error.message'] = error.message;
 
@@ -215,7 +218,7 @@ export function getExecutionLogger(
   options?: ExecutionLoggerOptions,
 ): ExecutionLogger {
   const activeContext = resolveContext(ctx);
-  let contextState: UnknownRecord = {};
+  const contextState: UnknownRecord = {};
   let emitted = false;
   let lastSnapshot: ExecutionLogSnapshot | null = null;
 
@@ -311,7 +314,7 @@ export function getExecutionLogger(
 
       const mergedContext = {
         ...contextState,
-        ...(overrides ?? {}),
+        ...overrides,
       };
       const flattened = flattenToAttributes(mergedContext);
       activeContext.setAttributes(flattened);
@@ -373,9 +376,8 @@ export function getExecutionLogger(
           .then(() => {
             childLog.emitNow();
           })
-          .catch((err: unknown) => {
-            const error = err instanceof Error ? err : new Error(String(err));
-            childLog.error(error);
+          .catch((error: unknown) => {
+            childLog.error(toError(error));
             childLog.emitNow();
           })
           .finally(() => {

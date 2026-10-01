@@ -55,20 +55,14 @@ minimumReleaseAgeExclude:
   - '@ai-sdk/*'
   - '@langfuse/*'
 
-# Moved out of package.json's `pnpm` field, which pnpm 11 no longer reads.
-#
-# Only what lived under `pnpm.overrides` belongs here. The root `overrides` key
-# is npm's, pnpm has always ignored it, and moving its `vite: >=7.1.11 <8` here
-# would apply it for the first time: it caps vite below 8, and both apps/docs
-# (astro) and apps/example-tanstack-start (which asks for `vite: ^8`) resolve
-# vite 8 and fail to build without it.
-overrides:
-  typescript: 6.0.3
+# No `overrides:` here on purpose. package.json's root `overrides` key
+# (`vite: >=7.1.11 <8`) is npm's and pnpm ignores it; moving it here would
+# apply it for the first time and cap vite below 8, which apps/docs (astro) and
+# apps/example-tanstack-start resolve and need.
 
 peerDependencyRules:
   allowedVersions:
-    typescript: '6'
-    eslint: '10'
+    typescript: '6 || 7'
     '@langchain/core': 0.3.80
     '@opentelemetry/exporter-trace-otlp-proto': 0.216.0
     '@effect/platform': 0.94.4

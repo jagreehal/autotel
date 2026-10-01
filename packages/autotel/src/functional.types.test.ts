@@ -17,6 +17,7 @@ import type { TraceContext } from './trace-context';
  */
 function queryBuilder(): PromiseLike<string> {
   return {
+    // oxlint-disable-next-line unicorn/no-thenable -- deliberately a non-Promise thenable, to test thenable handling
     then: (onFulfilled, onRejected) =>
       Promise.resolve('rows').then(onFulfilled, onRejected),
   };

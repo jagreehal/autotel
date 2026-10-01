@@ -6,15 +6,15 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "oxlint -c oxlint.json --disable-nested-config"
   },
   "dependencies": {
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*",
     "autotel-web": "workspace:*",
-    "next": "16.2.10",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "next": "16.3.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -22,8 +22,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
-    "eslint": "^9.38.0",
-    "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",
     "typescript": "^6"
   }

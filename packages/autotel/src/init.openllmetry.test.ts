@@ -18,7 +18,7 @@ async function loadInitModule(): Promise<InitModule> {
   vi.resetModules();
   // resetModules clears the registry, so ./init must be re-imported here to
   // get a fresh instance; a static import would return the stale module.
-  // eslint-disable-next-line no-restricted-syntax
+  // eslint-disable-next-line eslint-js/no-restricted-syntax
   return import('./init');
 }
 

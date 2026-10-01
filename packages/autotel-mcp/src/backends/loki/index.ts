@@ -248,5 +248,5 @@ function labelsToTags(
 }
 
 function escapeLokiLabelValue(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return value.replace(/\\/g, String.raw`\\`).replace(/"/g, String.raw`\"`);
 }

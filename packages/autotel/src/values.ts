@@ -191,7 +191,9 @@ export function describeValue(value: unknown): string {
 
 /** A field of a field: `readPath(v, 'a', 'b')` reads `v.a.b`. */
 export function readPath(source: unknown, ...keys: string[]): unknown {
-  return keys.reduce<unknown>((value, key) => readProperty(value, key), source);
+  let value = source;
+  for (const key of keys) value = readProperty(value, key);
+  return value;
 }
 
 /**

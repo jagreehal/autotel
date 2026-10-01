@@ -90,7 +90,7 @@ export function createPluginRunner<
     byName.set(plugin.name, plugin);
   }
 
-  const list = Array.from(byName.values());
+  const list = [...byName.values()];
 
   const hasEnrich = list.some((p) => typeof p.enrich === 'function');
   const hasDrain = list.some((p) => typeof p.drain === 'function');
@@ -119,8 +119,8 @@ export function createPluginRunner<
         if (!plugin.extendLogger) continue;
         try {
           plugin.extendLogger(logger);
-        } catch (err) {
-          logPluginError(errorLogger, plugin.name, 'extendLogger', err);
+        } catch (error) {
+          logPluginError(errorLogger, plugin.name, 'extendLogger', error);
         }
       }
     },
@@ -130,8 +130,8 @@ export function createPluginRunner<
         if (!plugin.onRequestStart) continue;
         try {
           plugin.onRequestStart(ctx);
-        } catch (err) {
-          logPluginError(errorLogger, plugin.name, 'onRequestStart', err);
+        } catch (error) {
+          logPluginError(errorLogger, plugin.name, 'onRequestStart', error);
         }
       }
     },
@@ -141,8 +141,8 @@ export function createPluginRunner<
         if (!plugin.onRequestFinish) continue;
         try {
           plugin.onRequestFinish(ctx);
-        } catch (err) {
-          logPluginError(errorLogger, plugin.name, 'onRequestFinish', err);
+        } catch (error) {
+          logPluginError(errorLogger, plugin.name, 'onRequestFinish', error);
         }
       }
     },
@@ -152,8 +152,8 @@ export function createPluginRunner<
         if (!plugin.onClientLog) continue;
         try {
           plugin.onClientLog(ctx);
-        } catch (err) {
-          logPluginError(errorLogger, plugin.name, 'onClientLog', err);
+        } catch (error) {
+          logPluginError(errorLogger, plugin.name, 'onClientLog', error);
         }
       }
     },
@@ -163,8 +163,8 @@ export function createPluginRunner<
         if (!plugin.setup) continue;
         try {
           await plugin.setup(ctx);
-        } catch (err) {
-          logPluginError(errorLogger, plugin.name, 'setup', err);
+        } catch (error) {
+          logPluginError(errorLogger, plugin.name, 'setup', error);
         }
       }
     },
@@ -174,8 +174,8 @@ export function createPluginRunner<
         if (!plugin.enrich) continue;
         try {
           await plugin.enrich(ctx);
-        } catch (err) {
-          logPluginError(errorLogger, plugin.name, 'enrich', err);
+        } catch (error) {
+          logPluginError(errorLogger, plugin.name, 'enrich', error);
         }
       }
     },
@@ -188,8 +188,8 @@ export function createPluginRunner<
         drains.map(async (plugin) => {
           try {
             await plugin.drain!(ctx);
-          } catch (err) {
-            logPluginError(errorLogger, plugin.name, 'drain', err);
+          } catch (error) {
+            logPluginError(errorLogger, plugin.name, 'drain', error);
           }
         }),
       );
@@ -200,8 +200,8 @@ export function createPluginRunner<
         if (!plugin.keep) continue;
         try {
           await plugin.keep(ctx);
-        } catch (err) {
-          logPluginError(errorLogger, plugin.name, 'keep', err);
+        } catch (error) {
+          logPluginError(errorLogger, plugin.name, 'keep', error);
         }
       }
     },

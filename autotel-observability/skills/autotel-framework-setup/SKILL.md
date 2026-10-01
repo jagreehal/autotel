@@ -108,9 +108,10 @@ export const getUser = createServerFn({ method: 'GET' })
 import { traceLoader } from 'autotel-tanstack/loaders';
 
 export const Route = createFileRoute('/users/$userId')({
-  loader: traceLoader(async ({ params }) => {
-    return await getUser({ data: params.userId });
-  }),
+  loader: (ctx) =>
+    traceLoader(ctx, async ({ params }) => {
+      return await getUser({ data: params.userId });
+    }),
 });
 ```
 

@@ -7,7 +7,7 @@ Browser-safe domain layer for **observing coding agents** (Claude Code, opencode
 ```bash
 pnpm build        # tsdown → ESM + CJS
 pnpm test         # vitest
-pnpm lint         # eslint (browser-safety guard via no-restricted-imports)
+pnpm lint         # oxlint (browser-safety guard via no-restricted-imports)
 pnpm type-check   # tsc --noEmit
 ```
 

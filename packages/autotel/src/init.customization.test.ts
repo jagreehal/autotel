@@ -133,7 +133,7 @@ async function loadInitWithMocks() {
 
   // vi.doMock is not hoisted, so ./init must be imported after the mocks
   // above are registered; a static import would bind the unmocked module.
-  // eslint-disable-next-line no-restricted-syntax
+  // eslint-disable-next-line eslint-js/no-restricted-syntax
   const mod = await import('./init');
 
   return {

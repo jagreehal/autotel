@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { otelTrace } from 'autotel';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getRequestLoggerSafe, hasTracerProvider, otelTrace } from 'autotel';
 import {
+  configureAudit,
   forceKeepAuditEvent,
   setAuditAttributes,
   withAudit,
@@ -64,6 +65,8 @@ vi.mock('autotel', () => ({
   getRequestLoggerSafe: vi.fn(() => logger),
   createNoopRequestLogger: vi.fn(() => logger),
   forceKeep: vi.fn(),
+  isInitialized: vi.fn(() => false),
+  hasTracerProvider: vi.fn(() => true),
   otelTrace: {
     getActiveSpan: vi.fn(() => ({
       setAttribute,
@@ -187,5 +190,76 @@ describe('autotel-audit best-effort (onMissingContext)', () => {
     expect(result).toBe('ran');
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe('autotel-audit default onMissingContext', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(otelTrace.getActiveSpan).mockReturnValue(undefined);
+  });
+  afterEach(() => {
+    vi.mocked(otelTrace.getActiveSpan).mockReset();
+    vi.mocked(hasTracerProvider).mockReturnValue(true);
+    configureAudit({ onMissingContext: undefined });
+    vi.restoreAllMocks();
+  });
+
+  const telemetryOff = () =>
+    vi.mocked(hasTracerProvider).mockReturnValue(false);
+  const spyWarn = () => vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  it('is silent when telemetry is off (no init, no provider)', async () => {
+    telemetryOff();
+    const warn = spyWarn();
+    await expect(
+      withAudit({ action: 'off.silent' }, () => 'ran'),
+    ).resolves.toBe('ran');
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('warns once per action when a provider is registered but no span is active', async () => {
+    const warn = spyWarn();
+    await withAudit({ action: 'on.outside' }, () => 'ran');
+    await withAudit({ action: 'on.outside' }, () => 'ran');
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('still warns with an explicit "warn" when telemetry is off', async () => {
+    telemetryOff();
+    const warn = spyWarn();
+    await withAudit({ action: 'off.explicit-warn' }, () => 'ran', {
+      onMissingContext: 'warn',
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('still throws with an explicit "throw" when telemetry is off', async () => {
+    telemetryOff();
+    await expect(
+      withAudit({ action: 'off.throw' }, () => 'x', {
+        onMissingContext: 'throw',
+      }),
+    ).rejects.toThrow('No active trace context');
+  });
+
+  it('applies the configureAudit default, overridden per call', async () => {
+    configureAudit({ onMissingContext: 'throw' });
+    await expect(withAudit({ action: 'cfg.throw' }, () => 'x')).rejects.toThrow(
+      'No active trace context',
+    );
+    await expect(
+      withAudit({ action: 'cfg.override' }, () => 'ran', {
+        onMissingContext: 'skip',
+      }),
+    ).resolves.toBe('ran');
+  });
+
+  it('skips the "No request logger" warning when telemetry is off', async () => {
+    telemetryOff();
+    const warn = spyWarn();
+    vi.mocked(getRequestLoggerSafe).mockReturnValueOnce(null);
+    await withAudit({ action: 'off.no-logger' }, () => 'ran', { ctx: mockCtx });
+    expect(warn).not.toHaveBeenCalled();
   });
 });

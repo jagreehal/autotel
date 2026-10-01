@@ -18,6 +18,7 @@ import {
   MISSING_CONTEXT_MESSAGE,
   noopAuditContext,
   resolveContextSafe,
+  resolveOnMissingContext,
   toAttributeValue,
   warnMissingContextOnce,
   type AuditContext,
@@ -122,9 +123,9 @@ export interface SecurityEventOptions {
    */
   metrics?: boolean;
   /**
-   * Behaviour when no trace context can be resolved. Defaults to `warn`
-   * (best-effort: record nothing, warn once). A dropped security event is still
-   * better than a crashed request — but the warning makes the gap visible.
+   * Behaviour when no trace context can be resolved. Defaults to the
+   * configureAudit() value, else `skip` when telemetry is off and `warn`
+   * (once per event) otherwise. See {@link OnMissingContext}.
    */
   onMissingContext?: OnMissingContext;
 }
@@ -255,7 +256,7 @@ export function securityEvent(
   }
 
   if (!traceCtx) {
-    const mode = options.onMissingContext ?? 'warn';
+    const mode = resolveOnMissingContext(options.onMissingContext);
     if (mode === 'throw') {
       throw new Error(MISSING_CONTEXT_MESSAGE);
     }

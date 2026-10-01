@@ -66,12 +66,12 @@ beforeEach(() => {
 
 describe('CONVERSATION_SIGNAL_QUESTIONS', () => {
   it('defines a boolean question with criteria for every signal name', () => {
-    expect(Object.keys(CONVERSATION_SIGNAL_QUESTIONS).sort()).toEqual(
-      [...CONVERSATION_SIGNAL_NAMES].sort(),
+    expect(Object.keys(CONVERSATION_SIGNAL_QUESTIONS).toSorted()).toEqual(
+      CONVERSATION_SIGNAL_NAMES.toSorted(),
     );
-    expect(Object.keys(DEFAULT_CONVERSATION_SIGNAL_THRESHOLDS).sort()).toEqual(
-      [...CONVERSATION_SIGNAL_NAMES].sort(),
-    );
+    expect(
+      Object.keys(DEFAULT_CONVERSATION_SIGNAL_THRESHOLDS).toSorted(),
+    ).toEqual(CONVERSATION_SIGNAL_NAMES.toSorted());
     for (const name of CONVERSATION_SIGNAL_NAMES) {
       const question = CONVERSATION_SIGNAL_QUESTIONS[name];
       expect(question.type).toBe('boolean');

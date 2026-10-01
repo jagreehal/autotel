@@ -314,7 +314,7 @@ export function spinLoop(
     action,
     evaluate: (s, step) => {
       const key = stepKey(step);
-      if (key === undefined) return undefined;
+      if (key === undefined) return;
       const recent = s.history.slice(-window);
       let occurrences = 0;
       for (const h of recent) if (h.key === key) occurrences++;
@@ -406,7 +406,7 @@ export function contextBudget(
     name: `context-budget:${Math.round(threshold * 100)}%`,
     action,
     evaluate: (s) => {
-      if (!limit) return undefined;
+      if (!limit) return;
       const ratio = s.inputTokens / limit;
       return ratio >= threshold
         ? {

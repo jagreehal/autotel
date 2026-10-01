@@ -26,7 +26,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint hooks/**/*.ts",
+    "lint": "oxlint -c oxlint.json --disable-nested-config hooks",
     "type-check": "tsc -p tsconfig.json"
   },
   "keywords": [
@@ -49,7 +49,7 @@
   },
   "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-claude-code#readme",
   "devDependencies": {
-    "typescript": "6.0.3",
-    "vitest": "^4.1.10"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
   }
 }

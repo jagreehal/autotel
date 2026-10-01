@@ -112,14 +112,31 @@ import {
   getAutoInstrumentations,
   getInstrumentationNames,
   isESMMode,
+} from './auto-instrumentations';
+import {
+  createLogExporter,
+  createMetricExporter,
+  createTraceExporter,
+  formatEndpointUrl,
+} from './otlp-exporters';
+
+// Re-exported: these were part of init.ts's surface before the exporter code
+// moved to its own module, and `autotel` is imported by path in the wild.
+export type { AutotelConfig } from './autotel-config';
+// Re-exported: part of init.ts's surface before these moved to their own module.
+export {
+  resolveAttributeRedactor,
+  resolveDebugFlag,
+  resolveLogsFlag,
+  resolveMetricsFlag,
+} from './config-resolution';
+export {
   _resetAutoInstrumentationsLoader,
   _setAutoInstrumentationsLoader,
   type AutoInstrumentationsLoader,
   type InstrumentationSwitches,
 } from './auto-instrumentations';
-import {
-  createLogExporter,
-  createMetricExporter,
+export {
   createTraceExporter,
   formatEndpointUrl,
   resolveProtocol,
@@ -127,31 +144,6 @@ import {
   type OtlpDestinationConfig,
   type OtlpSignal,
 } from './otlp-exporters';
-
-// Re-exported: these were part of init.ts's surface before the exporter code
-// moved to its own module, and `autotel` is imported by path in the wild.
-export type { AutotelConfig };
-// Re-exported: part of init.ts's surface before these moved to their own module.
-export {
-  resolveAttributeRedactor,
-  resolveDebugFlag,
-  resolveLogsFlag,
-  resolveMetricsFlag,
-};
-export {
-  _resetAutoInstrumentationsLoader,
-  _setAutoInstrumentationsLoader,
-  type AutoInstrumentationsLoader,
-  type InstrumentationSwitches,
-};
-export {
-  createTraceExporter,
-  formatEndpointUrl,
-  resolveProtocol,
-  type AutotelProtocol,
-  type OtlpDestinationConfig,
-  type OtlpSignal,
-};
 
 /**
  * Adapts an Autotel Sampler to the OTel SDK Sampler interface.
@@ -449,11 +441,11 @@ export function init(cfg: AutotelConfig): void {
   // fall through to the endpoint pipeline below — the documented "replaces the
   // pipeline autotel would have built" quietly did nothing.
   const configuredSpanProcessors =
-    mergedConfig.spanProcessors !== undefined
-      ? mergedConfig.spanProcessors
-      : mergedConfig.spanProcessor
+    mergedConfig.spanProcessors === undefined
+      ? mergedConfig.spanProcessor
         ? [mergedConfig.spanProcessor]
-        : undefined;
+        : undefined
+      : mergedConfig.spanProcessors;
   const configuredSpanExporters =
     mergedConfig.spanExporters && mergedConfig.spanExporters.length > 0
       ? mergedConfig.spanExporters
@@ -824,15 +816,14 @@ export function init(cfg: AutotelConfig): void {
     serviceName: mergedConfig.service,
     sampler,
     instrumentations: finalInstrumentations,
+    // Always set spanProcessors, even when nothing is being exported: "no
+    // endpoint configured" means "do not export", and a caller's explicit
+    // `spanProcessors: []` is an off switch. A `sdkFactory` handing these to
+    // NodeSDK still gets a registered TracerProvider for the no-op, so
+    // `traceparent` keeps propagating to the next service.
+    spanProcessors:
+      spanProcessors.length > 0 ? spanProcessors : [new NoopSpanProcessor()],
   };
-
-  // Always set spanProcessors, even when nothing is being exported: "no
-  // endpoint configured" means "do not export", and a caller's explicit
-  // `spanProcessors: []` is an off switch. A `sdkFactory` handing these to
-  // NodeSDK still gets a registered TracerProvider for the no-op, so
-  // `traceparent` keeps propagating to the next service.
-  sdkOptions.spanProcessors =
-    spanProcessors.length > 0 ? spanProcessors : [new NoopSpanProcessor()];
 
   if (metricReaders.length > 0) {
     sdkOptions.metricReaders = metricReaders;

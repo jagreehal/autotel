@@ -125,15 +125,15 @@ Wraps an async operation with audit context and automatic outcome tagging.
 
 **Parameters:**
 
-| Name                       | Type                          | Description                                                          |
-| -------------------------- | ----------------------------- | -------------------------------------------------------------------- |
-| `metadata`                 | `AuditMetadata`               | Audit event metadata (action, resource, actor, etc.)                 |
-| `fn`                       | `(ctx, logger) => Promise<T>` | Async function receiving audit context and request logger            |
-| `options.emitNow`          | `boolean`                     | Immediately emit the audit event (default: `false`)                  |
-| `options.forceKeep`        | `boolean`                     | Force event through tail-sampling (default: `true`)                  |
-| `options.ctx`              | `AuditContext`                | Custom audit context (auto-resolved if omitted)                      |
-| `options.logger`           | `RequestLogger`               | Override request logger instance                                     |
-| `options.onMissingContext` | `'throw' \| 'warn' \| 'skip'` | What to do when there is no active trace context (default: `'warn'`) |
+| Name                       | Type                          | Description                                                                                               |
+| -------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `metadata`                 | `AuditMetadata`               | Audit event metadata (action, resource, actor, etc.)                                                      |
+| `fn`                       | `(ctx, logger) => Promise<T>` | Async function receiving audit context and request logger                                                 |
+| `options.emitNow`          | `boolean`                     | Immediately emit the audit event (default: `false`)                                                       |
+| `options.forceKeep`        | `boolean`                     | Force event through tail-sampling (default: `true`)                                                       |
+| `options.ctx`              | `AuditContext`                | Custom audit context (auto-resolved if omitted)                                                           |
+| `options.logger`           | `RequestLogger`               | Override request logger instance                                                                          |
+| `options.onMissingContext` | `'throw' \| 'warn' \| 'skip'` | What to do when there is no active trace context (default: `'skip'` when telemetry is off, else `'warn'`) |
 
 **Returns:** `Promise<T>`. Result from the wrapped function.
 
@@ -155,10 +155,14 @@ Audit is observability. A missing trace context must never crash the business
 logic it wraps. When there is no active trace context, `withAudit` no longer
 throws into your handler. The `onMissingContext` option controls the behaviour:
 
-- `'warn'` (default): run the wrapped handler un-audited and log **one** warning
-  per action.
-- `'skip'`: run un-audited, silently.
-- `'throw'`: previous fail-fast behaviour: opt in when telemetry is mandatory.
+- `'skip'` (default when telemetry is off: no `init()` and no tracer provider):
+  run un-audited, silently.
+- `'warn'` (default otherwise): run the wrapped handler un-audited and log
+  **one** warning per action.
+- `'throw'`: fail fast. Opt in when telemetry is mandatory.
+
+`configureAudit({ onMissingContext })` sets a process-wide default; a per-call
+option overrides it.
 
 ```typescript
 // Safe to drop into a production hot path: no surrounding trace() needed,

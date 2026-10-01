@@ -35,7 +35,7 @@ const callApi = createServerFn({ method: 'GET' }).handler(async () => {
 
 export const Route = createFileRoute('/demo/distributed-tracing')({
   component: DistributedTracing,
-  loader: traceLoader(async () => await callApi()),
+  loader: (ctx) => traceLoader(ctx, async () => await callApi()),
 })
 
 function DistributedTracing() {

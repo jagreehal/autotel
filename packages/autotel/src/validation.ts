@@ -9,7 +9,6 @@
  */
 
 import type { EventAttributes } from './event-subscriber';
-import type { UnknownRecord } from './values';
 import {
   asBoolean,
   asNumber,

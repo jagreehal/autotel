@@ -93,7 +93,7 @@ export function toStatusCode(status: number | undefined): SpanStatusCode {
 }
 
 function escapeFilterString(value: string): string {
-  return value.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+  return value.replaceAll('\\', String.raw`\\`).replaceAll("'", String.raw`\'`);
 }
 
 export class SignozBackend implements TelemetryBackend {

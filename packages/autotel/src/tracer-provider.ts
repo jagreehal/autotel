@@ -12,7 +12,7 @@
  * the isolated provider may inherit trace context from global spans.
  */
 
-import { trace } from '@opentelemetry/api';
+import { ProxyTracerProvider, trace } from '@opentelemetry/api';
 import type { TracerProvider } from '@opentelemetry/api';
 import { asFunction, isFunction, readProperty } from './values';
 
@@ -226,6 +226,27 @@ export function getAutotelTracerProvider(): TracerProvider {
   return trace.getTracerProvider();
 }
 
+/** The API's no-op provider: what an empty proxy delegates to. */
+const NOOP_TRACER_PROVIDER = new ProxyTracerProvider().getDelegate();
+
+/**
+ * True when something could record a span: an isolated provider set via
+ * setAutotelTracerProvider(), or a real provider registered globally (by
+ * autotel's init() or plain OpenTelemetry).
+ *
+ * The global provider is always a ProxyTracerProvider; it delegates to the
+ * API's no-op singleton until a provider is registered, so compare by identity
+ * (minifier-safe, unlike constructor names). A proxy from another copy of
+ * @opentelemetry/api only appears once something registered, so it counts.
+ */
+export function hasTracerProvider(): boolean {
+  if (getGlobalState().isolatedTracerProvider) return true;
+  const provider = trace.getTracerProvider();
+  const getDelegate = asFunction(readProperty(provider, 'getDelegate'));
+  if (!getDelegate) return true;
+  return getDelegate.call(provider) !== NOOP_TRACER_PROVIDER;
+}
+
 /** A tracer provider that can be force-flushed (SDK providers implement this). */
 interface ForceFlushable {
   forceFlush(): Promise<void>;
@@ -269,7 +290,9 @@ export function getForceFlushableProvider(
   const getDelegate = asFunction(readProperty(globalProvider, 'getDelegate'));
   if (getDelegate) candidates.push(getDelegate.call(globalProvider));
 
-  return candidates.map(asForceFlushable).find((found) => found !== undefined);
+  return candidates
+    .map((candidate) => asForceFlushable(candidate))
+    .find((found) => found !== undefined);
 }
 
 /**

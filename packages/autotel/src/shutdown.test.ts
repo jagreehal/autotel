@@ -168,7 +168,7 @@ describe('shutdown module', () => {
       });
 
       const error: unknown = await flush({ timeout: 100 }).catch(
-        (cause: unknown) => cause,
+        (error) => error,
       );
 
       expect(error).toBeInstanceOf(Error);

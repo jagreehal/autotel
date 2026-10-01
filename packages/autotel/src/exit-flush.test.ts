@@ -1,3 +1,6 @@
+// Each test needs a fresh module (vi.resetModules()) for the process-wide
+// handler state, which only a dynamic import provides.
+/* eslint-disable eslint-js/no-restricted-syntax */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 type AnyListener = (...args: unknown[]) => void;
@@ -75,7 +78,7 @@ describe('flush on clean exit', () => {
       // SAFETY: process.exit is declared to return `never`; a test that
       // replaces it needs an implementation that returns, which is the point -
       // the code under test must keep running so the assertion can see it.
-      .mockImplementation((() => undefined) as never);
+      .mockImplementation((() => {}) as never);
 
     installExitFlush(() => new Promise<void>(() => {}), 2000);
     process.emit('beforeExit', 7);
@@ -99,7 +102,7 @@ describe('flush on clean exit', () => {
       // SAFETY: process.exit is declared to return `never`; a test that
       // replaces it needs an implementation that returns, which is the point -
       // the code under test must keep running so the assertion can see it.
-      .mockImplementation((() => undefined) as never);
+      .mockImplementation((() => {}) as never);
     const shutdown = vi.fn().mockResolvedValue(undefined);
     const flush = vi.fn().mockResolvedValue(undefined);
 

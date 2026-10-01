@@ -1,0 +1,97 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "extends": [
+    "../../tools/oxlint/base.json",
+    "../../tools/oxlint/unicorn.json"
+  ],
+  "plugins": ["typescript", "unicorn"],
+  "categories": {
+    "correctness": "off"
+  },
+  "jsPlugins": [
+    {
+      "name": "eslint-js",
+      "specifier": "oxlint-plugin-eslint"
+    }
+  ],
+  "options": {
+    "typeAware": true
+  },
+  "env": {
+    "builtin": true,
+    "es2026": true
+  },
+  "ignorePatterns": ["dist/**"],
+  "overrides": [
+    {
+      "files": ["src/**/*.ts"],
+      "rules": {
+        "unicorn/consistent-function-scoping": "off",
+        "unicorn/filename-case": "off",
+        "unicorn/no-null": "off",
+        "unicorn/prefer-top-level-await": "off",
+        "unicorn/no-nested-ternary": "off",
+        "no-unused-vars": [
+          "error",
+          {
+            "argsIgnorePattern": "^_",
+            "varsIgnorePattern": "^_"
+          }
+        ],
+        "typescript/no-explicit-any": "off",
+        "typescript/consistent-type-exports": "error"
+      }
+    },
+    {
+      "files": ["examples/**/*.ts"],
+      "rules": {
+        "unicorn/consistent-function-scoping": "off",
+        "unicorn/filename-case": "off",
+        "unicorn/no-null": "off",
+        "unicorn/prefer-top-level-await": "off",
+        "unicorn/no-nested-ternary": "off",
+        "no-unused-vars": [
+          "error",
+          {
+            "argsIgnorePattern": "^_",
+            "varsIgnorePattern": "^_"
+          }
+        ],
+        "typescript/no-explicit-any": "off",
+        "typescript/consistent-type-exports": "off"
+      }
+    },
+    {
+      "files": ["src/**/*.ts"],
+      "rules": {
+        "eslint-js/no-restricted-syntax": [
+          "error",
+          {
+            "selector": "ExportAllDeclaration",
+            "message": "Barrel exports (export * from) are not allowed. Use explicit named exports instead."
+          },
+          {
+            "selector": "TSEnumDeclaration",
+            "message": "Enums are not allowed. Use union types or const assertions instead."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["examples/**/*.ts"],
+      "rules": {
+        "eslint-js/no-restricted-syntax": [
+          "error",
+          {
+            "selector": "ExportAllDeclaration",
+            "message": "Barrel exports (export * from) are not allowed. Use explicit named exports instead."
+          },
+          {
+            "selector": "TSEnumDeclaration",
+            "message": "Enums are not allowed. Use union types or const assertions instead."
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -114,10 +114,14 @@ the business logic it wraps. When there is no active trace context,
 `securityEvent()` and `withSecurity()` no longer throw into your handler. An
 `onMissingContext` option (passed via the options arg) controls the behaviour:
 
-- `'warn'` (default): record nothing but run the wrapped handler and log **one**
-  warning per action.
-- `'skip'`: run un-recorded, silently.
-- `'throw'`: previous fail-fast behaviour: opt in when telemetry is mandatory.
+- `'skip'` (default when telemetry is off: no `init()` and no tracer provider):
+  run un-recorded, silently.
+- `'warn'` (default otherwise): record nothing, run the wrapped handler and log
+  **one** warning per action.
+- `'throw'`: fail fast. Opt in when telemetry is mandatory.
+
+`configureAudit({ onMissingContext })` from `autotel-audit` sets a process-wide
+default; a per-call option overrides it.
 
 ```typescript
 await withSecurity(

@@ -19,9 +19,6 @@ import type { UnknownRecord } from './values';
 /** Pino's own field bag: what LogFn takes, mirrored by this fake logger. */
 type LogFields = UnknownRecord;
 
-/** The options a constructor was called with, as this harness records them. */
-type SdkOptions = AutotelSdkOptions;
-
 /** What an exporter or instrumentation was constructed with. */
 type RecordedOptions = Record<string, ConfigValue>;
 
@@ -196,7 +193,7 @@ async function loadInitWithMocks() {
 
   // vi.doMock is not hoisted, so ./init must be imported after the mocks
   // above are registered; a static import would bind the unmocked module.
-  // eslint-disable-next-line no-restricted-syntax
+  // eslint-disable-next-line eslint-js/no-restricted-syntax
   const initModule = await import('./init');
 
   // Inject the mock loader via the exported setter

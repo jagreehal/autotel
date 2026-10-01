@@ -250,17 +250,20 @@ export function foldEvent(
       foldToolContext(rollup, event);
       break;
     }
-    case 'api_error':
+    case 'api_error': {
       rollup.apiErrors += 1;
       break;
-    case 'api_refusal':
+    }
+    case 'api_refusal': {
       // A refusal is a completed call that produced no answer. Counting it as
       // an error would put a working model in the failure column.
       rollup.apiRefusals += 1;
       break;
-    case 'user_prompt':
+    }
+    case 'user_prompt': {
       rollup.prompts += 1;
       break;
+    }
     case 'tool_result': {
       // tool_result is the actual execution: it owns the call count, duration,
       // failures and tool taxonomy. Accept/reject is NOT counted here — that's
@@ -322,8 +325,9 @@ export function foldEvent(
       rollup.hooks.cancelled += event.hookCancelled ?? 0;
       break;
     }
-    default:
+    default: {
       break;
+    }
   }
 
   session.timeline.push(event);
@@ -356,7 +360,7 @@ function counterDelta(
 /** Stable per-series key: a cumulative counter is one series per attribute set. */
 function seriesKey(signal: AgentMetricSignal): string {
   const attrs = Object.entries(signal.attributes)
-    .sort(([a], [b]) => a.localeCompare(b))
+    .toSorted(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => `${k}=${String(v)}`)
     .join(',');
   return `${signal.kind}|${attrs}`;
@@ -379,20 +383,24 @@ export function foldMetricSignal(
       else rollup.linesAdded += value;
       break;
     }
-    case 'commit':
+    case 'commit': {
       rollup.commits += value;
       break;
-    case 'pull_request':
+    }
+    case 'pull_request': {
       rollup.pullRequests += value;
       break;
-    case 'active_time':
+    }
+    case 'active_time': {
       rollup.activeTimeSeconds += value;
       break;
+    }
     // Everything else ('other') is a metric that overlaps an event — token.usage,
     // cost.usage, code_edit_tool.decision, session.count — and is deliberately
     // NOT folded here: events are authoritative (see source-of-truth invariant).
-    default:
+    default: {
       break;
+    }
   }
 }
 

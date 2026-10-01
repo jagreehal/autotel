@@ -91,7 +91,7 @@ export function chunkIntervalStats(
   for (let i = 1; i < timestampsMs.length; i++) {
     gaps.push((timestampsMs[i] - timestampsMs[i - 1]) / 1000);
   }
-  const sorted = [...gaps].sort((a, b) => a - b);
+  const sorted = gaps.toSorted((a, b) => a - b);
   const sum = gaps.reduce((acc, g) => acc + g, 0);
   return {
     min: round(sorted[0]),

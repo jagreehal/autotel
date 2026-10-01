@@ -68,4 +68,4 @@ export {
 // pickErrorMessage is exported from tools/diagnosis for testing, reused here
 // so the CLI find-errors command groups errors identically to the MCP tool.
 export { pickErrorMessage } from './tools/diagnosis';
-export * from './types';
+export type * from './types';

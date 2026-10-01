@@ -48,8 +48,7 @@ function renderNode(
 
   // Don't recurse into ancestors on the current path (cycle protection)
   if (ancestors.has(serviceName)) return;
-  const pathAncestors = new Set(ancestors);
-  pathAncestors.add(serviceName);
+  const pathAncestors = new Set([...ancestors, serviceName]);
 
   const outgoing = graph.edges.filter((e) => e.fromService === serviceName);
 

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -64,7 +64,6 @@ describe('ledger', () => {
     appendLedgerEntry(sampleEntry({ interaction: 'good' }), opts);
     const path = ledgerPath(opts);
     // simulate corruption
-    const { appendFileSync } = require('node:fs');
     appendFileSync(path, 'not-json\n', 'utf8');
 
     const entries = readLedger(opts);

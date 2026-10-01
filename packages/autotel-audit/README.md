@@ -54,6 +54,21 @@ Wraps an async operation with audit metadata and handles success/failure outcome
   - `forceKeep?: boolean`: Force event through tail-sampling (default: true)
   - `ctx?: AuditContext`: Provide custom audit context (auto-resolved from trace if omitted)
   - `logger?: RequestLogger`: Override the request logger instance
+  - `onMissingContext?: 'throw' | 'warn' | 'skip'`: What to do when no trace context is active (see below)
+
+**Without an active trace context**, `withAudit` and `securityEvent` run your handler un-audited. `onMissingContext` sets how they report it:
+
+- `skip` is the default when telemetry is off: autotel `init()` has not run and no OpenTelemetry tracer provider is registered. Tests and local runs without a backend stay quiet.
+- `warn` is the default when telemetry is on and the call runs outside a span. You get one warning per action; wrap the call in `trace()`/`instrument()` or pass `ctx`.
+- `throw` fails fast. An explicit `onMissingContext` takes precedence over both defaults.
+
+Set a process-wide default with `configureAudit`. A per-call option overrides it:
+
+```ts
+import { configureAudit } from 'autotel-audit';
+
+configureAudit({ onMissingContext: 'throw' });
+```
 
 **Example with custom context:**
 

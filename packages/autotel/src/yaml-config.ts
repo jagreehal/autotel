@@ -136,7 +136,9 @@ function substituteEnvVars(value: string): string {
  * @returns Object with all string values having env vars substituted
  */
 function substituteEnvVarsDeep(value: YamlValue): YamlValue {
-  if (Array.isArray(value)) return value.map(substituteEnvVarsDeep);
+  if (Array.isArray(value)) {
+    return value.map((item) => substituteEnvVarsDeep(item));
+  }
 
   const mapping = asYamlMapping(value);
   if (mapping) {

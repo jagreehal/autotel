@@ -8,6 +8,7 @@ import {
   getAutotelTracerProvider,
   getAutotelTracer,
   getForceFlushableProvider,
+  hasTracerProvider,
 } from './tracer-provider';
 import { trace } from '@opentelemetry/api';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
@@ -70,7 +71,7 @@ describe('getForceFlushableProvider', () => {
 
   it('falls back to the global provider when the SDK handle yields nothing', () => {
     // sdk-node 0.220 shape: getTracerProvider() returns undefined.
-    const fakeSdk = { getTracerProvider: () => undefined };
+    const fakeSdk = { getTracerProvider: () => {} };
     const flushable = getForceFlushableProvider(fakeSdk);
     // The ambient global provider is force-flushable (or undefined in a bare
     // env); either way the SDK's undefined must not short-circuit resolution.
@@ -248,5 +249,27 @@ describe('Isolated Tracer Provider', () => {
       globalSpan.end();
       isolatedSpan.end();
     });
+  });
+});
+
+describe('hasTracerProvider', () => {
+  afterEach(() => {
+    trace.disable();
+    setAutotelTracerProvider(null);
+  });
+
+  it('is false with nothing registered', () => {
+    trace.disable();
+    expect(hasTracerProvider()).toBe(false);
+  });
+
+  it('is true once a global provider is registered', () => {
+    trace.setGlobalTracerProvider(new NodeTracerProvider());
+    expect(hasTracerProvider()).toBe(true);
+  });
+
+  it('is true with an isolated provider', () => {
+    setAutotelTracerProvider(new NodeTracerProvider());
+    expect(hasTracerProvider()).toBe(true);
   });
 });

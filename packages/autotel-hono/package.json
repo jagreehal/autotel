@@ -24,7 +24,7 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "type-check": "tsc --noEmit",
-    "lint": "eslint src",
+    "lint": "oxlint -c oxlint.json --disable-nested-config src",
     "test": "vitest run",
     "clean": "rimraf dist"
   },
@@ -33,7 +33,7 @@
     "autotel-adapters": "workspace:*"
   },
   "peerDependencies": {
-    "hono": ">=4.12.31"
+    "hono": ">=4.13.10"
   },
   "peerDependenciesMeta": {
     "hono": {
@@ -41,11 +41,11 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "hono": "^4.12.32",
-    "tsdown": "^0.22.14",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "@types/node": "^26.6.3",
+    "hono": "^4.13.10",
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
   },
   "repository": {
     "type": "git",

@@ -5,7 +5,7 @@ import {
   getStructuredErrorAttributes,
   recordStructuredError,
 } from './structured-error';
-import { createTraceContext, type TraceContext } from './trace-context';
+import { createTraceContext } from './trace-context';
 import { spanDouble, traceContextDouble } from './testing/doubles';
 
 function createFakeSpan(): {

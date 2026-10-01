@@ -58,8 +58,8 @@
     "build": "tsdown",
     "ci": "npm run build && npm run check-format && npm run check-exports && npm run lint && npm run test",
     "dev": "tsdown --watch",
-    "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix",
+    "lint": "oxlint -c oxlint.json --disable-nested-config src",
+    "lint:fix": "pnpm lint --fix",
     "format:check": "prettier --check src/**/*.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest run --config vitest.unit.config.ts",
@@ -88,13 +88,13 @@
   "license": "Apache-2.0",
   "dependencies": {
     "autotel": "workspace:*",
-    "@opentelemetry/exporter-logs-otlp-http": ">=0.221.0",
-    "@opentelemetry/sdk-logs": ">=0.221.0"
+    "@opentelemetry/exporter-logs-otlp-http": ">=0.222.0",
+    "@opentelemetry/sdk-logs": ">=0.222.0"
   },
   "peerDependencies": {
-    "@opentelemetry/exporter-metrics-otlp-http": ">=0.221.0",
-    "@opentelemetry/exporter-trace-otlp-http": ">=0.221.0",
-    "@opentelemetry/sdk-metrics": ">=2.10.0",
+    "@opentelemetry/exporter-metrics-otlp-http": ">=0.222.0",
+    "@opentelemetry/exporter-trace-otlp-http": ">=0.222.0",
+    "@opentelemetry/sdk-metrics": ">=2.11.0",
     "google-auth-library": ">=10.9.1"
   },
   "peerDependenciesMeta": {
@@ -112,14 +112,10 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "@typescript-eslint/eslint-plugin": "^8.65.0",
-    "@typescript-eslint/parser": "^8.65.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-unicorn": "^64.0.0",
-    "tsdown": "^0.22.14",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "@types/node": "^26.6.3",
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
   },
   "repository": {
     "type": "git",

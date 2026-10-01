@@ -42,16 +42,16 @@
     "run-oe": "node scripts/run-examples.mjs oe-"
   },
   "dependencies": {
-    "ai": "7.0.41",
-    "ai-sdk-ollama": "4.1.0",
+    "ai": "7.0.118",
+    "ai-sdk-ollama": "4.3.0",
     "autotel": "workspace:*",
     "autotel-devtools": "workspace:*",
     "autotel-genai": "workspace:*",
     "autotel-subscribers": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "tsx": "^4.23.1",
-    "typescript": "^6.0.3"
+    "@types/node": "^26.6.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

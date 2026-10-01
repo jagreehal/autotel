@@ -52,7 +52,7 @@ it('exports the canonical GenAI instruments with their attributes', async () => 
       .map((metric) => [metric.descriptor.name, metric]),
   );
 
-  expect([...byName.keys()].sort()).toEqual([
+  expect([...byName.keys()].toSorted()).toEqual([
     'gen_ai.client.cost.usd',
     'gen_ai.client.operation.duration',
     'gen_ai.client.operation.time_to_first_chunk',
@@ -70,7 +70,7 @@ it('exports the canonical GenAI instruments with their attributes', async () => 
   expect(
     tokens.dataPoints
       .map((point) => point.attributes['gen_ai.token.type'])
-      .sort(),
+      .toSorted(),
   ).toEqual(['input', 'output']);
 });
 

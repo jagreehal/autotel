@@ -345,7 +345,7 @@ function renderTagCondition(key: string, value: TagValue): string {
 }
 
 function escapeTraceql(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return value.replace(/\\/g, String.raw`\\`).replace(/"/g, String.raw`\"`);
 }
 
 export function parseOtlpTrace(
