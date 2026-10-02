@@ -1,5 +1,11 @@
 # autotel-devtools
 
+## 31.0.1
+
+### Patch Changes
+
+- 09125d1: Size the embedded widget's gzip budget for Node 24, the release runtime.
+
 ## 31.0.0
 
 ### Major Changes
