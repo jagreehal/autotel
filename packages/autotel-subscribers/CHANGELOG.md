@@ -1,5 +1,13 @@
 # autotel-subscribers
 
+## 59.0.1
+
+### Patch Changes
+
+- Updated dependencies [32cf958]
+- Updated dependencies [4b9125f]
+  - autotel@7.10.0
+
 ## 59.0.0
 
 ### Patch Changes

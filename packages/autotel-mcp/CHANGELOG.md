@@ -1,5 +1,42 @@
 # autotel-mcp
 
+## 0.10.0
+
+### Minor Changes
+
+- 32cf958: Issues for every autotel runtime: failures group into issues you can triage, resolve and hand to a coding agent.
+
+  - **Signals.** `console.error(err)` inside a span records a handled exception (`captureConsoleErrors`). A log line repeated past `logFloodThreshold` in one invocation records `autotel.LogFlood`, and a Durable Object alarm running in a loop records `autotel.RunawayAlarm` (`runawayAlarm`).
+  - **autotel-devtools.** Groups thrown and handled exceptions, 5xx responses, error logs and detector reports into issues with status (active, resolved, ignored), counts, trend, versions and affected users. Automations send an issue after N occurrences or when it returns after a quiet period, to a signed webhook, a Claude Code routine, Cursor, Devin, Slack or PagerDuty, with retries and run history. Stack traces map back to source through local bundle maps or `AUTOTEL_DEVTOOLS_SOURCEMAPS`. New exports: `autotel-devtools/issues` and `autotel-devtools/sourcemaps`.
+  - **autotel-mcp.** `list_issues` and `get_issue` use the same fingerprint as devtools and read its stored status. The collector, Tempo and Jaeger backends keep exception events, and `AUTOTEL_ISSUES_DESTINATION` sends issues from any backend, with persisted state.
+  - **Cloudflare.** Native tracing uses the span methods the runtime provides, nests spans from Durable Objects, Workflows and entrypoints, and writes the handler body to the invocation's root span, so Workers Issues shows `user.id` and request context. `autotel-cloudflare/tail` observes Workers with no SDK through a Tail Worker.
+  - **autotel-effect.** Supports Effect 4.0.0.
+
+  **Migrating (autotel-devtools):** call `aggregator.addTrace(trace)` in place of `addErrorsFromTrace(trace)`, and `aggregator.add(occurrence)` with the `Occurrence` type from `autotel-devtools/issues` in place of `addError()`. `ErrorGroup` gains a `source` field.
+
+  **Migrating (autotel-edge):** `ensureGlobalContextManager()` returns `void`; read the active context from `@opentelemetry/api` instead.
+
+### Patch Changes
+
+- 4b9125f: **autotel-tanstack:** `traceLoader` and `traceBeforeLoad` take the route context first and run your function inside their span:
+
+  ```ts
+  beforeLoad: (ctx) => traceBeforeLoad(ctx, async ({ search }) => { ... }),
+  loader: (ctx) => traceLoader(ctx, async ({ params }) => { ... }),
+  ```
+
+  TanStack Router keeps typing `params`, `search` and the context `beforeLoad` returns, and spans you start inside a loader nest under it. `createTracedRoute(id).loader` and `.beforeLoad` take the context the same way.
+
+  **autotel-audit:** `withAudit` and `securityEvent` default `onMissingContext` to `skip` when telemetry is off (no `init()` and no tracer provider) and to `warn` otherwise. `configureAudit({ onMissingContext })` sets a process-wide default; a per-call option overrides it.
+
+  **autotel:** `hasTracerProvider()` reports whether an isolated or global tracer provider can record spans.
+
+  **autotel-aws:** `autoInstrumentAWS()` loads the Smithy client in the ESM build as well as CJS.
+
+  **autotel-mcp:** invalid CLI arguments set exit code 2.
+
+  Dependencies are refreshed across the packages.
+
 ## 0.9.1
 
 ### Patch Changes
