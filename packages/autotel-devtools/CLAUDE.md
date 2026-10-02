@@ -97,7 +97,7 @@ pnpm test:dist          # Built ESM smoke test + widget raw/gzip budgets
 - **The fold drains every page** (the `queryErrors` pattern). A partial fold does not fail, it under-reports — "2 tools dropped annotations" when the answer is 6 — and gets more wrong the more traffic there is.
 - **Lifecycle state is chronological and predates the activity window.** Store pages arrive newest-first, so the fold sorts spans before reducing them. A bounded query reads lifecycle history through the window end, then counts executions only inside the requested window; otherwise a long-lived tool becomes "not observed" as soon as its registration ages out.
 - **"Currently offered" is scoped to the latest `webmcp.installation.id`.** A reload withdraws nothing, so without that scope the previous page load's tools read as still available. A tool seen only in executions is `observedAtRegistration: false` and makes no claim about annotations or schema.
-- **Full-page only.** It carries no chart code and was still 146.4 kB gzip against the embedded bundle's 145 kB. Revisit when something else gets cheaper, not by raising the budget.
+- **Full-page only.** It carries no chart code and measured 146.4 kB gzip when the embedded budget was 145 kB. Revisit when something else gets cheaper, not by raising the budget.
 - Captured payloads are masked behind a reveal toggle and scrubbed by the shared `redact()` in `widget/utils.ts` — the same one `AgentsView` uses. Opting into capture is not opting into display.
 
 ## WebMCP tools (the viewer as an agent-callable API)
@@ -137,7 +137,7 @@ pnpm test:dist          # Built ESM smoke test + widget raw/gzip budgets
 - **Retention runs on a timer** (30s, `unref`'d, cleared on close). We exposed it and left it uncalled for a while, and the symptom, unbounded growth, shows up only after hours.
 - **The live tail and the store are both written on ingest**, and neither derives from the other: the tail is what a fresh client is handed and what streams over WS, the store is what queries and restarts read.
 - Every UI component has a paired `*.stories.ts` (catalogue, no assertions) and `*.test.ts` (behaviour). A story that stubs a global must restore it. Use Storybook's `beforeEach`, which takes a teardown; a decorator that replaces `globalThis.fetch` and walks away leaks into every later story. A test that stubs a DOM accessor through `Object.defineProperty(document, …)` restores it by **deleting the own property** — putting the `Document.prototype` descriptor back leaves the stub sitting in front of it, and every test after it reads the stub instead of the DOM.
-- `scripts/check-widget-size.mjs` enforces the browser bundle budgets: embedded ≤ 500,000 raw / 145,000 gzip; full-page ≤ 700,000 raw / 210,000 gzip. Raise them only when you have weighed the size against what it buys, never as routine build maintenance.
+- `scripts/check-widget-size.mjs` enforces the browser bundle budgets: embedded ≤ 500,000 raw / 147,000 gzip; full-page ≤ 715,000 raw / 212,000 gzip. Measure under Node 24, the release runtime, since gzip output varies by Node version. Raise them only when you have weighed the size against what it buys, never as routine build maintenance.
 
 ## Comparison, coverage and reproduction
 
