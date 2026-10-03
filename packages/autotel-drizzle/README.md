@@ -156,8 +156,8 @@ individually slow. Group a trace's spans by it:
 
 | `db.statement.hash` | `db.collection.name` | Spans |
 | ------------------- | -------------------- | ----: |
-| `6b863b41773053ba`  | `comments`           |   200 |
-| `53ee56739d371a4b`  | `posts`              |     1 |
+| `16f2c9a04be7d1`    | `comments`           |   200 |
+| `0a5e83d1c96b47`    | `posts`              |     1 |
 
 One statement, run 200 times. Asking which span was slowest gives you a 1.7%
 answer and sends you off to index a table that was never the problem. The
@@ -205,23 +205,27 @@ instrumentDrizzleClient(db, {
 
 The same query, before and after `CREATE INDEX`:
 
-| Attribute                | Before             | After                            |
-| ------------------------ | ------------------ | -------------------------------- |
-| `db.statement.hash`      | `372269a8881e921a` | `372269a8881e921a`               |
-| `db.plan.hash`           | `0b50591ce9f68f51` | `eb8765b8d1c4af5a`               |
-| `db.plan.node`           | `Seq Scan`         | `Bitmap Heap Scan`               |
-| `db.plan.indexes`        |                    | `idx_comments_post_id`           |
-| `db.plan.seq_scan`       | `true`             | `false`                          |
-| `db.plan.rows_examined`  | `200199`           | `1001`                           |
-| `db.plan.rows_returned`  | `1001`             | `1001`                           |
-| `db.plan.blocks`         | `1861`             | `1005`                           |
-| `db.plan.cost`           |                    | planner's total cost estimate    |
-| `db.plan.rows_estimated` |                    | rows the planner expected        |
-| `db.plan.execution_ms`   |                    | measured time (`'analyze'` only) |
+| Attribute                | Before           | After                            |
+| ------------------------ | ---------------- | -------------------------------- |
+| `db.statement.hash`      | `0c4a9f1e2b7d33` | `0c4a9f1e2b7d33`                 |
+| `db.plan.hash`           | `1d07e5a9c4b2f8` | `08f3b6e1a7c5d2`                 |
+| `db.plan.node`           | `Seq Scan`       | `Bitmap Heap Scan`               |
+| `db.plan.indexes`        |                  | `idx_comments_post_id`           |
+| `db.plan.full_scan`      | `true`           | `false`                          |
+| `db.plan.rows_examined`  | `200199`         | `1001`                           |
+| `db.plan.rows_returned`  | `1001`           | `1001`                           |
+| `db.plan.blocks`         | `1861`           | `1005`                           |
+| `db.plan.cost`           |                  | planner's total cost estimate    |
+| `db.plan.rows_estimated` |                  | rows the planner expected        |
+| `db.plan.execution_ms`   |                  | measured time (`'analyze'` only) |
 
 An unchanged statement hash beside a changed plan hash is a planner decision.
 Grouping `db.plan.indexes` by `db.statement.hash` answers which queries an index
 is serving.
+
+The attribute names and the hash come from `autotel-db`, which `autotel-mongodb`
+uses too, so a Postgres `Seq Scan` and a MongoDB `COLLSCAN` both read as
+`db.plan.full_scan: true` and one query can group them.
 
 `rows_examined` counts at the leaves of the plan, and counts the rows a scan
 read and discarded. A parent node reports the rows its children handed up, so
@@ -237,15 +241,50 @@ second time to measure it. Both are off by default. Use them in development, in
 CI, or behind a sample of production traffic.
 
 - `'analyze'` runs on read-only statements only, so a traced insert never runs
-  twice. A leading `WITH` qualifies only when no writing keyword appears
-  anywhere in the statement, because `WITH gone AS (DELETE ... RETURNING *)
-SELECT` opens exactly like a read.
-- The plan is collected before the span opens, so the extra round trip stays out
-  of the duration the span reports.
-- A failed `EXPLAIN` is swallowed. The query still runs and still gets its span.
-- Ignored unless `dbSystem` is `'postgresql'`.
-- Inside a transaction the plan is taken on the transaction's own connection, so
-  it sees the rows the query will see.
+  twice. A write is planned with a plain `EXPLAIN` instead, which runs nothing,
+  and its span records `db.plan.mode: plan`. A leading `WITH` counts as a read
+  only when no writing keyword appears anywhere in the statement, because
+  `WITH gone AS (DELETE ... RETURNING *) SELECT` opens exactly like a read.
+- Outside a transaction, the plan is collected before the span opens, so the
+  extra round trip stays out of the duration the span reports.
+- Only statements Postgres can explain are sent (`SELECT`, `WITH`, `INSERT`,
+  `UPDATE`, `DELETE`, `MERGE`, `VALUES`, `TABLE`). DDL and the rest record
+  `db.plan.status: unsupported` and send nothing.
+- **Inside `db.transaction()`, nothing is ever sent on the transaction's own
+  connection, and nothing the application sends is held back.** An `EXPLAIN`
+  there could abort the transaction, and waiting for a plan before a
+  statement reorders the transaction's statements against each other and
+  against its `COMMIT` or `ROLLBACK`. So each statement goes out exactly when
+  it would without instrumentation, and its plan is fetched alongside it from
+  a separate pooled connection, inside a transaction that is always rolled
+  back, with a 100ms lock timeout (the application's transaction may hold
+  locks the `EXPLAIN` needs). The span ends at the statement's own end time.
+  - `drizzle(pool)` (node-postgres `Pool`): plans are captured this way. A
+    statement whose table the transaction has locked records
+    `db.plan.status: failed` with the lock timeout, and is not slowed.
+  - `drizzle(client)`, an embedded database, or any other driver: there is no
+    separate connection, so statements inside a transaction record
+    `db.plan.status: unsupported`. The same statements outside a transaction
+    are planned as usual.
+  - A transaction is recognised by its connection, not by which session issued
+    the statement, so this holds for `drizzle(client)` (where the transaction
+    reuses the session it was given) and for nested transactions. Open
+    transactions through `db.transaction()` when explain is on.
+- Explains outside a transaction through a node-postgres `Pool` check a
+  connection out and hand it back clean, so a failing `EXPLAIN` (a missing
+  privilege) never costs a pooled connection.
+- A failed `EXPLAIN` never fails the query. The span records
+  `db.plan.status: failed` and the reason in `db.plan.error`, with any quoted
+  values, documents and key details stripped from it.
+- Postgres only. With another `dbSystem`, spans record
+  `db.plan.status: unsupported` rather than reading as if explain were off.
+- Plans also carry `db.plan.stages`, `db.plan.mode`, and
+  `db.plan.blocking_sort` (a `Sort` node).
+- Inside a transaction the plan comes from a separate pooled connection, so it
+  cannot see the transaction's uncommitted changes: rows it has inserted or
+  deleted, tables it has created. The plan describes the query against the
+  committed data, and a statement on a table the transaction created records
+  `db.plan.status: failed`.
 
 ## Security Considerations
 

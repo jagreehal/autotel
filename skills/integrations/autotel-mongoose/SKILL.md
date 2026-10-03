@@ -1,12 +1,12 @@
 ---
 name: autotel-mongoose
 description: >
-  Use this skill when adding OpenTelemetry tracing to a Mongoose 8+ application — covers instrumentMongoose(), query text capture, automatic PII redaction, and Schema hook instrumentation.
+  Use this skill when adding OpenTelemetry tracing to a Mongoose 8+ application: instrumentMongoose(), value-free query text with a statement hash, query plans and index suggestions from explain, and Schema hook instrumentation.
 ---
 
 # autotel-mongoose
 
-OpenTelemetry instrumentation for Mongoose 8+ with automatic `db.query.text` capture and built-in PII redaction. This package exists because the official `@opentelemetry/instrumentation-mongodb` has broken ESM+tsx support; use this instead when running Mongoose in an ESM environment.
+OpenTelemetry instrumentation for Mongoose 8+. Each operation records its value-free shape as `db.query.text`, a `db.statement.hash` to group repeats by, and, with `explain`, the query plan as `db.plan.*`. For the plain `mongodb` driver, use the `autotel-mongodb` skill.
 
 ## Setup
 
@@ -76,20 +76,25 @@ interface InstrumentMongooseConfig {
     | AttributeRedactorPreset // 'default' | other preset names
     | AttributeRedactorConfig // custom redactor config
     | false; // false = no redaction
+
+  // Capture the query plan on each span (default: false)
+  explain?: 'plan' | 'analyze' | false;
 }
 ```
 
 ### Span attributes
 
-| Attribute            | Condition                                                       |
-| -------------------- | --------------------------------------------------------------- |
-| `db.system.name`     | Always (`mongodb`)                                              |
-| `db.operation.name`  | Always (e.g., `find`, `insertMany`)                             |
-| `db.collection.name` | When `captureCollectionName: true` (default)                    |
-| `db.namespace`       | When `dbName` is set                                            |
-| `db.query.text`      | When statement serialization is enabled (default: JSON payload) |
-| `server.address`     | When `peerName` is set                                          |
-| `server.port`        | When `peerPort` is set                                          |
+| Attribute            | Condition                                                           |
+| -------------------- | ------------------------------------------------------------------- |
+| `db.system.name`     | Always (`mongodb`)                                                  |
+| `db.operation.name`  | Always (e.g., `find`, `insertMany`)                                 |
+| `db.collection.name` | When `captureCollectionName: true` (default)                        |
+| `db.namespace`       | When `dbName` is set                                                |
+| `db.query.text`      | When statement serialization is enabled (default: value-free shape) |
+| `db.statement.hash`  | Always: operation, collection and value-free shape, hashed          |
+| `db.plan.*`          | When `explain` is set                                               |
+| `server.address`     | When `peerName` is set                                              |
+| `server.port`        | When `peerPort` is set                                              |
 
 Span names follow `<operation> <collectionName>` (e.g., `find users`) or fall back to `mongoose.<operation>`.
 
@@ -112,29 +117,32 @@ User-defined `pre` and `post` hooks are wrapped. Internal Mongoose hooks are ski
 
 ### Statement capture and redaction
 
-By default, query payloads are serialized to JSON and set as `db.query.text`, with the `'default'` redactor applied (strips emails, phone numbers, SSNs, credit cards).
+By default `db.query.text` is the payload's shape with every value replaced by `?`: `find({ email: 'a@b.c' })` records `{"condition":{"email":"?"},"options":{}}`. The same query with different values gets the same text and the same `db.statement.hash`, so a dashboard or the devtools Queries tab groups repeats, and no user data reaches the span.
 
 ```typescript
-// Custom serializer — return undefined to suppress db.query.text for this operation
+// Capture values; the 'default' redactor masks emails, phones, SSNs and cards
 instrumentMongoose(mongoose, {
-  dbStatementSerializer: (operation, payload) => {
-    if (operation === 'find') {
-      return JSON.stringify({ filter: payload.condition });
-    }
-    return undefined; // suppress for other operations
-  },
+  dbStatementSerializer: (_operation, payload) => JSON.stringify(payload),
 });
 
-// Disable statement capture entirely
+// Disable statement capture entirely (db.statement.hash is still set)
 instrumentMongoose(mongoose, {
   dbStatementSerializer: false,
 });
-
-// Keep capture but disable redaction (dangerous — only for trusted environments)
-instrumentMongoose(mongoose, {
-  statementRedactor: false,
-});
 ```
+
+### Query plans
+
+```typescript
+instrumentMongoose(mongoose, { explain: 'analyze' });
+```
+
+Each query and aggregate span gets the plan MongoDB chose: `db.plan.stages` (`[SORT, COLLSCAN]`), `db.plan.indexes`, `db.plan.keys_examined`, `db.plan.rows_examined` against `db.plan.rows_returned`, `db.plan.full_scan`, `db.plan.blocking_sort`, and, for a collection scan or an in-memory sort, `db.plan.index_suggestion` (a `createIndex` call following the Equality, Sort, Range rule).
+
+- `'plan'` runs `explain('queryPlanner')`; `'analyze'` runs `explain('executionStats')`, which re-runs reads to measure the work.
+- The explain runs after the query settles, as a raw driver command, so the caller does not wait and schema middleware runs once.
+- `db.plan.status` records `captured`, `failed` (with a sanitised `db.plan.error`) or `unsupported` (a save, an insert).
+- One extra round trip per query: use it in development, CI, or on a sample of traffic.
 
 ### SerializerPayload shape
 
@@ -190,24 +198,18 @@ const User = mongoose.model('User', new mongoose.Schema({ name: String }));
 
 Hook wrapping (`instrumentHooks: true`) only applies to `pre`/`post` calls made after `instrumentMongoose` runs. Model method patching affects `mongoose.Model` globally and works regardless, but hook instrumentation is order-sensitive.
 
-### HIGH: Disabling redaction when query text contains PII
+### HIGH: Capturing values without a redactor
 
 ```typescript
-// Dangerous: raw query payloads may include emails, IDs, or sensitive fields
+// Values reach the span unmasked
 instrumentMongoose(mongoose, {
+  dbStatementSerializer: (_op, payload) => JSON.stringify(payload),
   statementRedactor: false,
 });
 
-// Safer: use a custom serializer that only captures safe fields
-instrumentMongoose(mongoose, {
-  dbStatementSerializer: (operation, payload) => {
-    // Only capture the operation name, not the full payload
-    return JSON.stringify({ op: operation });
-  },
-});
+// Keep the default value-free text, or keep the redactor when capturing values
+instrumentMongoose(mongoose);
 ```
-
-The default `'default'` redactor covers common PII patterns (email, phone, SSN, credit card) but is not exhaustive. Review your query payloads before disabling redaction.
 
 ### MEDIUM: Using `instrumentHooks: false` (default) and expecting hook spans
 
@@ -253,4 +255,4 @@ The instrumentation wraps `exec()` to finalize the span. Implicit execution (Mon
 
 ## Version
 
-Targets autotel-mongoose v0.0.2 with mongoose >= 8.0.0 (peer dep) and autotel (peer dep). Uses stable OTel semconv only (`db.query.text`, `db.operation.name`, `db.system.name`, `db.collection.name`, `db.namespace`, `server.address`, `server.port`).
+Targets mongoose >= 8.0.0 (peer dep) and autotel (peer dep). Uses stable OTel semconv (`db.query.text`, `db.operation.name`, `db.system.name`, `db.collection.name`, `db.namespace`, `server.address`, `server.port`), plus `db.statement.hash` and `db.plan.*` from `autotel-db`.

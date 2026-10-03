@@ -88,6 +88,7 @@ export const loadUser = withTracing({ name: 'user.load' })(
 - **GenAI**: LLM calls with tokens, cost and streaming timing
 - **Flow**: request flow across services
 - **Resources**: derived from ingested telemetry
+- **Queries**: database statements grouped by `db.statement.hash` (from `autotel-db`), per database: count, total, p95, rows examined against returned, the plan with its stages, an index suggestion, and "Repeated ×N" when one trace runs a statement more than once. Each plan names the run it came from; spans without a plan say whether explain is off, failed, or has nothing to plan. The waterfall marks FULL SCAN and ×N on database rows. Full-page viewer only
 - **Service map**: visualises call graph
 - **Metrics**: per-metric time series
 - **Logs**: severity/resource filtering

@@ -61,6 +61,7 @@
     "@opentelemetry/otlp-transformer": "^0.222.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "ajv": "^8.20.0",
+    "autotel-db": "workspace:*",
     "hono": "^4.13.10",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"

@@ -78,6 +78,66 @@ export interface QueryClient {
   query: (statement: string, params: DriverValue[]) => Promise<unknown>;
 }
 
+/** A node-postgres Pool: it can hand out a connection of its own. */
+function isPgPool(value: DriverObject): boolean {
+  return (
+    asFunction(value.connect) !== undefined &&
+    typeof value.totalCount === 'number'
+  );
+}
+
+/**
+ * A client that runs EXPLAIN for a statement inside a transaction, on a
+ * connection of its own rather than the transaction's.
+ *
+ * The transaction's connection belongs to the application: an EXPLAIN there
+ * can abort the transaction on error, and holding the application's
+ * statements back to make room for it reorders them against the COMMIT or
+ * ROLLBACK. So the plan comes from a separate pooled connection, inside a
+ * transaction that is always rolled back, with a lock timeout: the
+ * application's transaction may hold locks the EXPLAIN needs, and it is
+ * waiting on this EXPLAIN, so without one they would wait on each other
+ * forever.
+ *
+ * Only a node-postgres Pool qualifies. A single client has no other
+ * connection, and an embedded database queues the EXPLAIN behind the open
+ * transaction, which is the same deadlock.
+ */
+export function isolatedExplainClient(
+  value: DriverValue,
+): QueryClient | undefined {
+  if (!isDriverObject(value) || !isPgPool(value)) return undefined;
+  const connect = asFunction(value.connect)!;
+  return {
+    query: async (statement, params) => {
+      const connection = asDriverObject(await connect.call(value));
+      const run = connection && asFunction(connection.query);
+      if (connection === undefined || run === undefined) {
+        throw new Error('the pool handed back no client');
+      }
+      const release = asFunction(connection.release);
+      try {
+        await run.call(connection, 'BEGIN', []);
+        await run.call(connection, "SET LOCAL lock_timeout = '100ms'", []);
+        await run.call(connection, "SET LOCAL statement_timeout = '5s'", []);
+        return await run.call(connection, statement, params);
+      } finally {
+        try {
+          await run.call(connection, 'ROLLBACK', []);
+          release?.call(connection);
+        } catch (error) {
+          // A connection that cannot roll back is in no state to reuse:
+          // releasing it with an error tells the pool to destroy it.
+          release?.call(
+            connection,
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+    },
+  };
+}
+
 /** One node of a postgres plan tree, with the fields this package reads. */
 export interface PlanNode {
   nodeType: string | undefined;
@@ -190,6 +250,29 @@ export function asQueryClient(value: DriverValue): QueryClient | undefined {
 
   if (run === undefined) {
     return undefined;
+  }
+
+  // A node-postgres Pool releases the connection behind pool.query() with the
+  // query's error, and a connection released with an error is destroyed. A
+  // failed EXPLAIN (a missing privilege fails every one) would cost a pooled
+  // connection each time. Check one out instead and hand it back clean: an
+  // error outside a transaction leaves the connection usable.
+  const connect = asFunction(value.connect);
+  if (connect !== undefined && isPgPool(value)) {
+    return {
+      query: async (statement, params) => {
+        const connection = asDriverObject(await connect.call(value));
+        const checkedOut = connection && asFunction(connection.query);
+        if (connection === undefined || checkedOut === undefined) {
+          throw new Error('the pool handed back no client');
+        }
+        try {
+          return await checkedOut.call(connection, statement, params);
+        } finally {
+          asFunction(connection.release)?.call(connection);
+        }
+      },
+    };
   }
 
   // `run` is called on the client it came from. A pooled driver keeps its

@@ -3,7 +3,7 @@
 // Mongoose is a devDependency so we type-check against the real API; consumers use the peer.
 
 import type { Mongoose } from 'mongoose';
-import { otelTrace as trace, context, SpanKind } from 'autotel';
+import { otelTrace as trace, context, SpanKind, SpanStatusCode } from 'autotel';
 import type { Attributes as SpanAttributes, Span, Tracer } from 'autotel';
 import {
   runWithSpan,
@@ -38,6 +38,15 @@ import type {
   SerializerPayload,
 } from './types.js';
 import { DEFAULT_TRACER_NAME } from './types';
+import {
+  ATTR_DB_STATEMENT_HASH,
+  hashStatement,
+  planAttributes,
+  planUnavailableAttributes,
+  type ExplainMode,
+} from 'autotel-db';
+import { planFromExplain, serializeMongoStatement } from 'autotel-mongodb';
+import { explainCommand } from './explain';
 import {
   createStatementCapture,
   createParameterCapture,
@@ -243,18 +252,168 @@ function mongoDocument(value: unknown): MongoDocument | undefined {
   return asRecord(value) as MongoDocument | undefined;
 }
 
-function createSpanFinalizer(span: Span): (error?: unknown) => void {
+/** Ends a span once; `endTime` backdates the end to when the work finished. */
+type Finalize = (error?: unknown, endTime?: number) => void;
+
+function createSpanFinalizer(span: Span): Finalize {
   let done = false;
-  return (error?: unknown): void => {
+  return (error?: unknown, endTime?: number): void => {
     if (done) {
       return;
     }
     done = true;
-    finalizeSpan(
-      span,
-      error === undefined || error === null ? undefined : toError(error),
-    );
+    if (error === undefined || error === null) {
+      span.setStatus({ code: SpanStatusCode.OK });
+    } else {
+      span.recordException(toError(error));
+      span.setStatus({ code: SpanStatusCode.ERROR });
+    }
+    span.end(endTime);
   };
+}
+
+/**
+ * Sets `db.query.text` (through the user's serializer and redactor) and
+ * `db.statement.hash`. The hash is always taken from the value-free shape,
+ * whatever the serializer emits, and from the operation and collection, which
+ * the payload does not name, so it groups the same query and nothing else
+ * even when text capture is off.
+ */
+function recordStatement(
+  span: Span,
+  operation: string,
+  collectionName: string | undefined,
+  payload: SerializerPayload,
+  captureStatement: StatementCaptureFn,
+): void {
+  try {
+    const statementText = captureStatement(operation, payload);
+    if (statementText) {
+      span.setAttribute(ATTR_DB_QUERY_TEXT, statementText);
+    }
+    span.setAttribute(
+      ATTR_DB_STATEMENT_HASH,
+      hashStatement(
+        `${operation} ${collectionName ?? ''} ${serializeMongoStatement(payload)}`,
+      ),
+    );
+  } catch {
+    // Ignore serialization errors
+  }
+}
+
+/**
+ * How a wrapper ends its span on success: plainly, or after collecting the
+ * plan when `explain` is on and the operation has one.
+ */
+function succeedWith(
+  span: Span,
+  finalize: Finalize,
+  mode: ExplainMode | false,
+  explain: ((verbosity: string) => Promise<unknown>) | undefined,
+): () => void {
+  if (!mode) return () => finalize();
+  // Explain is on and this operation has nothing to explain (a save, an
+  // insert): the span says so.
+  if (!explain) {
+    return () => {
+      span.setAttributes(planUnavailableAttributes('unsupported', { mode }));
+      finalize();
+    };
+  }
+  return () =>
+    finalizeWithPlan(span, finalize, mode, () =>
+      explain(EXPLAIN_VERBOSITY[mode]),
+    );
+}
+
+/** What `explainThroughDriver` returns for an operation with no command. */
+const NO_EXPLAIN = Symbol('no explain');
+
+/** A Query's filter, update, options and projection as they stand now. */
+function readQueryPayload(query: Record<string, any>): SerializerPayload {
+  const payload: SerializerPayload = {};
+  try {
+    const getFilter = asFunction(query.getFilter);
+    if (getFilter) payload.condition = mongoDocument(getFilter.call(query));
+    payload.updates = mongoDocument(query._update);
+    const getOptions = asFunction(query.getOptions);
+    if (getOptions) payload.options = mongoDocument(getOptions.call(query));
+    payload.fields = mongoDocument(query._fields);
+  } catch {
+    // Ignore errors in payload extraction
+  }
+  return payload;
+}
+
+/**
+ * Sends `{ explain: command, verbosity }` on the connection's native `Db`.
+ * `connection` is the Mongoose Connection a Model hangs off (`Model.db`, read
+ * off the Model the wrapper was called on); its `.db` is the driver's.
+ */
+function explainThroughDriver(
+  connection: unknown,
+  command: Record<string, unknown> | undefined,
+  verbosity: string,
+): Promise<unknown> {
+  const db = readProperty(connection, 'db');
+  const run = asFunction(readProperty(db, 'command'));
+  if (!command) return Promise.resolve(NO_EXPLAIN);
+  if (!run) return Promise.reject(new Error('no driver Db on this connection'));
+  return Promise.resolve(
+    callFunction(run, db, [{ explain: command, verbosity }]),
+  );
+}
+
+/** The `explain()` verbosity each mode asks MongoDB for. */
+const EXPLAIN_VERBOSITY = {
+  plan: 'queryPlanner',
+  analyze: 'executionStats',
+} as const satisfies Record<ExplainMode, string>;
+
+/**
+ * Runs `explain` once the query has settled and ends the span with the plan
+ * on it. The span ends at the time the query settled, not when the explain
+ * came back, so the duration is the query's own, and the caller gets its
+ * result without waiting. A process that exits straight after its last query
+ * should shut down its tracer provider after a short pause, so that span is
+ * exported.
+ */
+function finalizeWithPlan(
+  span: Span,
+  finalize: Finalize,
+  mode: ExplainMode,
+  explain: () => Promise<unknown>,
+): void {
+  const settledAt = performance.timeOrigin + performance.now();
+  void Promise.resolve()
+    .then(explain)
+    .then((result) => {
+      if (result === NO_EXPLAIN) {
+        span.setAttributes(planUnavailableAttributes('unsupported', { mode }));
+        return;
+      }
+      const plan = planFromExplain(Array.isArray(result) ? result[0] : result);
+      span.setAttributes(
+        plan
+          ? planAttributes({ ...plan, mode })
+          : planUnavailableAttributes('failed', {
+              mode,
+              error: 'explain output was not a plan autotel-mongodb reads',
+            }),
+      );
+    })
+    .catch((error: unknown) => {
+      // A plan is commentary on a query: failing to get one never fails it,
+      // and the span records why, so a reader can tell it from explain off.
+      span.setAttributes(
+        planUnavailableAttributes('failed', {
+          mode,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    })
+    .finally(() => finalize(undefined, settledAt));
 }
 
 /**
@@ -266,17 +425,25 @@ function createSpanFinalizer(span: Span): (error?: unknown) => void {
  * - a synchronous value → finalize now, and return it.
  *
  * This is the single settlement ladder shared by every wrapper, so the rule
- * "the span ends when the work ends" lives in exactly one place.
+ * "the span ends when the work ends" lives in exactly one place. `succeed`
+ * replaces the plain `finalize()` on success, which is where explain hooks in;
+ * `beforeExec` runs as exec() starts, once the caller has finished chaining.
  */
-function settleSpan(result: any, finalize: (error?: unknown) => void): any {
+function settleSpan(
+  result: any,
+  finalize: Finalize,
+  succeed: () => void = () => finalize(),
+  beforeExec?: () => void,
+): any {
   const exec = asFunction(readProperty(result, 'exec'));
   if (exec) {
     const originalExec = exec.bind(result);
     result.exec = function wrappedExec(): Promise<any> {
       try {
+        beforeExec?.();
         return Promise.resolve(originalExec()).then(
           (value: any) => {
-            finalize();
+            succeed();
             return value;
           },
           (error: unknown) => {
@@ -296,7 +463,7 @@ function settleSpan(result: any, finalize: (error?: unknown) => void): any {
     // SAFETY: the probe above established the result is a thenable.
     return Promise.resolve(result as Promise<any>).then(
       (value) => {
-        finalize();
+        succeed();
         return value;
       },
       (error: unknown) => {
@@ -306,7 +473,7 @@ function settleSpan(result: any, finalize: (error?: unknown) => void): any {
     );
   }
 
-  finalize();
+  succeed();
   return result;
 }
 
@@ -409,30 +576,42 @@ function wrapQueryReturningMethod(
           buildingQuery = false;
         }
 
-        // Extract the query payload from the returned Query before it executes.
+        // The payload is read when exec() starts, not here: the caller may
+        // still chain `.where('n').gt(0)` or `.sort()` onto the Query, and the
+        // statement and its hash have to be the query that ran.
         const query = asRecord(result);
-        if (query && isFunction(query.exec)) {
-          try {
-            const payload: SerializerPayload = {};
-            const getFilter = asFunction(query.getFilter);
-            if (getFilter)
-              payload.condition = mongoDocument(getFilter.call(query));
-            payload.updates = mongoDocument(query._update);
-            const getOptions = asFunction(query.getOptions);
-            if (getOptions)
-              payload.options = mongoDocument(getOptions.call(query));
-            payload.fields = mongoDocument(query._fields);
-            const statementText = captureStatement(operation, payload);
-            if (statementText) {
-              span.setAttribute(ATTR_DB_QUERY_TEXT, statementText);
-            }
-          } catch {
-            // Ignore errors in payload extraction
-          }
-        }
+        const isQuery = query !== undefined && isFunction(query.exec);
+        const recordAtExec = isQuery
+          ? () =>
+              recordStatement(
+                span,
+                operation,
+                collectionName,
+                readQueryPayload(query),
+                captureStatement,
+              )
+          : undefined;
+        const explain =
+          isQuery && collectionName
+            ? (verbosity: string) =>
+                explainThroughDriver(
+                  this.db,
+                  explainCommand(
+                    operation,
+                    collectionName,
+                    readQueryPayload(query),
+                  ),
+                  verbosity,
+                )
+            : undefined;
 
         // settleSpan wraps exec() (Query) or finalizes a non-query result.
-        return settleSpan(result, finalize);
+        return settleSpan(
+          result,
+          finalize,
+          succeedWith(span, finalize, config.explain, explain),
+          recordAtExec,
+        );
       } catch (error) {
         finalize(error);
         throw error;
@@ -479,6 +658,8 @@ function wrapStaticMethod(
           break;
         }
         case 'aggregate': {
+          // The starting pipeline. The Aggregate's own pipeline() replaces it
+          // when exec() starts, after any `.match()` / `.group()` chaining.
           payload.aggregatePipeline = args[0];
           break;
         }
@@ -502,20 +683,60 @@ function wrapStaticMethod(
       config,
     );
 
-    try {
-      const statementText = captureStatement(operation, payload);
-      if (statementText) {
-        span.setAttribute(ATTR_DB_QUERY_TEXT, statementText);
-      }
-    } catch {
-      // Ignore serialization errors
-    }
-
     const finalize = createSpanFinalizer(span);
     return runWithSpan(span, () => {
       try {
         // exec() (e.g. aggregate), promise (create/insertMany), or sync value.
-        return settleSpan(original.apply(this, args), finalize);
+        const result: any = original.apply(this, args);
+
+        // An Aggregate can still be chained (`.match()`, `.sort()`,
+        // `.option()`) after the call returns, so its statement is read when
+        // exec() starts, as a Query's is. Everything else is final now.
+        const isAggregate =
+          operation === 'aggregate' &&
+          isFunction(readProperty(result, 'exec')) &&
+          isFunction(readProperty(result, 'pipeline'));
+        const readAggregate = (): SerializerPayload => ({
+          aggregatePipeline: result.pipeline(),
+          options: mongoDocument(readProperty(result, 'options')),
+        });
+        if (!isAggregate) {
+          recordStatement(
+            span,
+            operation,
+            collectionName,
+            payload,
+            captureStatement,
+          );
+        }
+        const recordAtExec = isAggregate
+          ? () =>
+              recordStatement(
+                span,
+                operation,
+                collectionName,
+                { aggregatePipeline: readAggregate().aggregatePipeline },
+                captureStatement,
+              )
+          : undefined;
+
+        // Explained as a raw command too, so aggregate middleware does not
+        // run twice. Pipeline and options are read after the query settled.
+        const explain =
+          isAggregate && collectionName
+            ? (verbosity: string) =>
+                explainThroughDriver(
+                  this.db,
+                  explainCommand(operation, collectionName, readAggregate()),
+                  verbosity,
+                )
+            : undefined;
+        return settleSpan(
+          result,
+          finalize,
+          succeedWith(span, finalize, config.explain, explain),
+          recordAtExec,
+        );
       } catch (error) {
         finalize(error);
         throw error;
@@ -566,20 +787,18 @@ function wrapInstanceMethod(
       config,
     );
 
-    try {
-      const statementText = captureStatement(operation, payload);
-      if (statementText) {
-        span.setAttribute(ATTR_DB_QUERY_TEXT, statementText);
-      }
-    } catch {
-      // Ignore serialization errors
-    }
+    recordStatement(span, operation, collectionName, payload, captureStatement);
 
     const finalize = createSpanFinalizer(span);
     return runWithSpan(span, () => {
       try {
         // Instance methods (save/deleteOne) return promises; sync is tolerated.
-        return settleSpan(original.apply(this, args), finalize);
+        // A document's own save has no query plan to show.
+        return settleSpan(
+          original.apply(this, args),
+          finalize,
+          succeedWith(span, finalize, config.explain, undefined),
+        );
       } catch (error) {
         finalize(error);
         throw error;
@@ -1537,6 +1756,7 @@ export function instrumentMongoose(
         ? false
         : (resolvedSerializer ?? defaultSerializer),
     statementRedactor: resolvedRedactor,
+    explain: config?.explain ?? false,
     customMethods: resolveCustomMethods(config),
   };
 

@@ -1,0 +1,56 @@
+{
+  "name": "autotel-db",
+  "version": "0.0.0",
+  "description": "Shared vocabulary for database query insight: a statement hash for grouping, and db.plan.* attributes from any database's query plan",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "oxlint -c oxlint.json --disable-nested-config src",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "peerDependencies": {
+    "autotel": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "autotel": "workspace:*",
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "database",
+    "query-plan",
+    "explain",
+    "observability",
+    "autotel"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-db"
+  }
+}

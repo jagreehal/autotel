@@ -101,6 +101,8 @@
   } from '../store.svelte';
   import { buildCodeLocation } from '../utils/codeLocation';
   import { extractDbInfo, highlightSql } from '../utils/dbInfo';
+  import { prettyStatement } from '../utils/queries';
+  import { DbPlanDetail } from '../db-panels';
 
   const EDITOR_OPTIONS: { value: EditorSchemeValue; label: string }[] = [
     { value: 'vscode', label: 'VS Code' },
@@ -182,8 +184,15 @@
 
   // Database query inspection
   const dbInfo = $derived(extractDbInfo(span.attributes || {}));
+  // A MongoDB statement is JSON and reads better indented; SQL keeps the
+  // keyword highlighting.
+  const prettyDb = $derived(
+    dbInfo?.statement ? prettyStatement(dbInfo.statement) : null,
+  );
   const sqlTokens = $derived(
-    dbInfo?.statement ? highlightSql(dbInfo.statement) : [],
+    dbInfo?.statement && !prettyDb?.isJson
+      ? highlightSql(dbInfo.statement)
+      : [],
   );
 
   // Calculate timing relative to trace
@@ -606,15 +615,24 @@
 
         {#if dbInfo.statement}
           <Copyable content={dbInfo.statement}>
-            <pre
-              class="bg-subtle rounded p-2.5 border border-line font-mono text-[11px] text-fg whitespace-pre-wrap break-all overflow-auto max-h-[240px]">{#each sqlTokens as token, i (i)}<span
-                  class={token.kind === 'keyword'
-                    ? 'text-indigo-500 font-semibold'
-                    : token.kind === 'string'
-                      ? 'text-green-500'
-                      : ''}>{token.text}</span
-                >{/each}</pre>
+            {#if prettyDb?.isJson}
+              <pre
+                class="bg-subtle rounded p-2.5 border border-line font-mono text-[11px] text-fg whitespace-pre-wrap break-all overflow-auto max-h-[240px]">{prettyDb.text}</pre>
+            {:else}
+              <pre
+                class="bg-subtle rounded p-2.5 border border-line font-mono text-[11px] text-fg whitespace-pre-wrap break-all overflow-auto max-h-[240px]">{#each sqlTokens as token, i (i)}<span
+                    class={token.kind === 'keyword'
+                      ? 'text-indigo-500 font-semibold'
+                      : token.kind === 'string'
+                        ? 'text-green-500'
+                        : ''}>{token.text}</span
+                  >{/each}</pre>
+            {/if}
           </Copyable>
+        {/if}
+
+        {#if DbPlanDetail}
+          <DbPlanDetail {span} {trace} />
         {/if}
       </div>
     {/if}

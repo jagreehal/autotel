@@ -137,7 +137,19 @@ pnpm test:dist          # Built ESM smoke test + widget raw/gzip budgets
 - **Retention runs on a timer** (30s, `unref`'d, cleared on close). We exposed it and left it uncalled for a while, and the symptom, unbounded growth, shows up only after hours.
 - **The live tail and the store are both written on ingest**, and neither derives from the other: the tail is what a fresh client is handed and what streams over WS, the store is what queries and restarts read.
 - Every UI component has a paired `*.stories.ts` (catalogue, no assertions) and `*.test.ts` (behaviour). A story that stubs a global must restore it. Use Storybook's `beforeEach`, which takes a teardown; a decorator that replaces `globalThis.fetch` and walks away leaks into every later story. A test that stubs a DOM accessor through `Object.defineProperty(document, …)` restores it by **deleting the own property** — putting the `Document.prototype` descriptor back leaves the stub sitting in front of it, and every test after it reads the stub instead of the DOM.
-- `scripts/check-widget-size.mjs` enforces the browser bundle budgets: embedded ≤ 500,000 raw / 147,000 gzip; full-page ≤ 715,000 raw / 212,000 gzip. Measure under Node 24, the release runtime, since gzip output varies by Node version. Raise them only when you have weighed the size against what it buys, never as routine build maintenance.
+- `scripts/check-widget-size.mjs` enforces the browser bundle budgets: embedded ≤ 504,000 raw / 148,000 gzip; full-page ≤ 743,000 raw / 221,000 gzip. Measure under Node 24, the release runtime, since gzip output varies by Node version. Raise them only when you have weighed the size against what it buys, never as routine build maintenance.
+
+## Queries tab and query plans
+
+- **The grouping is `autotel-db`'s `groupQueries`**, the same one `autotel-mcp`'s repeated-queries tool uses, so "the same statement" means one thing everywhere: `db.statement.hash`, else `db.query.text`, else operation + collection. Never add a second grouping here; `utils/queries.ts` holds presentation only (severity, trend buckets, statement layout).
+- `autotel-db` is a **devDependency**: Vite inlines it into the widget, the server never imports it, so nothing ships as a runtime dependency.
+- **Grouping runs inside `QueriesView`, not the store**, so the code ships only in the bundle that has the tab. The plan block under a span's statement (`DbPlanDetail`) is behind the `db-panels` lean swap; the embedded widget keeps only the waterfall's FULL SCAN and ×N badges.
+- Rows a statement ran from are keyed by `traceId:spanId`: a span id is unique only within its trace.
+- **A plan always names its run.** A group's latency covers every run; its plan (`group.plan`) covers one, `group.planSample`. `PlanDiagnosis` labels it "Plan from one run" with a link to that run, and labels the explain's own timing "Explain execution time". Never show plan facts beside group latency unlabelled.
+- **"No plan" is four different answers.** No `db.plan.status` means explain is off (show the setup); `failed` carries `db.plan.error`; `unsupported` means the operation has nothing to plan; `captured` with `db.plan.mode: plan` has no execution counts. `PlanDiagnosis` renders each distinctly.
+- **Setup advice follows the source, never a default.** `explainGuidance(scope, system)` keys on the span's instrumentation scope: `autotel-mongoose` and `autotel-drizzle` (Postgres) get their one-line setup, the official MongoDB driver plugin gets the manual `planFromExplain` path, and everything else is told plainly that nothing captures its plans. Never suggest a library that cannot explain the source.
+- **`db.plan.error` is shown as `readPlan` returns it,** which is sanitised (`autotel-db`'s `sanitizePlanError`): never display a raw error attribute.
+- Repetition within a trace is labelled **"Repeated ×N"** and described as a _possible_ N+1: a retry or a deliberate batch looks the same.
 
 ## Comparison, coverage and reproduction
 

@@ -76,6 +76,7 @@ interface InstrumentDrizzleConfig {
   maxQueryTextLength?: number; // Truncate SQL at this length (default: 1000)
   peerName?: string; // Sets net.peer.name
   peerPort?: number; // Sets net.peer.port
+  explain?: 'plan' | 'analyze' | false; // Postgres query plan on each span (default: false)
 }
 ```
 
@@ -91,6 +92,20 @@ interface InstrumentDrizzleConfig {
 | `net.peer.port` | `config.peerPort` (if set)                                       |
 
 Span names follow the pattern `drizzle.<operation>` (e.g., `drizzle.select`, `drizzle.insert`) or `drizzle.query` when the operation cannot be determined.
+
+Every span also carries `db.statement.hash`, present when text capture is off, so repeated statements group.
+
+### Query plans (Postgres)
+
+```typescript
+instrumentDrizzleClient(db, { dbSystem: 'postgresql', explain: 'plan' });
+```
+
+Spans gain `db.plan.*` from `autotel-db`: `stages`, `full_scan` (a `Seq Scan`), `blocking_sort`, `indexes`, `cost`, `rows_estimated`, and with `'analyze'` `rows_examined`, `rows_returned` and `execution_ms`. `db.plan.status` records `captured`, `failed` (sanitised reason in `db.plan.error`) or `unsupported` (DDL, other dialects).
+
+- `'analyze'` executes reads only; writes are planned with plain `EXPLAIN`.
+- Inside `db.transaction()` statements run exactly as without instrumentation. With `drizzle(pool)` the plan comes from a separate pooled connection, rolled back, with a lock timeout; with `drizzle(client)` those statements record `unsupported`.
+- Use it in development, CI, or on a sample of traffic: it adds a round trip per query.
 
 ### Disabling SQL capture (PII safety)
 

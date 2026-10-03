@@ -1,0 +1,156 @@
+{
+  "explainVersion": "1",
+  "queryPlanner": {
+    "namespace": "autotel_explain_probe.users",
+    "indexFilterSet": false,
+    "parsedQuery": {
+      "$and": [
+        {
+          "status": {
+            "$eq": "a"
+          }
+        },
+        {
+          "age": {
+            "$gt": 3
+          }
+        }
+      ]
+    },
+    "queryHash": "EC1FB431",
+    "planCacheKey": "29F02CDD",
+    "optimizationTimeMillis": 0,
+    "maxIndexedOrSolutionsReached": false,
+    "maxIndexedAndSolutionsReached": false,
+    "maxScansToExplodeReached": false,
+    "winningPlan": {
+      "stage": "SORT",
+      "sortPattern": {
+        "createdAt": -1
+      },
+      "memLimit": 104857600,
+      "type": "simple",
+      "inputStage": {
+        "stage": "FETCH",
+        "filter": {
+          "status": {
+            "$eq": "a"
+          }
+        },
+        "inputStage": {
+          "stage": "IXSCAN",
+          "keyPattern": {
+            "age": 1
+          },
+          "indexName": "age_1",
+          "isMultiKey": false,
+          "multiKeyPaths": {
+            "age": []
+          },
+          "isUnique": false,
+          "isSparse": false,
+          "isPartial": false,
+          "indexVersion": 2,
+          "direction": "forward",
+          "indexBounds": {
+            "age": ["(3, inf.0]"]
+          }
+        }
+      }
+    },
+    "rejectedPlans": []
+  },
+  "executionStats": {
+    "executionSuccess": true,
+    "nReturned": 23,
+    "executionTimeMillis": 1,
+    "totalKeysExamined": 46,
+    "totalDocsExamined": 46,
+    "executionStages": {
+      "stage": "SORT",
+      "nReturned": 23,
+      "executionTimeMillisEstimate": 0,
+      "works": 71,
+      "advanced": 23,
+      "needTime": 47,
+      "needYield": 0,
+      "saveState": 0,
+      "restoreState": 0,
+      "isEOF": 1,
+      "sortPattern": {
+        "createdAt": -1
+      },
+      "memLimit": 104857600,
+      "type": "simple",
+      "totalDataSizeSorted": 2208,
+      "usedDisk": false,
+      "spills": 0,
+      "spilledDataStorageSize": 0,
+      "inputStage": {
+        "stage": "FETCH",
+        "filter": {
+          "status": {
+            "$eq": "a"
+          }
+        },
+        "nReturned": 23,
+        "executionTimeMillisEstimate": 0,
+        "works": 47,
+        "advanced": 23,
+        "needTime": 23,
+        "needYield": 0,
+        "saveState": 0,
+        "restoreState": 0,
+        "isEOF": 1,
+        "docsExamined": 46,
+        "alreadyHasObj": 0,
+        "inputStage": {
+          "stage": "IXSCAN",
+          "nReturned": 46,
+          "executionTimeMillisEstimate": 0,
+          "works": 47,
+          "advanced": 46,
+          "needTime": 0,
+          "needYield": 0,
+          "saveState": 0,
+          "restoreState": 0,
+          "isEOF": 1,
+          "keyPattern": {
+            "age": 1
+          },
+          "indexName": "age_1",
+          "isMultiKey": false,
+          "multiKeyPaths": {
+            "age": []
+          },
+          "isUnique": false,
+          "isSparse": false,
+          "isPartial": false,
+          "indexVersion": 2,
+          "direction": "forward",
+          "indexBounds": {
+            "age": ["(3, inf.0]"]
+          },
+          "keysExamined": 46,
+          "seeks": 1,
+          "dupsTested": 0,
+          "dupsDropped": 0
+        }
+      }
+    }
+  },
+  "command": {
+    "find": "users",
+    "filter": {
+      "status": "a",
+      "age": {
+        "$gt": 3
+      }
+    },
+    "sort": {
+      "createdAt": -1
+    },
+    "$db": "autotel_explain_probe"
+  },
+  "ok": 1
+}

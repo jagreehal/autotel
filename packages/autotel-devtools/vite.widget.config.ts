@@ -15,6 +15,7 @@ const LEAN_MODULES = [
   'src/widget/views/registry',
   'src/widget/webmcp',
   'src/widget/issue-panels',
+  'src/widget/db-panels',
 ];
 
 /**

@@ -96,22 +96,45 @@ describe('instrumentMongoose integration', () => {
     );
     expect(findSpan!.attributes[ATTR_DB_COLLECTION_NAME]).toBe('users');
 
-    const queryText = queryTextOf(findSpan!);
-    expect(queryText).toBeDefined();
-    expect(queryText).toContain('Alice');
+    expect(queryTextOf(findSpan!)).toBe(
+      '{"condition":{"name":"?"},"options":{}}',
+    );
   });
 
-  it('redacts PII in db.query.text by default', async () => {
+  it('captures no values in db.query.text by default', async () => {
     await User.find({ email: 'alice@example.com' }).exec();
 
     const spans = exporter.getFinishedSpans();
     const findSpan = spans.find(
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'find',
     );
-    const queryText = queryTextOf(findSpan!);
-    expect(queryText).not.toContain('alice@example.com');
-    // Default preset smart-masks emails as a***@***.com.
-    expect(queryText).toContain('a***@***.com');
+    expect(queryTextOf(findSpan!)).not.toContain('alice');
+  });
+
+  it('hashes the query as chained, not as first called', async () => {
+    await User.find().where('age').gt(0).exec();
+    await User.find().where('age').lt(0).exec();
+
+    const [gt, lt] = exporter.getFinishedSpans();
+    expect(queryTextOf(gt!)).toContain('"$gt"');
+    expect(queryTextOf(lt!)).toContain('"$lt"');
+    expect(gt!.attributes['db.statement.hash']).not.toBe(
+      lt!.attributes['db.statement.hash'],
+    );
+  });
+
+  it('gives the same query the same db.statement.hash, whatever its values', async () => {
+    await User.find({ name: 'Alice' }).exec();
+    await User.find({ name: 'Bob' }).exec();
+    await User.find({ email: 'x' }).exec();
+    await User.findOne({ name: 'Alice' }).exec();
+
+    const hashes = exporter
+      .getFinishedSpans()
+      .map((span) => span.attributes['db.statement.hash']);
+    expect(hashes).toHaveLength(4);
+    expect(hashes[0]).toBe(hashes[1]);
+    expect(new Set(hashes).size).toBe(3);
   });
 
   it('captures db.query.text for save operations', async () => {
@@ -123,11 +146,9 @@ describe('instrumentMongoose integration', () => {
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'save',
     );
     expect(saveSpan).toBeDefined();
-    const queryText = queryTextOf(saveSpan!);
-    expect(queryText).toBeDefined();
-    expect(queryText).toContain('Bob');
-    // Email should be redacted
-    expect(queryText).not.toContain('bob@test.com');
+    expect(queryTextOf(saveSpan!)).toBe(
+      '{"document":{"name":"?","email":"?","age":"?","_id":"?"}}',
+    );
   });
 
   it('captures db.query.text for aggregate operations', async () => {
@@ -157,9 +178,11 @@ describe('instrumentMongoose integration', () => {
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'insertMany',
     );
     expect(insertSpan).toBeDefined();
-    const queryText = queryTextOf(insertSpan!);
-    expect(queryText).toContain('Charlie');
-    expect(queryText).toContain('Diana');
+    // Two documents of one shape are one entry: the text does not grow with
+    // the batch, so batches of any size group together.
+    expect(queryTextOf(insertSpan!)).toBe(
+      '{"documents":[{"name":"?","email":"?","age":"?"}]}',
+    );
   });
 
   it('captures db.query.text for bulkWrite', async () => {
@@ -180,7 +203,7 @@ describe('instrumentMongoose integration', () => {
     const queryText = queryTextOf(bulkSpan!);
     expect(queryText).toContain('insertOne');
     expect(queryText).toContain('updateOne');
-    expect(queryText).toContain('Eve');
+    expect(queryText).not.toContain('Eve');
   });
 
   it('captures db.query.text for updateOne with updates payload', async () => {
@@ -191,11 +214,9 @@ describe('instrumentMongoose integration', () => {
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'updateOne',
     );
     expect(updateSpan).toBeDefined();
-    const queryText = queryTextOf(updateSpan!);
-    expect(queryText).toBeDefined();
-    // Should contain both condition and update fields
-    expect(queryText).toContain('Bob');
-    expect(queryText).toContain('$set');
+    expect(queryTextOf(updateSpan!)).toBe(
+      '{"condition":{"name":"?"},"updates":{"$set":{"age":"?"}},"options":{}}',
+    );
   });
 
   it('uses stable semantic convention span names', async () => {

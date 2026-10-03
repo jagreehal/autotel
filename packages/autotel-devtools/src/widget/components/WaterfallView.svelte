@@ -105,6 +105,7 @@
   import { formatDuration } from '../utils';
   import { isInputFocused } from '../utils/keyboard';
   import { computeCriticalPath } from '../utils/spanAnalysis';
+  import { repeatedStatementCounts } from '../utils/queries';
   import { flattenWithConnectors } from '../utils/treeConnectors';
   import { helpShortcutsSignal } from '../store.svelte';
   import type { TraceData } from '../types';
@@ -242,6 +243,8 @@
   const OVERSCAN = 12;
 
   const criticalPath = $derived.by(() => computeCriticalPath(trace.spans));
+  // Database spans whose statement ran more than once in this trace.
+  const repeatCounts = $derived(repeatedStatementCounts(trace));
 
   // Track the timeline column width so the number of axis labels adapts to the
   // available space (the detail pane is resizable / responsive).
@@ -510,6 +513,7 @@
             isCollapsed={collapsed.has(node.span.spanId)}
             hasChildren={hasChildren(node.span.spanId)}
             isCritical={showCritical && criticalPath.has(node.span.spanId)}
+            repeatCount={repeatCounts.get(node.span.spanId)}
             {connectors}
             {nameWidth}
             {durationWidth}
