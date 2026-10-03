@@ -168,6 +168,17 @@ export type ExplainGuidance =
   | { kind: 'manual'; source: string; code: string }
   | { kind: 'unavailable'; source: string; reason: string };
 
+// Kept in a .ts file: Vite's dep scanner reads import statements inside
+// .svelte strings as real imports.
+// What a first run needs: telemetry flowing here, a database instrumented,
+// and explain on so plans arrive with the queries.
+// Mongoose shown; autotel-drizzle takes the same `explain` option.
+export const SETUP = `import { init } from 'autotel';
+import { instrumentMongoose } from 'autotel-mongoose';
+
+init({ service: 'my-app', endpoint: 'http://localhost:4318' });
+instrumentMongoose(mongoose, { explain: 'plan' });`;
+
 const MANUAL_MONGODB = `import { planAttributes } from 'autotel-db';
 import { planFromExplain } from 'autotel-mongodb';
 

@@ -20,6 +20,7 @@
     examinedRatioLabel,
     examinedSeverity,
     prettyStatement,
+    SETUP,
     sortQueryGroups,
     trendPoints,
     type QueryGroup,
@@ -87,15 +88,6 @@
     warn: 'text-warning',
     bad: 'text-danger',
   };
-
-  // What a first run needs: telemetry flowing here, a database instrumented,
-  // and explain on so plans arrive with the queries.
-  // Mongoose shown; autotel-drizzle takes the same `explain` option.
-  const SETUP = `import { init } from 'autotel';
-import { instrumentMongoose } from 'autotel-mongoose';
-
-init({ service: 'my-app', endpoint: 'http://localhost:4318' });
-instrumentMongoose(mongoose, { explain: 'plan' });`;
 
   function label(group: QueryGroup): string {
     return (
