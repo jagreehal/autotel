@@ -88,6 +88,7 @@ export default defineConfig({
             { label: 'Effect', slug: 'integrations/effect' },
             { label: 'Drizzle ORM', slug: 'integrations/drizzle' },
             { label: 'Mongoose', slug: 'integrations/mongoose' },
+            { label: 'MongoDB', slug: 'integrations/mongodb' },
             { label: 'Grafana Loki', slug: 'integrations/loki' },
             { label: 'MCP', slug: 'integrations/mcp' },
             { label: 'WebMCP', slug: 'integrations/webmcp' },

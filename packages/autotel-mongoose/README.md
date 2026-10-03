@@ -1,11 +1,13 @@
 # autotel-mongoose
 
-OpenTelemetry instrumentation for Mongoose with stable semantic conventions, `db.query.text` capture, and default PII redaction.
+OpenTelemetry instrumentation for Mongoose with stable semantic conventions, `db.query.text` that carries no values, a statement hash to group by, and optional query plans.
 
 ## What It Adds
 
-- Captures `db.query.text` by default using `JSON.stringify`
-- Redacts PII by default using Autotel's `'default'` redactor preset
+- Captures `db.query.text` as the query's shape, every value replaced by `?`, so no user data reaches the span and the same query always reads the same
+- Sets `db.statement.hash` on every operation, to group repeated queries (an N+1 is one hash, many spans)
+- With `explain`, adds `db.plan.*`: stages, indexes used, documents examined, and the `createIndex` call a collection scan is missing
+- Redacts PII by default (Autotel's `'default'` preset) in whatever a custom serializer emits
 - Supports custom `dbStatementSerializer` functions with the same payload shape as the OpenTelemetry MongoDB plugin
 - Uses stable semantic conventions only:
   - `db.system.name`
@@ -137,7 +139,7 @@ parameters are redacted by default:
 
 ```text
 ✓ findOne users                           1ms [autotel-mongoose]
-     db.system.name=mongodb, db.operation.name=findOne, db.collection.name=users, db.query.text={"condition":{"email":"A***@***.com"},...
+     db.system.name=mongodb, db.operation.name=findOne, db.collection.name=users, db.query.text={"condition":{"email":"?"},...
 ✓ mongoose.User.findByEmail               2ms [autotel-mongoose]
      db.system.name=mongodb, code.function.name=findByEmail, mongoose.method.name=findByEmail, mongoose.method.type=static, mongoose.method.model=User, db.collection.name=users, mongoose.method.parameter_count=1, mongoose.method.parameters=["A***@***.com"]
 
@@ -234,13 +236,24 @@ const config: InstrumentMongooseConfig = {
   instrumentHooks: false,
   dbStatementSerializer: false,
   statementRedactor: 'default',
+  explain: false, // or 'plan' / 'analyze'
   customMethods: true, // wrap all custom statics/methods/query helpers (default)
 };
 ```
 
 ## Statement Capture
 
-By default, this package serializes query payloads into `db.query.text` and redacts sensitive values before they are added to the span.
+By default `db.query.text` is the payload's shape, from `autotel-mongodb`:
+field names and operators, every value `?`. `find({ email: 'a@b.c' })` records
+`{"condition":{"email":"?"},"options":{}}`, as does every other find by email.
+A list of values is one `?`, and an `insertMany` batch keeps one entry per
+distinct document shape, so batches of any size are one statement. Pipelines
+keep every stage in order. The payload is read when `exec()` starts, so
+`find().where('age').gt(0)` and `.lt(0)` are different statements.
+
+`db.statement.hash` is computed from the operation, the collection and that
+shape on every operation, whatever the serializer below emits, and even when
+capture is off.
 
 You can disable statement capture entirely:
 
@@ -250,7 +263,16 @@ instrumentMongoose(mongoose, {
 });
 ```
 
-You can also provide a custom serializer:
+You can also provide a custom serializer. To capture values, which the
+redactor below then masks:
+
+```typescript
+instrumentMongoose(mongoose, {
+  dbStatementSerializer: (_operation, payload) => JSON.stringify(payload),
+});
+```
+
+Or pick what to keep:
 
 ```typescript
 instrumentMongoose(mongoose, {
@@ -266,7 +288,9 @@ instrumentMongoose(mongoose, {
 
 ## Redaction
 
-PII redaction is enabled by default through Autotel's `'default'` preset.
+PII redaction is enabled by default through Autotel's `'default'` preset. It
+applies to whatever the serializer returns; the default serializer has no
+values to redact.
 
 You can provide a custom redactor config or disable redaction:
 
@@ -275,6 +299,55 @@ instrumentMongoose(mongoose, {
   statementRedactor: false,
 });
 ```
+
+## Query Plans
+
+```typescript
+instrumentMongoose(mongoose, { explain: 'analyze' });
+
+await Order.find({ status: 'open', total: { $gte: 10 } })
+  .sort({ createdAt: -1 })
+  .exec();
+```
+
+| Attribute                  | Value                                                           |
+| -------------------------- | --------------------------------------------------------------- |
+| `db.plan.node`             | `SORT`                                                          |
+| `db.plan.full_scan`        | `true`                                                          |
+| `db.plan.rows_examined`    | `60`                                                            |
+| `db.plan.rows_returned`    | `16`                                                            |
+| `db.plan.index_suggestion` | `db.orders.createIndex({ status: 1, createdAt: -1, total: 1 })` |
+
+The span also carries `db.plan.stages` (`[SORT, COLLSCAN]`),
+`db.plan.keys_examined`, `db.plan.blocking_sort`, `db.plan.mode`, and the
+suggested keys by role (`db.plan.index_suggestion.equality` / `.sort` /
+`.range`). When explain cannot produce a plan, `db.plan.status` says why:
+`unsupported` for a save, an insert or `estimatedDocumentCount`, `failed` with
+`db.plan.error` when the database refused (a missing explain privilege, say).
+A span without `db.plan.status` was never explained.
+
+Create the suggested index and the same query records
+`db.plan.full_scan: false`, `db.plan.indexes: status_1_createdAt_-1_total_1`,
+and 16 documents examined for 16 returned.
+
+- `'analyze'` runs `explain('executionStats')`: the query again, which is what
+  reports documents examined and time.
+- `'plan'` runs `explain('queryPlanner')`: the plan, without running anything.
+
+Explain never applies a write, so updates and deletes are explained safely. It
+is sent to the driver as a raw command, so your schema's pre and post hooks
+run once per query, never again for the explain.
+Queries and aggregates are explained; `estimatedDocumentCount` reads metadata
+and has no plan.
+
+The explain runs after the query settles. Your code gets its result without
+waiting, and the span ends at the moment the query settled, so its duration is
+the query's own. It is one more round trip per query: turn it on in
+development, in CI, or for a sample of traffic.
+
+The attribute names come from `autotel-db` and are shared with
+`autotel-drizzle`'s Postgres plans, so `db.plan.full_scan: true` finds a
+MongoDB `COLLSCAN` and a Postgres `Seq Scan` alike.
 
 ## Exported API
 

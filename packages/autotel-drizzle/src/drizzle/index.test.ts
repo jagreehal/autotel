@@ -362,7 +362,7 @@ describe('instrumentDrizzle', () => {
     await client.query({ text: 'UPDATE users SET name = $1' });
 
     const hash = getSpan().attributes['db.statement.hash'];
-    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(hash).toMatch(/^[0-9a-f]{14}$/);
   });
 
   it('produces identical db.statement.hash for identical statements', async () => {
@@ -744,6 +744,61 @@ describe('explain', () => {
     expect(getSpan(0).attributes['db.plan.node']).toBeUndefined();
   });
 
+  it('marks a blocking sort, and says which mode captured the plan', async () => {
+    const { db } = buildDb(
+      planPayload({ 'Node Type': 'Sort', Plans: [{ ...seqScan }] }),
+    );
+    instrumentDrizzleClient(
+      db,
+      testConfig({ dbSystem: 'postgresql', explain: 'plan' }),
+    );
+
+    await db.session
+      .prepareQuery({ sql: 'SELECT id FROM events ORDER BY at', params: [] })
+      .execute();
+
+    expect(getSpan(0).attributes).toMatchObject({
+      'db.plan.status': 'captured',
+      'db.plan.mode': 'plan',
+      'db.plan.blocking_sort': true,
+      'db.plan.stages': ['Sort', 'Seq Scan'],
+    });
+  });
+
+  it('records why EXPLAIN failed, and still runs the query', async () => {
+    const { db, client } = buildDb(planPayload(seqScan));
+    client.query.mockRejectedValueOnce(
+      new Error('permission denied for table events'),
+    );
+    instrumentDrizzleClient(
+      db,
+      testConfig({ dbSystem: 'postgresql', explain: 'plan' }),
+    );
+
+    await db.session.prepareQuery({ sql: 'SELECT 1', params: [] }).execute();
+
+    expect(getSpan(0).attributes).toMatchObject({
+      'db.plan.status': 'failed',
+      'db.plan.error': 'permission denied for table events',
+    });
+  });
+
+  it('says explain is unsupported on a dialect it does not speak', async () => {
+    const { db, client } = buildDb(planPayload(seqScan));
+    instrumentDrizzleClient(
+      db,
+      testConfig({ dbSystem: 'mysql', explain: 'analyze' }),
+    );
+
+    await db.session.prepareQuery({ sql: 'SELECT 1', params: [] }).execute();
+
+    expect(client.query).not.toHaveBeenCalled();
+    expect(getSpan(0).attributes).toMatchObject({
+      'db.plan.status': 'unsupported',
+      'db.plan.mode': 'analyze',
+    });
+  });
+
   it('records the plan a statement was given', async () => {
     const { db, client } = buildDb(planPayload(seqScan));
 
@@ -767,7 +822,7 @@ describe('explain', () => {
       [42],
     );
     expect(getSpan(0).attributes['db.plan.node']).toBe('Seq Scan');
-    expect(getSpan(0).attributes['db.plan.seq_scan']).toBe(true);
+    expect(getSpan(0).attributes['db.plan.full_scan']).toBe(true);
     expect(getSpan(0).attributes['db.plan.rows_estimated']).toBe(397);
     // Measured counts belong to ANALYZE, which this mode does not run.
     expect(getSpan(0).attributes['db.plan.rows_examined']).toBeUndefined();
@@ -819,7 +874,7 @@ describe('explain', () => {
     // leaf counts, or an index lookup looks twice as expensive as it is.
     expect(getSpan(0).attributes['db.plan.rows_examined']).toBe(400);
     expect(getSpan(0).attributes['db.plan.indexes']).toBe('idx_events_tenant');
-    expect(getSpan(0).attributes['db.plan.seq_scan']).toBe(false);
+    expect(getSpan(0).attributes['db.plan.full_scan']).toBe(false);
   });
 
   it('changes db.plan.hash when the planner changes its mind', async () => {
@@ -876,9 +931,14 @@ describe('explain', () => {
       .execute();
 
     // EXPLAIN ANALYZE executes what it measures, so running it here would
-    // insert the row twice.
-    expect(client.query).not.toHaveBeenCalled();
-    expect(getSpan(0).attributes['db.plan.node']).toBeUndefined();
+    // insert the row twice. A plain EXPLAIN plans the write without running
+    // it, so the span still gets the plan, marked as planner-only.
+    expect(client.query).toHaveBeenCalledTimes(1);
+    const [explained] = vi.mocked(client.query).mock.calls[0]!;
+    expect(explained).toMatch(/^EXPLAIN \(FORMAT JSON\) INSERT/);
+    expect(explained).not.toContain('ANALYZE');
+    expect(getSpan(0).attributes['db.plan.mode']).toBe('plan');
+    expect(getSpan(0).attributes['db.plan.status']).toBe('captured');
   });
 
   it('never runs ANALYZE on a CTE that writes', async () => {
@@ -899,7 +959,10 @@ describe('explain', () => {
       })
       .execute();
 
-    expect(client.query).not.toHaveBeenCalled();
+    for (const [statement] of vi.mocked(client.query).mock.calls) {
+      expect(statement).not.toContain('ANALYZE');
+    }
+    expect(getSpan(0).attributes['db.plan.mode']).toBe('plan');
   });
 
   it('plans a read-only CTE', async () => {
@@ -1384,5 +1447,317 @@ describe('other drizzle dialects', () => {
     await db.session.prepareQuery({ sql: 'select 1' }).execute();
 
     expect(client.query).not.toHaveBeenCalled();
+  });
+});
+
+describe('explain inside a transaction', () => {
+  beforeEach(() => {
+    spans.length = 0;
+  });
+
+  /**
+   * One Postgres connection as the server sees it: statements run in the
+   * order they arrive, one at a time, with a pause between them. Records
+   * every statement, so a test can see exactly what reached the wire.
+   */
+  function fifoConnection() {
+    const log: string[] = [];
+    let tail: Promise<unknown> = Promise.resolve();
+    const plan = {
+      rows: [{ 'QUERY PLAN': [{ Plan: { 'Node Type': 'Seq Scan' } }] }],
+    };
+    const connection = {
+      query: vi.fn((statement: string): Promise<FakeResult> => {
+        const result = tail.then(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          log.push(statement);
+          return statement.startsWith('EXPLAIN') ? plan : { rows: [] };
+        });
+        tail = result.then(
+          () => {},
+          () => {},
+        );
+        return result;
+      }),
+    };
+    return { connection, log };
+  }
+
+  /**
+   * drizzle(pgClient): the transaction runs on the session the database was
+   * given, whose prepareQuery was wrapped as an ordinary query before any
+   * transaction existed. `pool`, when given, is `db.$client`.
+   */
+  function sharedSessionDb(
+    connection: { query: (statement: string) => Promise<FakeResult> },
+    $client?: object,
+  ) {
+    const session: any = {
+      client: connection,
+      prepareQuery: vi.fn((query: DrizzleQuery): FakePreparedQuery => ({
+        execute: vi.fn(async () =>
+          connection.query(typeof query === 'string' ? query : readSql(query)),
+        ),
+        client: connection as never,
+        query,
+      })),
+    };
+    session.transaction = vi.fn(
+      async (callback: (tx: any) => Promise<FakeResult>) =>
+        callback({
+          session,
+          execute: (query: DrizzleQuery) =>
+            session.prepareQuery(query).execute(),
+        }),
+    );
+    return $client ? { session, $client } : { session };
+  }
+
+  it('sends nothing but the application statements, in order, to its connection', async () => {
+    const { connection, log } = fifoConnection();
+    const db = sharedSessionDb(connection);
+    instrumentDrizzleClient(
+      db,
+      testConfig({ dbSystem: 'postgresql', explain: 'plan' }),
+    );
+
+    await db.session.transaction(async (tx: any) => {
+      await Promise.all([
+        tx.execute({ sql: 'SELECT id FROM a', params: [] }),
+        tx.execute({ sql: 'INSERT INTO a VALUES (1)', params: [] }),
+        tx.execute({ sql: 'CREATE TABLE c (id int)', params: [] }),
+      ]);
+    });
+    // Outside the transaction, the plan is collected as before.
+    await db.session.prepareQuery({ sql: 'SELECT 2', params: [] }).execute();
+
+    expect(log).toEqual([
+      'SELECT id FROM a',
+      'INSERT INTO a VALUES (1)',
+      'CREATE TABLE c (id int)',
+      'EXPLAIN (FORMAT JSON) SELECT 2',
+      'SELECT 2',
+    ]);
+    // No connection apart from the transaction's: no plan inside it.
+    expect(
+      spans
+        .filter((span) => span.name !== 'drizzle.transaction')
+        .slice(0, 3)
+        .map((span) => span.attributes['db.plan.status']),
+    ).toEqual(['unsupported', 'unsupported', 'unsupported']);
+  });
+
+  it('plans a statement in a transaction on a pooled connection of its own', async () => {
+    const { connection, log } = fifoConnection();
+    const pooled = fifoConnection();
+    const release = vi.fn();
+    const pool = {
+      totalCount: 1,
+      query: vi.fn(),
+      connect: vi.fn(async () => ({
+        query: pooled.connection.query,
+        release,
+      })),
+    };
+    const db = sharedSessionDb(connection, pool);
+    instrumentDrizzleClient(
+      db,
+      testConfig({ dbSystem: 'postgresql', explain: 'plan' }),
+    );
+
+    const result = await db.session.transaction(async (tx: any) =>
+      tx.execute({ sql: 'SELECT id FROM a', params: [] }),
+    );
+    expect(result).toEqual({ rows: [] });
+    const select = () => spans.find((span) => span.name === 'drizzle.select');
+    await vi.waitFor(() => expect(select()?.ended).toBe(true));
+
+    // The transaction's connection saw only the application's statement.
+    expect(log).toEqual(['SELECT id FROM a']);
+    // The plan came from its own connection, inside a transaction that is
+    // always rolled back, with a lock timeout.
+    expect(pooled.log).toEqual([
+      'BEGIN',
+      "SET LOCAL lock_timeout = '100ms'",
+      "SET LOCAL statement_timeout = '5s'",
+      'EXPLAIN (FORMAT JSON) SELECT id FROM a',
+      'ROLLBACK',
+    ]);
+    expect(release).toHaveBeenCalledWith();
+    expect(select()!.attributes).toMatchObject({
+      'db.plan.status': 'captured',
+      'db.plan.node': 'Seq Scan',
+    });
+  });
+});
+
+describe('explain keeps every write inside its transaction', () => {
+  beforeEach(() => {
+    spans.length = 0;
+  });
+
+  /**
+   * One Postgres connection that keeps data: statements run in arrival order
+   * with a pause between them; BEGIN opens a transaction, COMMIT keeps its
+   * writes, ROLLBACK drops them, and outside a transaction a write commits on
+   * its own. After an error inside a transaction, everything fails until a
+   * ROLLBACK (TO SAVEPOINT).
+   */
+  function persistingConnection() {
+    const committed: string[] = [];
+    let pending: string[] | undefined;
+    let aborted = false;
+    let tail: Promise<unknown> = Promise.resolve();
+    const plan = {
+      rows: [{ 'QUERY PLAN': [{ Plan: { 'Node Type': 'Seq Scan' } }] }],
+    };
+
+    function handle(statement: string): FakeResult {
+      const word = statement.split(' ')[0]!.toUpperCase();
+      if (word === 'BEGIN') {
+        pending = [];
+        return { rows: [] };
+      }
+      if (word === 'ROLLBACK') {
+        if (statement.toUpperCase().startsWith('ROLLBACK TO')) {
+          aborted = false;
+          return { rows: [] };
+        }
+        pending = undefined;
+        aborted = false;
+        return { rows: [] };
+      }
+      if (aborted) throw new Error('current transaction is aborted');
+      if (word === 'COMMIT') {
+        committed.push(...(pending ?? []));
+        pending = undefined;
+        return { rows: [] };
+      }
+      if (word === 'SAVEPOINT' || word === 'RELEASE') return { rows: [] };
+      if (word === 'EXPLAIN') return plan;
+      if (statement.includes('1 / 0')) {
+        if (pending) aborted = true;
+        throw new Error('division by zero');
+      }
+      if (word === 'INSERT') {
+        if (pending) pending.push(statement);
+        else committed.push(statement);
+      }
+      return { rows: [] };
+    }
+
+    const connection = {
+      query: vi.fn((statement: string): Promise<FakeResult> => {
+        const result = tail.then(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          return handle(statement);
+        });
+        tail = result.then(
+          () => {},
+          () => {},
+        );
+        return result;
+      }),
+    };
+    return { connection, committed };
+  }
+
+  /** drizzle(pgClient): BEGIN, the callback, then COMMIT or ROLLBACK, all
+   *  through tx.execute on the session the database was given. */
+  function drizzleShapedDb(connection: {
+    query: (s: string) => Promise<FakeResult>;
+  }) {
+    const session: any = {
+      client: connection,
+      prepareQuery: vi.fn((query: DrizzleQuery): FakePreparedQuery => ({
+        execute: vi.fn(async () =>
+          connection.query(typeof query === 'string' ? query : readSql(query)),
+        ),
+        client: connection as never,
+        query,
+      })),
+    };
+    const run = (sql: string) =>
+      session.prepareQuery({ sql, params: [] }).execute();
+    session.transaction = vi.fn(
+      async (callback: (tx: any) => Promise<FakeResult>) => {
+        const tx = {
+          session,
+          execute: (query: { sql: string }) => run(query.sql),
+        };
+        await run('begin');
+        try {
+          const result = await callback(tx);
+          await run('commit');
+          return result;
+        } catch (error) {
+          await run('rollback');
+          throw error;
+        }
+      },
+    );
+    return { session };
+  }
+
+  it('runs the rollback after every statement the transaction started', async () => {
+    const { connection, committed } = persistingConnection();
+    const db = drizzleShapedDb(connection);
+    instrumentDrizzleClient(
+      db,
+      testConfig({ dbSystem: 'postgresql', explain: 'plan' }),
+    );
+
+    await expect(
+      db.session.transaction(async (tx: any) => {
+        await Promise.all([
+          tx.execute({ sql: 'SELECT 1 / 0' }),
+          tx.execute({ sql: 'INSERT INTO t VALUES (1)' }),
+        ]);
+      }),
+    ).rejects.toThrow('division by zero');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(committed).toEqual([]);
+  });
+
+  it('fails a statement still queued when the transaction ends without it', async () => {
+    const { connection, committed } = persistingConnection();
+    const db = drizzleShapedDb(connection);
+    // A driver with native transactions: BEGIN and ROLLBACK go straight to
+    // the connection, never through the instrumented methods.
+    db.session.transaction = vi.fn(
+      async (callback: (tx: any) => Promise<FakeResult>) => {
+        const tx = {
+          session: db.session,
+          execute: (query: { sql: string }) =>
+            db.session.prepareQuery({ sql: query.sql, params: [] }).execute(),
+        };
+        await connection.query('BEGIN');
+        try {
+          return await callback(tx);
+        } catch (error) {
+          await connection.query('ROLLBACK');
+          throw error;
+        }
+      },
+    );
+    instrumentDrizzleClient(
+      db,
+      testConfig({ dbSystem: 'postgresql', explain: 'plan' }),
+    );
+
+    let insert: Promise<unknown> | undefined;
+    await expect(
+      db.session.transaction(async (tx: any) => {
+        // The failing statement first; the INSERT queues behind it.
+        const failing = tx.execute({ sql: 'SELECT 1 / 0' });
+        insert = tx.execute({ sql: 'INSERT INTO t VALUES (1)' });
+        await Promise.all([failing, insert]);
+      }),
+    ).rejects.toThrow();
+    await insert?.catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(committed).toEqual([]);
   });
 });

@@ -73,3 +73,22 @@ export const Errored: Story = {
     isCritical: false,
   },
 };
+
+// A MongoDB find that scanned its collection and ran 5 times in the trace:
+// the two badges a database span can carry.
+export const DatabaseFullScanRepeated: Story = {
+  args: {
+    node: makeSpanNode({
+      ...makeTrace().rootSpan,
+      name: 'find orders',
+      kind: 'CLIENT',
+      attributes: { 'db.system.name': 'mongodb', 'db.plan.full_scan': true },
+    }),
+    trace: makeTrace(),
+    isSelected: false,
+    isCollapsed: false,
+    hasChildren: false,
+    isCritical: false,
+    repeatCount: 5,
+  },
+};

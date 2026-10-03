@@ -1,4 +1,5 @@
 import type { AttributeRedactorPreset, AttributeRedactorConfig } from 'autotel';
+import type { ExplainMode } from 'autotel-db';
 
 /**
  * Payload passed to the dbStatementSerializer.
@@ -81,6 +82,24 @@ export interface InstrumentMongooseConfig {
    * Pass a preset name, custom config, or false to disable redaction.
    */
   statementRedactor?: AttributeRedactorPreset | AttributeRedactorConfig | false;
+
+  /**
+   * Ask MongoDB how it answered each query and put the answer on the span as
+   * `db.plan.*`: the stages (`COLLSCAN`, `IXSCAN`), the indexes used, documents
+   * examined against returned, and, when the plan scanned the collection or
+   * sorted in memory, `db.plan.index_suggestion`, the `createIndex` call that
+   * would fix it. Off by default.
+   *
+   * - `'plan'` runs `explain('queryPlanner')`: the plan, without the query.
+   * - `'analyze'` runs `explain('executionStats')`: the query again, reads
+   *   only, which is what reports documents examined and time.
+   *
+   * The explain runs after the query settles, so the caller does not wait for
+   * it and the span still measures the query alone. It is one more round trip
+   * per query: use it in development, in CI, or on a sample of traffic.
+   * Explain never applies a write.
+   */
+  explain?: ExplainMode | false;
 
   /**
    * Instrument user-defined statics, instance methods, and query helpers
@@ -205,6 +224,7 @@ export interface ResolvedConfig {
     | ((operation: string, payload: SerializerPayload) => string | undefined)
     | false;
   statementRedactor: AttributeRedactorPreset | AttributeRedactorConfig | false;
+  explain: ExplainMode | false;
   customMethods: ResolvedCustomMethods;
 }
 

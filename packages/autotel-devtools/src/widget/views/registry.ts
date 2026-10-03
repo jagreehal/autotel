@@ -17,6 +17,7 @@ import AgentsView from '../components/AgentsView.svelte';
 import GenAiView from '../components/GenAiView.svelte';
 import FlowView from '../components/FlowView.svelte';
 import ResourcesView from '../components/ResourcesView.svelte';
+import QueriesView from '../components/QueriesView.svelte';
 import ServiceMapView from '../components/ServiceMapView.svelte';
 import MetricsView from '../components/MetricsView.svelte';
 import LogsView from '../components/LogsView.svelte';
@@ -33,6 +34,7 @@ export const VIEWS: Partial<Record<TabType, Component>> = {
   genai: GenAiView,
   flow: FlowView,
   resources: ResourcesView,
+  queries: QueriesView,
   'service-map': ServiceMapView,
   metrics: MetricsView,
   logs: LogsView,

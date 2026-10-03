@@ -1,0 +1,167 @@
+{
+  "explainVersion": "1",
+  "stages": [
+    {
+      "$cursor": {
+        "queryPlanner": {
+          "namespace": "autotel_explain_probe.users",
+          "indexFilterSet": false,
+          "parsedQuery": {
+            "status": {
+              "$eq": "a"
+            }
+          },
+          "queryHash": "EF187896",
+          "planCacheKey": "EF187896",
+          "optimizationTimeMillis": 0,
+          "maxIndexedOrSolutionsReached": false,
+          "maxIndexedAndSolutionsReached": false,
+          "maxScansToExplodeReached": false,
+          "winningPlan": {
+            "stage": "PROJECTION_SIMPLE",
+            "transformBy": {
+              "age": 1,
+              "_id": 0
+            },
+            "inputStage": {
+              "stage": "COLLSCAN",
+              "filter": {
+                "status": {
+                  "$eq": "a"
+                }
+              },
+              "direction": "forward"
+            }
+          },
+          "rejectedPlans": []
+        },
+        "executionStats": {
+          "executionSuccess": true,
+          "nReturned": 25,
+          "executionTimeMillis": 0,
+          "totalKeysExamined": 0,
+          "totalDocsExamined": 50,
+          "executionStages": {
+            "stage": "PROJECTION_SIMPLE",
+            "nReturned": 25,
+            "executionTimeMillisEstimate": 0,
+            "works": 51,
+            "advanced": 25,
+            "needTime": 25,
+            "needYield": 0,
+            "saveState": 1,
+            "restoreState": 1,
+            "isEOF": 1,
+            "transformBy": {
+              "age": 1,
+              "_id": 0
+            },
+            "inputStage": {
+              "stage": "COLLSCAN",
+              "filter": {
+                "status": {
+                  "$eq": "a"
+                }
+              },
+              "nReturned": 25,
+              "executionTimeMillisEstimate": 0,
+              "works": 51,
+              "advanced": 25,
+              "needTime": 25,
+              "needYield": 0,
+              "saveState": 1,
+              "restoreState": 1,
+              "isEOF": 1,
+              "direction": "forward",
+              "docsExamined": 50
+            }
+          }
+        }
+      },
+      "nReturned": {
+        "high": 0,
+        "low": 25,
+        "unsigned": false
+      },
+      "executionTimeMillisEstimate": {
+        "high": 0,
+        "low": 0,
+        "unsigned": false
+      }
+    },
+    {
+      "$group": {
+        "_id": "$age",
+        "n": {
+          "$sum": {
+            "$const": 1
+          }
+        }
+      },
+      "maxAccumulatorMemoryUsageBytes": {
+        "n": {
+          "high": 0,
+          "low": 2400,
+          "unsigned": false
+        }
+      },
+      "totalOutputDataSizeBytes": {
+        "high": 0,
+        "low": 6125,
+        "unsigned": false
+      },
+      "usedDisk": false,
+      "spills": {
+        "high": 0,
+        "low": 0,
+        "unsigned": false
+      },
+      "spilledDataStorageSize": {
+        "high": 0,
+        "low": 0,
+        "unsigned": false
+      },
+      "numBytesSpilledEstimate": {
+        "high": 0,
+        "low": 0,
+        "unsigned": false
+      },
+      "spilledRecords": {
+        "high": 0,
+        "low": 0,
+        "unsigned": false
+      },
+      "nReturned": {
+        "high": 0,
+        "low": 25,
+        "unsigned": false
+      },
+      "executionTimeMillisEstimate": {
+        "high": 0,
+        "low": 0,
+        "unsigned": false
+      }
+    }
+  ],
+  "command": {
+    "aggregate": "users",
+    "pipeline": [
+      {
+        "$match": {
+          "status": "a"
+        }
+      },
+      {
+        "$group": {
+          "_id": "$age",
+          "n": {
+            "$sum": 1
+          }
+        }
+      }
+    ],
+    "cursor": {},
+    "$db": "autotel_explain_probe"
+  },
+  "ok": 1
+}

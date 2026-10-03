@@ -11,6 +11,7 @@ import {
   selectedTabSignal,
 } from '../store.svelte';
 import type { SpanData, TraceData } from '../types';
+import { sampleQueryTraces } from '../components/__fixtures__/queries';
 
 function makeSpan(overrides: Partial<SpanData> = {}): SpanData {
   return {
@@ -178,5 +179,40 @@ describe('SpanDetailPanel — database', () => {
     expect(screen.getAllByText('postgresql').length).toBeGreaterThanOrEqual(1);
     // SQL is tokenised; `users` appears in both the table field and the query.
     expect(screen.getAllByText('users').length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('SpanDetailPanel — query plan', () => {
+  afterEach(cleanup);
+
+  it('shows the plan, the work it did, and the index to create', () => {
+    const trace = sampleQueryTraces()[1]!;
+    const span = trace.spans.find((s) => s.spanId === 'find')!;
+    render(SpanDetailPanel, { props: { span, trace, onClose: () => {} } });
+
+    const plan = screen.getByTestId('db-plan');
+    expect(screen.getByLabelText('Plan stages').textContent).toMatch(
+      /SORT\s*→\s*COLLSCAN/,
+    );
+    expect(plan.textContent).toContain('3750:1');
+    expect(plan.textContent).toContain('Explain execution time');
+    expect(plan.textContent).toContain(
+      'This run read the whole collection and sorted the results in memory, examining 60000 to return 16.',
+    );
+    expect(plan.textContent).toContain(
+      'db.orders.createIndex({ status: 1, createdAt: -1, total: 1 })',
+    );
+    expect(plan.textContent).toContain('createdAt desc');
+    // A MongoDB statement is shown indented, not as one line.
+    expect(screen.getByText(/"condition": \{/)).toBeTruthy();
+  });
+
+  it('calls a statement repeated in the trace a possible N+1', () => {
+    const trace = sampleQueryTraces()[0]!;
+    const span = trace.spans.find((s) => s.spanId === 'c2')!;
+    render(SpanDetailPanel, { props: { span, trace, onClose: () => {} } });
+    expect(
+      screen.getByText(/Repeated ×5 in this trace: possible N\+1/),
+    ).toBeTruthy();
   });
 });

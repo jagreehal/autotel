@@ -11,6 +11,7 @@ const EVERY_TAB = {
   genai: true,
   flow: true,
   resources: true,
+  queries: true,
   'service-map': true,
   metrics: true,
   logs: true,

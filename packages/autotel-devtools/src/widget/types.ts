@@ -113,6 +113,7 @@ export type TabType =
   | 'coverage'
   | 'agents'
   | 'resources'
+  | 'queries'
   | 'service-map'
   | 'metrics'
   | 'logs'

@@ -55,7 +55,8 @@
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/instrumentation": "^0.222.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
-    "autotel": "workspace:*"
+    "autotel": "workspace:*",
+    "autotel-db": "workspace:*"
   },
   "peerDependencies": {
     "drizzle-orm": ">=0.45.3"

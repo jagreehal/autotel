@@ -25,7 +25,7 @@ function makeSpan(overrides: Partial<SpanData> = {}): SpanData {
   };
 }
 
-function renderRow(span: SpanData) {
+function renderRow(span: SpanData, repeatCount?: number) {
   const node: SpanNode = { span, children: [], depth: 0 };
   const trace: TraceData = {
     traceId: span.traceId,
@@ -46,6 +46,7 @@ function renderRow(span: SpanData) {
       isCollapsed: false,
       hasChildren: false,
       isCritical: false,
+      repeatCount,
     },
   });
 }
@@ -80,5 +81,21 @@ describe('WaterfallRow — event popover', () => {
     await fireEvent.keyDown(window, { key: 'Escape' });
 
     expect(screen.queryByText('user:1')).toBeNull();
+  });
+});
+
+describe('WaterfallRow — database badges', () => {
+  afterEach(cleanup);
+
+  it('marks a full scan and a statement repeated in the trace', () => {
+    renderRow(makeSpan({ attributes: { 'db.plan.full_scan': true } }), 5);
+    expect(screen.getByText('FULL SCAN')).toBeTruthy();
+    expect(screen.getByText('×5')).toBeTruthy();
+  });
+
+  it('shows neither on an ordinary span', () => {
+    renderRow(makeSpan({ attributes: { 'db.plan.full_scan': false } }));
+    expect(screen.queryByText('FULL SCAN')).toBeNull();
+    expect(screen.queryByText(/^×/)).toBeNull();
   });
 });

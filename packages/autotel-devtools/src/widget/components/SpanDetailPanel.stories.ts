@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/svelte-vite';
 import { expect, userEvent } from 'storybook/test';
 import SpanDetailPanel from './SpanDetailPanel.svelte';
 import type { SpanData, TraceData } from '../types';
+import { sampleQueryTraces } from './__fixtures__/queries';
 
 // A span carrying the kind of resource + framework attributes a real OTLP
 // export produces — long dotted keys (`deployment.environment`,
@@ -142,5 +143,15 @@ export const SensitiveAttributes: Story = {
     await expect(canvas.getByText('[redacted]')).toBeInTheDocument();
     await userEvent.click(canvas.getByText('[redacted]'));
     await expect(await canvas.findByText('Bearer abc')).toBeInTheDocument();
+  },
+};
+
+// A MongoDB find with its plan: full scan, examined against returned, and the
+// index that would fix it, plus the JSON statement shown indented.
+const dbTrace = sampleQueryTraces()[1]!;
+export const DatabasePlan: Story = {
+  args: {
+    span: dbTrace.spans.find((s) => s.spanId === 'find')!,
+    trace: dbTrace,
   },
 };

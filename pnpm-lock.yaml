@@ -2147,6 +2147,24 @@ importers:
         specifier: ^5.1.1
         version: 5.1.1(typescript@7.0.2)(vitest@5.0.2)
 
+  packages/autotel-db:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.3
+        version: 26.6.3
+      autotel:
+        specifier: workspace:*
+        version: link:../autotel
+      tsdown:
+        specifier: ^0.23.0
+        version: 0.23.0(@arethetypeswrong/core@0.18.5)(@vue/language-core@3.3.7)(oxc-resolver@11.24.2)(tsx@4.23.15)(typescript@7.0.2)(unrun@0.3.1)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^5.0.2
+        version: 5.0.2(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(@vitest/browser-playwright@5.0.2)(@vitest/coverage-v8@5.0.2)(@vitest/ui@5.0.2)(happy-dom@20.14.5)(jsdom@30.1.1)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/autotel-devtools:
     dependencies:
       '@grpc/grpc-js':
@@ -2246,6 +2264,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 5.0.2
         version: 5.0.2(@vitest/browser@5.0.2)(vitest@5.0.2)
+      autotel-db:
+        specifier: workspace:*
+        version: link:../autotel-db
       eslint-plugin-storybook:
         specifier: ^10.6.0
         version: 10.6.0(eslint@10.11.0(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)
@@ -2303,6 +2324,9 @@ importers:
       autotel:
         specifier: workspace:*
         version: link:../autotel
+      autotel-db:
+        specifier: workspace:*
+        version: link:../autotel-db
     devDependencies:
       '@arethetypeswrong/cli':
         specifier: ^0.18.5
@@ -2541,6 +2565,9 @@ importers:
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
+      autotel-db:
+        specifier: workspace:*
+        version: link:../autotel-db
       hono:
         specifier: ^4.13.10
         version: 4.13.10
@@ -2650,7 +2677,48 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(@vitest/browser-playwright@5.0.2)(@vitest/coverage-v8@5.0.2)(@vitest/ui@5.0.2)(happy-dom@20.14.5)(jsdom@30.1.1)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/autotel-mongodb:
+    dependencies:
+      autotel-db:
+        specifier: workspace:*
+        version: link:../autotel-db
+    devDependencies:
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
+      '@opentelemetry/instrumentation-mongodb':
+        specifier: ^0.75.0
+        version: 0.75.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
+      '@opentelemetry/sdk-trace-node':
+        specifier: ^2.11.0
+        version: 2.11.0(@opentelemetry/api@1.9.1)
+      '@types/node':
+        specifier: ^26.6.3
+        version: 26.6.3
+      autotel:
+        specifier: workspace:*
+        version: link:../autotel
+      mongodb:
+        specifier: ^7.6.0
+        version: 7.6.0(@aws-sdk/credential-providers@3.1141.0)
+      tsdown:
+        specifier: ^0.23.0
+        version: 0.23.0(@arethetypeswrong/core@0.18.5)(@vue/language-core@3.3.7)(oxc-resolver@11.24.2)(tsx@4.23.15)(typescript@7.0.2)(unrun@0.3.1)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^5.0.2
+        version: 5.0.2(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(@vitest/browser-playwright@5.0.2)(@vitest/coverage-v8@5.0.2)(@vitest/ui@5.0.2)(happy-dom@20.14.5)(jsdom@30.1.1)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/autotel-mongoose:
+    dependencies:
+      autotel-db:
+        specifier: workspace:*
+        version: link:../autotel-db
+      autotel-mongodb:
+        specifier: workspace:*
+        version: link:../autotel-mongodb
     devDependencies:
       '@opentelemetry/context-async-hooks':
         specifier: ^2.11.0
@@ -10868,9 +10936,6 @@ packages:
 
   '@types/node@26.1.1':
     resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
-
-  '@types/node@26.1.2':
-    resolution: {integrity: sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==}
 
   '@types/node@26.6.3':
     resolution: {integrity: sha512-dsqMQQoeTLqu9wynDD00q573mNzso3IdQOAfHRJqLCcmCFPoGo9A1bDpUcv/9tnKpErQWv9uKeGfl37EIS02Yg==}
@@ -26486,7 +26551,7 @@ snapshots:
 
   '@slack/logger@4.0.1':
     dependencies:
-      '@types/node': 26.1.2
+      '@types/node': 26.6.3
     optional: true
 
   '@slack/types@2.22.0':
@@ -26496,7 +26561,7 @@ snapshots:
     dependencies:
       '@slack/logger': 4.0.1
       '@slack/types': 2.22.0
-      '@types/node': 26.1.2
+      '@types/node': 26.6.3
       '@types/retry': 0.12.0
       axios: 1.18.1(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       eventemitter3: 5.0.4
@@ -28206,10 +28271,6 @@ snapshots:
     dependencies:
       undici-types: 8.3.0
 
-  '@types/node@26.1.2':
-    dependencies:
-      undici-types: 8.3.0
-
   '@types/node@26.6.3':
     dependencies:
       undici-types: 8.9.0
@@ -28272,7 +28333,7 @@ snapshots:
 
   '@types/sax@1.2.7':
     dependencies:
-      '@types/node': 26.1.2
+      '@types/node': 26.6.3
 
   '@types/semver@7.8.0': {}
 

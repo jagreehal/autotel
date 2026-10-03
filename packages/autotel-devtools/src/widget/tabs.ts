@@ -9,6 +9,7 @@
 
 import {
   Database,
+  DatabaseZap,
   Bot,
   Sparkles,
   Workflow,
@@ -37,6 +38,7 @@ const ALL_TABS: readonly TabDef[] = [
   { id: 'genai', label: 'GenAI', icon: Sparkles },
   { id: 'flow', label: 'Flow', icon: Workflow },
   { id: 'resources', label: 'Resources', icon: Boxes },
+  { id: 'queries', label: 'Queries', icon: DatabaseZap },
   { id: 'service-map', label: 'Service Map', icon: Network },
   { id: 'metrics', label: 'Metrics', icon: BarChart },
   { id: 'logs', label: 'Logs', icon: FileText },

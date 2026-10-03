@@ -1,9 +1,9 @@
 ---
 title: Mongoose
-description: OpenTelemetry instrumentation for Mongoose with db.query.text capture and PII redaction.
+description: OpenTelemetry instrumentation for Mongoose with value-free db.query.text, db.statement.hash, and query plans.
 ---
 
-`autotel-mongoose` instruments Mongoose 8+ with stable semantic conventions, query text capture, and default PII redaction.
+`autotel-mongoose` instruments Mongoose 8+ with stable semantic conventions, query text that carries no values, a statement hash to group by, and optional query plans.
 
 ## Installation
 
@@ -28,7 +28,9 @@ const User = mongoose.model(
 );
 
 await User.findOne({ email: 'alice@example.com' }).exec();
-// Span: "find users" with db.query.text (PII redacted)
+// Span: "findOne users"
+//   db.query.text:     {"condition":{"email":"?"},"options":{}}
+//   db.statement.hash: the same for every findOne on users by email
 ```
 
 `instrumentMongoose()` is safe to call more than once. Mongoose's `Model` and
@@ -40,6 +42,58 @@ Methods Mongoose implements with other methods produce one span, not one per
 delegation: `findById` traces as `findById`, without a nested `findOne` for the
 same round trip. A query a hook issues is a separate round trip and keeps its
 own span.
+
+## Query text and grouping
+
+`db.query.text` is the query's shape: field names and operators, with every
+value replaced by `?`. Nothing user-supplied reaches the span, so there is
+nothing for a redactor to miss, and the same query with different values has
+the same text. An `insertMany` records one entry per distinct document shape,
+so batches of any size are one statement.
+
+`db.statement.hash` is set on every operation, from the operation, the
+collection and that shape, even when `dbStatementSerializer` is `false` or
+captures values. Group a trace's spans by it to find an N+1: one hash, many
+spans. The `find_repeated_queries` tool in `autotel-mcp` does that for you.
+
+To capture values anyway, pass a serializer. `statementRedactor` (the
+`'default'` preset unless you say otherwise) still masks emails, phone numbers,
+card numbers and SSNs in what it returns:
+
+```typescript
+instrumentMongoose(mongoose, {
+  dbStatementSerializer: (_operation, payload) => JSON.stringify(payload),
+});
+```
+
+## Query plans
+
+```typescript
+instrumentMongoose(mongoose, { explain: 'analyze' });
+
+await Order.find({ status: 'open', total: { $gte: 10 } })
+  .sort({ createdAt: -1 })
+  .exec();
+// db.plan.node:             SORT
+// db.plan.full_scan:        true
+// db.plan.rows_examined:    60
+// db.plan.rows_returned:    16
+// db.plan.index_suggestion: db.orders.createIndex({ status: 1, createdAt: -1, total: 1 })
+```
+
+`'analyze'` runs `explain('executionStats')`, which reports documents examined
+and time; `'plan'` runs `explain('queryPlanner')`, which does not run the query.
+Explain never applies a write, so updates and deletes are explained safely. It
+is sent to the driver as a raw command, so your schema's hooks run once per
+query, never again for the explain.
+
+The explain runs after the query settles: your code gets its result without
+waiting, and the span still ends when the query did, so its duration is the
+query's own. It is one more round trip per query, so turn it on in
+development, in CI, or for a sample of traffic.
+
+The attributes are the ones [MongoDB](/integrations/mongodb#query-plans)
+documents, shared with Drizzle's Postgres plans.
 
 ## Hook Instrumentation
 
@@ -82,23 +136,24 @@ Excluding a hook only stops the span; your handler still runs.
 
 ## Configuration
 
-| Option                  | Default     | Description                            |
-| ----------------------- | ----------- | -------------------------------------- |
-| `dbName`                | —           | Database name                          |
-| `peerName`              | —           | MongoDB host                           |
-| `peerPort`              | —           | MongoDB port                           |
-| `captureCollectionName` | `true`      | Include collection in span             |
-| `instrumentHooks`       | `false`     | Trace schema hooks; accepts a selector |
-| `dbStatementSerializer` | built-in    | Custom query serializer                |
-| `statementRedactor`     | `'default'` | PII redaction preset                   |
+| Option                  | Default     | Description                              |
+| ----------------------- | ----------- | ---------------------------------------- |
+| `dbName`                | —           | Database name                            |
+| `peerName`              | —           | MongoDB host                             |
+| `peerPort`              | —           | MongoDB port                             |
+| `captureCollectionName` | `true`      | Include collection in span               |
+| `instrumentHooks`       | `false`     | Trace schema hooks; accepts a selector   |
+| `dbStatementSerializer` | value-free  | Custom query serializer                  |
+| `statementRedactor`     | `'default'` | PII redaction for a serializer's output  |
+| `explain`               | `false`     | `'plan'` or `'analyze'`: add `db.plan.*` |
 
 ## Examples
 
-- [`example-mongoose`](https://github.com/jagreehal/autotel/tree/main/apps/example-mongoose): Mongoose with query text capture, PII redaction, and hook instrumentation.
+- [`example-mongoose`](https://github.com/jagreehal/autotel/tree/main/apps/example-mongoose): Mongoose with query text capture and hook instrumentation.
 
 ## Semantic Conventions
 
-Uses stable OTel conventions only:
+Uses stable OTel conventions:
 
 - `db.system.name`
 - `db.operation.name`
@@ -106,3 +161,6 @@ Uses stable OTel conventions only:
 - `db.namespace`
 - `db.query.text`
 - `server.address` / `server.port`
+
+Plus autotel's own, shared across its database instrumentations:
+`db.statement.hash`, and `db.plan.*` when `explain` is on.

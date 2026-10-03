@@ -1,0 +1,104 @@
+---
+title: MongoDB
+description: Value-free db.query.text that groups, and db.plan.* from explain() with an index suggestion, for the MongoDB driver and Mongoose.
+---
+
+`autotel-mongodb` is what MongoDB spans say beyond "a query ran": which query it
+was, without its values, and what MongoDB did to answer it. `autotel-mongoose`
+uses it by default. For the plain `mongodb` driver, plug it into the official
+`@opentelemetry/instrumentation-mongodb` that `init()` already loads.
+
+## Installation
+
+```bash
+npm install autotel autotel-mongodb
+```
+
+## Query text that groups
+
+```typescript
+import { init } from 'autotel';
+import { serializeMongoCommand } from 'autotel-mongodb';
+
+init({
+  service: 'my-app',
+  autoInstrumentations: {
+    mongodb: { dbStatementSerializer: serializeMongoCommand },
+  },
+});
+```
+
+`users.findOne({ email: 'alice@example.com' })` and
+`users.findOne({ email: 'bob@example.com' })` now record the same
+`db.query.text`:
+
+```json
+{
+  "find": "users",
+  "filter": { "email": "?" },
+  "limit": "?",
+  "singleBatch": "?"
+}
+```
+
+Every value is `?`, so nothing user-supplied reaches the span and there is no
+redactor to miss a case. A list of values is one `?`, so `$in` lists of any
+length are the same statement. Batches (`insertMany`, bulk writes) and `$or`
+branches keep one entry per distinct shape, so a batch of 3 documents and one
+of 3,000 match. Pipelines keep every stage, in order. Session fields that change per call (`lsid`,
+`$clusterTime`, `txnNumber`) are dropped.
+
+`serializeMongoStatement(value)` does the same for any filter, update or
+pipeline, without treating its first field as a collection name.
+
+## Query plans
+
+`planFromExplain()` reads `explain('executionStats')` output as a `QueryPlan`,
+and `autotel-db` turns that into span attributes:
+
+```typescript
+import { planAttributes } from 'autotel-db';
+import { planFromExplain } from 'autotel-mongodb';
+
+const plan = planFromExplain(
+  await orders
+    .find({ status: 'open', total: { $gte: 10 } })
+    .sort({ createdAt: -1 })
+    .explain('executionStats'),
+);
+if (plan) span.setAttributes(planAttributes(plan));
+```
+
+| Attribute                                                | Example                                                         |
+| -------------------------------------------------------- | --------------------------------------------------------------- |
+| `db.plan.node`                                           | `SORT`                                                          |
+| `db.plan.full_scan`                                      | `true` when any stage was a `COLLSCAN`                          |
+| `db.plan.indexes`                                        | `status_1_createdAt_-1_total_1`                                 |
+| `db.plan.rows_examined`                                  | documents read (`totalDocsExamined`)                            |
+| `db.plan.rows_returned`                                  | `nReturned`                                                     |
+| `db.plan.execution_ms`                                   | `executionTimeMillis`                                           |
+| `db.plan.hash`                                           | changes when the plan's stages change                           |
+| `db.plan.index_suggestion`                               | `db.orders.createIndex({ status: 1, createdAt: -1, total: 1 })` |
+| `db.plan.stages`                                         | `[SORT, COLLSCAN]`                                              |
+| `db.plan.keys_examined`                                  | `totalKeysExamined`                                             |
+| `db.plan.blocking_sort`                                  | `true` when a `SORT` stage sorted in memory                     |
+| `db.plan.index_suggestion.equality` / `.sort` / `.range` | `[status]`, `[createdAt:-1]`, `[total]`                         |
+
+The suggestion appears when the plan scanned the collection or sorted in
+memory. It follows MongoDB's Equality, Sort, Range rule: fields matched exactly,
+then the sort, then fields matched by range. A query whose filter is an `$or`
+gets none, since no single compound index serves one.
+
+The reader handles find, count, update, delete and findAndModify explains,
+aggregate explains with a `$cursor` stage, the slot-based engine's plan
+wrapper, and sharded plans.
+
+With Mongoose, `instrumentMongoose(mongoose, { explain: 'analyze' })` does all
+of this per query. See [Mongoose](/integrations/mongoose#query-plans).
+
+## The same attributes as Drizzle
+
+The attribute names and the statement hash come from `autotel-db`, which
+`autotel-drizzle` uses for Postgres too. A Postgres `Seq Scan` and a MongoDB
+`COLLSCAN` both read as `db.plan.full_scan: true`, so one query in your backend
+finds every full scan whichever database ran it.

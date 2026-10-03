@@ -1,15 +1,17 @@
 # autotel-mongoose
 
-Standalone Mongoose instrumentation with db.query.text capture and automatic PII redaction.
+Standalone Mongoose instrumentation with value-free db.query.text, db.statement.hash, and optional query plans.
 
 ## Your Role
 
-You are working on the Mongoose micro-package. It instruments Mongoose 8+ with OpenTelemetry tracing, capturing query text with redaction by default.
+You are working on the Mongoose micro-package. It instruments Mongoose 8+ with OpenTelemetry tracing, capturing each query's value-free shape as its text.
 
 ## Key Concepts
 
-- **Statement capture**: Query filters, aggregation pipelines, and document payloads are serialized as `db.query.text`
-- **Default redaction**: Uses autotel core's `createStringRedactor('default')`: emails, phones, SSNs, credit cards
+- **Statement capture**: Query filters, aggregation pipelines, and document payloads are serialized as `db.query.text` by `autotel-mongodb`'s `serializeMongoStatement`: every value `?`, value lists one `?`, batches and `$or` branches one entry per distinct shape, pipelines kept whole and in order. The payload is read when `exec()` starts (after the caller's chaining), not when the Query or Aggregate is created: an Aggregate's statement is `result.pipeline()` at exec, so `.match()` / `.group()` chained after `aggregate()` are part of it
+- **Statement hash**: `db.statement.hash` (from `autotel-db`) is always computed from operation + collection + the value-free shape, independent of `dbStatementSerializer`, so grouping works with a custom serializer or with capture off
+- **Default redaction**: Uses autotel core's `createStringRedactor('default')` on whatever the serializer returns: emails, phones, SSNs, credit cards. The default serializer emits no values, but a custom one may, so it stays on
+- **Explain**: `explain: 'plan' | 'analyze'` runs after the query settles. `src/explain.ts` rebuilds the driver command from the settled (cast) payload, carrying every option that changes the plan (`hint`, `collation`, `min`/`max`, `allowDiskUse`, `let`, and `arrayFilters`/`upsert` on writes), and sends `{ explain: <command>, verbosity }` on the native `Db` (`Model.db.db`), so application middleware runs once. `autotel-mongodb`'s `planFromExplain` turns the output into `db.plan.*`, and the span ends at the settle time it recorded, so the caller never waits for the explain. Use the raw command, not `query.clone().explain()` or `Aggregate.explain()`, which run pre/post middleware again.
 - **Stable semconv only**: Uses `db.query.text`, `db.operation.name`, `db.system.name`, `db.collection.name`, `db.namespace`, `server.address`, `server.port`
 - **OTel-compatible API**: `dbStatementSerializer` matches `@opentelemetry/instrumentation-mongodb`
 - **Hooks are opt-in and selectable**: `instrumentHooks` is `false` by default and accepts the same `MethodSelector` shape as `customMethods`, so a caller can trace `save` while leaving `init` alone. `init` fires once per hydrated document; every other common hook fires once per operation.
@@ -39,12 +41,12 @@ proves the same rules against a server.
 
 - `src/types.ts`: Config interfaces, SerializerPayload
 - `src/constants.ts`: Stable OTel semantic convention constants
-- `src/statement.ts`: Serializer + redactor composition
+- `src/statement.ts`: Serializer + redactor composition (default serializer delegates to `autotel-mongodb`)
 - `src/instrumentation.ts`: Core `instrumentMongoose()` patching
 - `src/index.ts`: Public API exports
 
 ## Boundaries
 
-- ✅ **Always**: Use stable semconv constants, redact by default, match OTel MongoDB plugin API shape
+- ✅ **Always**: Use stable semconv constants, redact by default, match OTel MongoDB plugin API shape, take `db.statement.hash` / `db.plan.*` names from `autotel-db` rather than spelling them here
 - ⚠️ **Ask first**: Adding new semconv attributes, changing default redactor preset
 - 🚫 **Never**: Use deprecated semconv (db.statement, db.system.name, net.peer.\*), disable redaction by default

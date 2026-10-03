@@ -103,6 +103,11 @@
     hasChildren: boolean;
     isCritical: boolean;
     /**
+     * How many spans in this trace ran the same database statement, when more
+     * than one: the row is part of a loop issuing it (an N+1).
+     */
+    repeatCount?: number;
+    /**
      * Which connector lines to draw in the gutter. Absent falls back to plain
      * indentation, so a caller that has not been updated still renders.
      */
@@ -123,6 +128,7 @@
     isCollapsed,
     hasChildren,
     isCritical,
+    repeatCount,
     connectors,
     nameWidth = 200,
     durationWidth = 80,
@@ -135,6 +141,9 @@
   const timing = $derived(calculateTimingInfo(span, trace));
   const isError = $derived(span.status.code === 'ERROR');
   const hasEvents = $derived(span.events && span.events.length > 0);
+  // The plan read a whole table or collection (Postgres Seq Scan, MongoDB
+  // COLLSCAN): the database span most worth opening.
+  const isFullScan = $derived(span.attributes?.['db.plan.full_scan'] === true);
 
   // Pack event markers into sub-lanes to avoid overlap (see utils/spanEvents)
   const eventLanes = $derived(
@@ -233,6 +242,21 @@
     <span class={cn('text-xs truncate', isError ? 'text-danger' : 'text-fg')}>
       {span.name || 'unknown'}
     </span>
+
+    {#if isFullScan}
+      <span
+        class="shrink-0 px-1 rounded border text-[9px] font-medium leading-4 bg-danger-bg text-danger border-danger/40"
+        title="The query plan read the whole table or collection"
+        >FULL SCAN</span
+      >
+    {/if}
+    {#if repeatCount}
+      <span
+        class="shrink-0 px-1 rounded border text-[9px] font-medium leading-4 bg-warning-bg text-warning border-warning/40"
+        title={`This statement ran ${repeatCount} times in this trace: possible N+1`}
+        >×{repeatCount}</span
+      >
+    {/if}
 
     <!-- Collapsed children count -->
     {#if isCollapsed && node.children.length > 0}

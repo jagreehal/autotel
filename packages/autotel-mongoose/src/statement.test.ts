@@ -3,26 +3,28 @@ import { defaultSerializer, createStatementCapture } from './statement';
 import type { SerializerPayload } from './types';
 
 describe('defaultSerializer', () => {
-  it('serializes a query condition payload to JSON', () => {
+  it('serializes a query condition payload without its values', () => {
     const payload: SerializerPayload = {
       condition: { name: 'Alice' },
       options: { lean: true },
     };
-    const result = defaultSerializer('find', payload);
-    expect(result).toBe(JSON.stringify(payload));
+    expect(defaultSerializer('find', payload)).toBe(
+      '{"condition":{"name":"?"},"options":{"lean":"?"}}',
+    );
   });
 
   it('serializes an aggregate pipeline payload', () => {
     const payload: SerializerPayload = {
       aggregatePipeline: [{ $match: { status: 'active' } }],
     };
-    const result = defaultSerializer('aggregate', payload);
-    expect(result).toBe(JSON.stringify(payload));
+    expect(defaultSerializer('aggregate', payload)).toBe(
+      '{"aggregatePipeline":[{"$match":{"status":"?"}}]}',
+    );
   });
 });
 
 describe('createStatementCapture', () => {
-  it('uses default serializer and default redactor when no config provided', () => {
+  it('captures no values by default', () => {
     const capture = createStatementCapture({
       // SAFETY: a JavaScript caller can leave this unset, which is the default
       // path being tested; the type requires a value.
@@ -32,7 +34,17 @@ describe('createStatementCapture', () => {
     const result = capture('find', {
       condition: { email: 'test@example.com' },
     });
-    expect(result).toBeDefined();
+    expect(result).toBe('{"condition":{"email":"?"}}');
+  });
+
+  it('redacts a serializer that captures values', () => {
+    const capture = createStatementCapture({
+      dbStatementSerializer: (_op, payload) => JSON.stringify(payload),
+      statementRedactor: 'default',
+    });
+    const result = capture('find', {
+      condition: { email: 'test@example.com' },
+    });
     // Email should be smart-masked by the default preset (t***@***.com).
     expect(result).not.toContain('test@example.com');
     expect(result).toContain('t***@***.com');
@@ -60,9 +72,7 @@ describe('createStatementCapture', () => {
 
   it('skips redaction when statementRedactor is false', () => {
     const capture = createStatementCapture({
-      // SAFETY: a JavaScript caller can leave this unset, which is the default
-      // path being tested; the type requires a value.
-      dbStatementSerializer: undefined as any,
+      dbStatementSerializer: (_op, payload) => JSON.stringify(payload),
       statementRedactor: false,
     });
     const result = capture('find', {

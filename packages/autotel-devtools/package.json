@@ -115,6 +115,7 @@
     "@types/ws": "^8.18.1",
     "@vitest/browser-playwright": "5.0.2",
     "@vitest/coverage-v8": "5.0.2",
+    "autotel-db": "workspace:*",
     "eslint-plugin-storybook": "^10.6.0",
     "jsdom": "^30.1.1",
     "playwright": "^1.63.0",

@@ -25,6 +25,7 @@ const TAB_SET: Record<TabType, true> = {
   coverage: true,
   agents: true,
   resources: true,
+  queries: true,
   'service-map': true,
   metrics: true,
   logs: true,

@@ -1,4 +1,4 @@
-import { nonEmptyString } from '../lib/values';
+import { groupQueries } from 'autotel-db';
 import type { SpanRecord, TraceRecord } from '../types';
 
 export interface RepeatedQuery {
@@ -16,15 +16,6 @@ export interface RepeatedQueriesResult {
   dbSpansConsidered: number;
 }
 
-function tagString(span: SpanRecord, key: string): string | undefined {
-  return nonEmptyString(span.tags[key]);
-}
-
-/**
- * The statement's identity. `db.statement.hash` is the cheap one and survives
- * suppressed query text; the statement itself is the fallback for spans that
- * carry text but no hash.
- */
 /**
  * Group a trace's database spans by statement and return the ones that ran more
  * than once.
@@ -32,38 +23,39 @@ function tagString(span: SpanRecord, key: string): string | undefined {
  * find_root_cause answers "which single span was slowest", which is the wrong
  * question for an N+1: there the slowest span is one cheap query among hundreds
  * and fixing it buys nothing. The count is the finding.
+ *
+ * The grouping is autotel-db's, the same devtools' Queries tab uses: the
+ * statement hash, else the query text, else the operation on its collection.
  */
 export function findRepeatedQueries(trace: TraceRecord): RepeatedQueriesResult {
-  const groups = new Map<string, RepeatedQuery>();
-  let dbSpansConsidered = 0;
+  const groups = groupQueries(
+    trace.spans.map((span: SpanRecord) => ({
+      traceId: span.traceId,
+      spanId: span.spanId,
+      startMs: span.startTimeUnixMs,
+      durationMs: span.durationMs,
+      attributes: span.tags,
+    })),
+  );
 
-  for (const span of trace.spans) {
-    const statementHash = tagString(span, 'db.statement.hash');
-    const statement =
-      tagString(span, 'db.query.text') ?? tagString(span, 'db.statement');
-    const key = statementHash ?? statement;
-    if (key === undefined) continue;
-    dbSpansConsidered += 1;
-
-    const existing = groups.get(key);
-    if (existing) {
-      existing.count += 1;
-      existing.totalDurationMs += span.durationMs;
-      continue;
-    }
-    const group: RepeatedQuery = {
-      statement,
-      collection: tagString(span, 'db.collection.name'),
-      count: 1,
-      totalDurationMs: span.durationMs,
-    };
-    if (statementHash !== undefined) group.statementHash = statementHash;
-    groups.set(key, group);
-  }
-
-  const repeated = [...groups.values()]
+  const repeated = groups
     .filter((group) => group.count > 1)
-    .sort((a, b) => b.totalDurationMs - a.totalDurationMs);
+    .map((group): RepeatedQuery => {
+      const query: RepeatedQuery = {
+        statement: group.statement,
+        collection: group.collection,
+        count: group.count,
+        totalDurationMs: group.totalMs,
+      };
+      if (group.statementHash !== undefined) {
+        query.statementHash = group.statementHash;
+      }
+      return query;
+    });
 
-  return { traceId: trace.traceId, repeated, dbSpansConsidered };
+  return {
+    traceId: trace.traceId,
+    repeated,
+    dbSpansConsidered: groups.reduce((sum, group) => sum + group.count, 0),
+  };
 }

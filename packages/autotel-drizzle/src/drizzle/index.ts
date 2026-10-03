@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createHash } from 'node:crypto';
 import {
   asDriverObject,
   asFunction,
   asQueryClient,
+  isolatedExplainClient,
   isDriverObject,
   isThenable,
   parseExplainResponse,
@@ -19,7 +19,12 @@ import {
   type QueryCallback,
   type QueryClient,
 } from './boundary';
-import { SpanKind, trace, type TracerProvider } from '@opentelemetry/api';
+import {
+  SpanKind,
+  SpanStatusCode,
+  trace,
+  type TracerProvider,
+} from '@opentelemetry/api';
 import {
   SEMATTRS_DB_COLLECTION_NAME,
   SEMATTRS_DB_NAME,
@@ -35,17 +40,13 @@ import {
   SEMATTRS_NET_PEER_PORT,
 } from '../common/constants';
 import { finalizeSpan, runWithSpan } from 'autotel/trace-helpers';
-
-const SEMATTRS_DB_PLAN_NODE = 'db.plan.node';
-const SEMATTRS_DB_PLAN_INDEXES = 'db.plan.indexes';
-const SEMATTRS_DB_PLAN_COST = 'db.plan.cost';
-const SEMATTRS_DB_PLAN_ROWS_ESTIMATED = 'db.plan.rows_estimated';
-const SEMATTRS_DB_PLAN_ROWS_EXAMINED = 'db.plan.rows_examined';
-const SEMATTRS_DB_PLAN_ROWS_RETURNED = 'db.plan.rows_returned';
-const SEMATTRS_DB_PLAN_BLOCKS = 'db.plan.blocks';
-const SEMATTRS_DB_PLAN_EXECUTION_MS = 'db.plan.execution_ms';
-const SEMATTRS_DB_PLAN_SEQ_SCAN = 'db.plan.seq_scan';
-const SEMATTRS_DB_PLAN_HASH = 'db.plan.hash';
+import {
+  hashStatement,
+  planUnavailableAttributes,
+  planAttributes as toPlanAttributes,
+  type PlanAttributes,
+  type QueryPlan,
+} from 'autotel-db';
 
 const TRANSACTION_ATTRIBUTE = 'db.transaction';
 const REENTRY_FLAG = `${'__autotelDrizzleInstrumented'}:running` as const;
@@ -61,7 +62,7 @@ const PREPARED_QUERY_METHODS = [
   'values',
 ] as const;
 
-type AttributeValue = string | number | boolean;
+type AttributeValue = string | number | boolean | string[];
 type AttributeMap = Record<string, AttributeValue>;
 
 /**
@@ -168,6 +169,8 @@ interface ResolvedConfig {
   peerName?: string;
   peerPort?: number;
   explain: ExplainMode | false;
+  /** What the caller asked for, before the postgres-only rule. */
+  explainRequested: ExplainMode | false;
 }
 
 interface InstrumentationState {
@@ -175,6 +178,8 @@ interface InstrumentationState {
   config: ResolvedConfig;
   /** Fallback client for EXPLAIN when the traced object carries none. */
   explainClient?: QueryClient;
+  /** A pooled connection apart from any transaction, for EXPLAIN inside one. */
+  isolatedExplainClient?: QueryClient;
 }
 
 interface MethodInstrumentationOptions {
@@ -275,6 +280,7 @@ function resolveConfig(config?: InstrumentDrizzleConfig): ResolvedConfig {
       (config?.dbSystem ?? DEFAULT_DB_SYSTEM) === 'postgresql'
         ? (config?.explain ?? false)
         : false,
+    explainRequested: config?.explain ?? false,
   };
 }
 
@@ -367,16 +373,6 @@ function sanitizeQueryText(queryText: string, maxLength: number): string {
   return `${queryText.slice(0, Math.max(0, maxLength))}...`;
 }
 
-/**
- * Stable sha1 of a parameterised SQL statement, used as `db.statement.hash`.
- * Hashes the full original text (not the truncated form) so the hash is
- * identical for queries that only differ in trailing length. We keep this
- * cheap (sha1, hex, take 16 chars) — the goal is grouping, not crypto.
- */
-function hashQueryText(queryText: string): string {
-  return createHash('sha1').update(queryText).digest('hex').slice(0, 16);
-}
-
 function extractOperation(queryText: string): string | undefined {
   const trimmed = queryText.trimStart();
   const match = /^(?<operation>\w+)/u.exec(trimmed);
@@ -418,53 +414,49 @@ function buildExplainStatement(mode: ExplainMode, queryText: string): string {
 }
 
 /**
- * What a captured query plan puts on a span. Declared field by field rather
- * than as a free-form bag, so the attribute set a backend can group and filter
- * by is a contract rather than whatever the last edit happened to write.
+ * Reads a decoded Postgres plan as autotel-db's {@link QueryPlan}, which owns
+ * the attribute names, so a Postgres plan and a MongoDB one land on a span the
+ * same way. The set is deliberately small: enough to answer whether an index
+ * was used, how much of the table was read, and whether the plan changed,
+ * without shipping the whole tree.
  */
-interface PlanAttributes {
-  [SEMATTRS_DB_PLAN_NODE]?: string;
-  [SEMATTRS_DB_PLAN_INDEXES]?: string;
-  [SEMATTRS_DB_PLAN_COST]?: number;
-  [SEMATTRS_DB_PLAN_ROWS_ESTIMATED]?: number;
-  [SEMATTRS_DB_PLAN_ROWS_EXAMINED]?: number;
-  [SEMATTRS_DB_PLAN_ROWS_RETURNED]?: number;
-  [SEMATTRS_DB_PLAN_BLOCKS]?: number;
-  [SEMATTRS_DB_PLAN_EXECUTION_MS]?: number;
-  [SEMATTRS_DB_PLAN_SEQ_SCAN]?: boolean;
-  [SEMATTRS_DB_PLAN_HASH]?: string;
-}
+/** Postgres nodes that read every input row before returning the first. */
+const SORT_NODES = new Set(['Sort', 'Incremental Sort']);
 
-/**
- * Turns a decoded plan into span attributes. The set is deliberately small:
- * enough to answer whether an index was used, how much of the table was read,
- * and whether the plan changed, without shipping the whole tree.
- */
 function planAttributes(
   payload: ExplainPayload,
   mode: ExplainMode,
 ): PlanAttributes {
-  const attributes: PlanAttributes = {};
   const [root] = payload.nodes;
 
   if (root === undefined) {
-    return attributes;
+    return {};
   }
 
-  const nodeTypes: string[] = [];
-  const indexes: string[] = [];
+  const plan: QueryPlan = {
+    nodes: [],
+    fullScan: false,
+    blockingSort: false,
+    mode,
+    indexes: [],
+    cost: root.totalCost,
+    rowsEstimated: root.planRows,
+  };
   let rowsExamined = 0;
   let blocks = 0;
-  let sawSeqScan = false;
 
   for (const node of payload.nodes) {
     if (node.nodeType !== undefined) {
-      nodeTypes.push(node.nodeType);
-      sawSeqScan ||= node.nodeType === 'Seq Scan';
+      plan.nodes.push(node.nodeType);
+      plan.fullScan ||= node.nodeType === 'Seq Scan';
+      plan.blockingSort ||= SORT_NODES.has(node.nodeType);
     }
 
-    if (node.indexName !== undefined && !indexes.includes(node.indexName)) {
-      indexes.push(node.indexName);
+    if (
+      node.indexName !== undefined &&
+      !plan.indexes.includes(node.indexName)
+    ) {
+      plan.indexes.push(node.indexName);
     }
 
     // Rows examined is counted at the leaves only. A parent node reports the
@@ -485,75 +477,153 @@ function planAttributes(
     blocks += node.sharedReadBlocks;
   }
 
-  if (root.nodeType !== undefined) {
-    attributes[SEMATTRS_DB_PLAN_NODE] = root.nodeType;
-  }
-
-  if (root.totalCost !== undefined) {
-    attributes[SEMATTRS_DB_PLAN_COST] = root.totalCost;
-  }
-
-  if (root.planRows !== undefined) {
-    attributes[SEMATTRS_DB_PLAN_ROWS_ESTIMATED] = root.planRows;
-  }
-
-  if (indexes.length > 0) {
-    attributes[SEMATTRS_DB_PLAN_INDEXES] = indexes.join(',');
-  }
-
-  // A plan that reads a whole table is the single most useful thing to filter
-  // a trace by, so it gets its own boolean rather than hiding inside the hash.
-  attributes[SEMATTRS_DB_PLAN_SEQ_SCAN] = sawSeqScan;
-
-  // Same statement, different hash, means the planner changed its mind. That
-  // is the comparison an index change is judged on.
-  attributes[SEMATTRS_DB_PLAN_HASH] = hashQueryText(nodeTypes.join('>'));
-
   if (mode === 'analyze') {
-    attributes[SEMATTRS_DB_PLAN_ROWS_EXAMINED] = rowsExamined;
-    attributes[SEMATTRS_DB_PLAN_ROWS_RETURNED] = root.actualRows;
-    attributes[SEMATTRS_DB_PLAN_BLOCKS] = blocks;
-
-    if (payload.executionMs !== undefined) {
-      attributes[SEMATTRS_DB_PLAN_EXECUTION_MS] = payload.executionMs;
-    }
+    plan.rowsExamined = rowsExamined;
+    plan.rowsReturned = root.actualRows;
+    plan.blocks = blocks;
+    plan.executionMs = payload.executionMs;
   }
 
-  return attributes;
+  return toPlanAttributes(plan);
 }
 
 /**
- * The connection EXPLAIN should run on. drizzle hangs the live client off the
- * prepared query, and inside a transaction that is the transaction's own
- * connection: planning there sees the uncommitted rows the query will see.
- * The pool from `db.$client` is the fallback.
+ * The connection EXPLAIN runs on outside a transaction: the client drizzle
+ * hangs off the prepared query, else the one from `db.$client`. The driver
+ * object is returned too, since readQueryClient wraps it afresh each call
+ * and only the object itself identifies the connection.
  */
 function resolveExplainClient(
   target: DriverValue,
   state: InstrumentationState,
-): QueryClient | undefined {
-  return readQueryClient(target) ?? state.explainClient;
+): { client: QueryClient; connection?: object } | undefined {
+  const own = readQueryClient(target);
+  if (own && isDriverObject(target)) {
+    return { client: own, connection: readObject(target, 'client') };
+  }
+  return state.explainClient ? { client: state.explainClient } : undefined;
 }
 
 /**
- * Runs EXPLAIN on the client that is about to run the query and returns the
- * attributes for its span. Returns nothing rather than throwing: a plan is
- * commentary on a query, and failing to collect it must never fail the query.
+ * How many transactions are open on each connection. Whether a statement runs
+ * inside a transaction is a fact about its connection, not about which
+ * wrapper it came through: drizzle(pgClient) runs a transaction on the same
+ * session it was given, whose methods were wrapped as ordinary queries, and
+ * on one connection every statement sent while a transaction is open runs
+ * inside it.
+ */
+const openTransactions = new WeakMap<object, number>();
+
+/** The connections a drizzle transaction object runs on. */
+function transactionConnections(tx: DriverValue): DriverObject[] {
+  if (!isDriverObject(tx)) return [];
+  const found: DriverObject[] = [];
+  for (const holder of [tx, ...readSessions(tx)]) {
+    const connection = readObject(holder, 'client');
+    if (connection !== undefined && !found.includes(connection)) {
+      found.push(connection);
+    }
+  }
+  return found;
+}
+
+/** Marks a transaction open on `connections`; the returned function closes it. */
+function openTransaction(connections: object[]): () => void {
+  for (const connection of connections) {
+    openTransactions.set(
+      connection,
+      (openTransactions.get(connection) ?? 0) + 1,
+    );
+  }
+  return () => {
+    for (const connection of connections) {
+      const depth = (openTransactions.get(connection) ?? 1) - 1;
+      if (depth > 0) openTransactions.set(connection, depth);
+      else openTransactions.delete(connection);
+    }
+  };
+}
+
+/** Runs `run`, then `after` once it has settled, sync or async. */
+function thenAfter<T>(run: () => T, after: () => void): T {
+  let result: T;
+  try {
+    result = run();
+  } catch (error) {
+    after();
+    throw error;
+  }
+  if (isThenable(result)) {
+    // SAFETY: the probe above found a thenable; settling it runs `after`
+    // whichever way it ends, and the caller gets the same outcome.
+    return Promise.resolve(result).finally(after) as T;
+  }
+  after();
+  return result;
+}
+
+/**
+ * Statements Postgres can EXPLAIN. Anything else (DDL, `SET`, `COPY`) is
+ * rejected by EXPLAIN with an error, so it is never sent.
+ */
+const EXPLAINABLE = new Set([
+  'SELECT',
+  'WITH',
+  'INSERT',
+  'UPDATE',
+  'DELETE',
+  'MERGE',
+  'VALUES',
+  'TABLE',
+]);
+
+/**
+ * Runs EXPLAIN for a statement about to run and returns the attributes for
+ * its span. Never throws: a plan is commentary on a query, and failing to
+ * collect it must never fail the query.
+ *
+ * Inside a transaction the plan comes from a separate pooled connection
+ * (`isolatedExplainClient`), or none is taken: the transaction's own
+ * connection belongs to the application, and its statements keep their order
+ * against its COMMIT or ROLLBACK. Transactions are recognised through
+ * db.transaction().
  */
 async function collectPlan(
   state: InstrumentationState,
-  client: QueryClient | undefined,
+  explainClient: { client: QueryClient } | undefined,
   queryText: string,
   params: DriverValue,
+  inTransaction: boolean,
 ): Promise<PlanAttributes | undefined> {
-  const mode = state.config.explain;
+  const requested = state.config.explain;
 
-  if (!mode || client === undefined) {
+  if (!requested) {
     return undefined;
   }
 
-  if (mode === 'analyze' && !isReadOnlyStatement(queryText)) {
-    return undefined;
+  if (!EXPLAINABLE.has(extractOperation(queryText) ?? '')) {
+    return planUnavailableAttributes('unsupported', { mode: requested });
+  }
+
+  // ANALYZE executes the statement, so a write is planned without running
+  // it: the plan still shows the scan, only the measured counts are absent.
+  const mode: ExplainMode =
+    requested === 'analyze' && !isReadOnlyStatement(queryText)
+      ? 'plan'
+      : requested;
+
+  const client = inTransaction
+    ? state.isolatedExplainClient
+    : explainClient?.client;
+
+  if (client === undefined) {
+    return inTransaction
+      ? // No connection but the transaction's own: no plan, rather than risk it.
+        planUnavailableAttributes('unsupported', { mode })
+      : planUnavailableAttributes('failed', {
+          mode,
+          error: 'no client to run EXPLAIN on',
+        });
   }
 
   try {
@@ -564,14 +634,21 @@ async function collectPlan(
     const payload = parseExplainResponse(result);
 
     if (payload === undefined) {
-      return undefined;
+      return planUnavailableAttributes('failed', {
+        mode,
+        error: 'EXPLAIN returned no plan autotel-drizzle reads',
+      });
     }
 
     return planAttributes(payload, mode);
-  } catch {
+  } catch (error) {
     // An unplannable statement, a driver that does not take raw SQL, a
-    // permissions error: the query still runs and still gets its span.
-    return undefined;
+    // permissions error, a lock the transaction holds: the query still runs
+    // and still gets its span, and the span says why it has no plan.
+    return planUnavailableAttributes('failed', {
+      mode,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -639,7 +716,7 @@ function buildSpan(
   if (queryText !== undefined) {
     // The hash always lives on the span, even when captureQueryText is off for
     // privacy or size, so query grouping still works.
-    span.setAttribute(SEMATTRS_DB_STATEMENT_HASH, hashQueryText(queryText));
+    span.setAttribute(SEMATTRS_DB_STATEMENT_HASH, hashStatement(queryText));
 
     if (table !== undefined) {
       span.setAttribute(SEMATTRS_DB_COLLECTION_NAME, table);
@@ -670,6 +747,60 @@ function buildSpan(
   }
 
   return span;
+}
+
+/**
+ * Runs `fn` under `span` without waiting for `planned`, then ends the span
+ * once both have settled, at the time `fn` finished, with the plan on it.
+ * The caller gets `fn`'s result as soon as it has one.
+ */
+function runAlongsidePlan<T>(
+  span: any,
+  planned: Promise<PlanAttributes | undefined>,
+  fn: () => T,
+): T {
+  const end = (error?: unknown) => {
+    const endTime = performance.timeOrigin + performance.now();
+    void planned
+      .then((attributes) => {
+        if (attributes) span.setAttributes(attributes);
+      })
+      .finally(() => {
+        if (error) {
+          span.recordException(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+          span.setStatus({ code: SpanStatusCode.ERROR });
+        } else {
+          span.setStatus({ code: SpanStatusCode.OK });
+        }
+        span.end(endTime);
+      });
+  };
+  return runWithSpan(span, () => {
+    try {
+      const result = fn();
+      if (isThenable(result)) {
+        // SAFETY: the guard narrowed the result to a thenable; the caller
+        // gets the same outcome back.
+        return result.then(
+          (value) => {
+            end();
+            return value;
+          },
+          (error) => {
+            end(error);
+            throw error;
+          },
+        ) as T;
+      }
+      end();
+      return result;
+    } catch (error) {
+      end(error);
+      throw error;
+    }
+  });
 }
 
 function executeWithSpan<T>(span: any, fn: () => T): T {
@@ -750,11 +881,39 @@ function instrumentMethod(
     // fetches it never lands in the duration the span reports. A traced query
     // measures the query.
     if (state.config.explain && queryText !== undefined && !callback) {
+      const explainClient = resolveExplainClient(readSelf(this), state);
+      const inTransaction =
+        options.extraAttributes?.[TRANSACTION_ATTRIBUTE] === true ||
+        (explainClient?.connection !== undefined &&
+          openTransactions.has(explainClient.connection));
+      if (inTransaction) {
+        // Inside a transaction the statement goes out exactly when it would
+        // without instrumentation. Waiting for a plan first, even one from
+        // another connection, reorders the transaction's statements against
+        // each other and against its COMMIT or ROLLBACK. So the plan is
+        // fetched alongside, and the span ends at the statement's own end
+        // time once both have settled.
+        const span = buildSpan(state, queryText, options.extraAttributes);
+        const planned = collectPlan(
+          state,
+          explainClient,
+          queryText,
+          options.explainParams?.(args),
+          true,
+        );
+        return runAlongsidePlan(span, planned, () =>
+          originalMethod.call(this, ...args),
+        );
+      }
+
+      // Outside a transaction the plan is collected before the span opens,
+      // so the round trip that fetches it stays out of the duration.
       return collectPlan(
         state,
-        resolveExplainClient(readSelf(this), state),
+        explainClient,
         queryText,
         options.explainParams?.(args),
+        inTransaction,
       ).then((planAttributes) =>
         executeWithSpan(
           buildSpan(state, queryText, {
@@ -766,7 +925,19 @@ function instrumentMethod(
       );
     }
 
-    const span = buildSpan(state, queryText, options.extraAttributes);
+    // Explain was asked for but cannot run here: a dialect other than
+    // postgres, or a callback-style call. Say so, rather than leave a span
+    // that reads as if explain were off.
+    const unexplained =
+      state.config.explainRequested && queryText !== undefined
+        ? planUnavailableAttributes('unsupported', {
+            mode: state.config.explainRequested,
+          })
+        : undefined;
+    const span = buildSpan(state, queryText, {
+      ...options.extraAttributes,
+      ...unexplained,
+    });
 
     if (callback) {
       return runWithSpan(span, () => {
@@ -972,16 +1143,26 @@ function instrumentSession(
           return originalTransaction.call(this, ...transactionArgs);
         }
 
+        // Opened as the callback starts (that is when the connection is
+        // known) and closed only once drizzle's transaction() has settled,
+        // after its COMMIT or ROLLBACK.
+        const closers: Array<() => void> = [];
         const wrappedCallback = (
           tx: DriverValue,
           ...callbackArgs: DriverValue[]
         ) => {
           instrumentTransactionTarget(tx, state);
+          closers.push(openTransaction(transactionConnections(tx)));
           return callback.call(this, tx, ...callbackArgs);
         };
 
         const runTransaction = () =>
-          originalTransaction.call(this, wrappedCallback, ...restArgs);
+          thenAfter(
+            () => originalTransaction.call(this, wrappedCallback, ...restArgs),
+            () => {
+              for (const close of closers) close();
+            },
+          );
 
         if (!state.config.traceTransactions) {
           return runTransaction();
@@ -1073,6 +1254,7 @@ export function instrumentDrizzleClient<TDb>(
 
   const state = getState(config);
   state.explainClient = asQueryClient(target.$client);
+  state.isolatedExplainClient = isolatedExplainClient(target.$client);
   let instrumented = false;
 
   // The real session objects go first. Whether one of them was instrumented
