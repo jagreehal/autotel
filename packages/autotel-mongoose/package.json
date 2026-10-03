@@ -1,6 +1,6 @@
 {
   "name": "autotel-mongoose",
-  "version": "30.0.0",
+  "version": "31.0.0",
   "description": "OpenTelemetry instrumentation for Mongoose: value-free db.query.text that groups, db.statement.hash, and db.plan.* from explain()",
   "type": "module",
   "main": "./dist/index.js",

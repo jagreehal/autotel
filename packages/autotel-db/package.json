@@ -1,6 +1,6 @@
 {
   "name": "autotel-db",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Shared vocabulary for database query insight: a statement hash for grouping, and db.plan.* attributes from any database's query plan",
   "type": "module",
   "sideEffects": false,

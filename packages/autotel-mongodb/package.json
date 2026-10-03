@@ -1,6 +1,6 @@
 {
   "name": "autotel-mongodb",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "MongoDB query insight for OpenTelemetry: value-free db.query.text that groups, and db.plan.* from explain() with an ESR index suggestion",
   "type": "module",
   "sideEffects": false,
