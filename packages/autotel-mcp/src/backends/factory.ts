@@ -10,6 +10,7 @@ import { FixtureBackend } from './fixture/index';
 import { LogfireBackend } from './logfire/index';
 import { DatadogBackend } from './datadog/index';
 import { SignozBackend } from './signoz/index';
+import { CloudflareBackend } from './cloudflare/index';
 import {
   CompositeBackend,
   type CompositeBackendParts,
@@ -88,6 +89,13 @@ export async function createBackend(config: AppConfig): Promise<BackendHandle> {
       backend = new SignozBackend({
         baseUrl: config.signozBaseUrl,
         apiKey: config.signozApiKey,
+      });
+      break;
+    }
+    case 'cloudflare': {
+      backend = new CloudflareBackend({
+        accountId: config.cloudflareAccountId,
+        apiToken: config.cloudflareApiToken,
       });
       break;
     }

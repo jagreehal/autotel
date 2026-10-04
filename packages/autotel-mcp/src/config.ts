@@ -75,6 +75,7 @@ const configSchema = z.object({
       'logfire',
       'datadog',
       'signoz',
+      'cloudflare',
     ])
     .default('collector'),
   // No `sse`: the HTTP+SSE transport has been deprecated since protocol
@@ -116,6 +117,8 @@ const configSchema = z.object({
   datadogAppKey: z.string().default(''),
   signozBaseUrl: z.string().default('http://localhost:8080'),
   signozApiKey: z.string().default(''),
+  cloudflareAccountId: z.string().default(''),
+  cloudflareApiToken: z.string().default(''),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
@@ -187,6 +190,9 @@ export function resolveConfig(
     datadogAppKey: env.DD_APP_KEY,
     signozBaseUrl: read('SIGNOZ_BASE_URL'),
     signozApiKey: env.SIGNOZ_API_KEY,
+    // An account id names, it does not grant, so it has a flag.
+    cloudflareAccountId: read('CLOUDFLARE_ACCOUNT_ID'),
+    cloudflareApiToken: env.CLOUDFLARE_API_TOKEN,
   };
 
   const result = configSchema.safeParse(raw);

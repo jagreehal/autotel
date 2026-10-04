@@ -57,6 +57,8 @@ export class HttpError extends Error {
   constructor(
     readonly status: number,
     readonly url: string,
+    /** The error response's text, for backends whose errors explain themselves. */
+    readonly body?: string,
   ) {
     super(`HTTP ${status} for ${url}`);
     this.name = 'HttpError';
@@ -65,7 +67,14 @@ export class HttpError extends Error {
 
 async function parseOrThrow<T>(response: Response, url: string): Promise<T> {
   if (!response.ok) {
-    throw new HttpError(response.status, url);
+    let body: string | undefined;
+    try {
+      const text = await response.text();
+      body = text.slice(0, 2000);
+    } catch {
+      // No readable body; the status alone has to do.
+    }
+    throw new HttpError(response.status, url, body);
   }
   // SAFETY: the caller names the shape this endpoint documents, and the
   // status was checked above. A payload that does not match surfaces as a

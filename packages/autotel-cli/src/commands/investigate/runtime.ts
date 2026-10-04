@@ -19,6 +19,7 @@ export interface InvestigateFlags {
   logfireBaseUrl?: string;
   datadogSite?: string;
   signozBaseUrl?: string;
+  cloudflareAccountId?: string;
   outputFile?: string;
   noSecrets?: boolean;
 }
@@ -47,6 +48,8 @@ function applyFlagsToEnv(flags: InvestigateFlags): void {
   if (flags.datadogSite !== undefined) process.env.DD_SITE = flags.datadogSite;
   if (flags.signozBaseUrl !== undefined)
     process.env.SIGNOZ_BASE_URL = flags.signozBaseUrl;
+  if (flags.cloudflareAccountId !== undefined)
+    process.env.CLOUDFLARE_ACCOUNT_ID = flags.cloudflareAccountId;
 }
 
 /**
