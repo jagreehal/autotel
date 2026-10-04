@@ -291,6 +291,24 @@ the health check and names the variable, so you never read an empty result as
 "no data". HTTP 403 means Datadog accepted the request and refused it: check
 that `DD_SITE` matches the org and that the application key carries `apm_read`.
 
+### Cloudflare
+
+Query the spans and Workers logs Cloudflare stores through its SQL API
+(`logs.traces`, `logs.workersLogs`): Workers' automatic spans, custom spans
+(autotel's included) and Cloudflare Traces' edge spans. Metrics report as
+`unsupported`.
+
+```bash
+export CLOUDFLARE_ACCOUNT_ID=...
+export CLOUDFLARE_API_TOKEN=...   # needs Account Analytics Read
+AUTOTEL_BACKEND=cloudflare npx autotel-mcp
+```
+
+Cloudflare samples the dataset adaptively by window width and volume. The
+backend fetches each trace in a narrow window around its start time, and tags a
+sampled span with `cloudflare.sample_interval`, the number of spans it
+represents.
+
 ## Offline cache and snapshots
 
 Collector schema and semantic-convention tools can run in CI or air-gapped environments using local cache/snapshots.
@@ -309,30 +327,31 @@ everything.
 
 ### Flags and environment variables
 
-| Flag                | Variable                  | Default                                       | Description                                     |
-| ------------------- | ------------------------- | --------------------------------------------- | ----------------------------------------------- |
-| `-b, --backend`     | `AUTOTEL_BACKEND`         | `collector`                                   | Backend: `collector`, `jaeger`, …               |
-| `-t, --transport`   | `AUTOTEL_TRANSPORT`       | `stdio`                                       | MCP transport: `stdio` or `http`                |
-| `-p, --port`        | `AUTOTEL_PORT`            | `3000`                                        | MCP HTTP port                                   |
-| `--allowed-hosts`   | `AUTOTEL_ALLOWED_HOSTS`   | localhost only                                | Hostnames the HTTP endpoint answers for         |
-| `--allowed-origins` | `AUTOTEL_ALLOWED_ORIGINS` | localhost only                                | Hostnames of browser origins allowed to call it |
-| `-H, --host`        | `AUTOTEL_HOST`            | `127.0.0.1`                                   | MCP HTTP bind address                           |
-| `--collector-port`  | `AUTOTEL_COLLECTOR_PORT`  | `4318`                                        | OTLP receiver port                              |
-| `--persist`         | `AUTOTEL_PERSIST`         | —                                             | libsql file path (omit for in-memory)           |
-| `--retention-ms`    | `AUTOTEL_RETENTION_MS`    | `3600000` (1h mem) / `86400000` (24h persist) | Data retention                                  |
-| `--max-traces`      | `AUTOTEL_MAX_TRACES`      | `10000`                                       | Max traces before eviction                      |
-| `--fixture`         | `AUTOTEL_FIXTURE_PATH`    | `./fixtures/telemetry.json`                   | Fixture backend data                            |
-| `--jaeger-url`      | `JAEGER_BASE_URL`         | `http://localhost:16686`                      | Jaeger API URL                                  |
-| `--devtools-url`    | `DEVTOOLS_BASE_URL`       | `http://localhost:4318`                       | autotel-devtools URL                            |
-| `--tempo-url`       | `TEMPO_BASE_URL`          | `http://localhost:3200`                       | Tempo URL                                       |
-| `--prometheus-url`  | `PROMETHEUS_BASE_URL`     | `http://localhost:9090`                       | Prometheus URL                                  |
-| `--loki-url`        | `LOKI_BASE_URL`           | `http://localhost:3100`                       | Loki URL                                        |
-| `--datadog-site`    | `DD_SITE`                 | `datadoghq.com`                               | Datadog region                                  |
+| Flag                   | Variable                  | Default                                       | Description                                     |
+| ---------------------- | ------------------------- | --------------------------------------------- | ----------------------------------------------- |
+| `-b, --backend`        | `AUTOTEL_BACKEND`         | `collector`                                   | Backend: `collector`, `jaeger`, …               |
+| `-t, --transport`      | `AUTOTEL_TRANSPORT`       | `stdio`                                       | MCP transport: `stdio` or `http`                |
+| `-p, --port`           | `AUTOTEL_PORT`            | `3000`                                        | MCP HTTP port                                   |
+| `--allowed-hosts`      | `AUTOTEL_ALLOWED_HOSTS`   | localhost only                                | Hostnames the HTTP endpoint answers for         |
+| `--allowed-origins`    | `AUTOTEL_ALLOWED_ORIGINS` | localhost only                                | Hostnames of browser origins allowed to call it |
+| `-H, --host`           | `AUTOTEL_HOST`            | `127.0.0.1`                                   | MCP HTTP bind address                           |
+| `--collector-port`     | `AUTOTEL_COLLECTOR_PORT`  | `4318`                                        | OTLP receiver port                              |
+| `--persist`            | `AUTOTEL_PERSIST`         | —                                             | libsql file path (omit for in-memory)           |
+| `--retention-ms`       | `AUTOTEL_RETENTION_MS`    | `3600000` (1h mem) / `86400000` (24h persist) | Data retention                                  |
+| `--max-traces`         | `AUTOTEL_MAX_TRACES`      | `10000`                                       | Max traces before eviction                      |
+| `--fixture`            | `AUTOTEL_FIXTURE_PATH`    | `./fixtures/telemetry.json`                   | Fixture backend data                            |
+| `--jaeger-url`         | `JAEGER_BASE_URL`         | `http://localhost:16686`                      | Jaeger API URL                                  |
+| `--devtools-url`       | `DEVTOOLS_BASE_URL`       | `http://localhost:4318`                       | autotel-devtools URL                            |
+| `--tempo-url`          | `TEMPO_BASE_URL`          | `http://localhost:3200`                       | Tempo URL                                       |
+| `--prometheus-url`     | `PROMETHEUS_BASE_URL`     | `http://localhost:9090`                       | Prometheus URL                                  |
+| `--loki-url`           | `LOKI_BASE_URL`           | `http://localhost:3100`                       | Loki URL                                        |
+| `--datadog-site`       | `DD_SITE`                 | `datadoghq.com`                               | Datadog region                                  |
+| `--cloudflare-account` | `CLOUDFLARE_ACCOUNT_ID`   | —                                             | Cloudflare account id                           |
 
 Credentials have no flag form. `argv` is readable by any process that can list
-the process table, so `LOGFIRE_READ_TOKEN`, `DD_API_KEY`, `DD_APP_KEY` and
-`SIGNOZ_API_KEY` come from the environment only. Passing one as a flag is an
-error that names the variable to set instead.
+the process table, so `LOGFIRE_READ_TOKEN`, `DD_API_KEY`, `DD_APP_KEY`,
+`SIGNOZ_API_KEY` and `CLOUDFLARE_API_TOKEN` come from the environment only.
+Passing one as a flag is an error that names the variable to set instead.
 
 An unrecognised flag is reported on stderr and ignored, not treated as an error:
 this binary read no `argv` at all until recently, and client configs in the wild

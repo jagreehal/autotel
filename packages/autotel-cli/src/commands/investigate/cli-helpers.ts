@@ -20,7 +20,7 @@ export function addBackendFlags(cmd: Command): Command {
     cmd
       .option(
         '--backend <kind>',
-        'Backend: collector|jaeger|tempo|prometheus|loki|stack|auto|fixture|logfire|datadog|signoz (env: AUTOTEL_BACKEND)',
+        'Backend: collector|jaeger|tempo|prometheus|loki|stack|auto|fixture|logfire|datadog|signoz|cloudflare (env: AUTOTEL_BACKEND)',
       )
       .option(
         '--jaeger-base-url <url>',
@@ -52,6 +52,10 @@ export function addBackendFlags(cmd: Command): Command {
         '--signoz-base-url <url>',
         'SigNoz base URL (env: SIGNOZ_BASE_URL; key via SIGNOZ_API_KEY)',
       )
+      .option(
+        '--cloudflare-account <id>',
+        'Cloudflare account id (env: CLOUDFLARE_ACCOUNT_ID; token via CLOUDFLARE_API_TOKEN)',
+      )
       .option('--output-file <path>', 'Persist JSON output to this file')
       .option('--no-secrets-in-output', 'Redact secret-shaped values')
   );
@@ -81,6 +85,7 @@ export function backendFlagsFromOpts(
     logfireBaseUrl: stringOpt(opts, 'logfireBaseUrl'),
     datadogSite: stringOpt(opts, 'datadogSite'),
     signozBaseUrl: stringOpt(opts, 'signozBaseUrl'),
+    cloudflareAccountId: stringOpt(opts, 'cloudflareAccount'),
     outputFile: stringOpt(opts, 'outputFile'),
     noSecrets: opts.secretsInOutput === false,
   };

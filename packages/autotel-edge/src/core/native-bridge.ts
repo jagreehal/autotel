@@ -61,6 +61,11 @@ export interface NativeSpanHandle {
   }): void;
   updateName?(name: string): void;
   /**
+   * End the span. Only spans from {@link NativeTracer.startSpan} /
+   * {@link NativeTracer.startActiveSpan} need it; `enterSpan` ends its own.
+   */
+  end?(): void;
+  /**
    * Optional — not provided by Cloudflare today, but reserved so autotel
    * auto-upgrades to real trace/span ids the moment the platform exposes them,
    * with no API change. When present and valid, its ids take precedence over
@@ -77,6 +82,17 @@ export interface NativeTracer {
   enterSpan<T>(name: string, callback: (span: NativeSpanHandle) => T): T;
   /** The currently active span; outside custom spans, the invocation root. */
   getActiveSpan?(): NativeSpanHandle | undefined;
+  /**
+   * Start a span the caller ends, without making it active. Backs OpenTelemetry
+   * `tracer.startSpan()`. Cloudflare: `tracing.startSpan(name)` (Sept 2026+).
+   */
+  startSpan?(name: string): NativeSpanHandle;
+  /**
+   * Start a span, make it active for the callback, and leave ending it to the
+   * caller: OpenTelemetry's `startActiveSpan` contract. Cloudflare:
+   * `tracing.startActiveSpan(name, callback)` (Sept 2026+).
+   */
+  startActiveSpan?<T>(name: string, callback: (span: NativeSpanHandle) => T): T;
   /**
    * Optional per-request correlation id surfaced as `ctx.correlationId` (and a
    * `correlation.id` span attribute) when the platform does not yet expose
@@ -228,7 +244,10 @@ function coerceAttribute(
   }
 }
 
-function applyAttributes(span: NativeSpanHandle, attributes: Attributes): void {
+export function applyNativeAttributes(
+  span: NativeSpanHandle,
+  attributes: Attributes,
+): void {
   const coerced: Record<string, string | number | boolean | undefined> = {};
   for (const [key, value] of Object.entries(attributes)) {
     coerced[key] = coerceAttribute(value);
@@ -342,7 +361,7 @@ export function createNativeTraceContext(
     'code.function': name,
     setAttribute: (key, value) =>
       span.setAttribute(key, coerceAttribute(value)),
-    setAttributes: (attrs) => applyAttributes(span, attrs),
+    setAttributes: (attrs) => applyNativeAttributes(span, attrs),
     setStatus: (status) => nativeSetStatus(span, status),
     recordException: (exception) => nativeRecordException(span, exception),
     addEvent: (eventName, attributesOrStartTime) =>
@@ -362,6 +381,8 @@ export function createNativeTraceContext(
 export function createNativeSpanShim(
   span: NativeSpanHandle,
   correlationId?: string,
+  /** The caller owns the span's lifetime, so `end()` ends the native span. */
+  owned = false,
 ): Span {
   // Surface the correlation id as a queryable attribute (parity with
   // createNativeTraceContext), preferring real ids when the platform has them.
@@ -383,7 +404,7 @@ export function createNativeSpanShim(
       return shim;
     },
     setAttributes(attributes) {
-      applyAttributes(span, attributes);
+      applyNativeAttributes(span, attributes);
       return shim;
     },
     addEvent(eventName, attributesOrStartTime) {
@@ -400,7 +421,9 @@ export function createNativeSpanShim(
       nativeUpdateName(span, newName);
       return shim;
     },
-    end: () => {},
+    end: () => {
+      if (owned) span.end?.();
+    },
     isRecording: () => span.isTraced,
     recordException: (exception) => nativeRecordException(span, exception),
   } as Span;

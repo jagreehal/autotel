@@ -438,9 +438,16 @@ Your `trace()` calls route to Cloudflare's tracer, including calls buried inside
 utility functions and libraries.
 
 When native tracing is active, autotel steps aside. It does not proxy-instrument
-bindings, because Cloudflare already traces them, and it registers no second
-provider or exporter, because Cloudflare exports everything. You get one set of
-spans.
+bindings, because Cloudflare already traces them, and it adds no exporter,
+because Cloudflare exports everything. You get one set of spans.
+
+Libraries that call `@opentelemetry/api` directly, such as AI SDK telemetry and
+`autotel-genai`, land in the same waterfall. autotel maps `startActiveSpan()`
+onto Cloudflare's `tracing.startActiveSpan()` and `startSpan()` onto
+`tracing.startSpan()`, so a library span holds the `fetch` calls it makes.
+
+To query what Cloudflare stored, run
+[autotel-mcp](/autotel/integrations/mcp/) with `AUTOTEL_BACKEND=cloudflare`.
 
 Control it with `nativeTracing`, which defaults to `'auto'`:
 

@@ -42,6 +42,7 @@ export const VALUE_FLAGS = new Map<string, string>([
   ['--signoz-url', 'SIGNOZ_BASE_URL'],
   // A region hostname, not a secret. autotel-cli exposes it as a flag too.
   ['--datadog-site', 'DD_SITE'],
+  ['--cloudflare-account', 'CLOUDFLARE_ACCOUNT_ID'],
 ]);
 
 /**
@@ -54,6 +55,7 @@ const ENV_ONLY = new Map<string, string>([
   ['--datadog-api-key', 'DD_API_KEY'],
   ['--datadog-app-key', 'DD_APP_KEY'],
   ['--signoz-api-key', 'SIGNOZ_API_KEY'],
+  ['--cloudflare-token', 'CLOUDFLARE_API_TOKEN'],
 ]);
 
 export interface ParsedArgs {
@@ -134,7 +136,7 @@ Usage: autotel-mcp [options]
 Options:
   -b, --backend <name>       collector (default), jaeger, devtools, tempo,
                              prometheus, loki, stack, auto, fixture, logfire,
-                             datadog, signoz            [AUTOTEL_BACKEND]
+                             datadog, signoz, cloudflare [AUTOTEL_BACKEND]
   -t, --transport <name>     stdio (default), http    [AUTOTEL_TRANSPORT]
   -p, --port <port>          MCP HTTP port, default 3000        [AUTOTEL_PORT]
   -H, --host <host>          MCP HTTP bind address, default 127.0.0.1
@@ -161,6 +163,8 @@ Options:
       --logfire-url <url>    Logfire base URL            [LOGFIRE_BASE_URL]
       --signoz-url <url>     SigNoz base URL              [SIGNOZ_BASE_URL]
       --datadog-site <host>  Datadog region, e.g. datadoghq.eu     [DD_SITE]
+      --cloudflare-account <id>
+                             Cloudflare account id  [CLOUDFLARE_ACCOUNT_ID]
   -h, --help                 Show this help
   -v, --version              Show version
 
@@ -168,7 +172,8 @@ Flags override environment variables, which override defaults.
 
 Credentials are read from the environment only, never from flags, because argv
 is visible to any process that can list the process table:
-  LOGFIRE_READ_TOKEN, DD_API_KEY, DD_APP_KEY, SIGNOZ_API_KEY
+  LOGFIRE_READ_TOKEN, DD_API_KEY, DD_APP_KEY, SIGNOZ_API_KEY,
+  CLOUDFLARE_API_TOKEN
 
 Unknown flags are reported on stderr and ignored, not treated as errors.
 

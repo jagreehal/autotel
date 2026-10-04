@@ -40,8 +40,17 @@ When native tracing is active autotel **defers to the platform**:
 
 - **No duplicate spans.** autotel does **not** proxy-instrument bindings
   (KV/R2/D1/…). Cloudflare already traces them natively.
-- **No second pipeline.** autotel does not register its own provider/exporter or
-  flush spans; Cloudflare exports everything.
+- **One pipeline.** Cloudflare exports and flushes every span. autotel
+  registers its tracer so OpenTelemetry API spans reach the platform.
+- **OpenTelemetry API spans join the waterfall.** Libraries that call
+  `@opentelemetry/api` directly (AI SDK `experimental_telemetry`,
+  `autotel-genai`, `@opentelemetry/instrumentation-*`) emit native spans.
+  `tracer.startActiveSpan()` maps to `tracing.startActiveSpan()`, and the
+  platform nests `fetch` and child spans under it. `tracer.startSpan()` maps to
+  `tracing.startSpan()`, a child of the active span. Cloudflare takes a name
+  only, so autotel applies `attributes` after start; parent context, `root`,
+  `kind` and links have no native equivalent. To parent children, use
+  `startActiveSpan()`. On older runtimes autotel uses `enterSpan()`.
 - **Handler body = root span.** Outside any `trace()`, the ambient ctx,
   `getRequestLogger()` and `createWorkersLogger()` write to Cloudflare's root
   invocation span. That is the span [Workers Issues](https://developers.cloudflare.com/workers/observability/issues/)
@@ -61,10 +70,13 @@ See the package README.
   tests, choosing native or OTLP per invocation.
 - The request logger / wide events, typed attributes, sampling, subscribers
   (product events), and `correlation.id` (`cf-ray`) on every custom span.
-- **Distributed traces.** Native tracing does not propagate `traceparent`
-  (verified: outbound `fetch()` carries none and Cloudflare exposes no span ids).
-  Set `nativeTracing: 'off'` when a Worker must join traces with non-Cloudflare
-  services.
+- **Distributed traces.** Set `nativeTracing: 'off'` when a Worker joins
+  traces with services outside Cloudflare. autotel's OTLP mode reads and writes
+  `traceparent` itself. Checked 2026-10-04 on a `workers.dev` Worker: native
+  mode sends no `traceparent` on outbound `fetch()` and starts a fresh trace
+  for each request. Cloudflare Traces (zone-level, beta) adds
+  `propagation-policy` and `forward-context` per zone for the edge-to-origin
+  hop.
 - Named Workflow steps (see above).
 - **Issue signals Cloudflare records from logs, as span exceptions** (both
   modes; in native mode they land on the platform span):
@@ -95,6 +107,20 @@ export default wrapModule(
   handler,
 );
 ```
+
+## Querying what Cloudflare stored
+
+Cloudflare's SQL API serves the spans and Workers logs it keeps
+(`logs.traces`, `logs.workersLogs`). Point autotel-mcp at it and you get the
+same investigation tools as any other backend:
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_API_TOKEN=... npx autotel-mcp --backend cloudflare
+```
+
+The token needs Account Analytics Read. Cloudflare writes `cloudflare.ray_id`
+on the root invocation span, and autotel writes the same value as
+`correlation.id` on custom spans.
 
 ## Backends are fully configurable
 

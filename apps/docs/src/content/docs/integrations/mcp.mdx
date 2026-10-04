@@ -496,11 +496,13 @@ dashboard), or give each tool a separate port and export from your app to both.
 | `logfire`    | Pydantic Logfire query API (traces only)                                                              | `LOGFIRE_BASE_URL`, `LOGFIRE_READ_TOKEN`             |
 | `datadog`    | Datadog APM v2 APIs (traces only)                                                                     | `DD_SITE`, `DD_API_KEY`, `DD_APP_KEY`                |
 | `signoz`     | SigNoz Query Builder v5 API (traces only)                                                             | `SIGNOZ_BASE_URL`, optional `SIGNOZ_API_KEY`         |
+| `cloudflare` | Cloudflare SQL API: `logs.traces` and `logs.workersLogs` (traces and logs)                            | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`      |
 
 Hosted-vendor credentials belong in `env`, never command arguments. Logfire
 requires a read-scope token and its regional query host; Datadog requires both
 an API key and an application key. These three backends return an explicit
-`unsupported` capability for metrics and logs.
+`unsupported` capability for metrics and logs. Cloudflare needs a token with
+Account Analytics Read and reports metrics as `unsupported`.
 
 ### Read from a local LGTM stack
 

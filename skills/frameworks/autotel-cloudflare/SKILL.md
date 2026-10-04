@@ -82,7 +82,11 @@ With `[observability.traces] enabled = true` in `wrangler`, Cloudflare instrumen
 | `'on'`          | Prefer native; warn once and fall back when absent.        |
 | `'off'`         | Always autotel's OTLP exporter.                            |
 
+Libraries that call `@opentelemetry/api` directly (AI SDK telemetry, `autotel-genai`) join the same waterfall: autotel maps `startActiveSpan()` onto Cloudflare's `tracing.startActiveSpan()` and `startSpan()` onto `tracing.startSpan()`.
+
 Leave it at `'auto'`. Outside any wrapper (Durable Object RPC methods, entrypoints), `trace()` uses the `tracing` export of `cloudflare:workers`, so those spans nest too. The handler body writes to Cloudflare's root span, so `user.id` set through the request logger shows up in Workers Issues.
+
+To query spans and Workers logs Cloudflare stored, run autotel-mcp or `autotel investigate` with `--backend cloudflare` (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` with Account Analytics Read).
 
 `wrangler dev` runs native tracing as well and sends spans to the Local Explorer. To stream local spans to `npx autotel-devtools`, put `NATIVE_TRACING=off` in `.dev.vars` and pass `nativeTracing: env.NATIVE_TRACING`.
 

@@ -20,7 +20,9 @@
  */
 
 import { tracing as moduleTracing } from 'cloudflare:workers';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
+  WorkerTracerProvider,
   setDefaultNativeTracer,
   type NativeTracer,
   type NativeSpanHandle,
@@ -44,6 +46,10 @@ interface CloudflareTracing {
     ...args: A
   ): T;
   getActiveSpan?(): CloudflareSpan | undefined;
+  /** Sept 2026+: a span the caller ends, not made active. Takes a name only. */
+  startSpan?(name: string): CloudflareSpan;
+  /** Sept 2026+: active for the callback; the caller ends it. */
+  startActiveSpan?<T>(name: string, callback: (span: CloudflareSpan) => T): T;
 }
 
 type MaybeTracingCarrier = { tracing?: CloudflareTracing } | null | undefined;
@@ -83,6 +89,11 @@ export function getNativeTracerFromCtx(
     enterSpan: <T>(name: string, callback: (span: NativeSpanHandle) => T): T =>
       tracing.enterSpan(name, callback as (span: CloudflareSpan) => T),
     getActiveSpan: () => tracing.getActiveSpan?.(),
+    // Older runtimes lack these; autotel-edge's tracer falls back to enterSpan.
+    startSpan: tracing.startSpan && ((name) => tracing.startSpan!(name)),
+    startActiveSpan:
+      tracing.startActiveSpan &&
+      ((name, callback) => tracing.startActiveSpan!(name, callback)),
   };
 }
 
@@ -95,3 +106,10 @@ export const platformNativeTracer = getNativeTracerFromCtx({
   tracing: moduleTracing,
 });
 setDefaultNativeTracer(platformNativeTracer);
+
+// Register autotel's tracer so OpenTelemetry API spans (AI SDK telemetry,
+// instrumentation libraries) route to the native tracer. An OTLP-mode
+// invocation reconfigures this same tracer.
+if (platformNativeTracer) {
+  new WorkerTracerProvider([], resourceFromAttributes({})).register();
+}

@@ -17,7 +17,10 @@ import { ensureGlobalContextManager } from './context';
 export class WorkerTracerProvider {
   private tracer: WorkerTracer;
 
-  constructor(spanProcessors: SpanProcessor[], resource: Resource) {
+  constructor(
+    private readonly spanProcessors: SpanProcessor[],
+    private readonly resource: Resource,
+  ) {
     this.tracer = new WorkerTracer(spanProcessors, resource);
   }
 
@@ -42,6 +45,15 @@ export class WorkerTracerProvider {
    */
   register(): void {
     ensureGlobalContextManager();
+
+    // The API accepts one provider per isolate. When native routing registered
+    // first, give the installed tracer this OTLP pipeline.
+    const installed = trace.getTracer('autotel-edge');
+    if (installed instanceof WorkerTracer) {
+      installed.configure(this.spanProcessors, this.resource);
+      this.tracer = installed;
+      return;
+    }
 
     const provider = {
       getTracer: (_name: string, _version?: string) => this.tracer,
