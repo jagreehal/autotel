@@ -61,3 +61,7 @@ apps/cloudflare-example/.alchemy
 ___/*
 # Spike/scratch work
 temp/
+
+# Skybridge build output (apps/example-skybridge)
+.skybridge/
+.vercel/

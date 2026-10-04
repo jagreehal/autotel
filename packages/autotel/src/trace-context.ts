@@ -20,11 +20,11 @@ import { track } from './track';
 import type { UnknownRecord } from './values';
 import { isFunction } from './values';
 
-const spansWithExplicitStatus = new WeakSet<Span>();
+const explicitSpanStatuses = new WeakMap<Span, SpanStatusCode>();
 
-/** Whether a TraceContext consumer explicitly chose this span's status. */
-export function hasExplicitSpanStatus(span: Span): boolean {
-  return spansWithExplicitStatus.has(span);
+/** The status a TraceContext consumer explicitly chose for this span, if any. */
+export function explicitSpanStatus(span: Span): SpanStatusCode | undefined {
+  return explicitSpanStatuses.get(span);
 }
 
 type AsyncLocalBox<T> = {
@@ -482,7 +482,7 @@ export function createTraceContext<
       span.setAttributes(flattenToAttributes(attrs));
     },
     setStatus: (status: { code: SpanStatusCode; message?: string }) => {
-      spansWithExplicitStatus.add(span);
+      explicitSpanStatuses.set(span, status.code);
       span.setStatus(status);
     },
     recordException: span.recordException.bind(span),

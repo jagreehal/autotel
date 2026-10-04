@@ -209,6 +209,29 @@ interface McpInstrumentationConfig {
   status is left UNSET, since a pause is neither success nor failure)
 - `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result` - opt-in only
 
+#### `traceMcpHandler(handler, options)`
+
+Traces one handler with the spans, attributes and metrics `instrumentMcpServer`
+produces. Use it in a framework that exposes a request hook in place of the
+SDK's `register*` methods. [`autotel-skybridge`](../autotel-skybridge) builds
+its middleware on it.
+
+```typescript
+import { traceMcpHandler } from 'autotel-mcp-instrumentation';
+
+const traced = traceMcpHandler(() => next(), {
+  type: 'tool', // 'tool' | 'resource' | 'prompt'
+  name: 'search',
+  config: { captureToolArgs: true },
+});
+
+await traced(args, ctx); // ctx: the request context, so `_meta` parents the span
+```
+
+The wrapper returns a Promise, whether `handler` is sync or async. A resource
+URI goes on the span and stays off the duration metric, since a request hook
+cannot tell a template expansion from a fixed URI.
+
 ### Client Instrumentation
 
 #### `instrumentMcpClient(client, config?)`

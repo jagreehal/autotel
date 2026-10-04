@@ -32,7 +32,7 @@ import {
   createTraceContext,
   getActiveContextWithBaggage,
   getContextStorage,
-  hasExplicitSpanStatus,
+  explicitSpanStatus,
   type TraceContext,
 } from './trace-context';
 import { setSpanName } from './trace-helpers';
@@ -472,8 +472,12 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
     }
 
     const startTime = performance.now();
+    // A span with a remote parent (an incoming traceparent) is this process's root.
+    const activeSpan = otelTrace.getActiveSpan();
     const isRootSpan =
-      options.startNewRoot || otelTrace.getActiveSpan() === undefined;
+      options.startNewRoot ||
+      activeSpan === undefined ||
+      activeSpan.spanContext().isRemote === true;
     const flushRootTelemetry = createRootTelemetryFlusher(options, isRootSpan);
     const spanOptions: import('@opentelemetry/api').SpanOptions = {};
     if (options.startNewRoot) spanOptions.root = true;
@@ -520,19 +524,20 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
             };
             const onSuccess = (result: Awaited<TReturn>) => {
               const duration = performance.now() - startTime;
-              callCounter?.add(1, {
-                operation: spanName,
-                status: 'success',
-              });
+              // An explicit ERROR status marks the operation failed.
+              const explicitStatus = explicitSpanStatus(span);
+              const success = explicitStatus !== SpanStatusCode.ERROR;
+              const status = success ? 'success' : 'error';
+              callCounter?.add(1, { operation: spanName, status });
               durationHistogram?.record(duration, {
                 operation: spanName,
-                status: 'success',
+                status,
               });
               const resultAttributes: Attributes = {
                 ...captureOutputAttrs(result, options.captureOutput),
                 ...options.attributesFromResult?.(result),
               };
-              if (!hasExplicitSpanStatus(span)) {
+              if (explicitStatus === undefined) {
                 span.setStatus({ code: SpanStatusCode.OK });
               }
               span.setAttributes({
@@ -541,9 +546,10 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
                 'operation.name': spanName,
                 'code.function': spanName,
                 'operation.duration': duration,
-                'operation.success': true,
+                'operation.success': success,
+                ...(success ? {} : { error: true }),
               });
-              handleTailSampling(true, duration);
+              handleTailSampling(success, duration);
               span.end();
               return result;
             };

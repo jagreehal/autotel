@@ -1,0 +1,73 @@
+{
+  "name": "autotel-skybridge",
+  "version": "0.0.0",
+  "description": "OpenTelemetry for Skybridge MCP Apps, powered by autotel",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "oxlint -c oxlint.json --disable-nested-config src",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "skybridge",
+    "mcp",
+    "mcp-apps",
+    "chatgpt",
+    "observability",
+    "instrumentation"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "dependencies": {
+    "autotel-mcp-instrumentation": "workspace:*"
+  },
+  "peerDependencies": {
+    "autotel": "*",
+    "skybridge": ">=2.0.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.1.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/context-async-hooks": "^2.11.0",
+    "@opentelemetry/core": "^2.11.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "@opentelemetry/sdk-trace-node": "^2.11.0",
+    "@types/node": "^26.6.3",
+    "autotel": "workspace:*",
+    "skybridge": "^2.0.1",
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2",
+    "zod": "^4.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-skybridge"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-skybridge#readme"
+}

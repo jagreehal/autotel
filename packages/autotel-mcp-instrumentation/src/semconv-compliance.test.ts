@@ -39,6 +39,7 @@ vi.mock('autotel', () => ({
         setStatus: vi.fn(),
         recordException: vi.fn(),
         recordError: vi.fn(),
+        updateName: vi.fn(),
         track: vi.fn(),
       };
       hoisted.traceCalls.push({ options, ctx });
@@ -1161,6 +1162,54 @@ describe('MCP semconv compliance', () => {
     expect(first.metricAttrs[MCP_SEMCONV.FAILURE_CATEGORY]).toBe(
       MCP_FAILURE_CATEGORY.TIMEOUT,
     );
+  });
+
+  it('keeps a concrete resource URI from traceMcpHandler on the span, not the metric', async () => {
+    const { traceMcpHandler } = await import('./server');
+    const read = async (_uri: string, _ctx: { mcpReq: { _meta: object } }) => ({
+      contents: [],
+    });
+    const traced = traceMcpHandler(read, {
+      type: 'resource',
+      name: 'users://42',
+    });
+    await traced('users://42', { mcpReq: { _meta: {} } });
+
+    expect(attributeValue(MCP_SEMCONV.RESOURCE_URI)).toBe('users://42');
+    const metricAttrs = hoisted.serverMetricAttrs.at(-1) ?? {};
+    expect(metricAttrs[MCP_SEMCONV.RESOURCE_URI]).toBeUndefined();
+    expect(metricAttrs[MCP_SEMCONV.METHOD_NAME]).toBe('resources/read');
+  });
+
+  it('keeps a client-supplied name off the span name and metric when the SDK rejects the request', async () => {
+    const { traceMcpHandler } = await import('./server');
+    const traced = traceMcpHandler(
+      async (_ctx: unknown) => {
+        throw Object.assign(new Error('Tool nope-123 not found'), {
+          code: -32_602,
+        });
+      },
+      { type: 'tool', name: 'nope-123' },
+    );
+    await expect(traced({ mcpReq: { _meta: {} } })).rejects.toThrow();
+
+    const { ctx } = hoisted.traceCalls.at(-1)!;
+    expect(ctx.updateName).toHaveBeenCalledWith('tools/call');
+    const metricAttrs = hoisted.serverMetricAttrs.at(-1) ?? {};
+    expect(metricAttrs[MCP_SEMCONV.TOOL_NAME]).toBeUndefined();
+    expect(metricAttrs[MCP_SEMCONV.METHOD_NAME]).toBe('tools/call');
+  });
+
+  it('keeps a registered tool name when its own handler throws InvalidParams', async () => {
+    const wrappedTool = await registerServerTool({}, {}, async () => {
+      throw Object.assign(new Error('query too short'), { code: -32_602 });
+    });
+    await expect(wrappedTool?.({ q: 'x' })).rejects.toThrow();
+
+    const { ctx } = hoisted.traceCalls.at(-1)!;
+    expect(ctx.updateName).not.toHaveBeenCalled();
+    const metricAttrs = hoisted.serverMetricAttrs.at(-1) ?? {};
+    expect(metricAttrs[MCP_SEMCONV.TOOL_NAME]).toBeDefined();
   });
 
   it('leaves failure attributes off a silent failure with no text to group on', async () => {

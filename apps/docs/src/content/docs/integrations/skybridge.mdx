@@ -1,0 +1,88 @@
+---
+title: Skybridge
+description: OpenTelemetry for Skybridge MCP Apps.
+---
+
+[Skybridge](https://github.com/alpic-ai/skybridge) builds MCP Apps for ChatGPT,
+Claude and other MCP clients. `autotel-skybridge` adds one middleware that
+traces every tool call, resource read and prompt, with the spans and attributes
+of [`autotel-mcp-instrumentation`](/integrations/mcp/).
+
+## Installation
+
+```bash
+npm install autotel autotel-skybridge
+```
+
+## Usage
+
+Init autotel in its own module and import it first in `src/index.ts`:
+
+```typescript
+// src/instrumentation.ts
+import { init } from 'autotel';
+
+init({ service: 'my-app' }); // reads OTEL_EXPORTER_OTLP_ENDPOINT / _HEADERS
+```
+
+Register the middleware on the server:
+
+```typescript
+import { skybridgeTracing } from 'autotel-skybridge';
+import { Skybridge } from 'skybridge/server';
+
+export const app = new Skybridge({
+  name: 'my-app',
+  version: '1.0.0',
+  handler: (server) =>
+    server
+      .registerTool({ name: 'search' /* ... */ }, handler)
+      .mcpMiddleware(skybridgeTracing({ captureToolArgs: true })),
+});
+```
+
+## Spans
+
+| Request          | Span name              | Key attributes                          |
+| ---------------- | ---------------------- | --------------------------------------- |
+| `tools/call`     | `tools/call <tool>`    | `gen_ai.tool.name`, `mcp.method.name`   |
+| `resources/read` | `resources/read`       | `mcp.resource.uri` (no `?v=` cache key) |
+| `prompts/get`    | `prompts/get <prompt>` | `gen_ai.prompt.name`                    |
+
+A call to an unknown tool gets the bare method name, with no tool label on the
+duration metric. Resource URIs stay on
+the span and off the metric, since a URI can expand a template.
+
+The caller's `traceparent` in `_meta` parents each span, so an
+`instrumentMcpClient` caller and your server share one trace. Spans you start
+inside a tool nest under the tool span.
+
+When a tool throws, Skybridge answers with an `isError` result. The span records
+`ERROR` with the failure text as its status message, `error.type=tool_error`,
+`mcp.failure.category` and `mcp.failure.fingerprint`, and the original
+exception. A `createStructuredError` keeps its `why`, `fix` and `code` as
+`error.*` attributes.
+
+## Deploying to Vercel
+
+`skybridge build` writes Vercel's prebuilt output. Flush per request and keep
+the bundled JSON exporter:
+
+```typescript
+init({
+  service: 'my-app',
+  protocol: 'http',
+  forceFlushOnShutdown: process.env.VERCEL === '1',
+});
+```
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` on the Vercel
+project and run `vercel deploy --prebuilt`.
+
+Skybridge sends its own usage telemetry unless
+`SKYBRIDGE_TELEMETRY_DISABLED=1` is set.
+
+## Example
+
+[`apps/example-skybridge`](https://github.com/jagreehal/autotel/tree/main/apps/example-skybridge)
+has a tool with a React view, a tool that throws, and a traced client script.

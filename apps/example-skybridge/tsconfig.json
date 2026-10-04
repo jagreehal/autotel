@@ -1,0 +1,4 @@
+{
+  "extends": "skybridge/tsconfig",
+  "include": ["src", ".skybridge/**/*.d.ts"]
+}

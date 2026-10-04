@@ -310,6 +310,25 @@ describe('Functional API', () => {
       });
     });
 
+    it('does not report success when the operation set an ERROR status', async () => {
+      const collector = createTraceCollector();
+
+      await trace.run('http.request', async (ctx) => {
+        ctx.setStatus({ code: SpanStatusCode.ERROR, message: 'HTTP 502' });
+        return [502, 'bad upstream'];
+      });
+
+      const [span] = collector.getSpansByName('http.request');
+      expect(span?.status).toEqual({
+        code: SpanStatusCode.ERROR,
+        message: 'HTTP 502',
+      });
+      expect(span?.attributes).toMatchObject({
+        'operation.success': false,
+        error: true,
+      });
+    });
+
     it('honors isError for async factory functions', async () => {
       const collector = createTraceCollector();
       const signal = { type: 'control-flow' };
