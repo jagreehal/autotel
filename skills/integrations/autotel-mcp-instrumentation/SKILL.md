@@ -47,6 +47,10 @@ const server = instrumentMcpServer(new Server(...));
 to wrap the client so tool/resource/prompt calls create spans and propagate
 context. `callTool` takes an object: `callTool({ name, arguments })`.
 
+**Frameworks with a request hook.** `traceMcpHandler(handler, { type, name, config })`
+traces one handler with the same spans and metrics, for frameworks that expose
+middleware in place of the SDK's `register*` methods. `autotel-skybridge` uses it.
+
 ## Entry points
 
 - `autotel-mcp-instrumentation`: all exports

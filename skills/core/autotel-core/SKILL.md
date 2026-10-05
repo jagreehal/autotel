@@ -203,6 +203,27 @@ is clearer, not because the ambient form is unavailable.
 
 Source: docs/AGENT-GUIDE.md
 
+### MEDIUM Return a failure without marking the span
+
+A handler that turns a failure into a value (an HTTP 502, an error result)
+returns normally, so `trace()` records success. Set the status before you
+return and the span reports the failure:
+
+```typescript
+const reply = await trace.run('POST /orders', async (ctx) => {
+  const [status, body] = await handleOrder(req);
+  if (status >= 500)
+    ctx.setStatus({ code: SpanStatusCode.ERROR, message: `HTTP ${status}` });
+  return [status, body];
+});
+```
+
+An explicit `ERROR` status gives the span `operation.success: false` and
+`error: true`, and the call metrics and tail sampling count the operation as
+failed.
+
+Source: packages/autotel/src/functional-wrapper.ts
+
 ## Compatibility
 
 Targets the current workspace public API. Verify package exports when working

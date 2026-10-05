@@ -17,7 +17,8 @@ export {
   activateTraceContext,
 } from './context';
 
-export { instrumentMcpServer } from './server';
+export { instrumentMcpServer, traceMcpHandler } from './server';
+export type { TraceMcpHandlerOptions } from './server';
 
 export { instrumentMcpClient } from './client';
 

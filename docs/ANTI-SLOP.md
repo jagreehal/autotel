@@ -80,6 +80,13 @@ both are what users have. Discriminating the two at runtime needs `typeof`; the
 check cannot be removed, only moved somewhere less honest. This function _is_
 the boundary the rule asks for. Kept.
 
+### Raw request params in Skybridge middleware — `no-runtime-typeof`
+
+`skybridgeTracing` in `packages/autotel-skybridge/src/index.ts` runs before the
+MCP SDK validates the request, so `params.name` and `params.uri` arrive as
+`unknown`. The `typeof … === 'string'` check is the parse: a request that fails
+it passes through untraced. Kept.
+
 ### Capability probes against a beta API — `no-runtime-typeof`
 
 `apps/cloudflare-example/src/actor.ts` guards every call into `@cloudflare/actors`

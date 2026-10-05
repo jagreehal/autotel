@@ -300,6 +300,11 @@ function wrapHandler<T extends (...args: any[]) => any>(
   resourceUri?: string,
   annotations?: McpToolAnnotations,
   manifestAssessmentPromise?: Promise<ManifestAssessment | undefined>,
+  /**
+   * True for a request hook that runs before the SDK validates the request:
+   * the name comes from the client, and `resourceUri` may expand a template.
+   */
+  requestHook = false,
 ): T {
   const methodName = getMethodName(type);
   const spanName = getSpanName(type, name);
@@ -487,11 +492,13 @@ function wrapHandler<T extends (...args: any[]) => any>(
           let failureCategory: McpFailureCategory | undefined;
           if (result?.isError) {
             ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, 'tool_error');
-            failureCategory = applyFailureGrouping(
-              ctx,
-              extractFailureText(result),
-            );
-            ctx.setStatus({ code: SpanStatusCode.ERROR });
+            const failureText = extractFailureText(result);
+            failureCategory = applyFailureGrouping(ctx, failureText);
+            ctx.setStatus({
+              code: SpanStatusCode.ERROR,
+              message:
+                config.captureErrors && failureText ? failureText : undefined,
+            });
           } else if (!paused) {
             ctx.setStatus({ code: SpanStatusCode.OK });
           }
@@ -523,7 +530,9 @@ function wrapHandler<T extends (...args: any[]) => any>(
                 break;
               }
               case 'resource': {
-                metricAttrs[MCP_SEMCONV.RESOURCE_URI] = resourceUri ?? name;
+                if (!requestHook) {
+                  metricAttrs[MCP_SEMCONV.RESOURCE_URI] = resourceUri ?? name;
+                }
                 break;
               }
               case 'prompt': {
@@ -546,6 +555,13 @@ function wrapHandler<T extends (...args: any[]) => any>(
 
           return result;
         } catch (error) {
+          // In a request hook, -32602 / -32601 means the SDK found no handler
+          // for the requested name. That name came from the client, so it stays
+          // off the span name and the duration metric.
+          const code = readProperty(error, 'code');
+          const rejected =
+            requestHook && (code === -32_602 || code === -32_601);
+          if (rejected) ctx.updateName(methodName);
           const thrownText = failureTextFromError(error);
           const thrownCategory = thrownText
             ? classifyFailure(thrownText)
@@ -572,18 +588,22 @@ function wrapHandler<T extends (...args: any[]) => any>(
               [MCP_SEMCONV.METHOD_NAME]: methodName,
               [MCP_SEMCONV.ERROR_TYPE]: errorName(error),
             };
-            switch (type) {
-              case 'tool': {
-                metricAttrs[MCP_SEMCONV.TOOL_NAME] = name;
-                break;
-              }
-              case 'resource': {
-                metricAttrs[MCP_SEMCONV.RESOURCE_URI] = resourceUri ?? name;
-                break;
-              }
-              case 'prompt': {
-                metricAttrs[MCP_SEMCONV.PROMPT_NAME] = name;
-                break;
+            if (!rejected) {
+              switch (type) {
+                case 'tool': {
+                  metricAttrs[MCP_SEMCONV.TOOL_NAME] = name;
+                  break;
+                }
+                case 'resource': {
+                  if (!requestHook) {
+                    metricAttrs[MCP_SEMCONV.RESOURCE_URI] = resourceUri ?? name;
+                  }
+                  break;
+                }
+                case 'prompt': {
+                  metricAttrs[MCP_SEMCONV.PROMPT_NAME] = name;
+                  break;
+                }
               }
             }
             if (thrownCategory) {
@@ -597,6 +617,51 @@ function wrapHandler<T extends (...args: any[]) => any>(
       })();
     });
   }) as T;
+}
+
+/** What {@link traceMcpHandler} is tracing. */
+export interface TraceMcpHandlerOptions {
+  type: 'tool' | 'resource' | 'prompt';
+  /**
+   * Tool or prompt name, or the resource URI. A tool or prompt name also
+   * labels the duration metric, so keep it low-cardinality.
+   */
+  name: string;
+  /**
+   * Resource URI (`mcp.resource.uri`) on the span; defaults to `name`. The
+   * duration metric leaves it out, since it may expand a template.
+   */
+  resourceUri?: string;
+  annotations?: McpToolAnnotations;
+  config?: McpInstrumentationConfig;
+}
+
+/**
+ * Trace one MCP handler with the same spans, attributes and metrics as
+ * {@link instrumentMcpServer}, for frameworks that expose a request hook
+ * instead of the SDK's `registerTool` / `registerResource` / `registerPrompt`
+ * (Skybridge middleware, for example).
+ *
+ * The handler is called with the arguments the wrapper receives. Pass the
+ * request context (v2 `ServerContext` or v1 `RequestHandlerExtra`) as the last
+ * argument so the span is parented to the caller's `_meta` trace context.
+ */
+export function traceMcpHandler<A extends unknown[], R>(
+  handler: (...args: A) => R,
+  options: TraceMcpHandlerOptions,
+): (...args: A) => Promise<Awaited<R>> {
+  // A request hook sees no tool description, so no manifest assessment.
+  const traced = wrapHandler(
+    options.type,
+    options.name,
+    handler,
+    resolveConfig(options.config),
+    options.resourceUri,
+    options.annotations,
+    undefined,
+    true,
+  );
+  return async (...args: A): Promise<Awaited<R>> => await traced(...args);
 }
 
 /**

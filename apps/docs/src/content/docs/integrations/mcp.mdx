@@ -27,6 +27,10 @@ Supports **both protocol eras** from the same call: MCP `2026-07-28` (the v2
 SDK) and the 2025-era v1 SDK. The era is detected per request, and no MCP SDK is
 imported at runtime.
 
+**Frameworks with a request hook.** `traceMcpHandler(handler, { type, name, config })`
+traces one handler with the same spans and metrics, for frameworks that expose
+middleware in place of the SDK's `register*` methods. [Skybridge](/integrations/skybridge/) apps use it through `autotel-skybridge`.
+
 ### Installation
 
 ```bash

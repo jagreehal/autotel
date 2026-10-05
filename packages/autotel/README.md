@@ -656,6 +656,8 @@ export const createUser = withTracing({})(
 
 Available helpers: `traceId`, `spanId`, `correlationId`, `setAttribute`, `setAttributes`, `setStatus`, `getBaggage`, `setBaggage`, `deleteBaggage`, `getAllBaggage`.
 
+An operation that returns normally counts as a success. To report a failure you return as a value, such as an HTTP 502, call `ctx.setStatus({ code: SpanStatusCode.ERROR })` before returning: the span gets `operation.success: false` and `error: true`, and metrics and tail sampling count it as failed.
+
 > **Errors and events:** prefer `recordStructuredError(ctx, error)` and the
 > request logger over the raw `Span.recordException` / `Span.addEvent` APIs.
 > See [MIGRATION.md](./MIGRATION.md) for the OTel Span Event deprecation

@@ -1,0 +1,36 @@
+{
+  "name": "@jagreehal/example-skybridge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Skybridge MCP App traced with autotel-skybridge",
+  "scripts": {
+    "dev": "SKYBRIDGE_TELEMETRY_DISABLED=1 skybridge dev",
+    "build": "SKYBRIDGE_TELEMETRY_DISABLED=1 skybridge build",
+    "start": "SKYBRIDGE_TELEMETRY_DISABLED=1 skybridge start",
+    "call": "tsx scripts/call.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "autotel": "workspace:*",
+    "autotel-skybridge": "workspace:*",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "skybridge": "^2.0.1",
+    "vite": "^8.1.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.1.0",
+    "@skybridge/devtools": "^2.0.0",
+    "@skybridge/vite-plugin": "^2.0.0",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "autotel-mcp-instrumentation": "workspace:*",
+    "nodemon": "^3.1.10",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

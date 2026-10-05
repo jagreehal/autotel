@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { context, trace as otelTrace, TraceFlags } from '@opentelemetry/api';
 
 const queue = vi.hoisted(() => ({
   flush: vi.fn<() => Promise<void>>(),
@@ -67,5 +68,36 @@ describe('root telemetry flushing', () => {
     expect(settled).toBe(false);
     flush.resolve();
     await expect(result).rejects.toBe(failure);
+  });
+
+  it('flushes a span whose parent is remote (server side of a distributed trace)', async () => {
+    queue.flush.mockResolvedValue();
+    const remoteParent = otelTrace.setSpan(
+      context.active(),
+      otelTrace.wrapSpanContext({
+        traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+        spanId: '00f067aa0ba902b7',
+        traceFlags: TraceFlags.SAMPLED,
+        isRemote: true,
+      }),
+    );
+    const traced = withTracing({ name: 'flush.remote' })(() => async () => 1);
+
+    await context.with(remoteParent, () => traced());
+
+    expect(queue.flush).toHaveBeenCalledOnce();
+  });
+
+  it('does not flush a span nested under a local parent', async () => {
+    queue.flush.mockResolvedValue();
+    const inner = withTracing({ name: 'flush.inner' })(() => async () => 1);
+    const outer = withTracing({ name: 'flush.outer' })(() => async () => {
+      await inner();
+      expect(queue.flush).not.toHaveBeenCalled();
+    });
+
+    await outer();
+
+    expect(queue.flush).toHaveBeenCalledOnce();
   });
 });

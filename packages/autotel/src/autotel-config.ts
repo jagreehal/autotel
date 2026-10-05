@@ -610,7 +610,9 @@ export interface AutotelConfig {
    * - true: Flush on root span completion (default)
    * - false: Use batching (events flush every 10 seconds automatically)
    *
-   * Only flushes on root spans to avoid excessive network calls.
+   * Only flushes on root spans to avoid excessive network calls. A span whose
+   * parent arrived from another process (an extracted `traceparent`) counts as
+   * a root, so a server flushes once per incoming request.
    * Default is true for serverless/short-lived processes. Set to false
    * for long-running services where batching is more efficient.
    */
