@@ -21,7 +21,7 @@ export function renderPlanPreview(plan: InitPlan): string {
     );
     if (det.primaryLogger !== null) {
       lines.push(
-        `${chalk.dim('Logger:')} ${chalk.bold(det.primaryLogger)} ${chalk.dim('(first-class)')}` +
+        `${chalk.dim('Logger:')} ${chalk.bold(det.primaryLogger)} ${chalk.dim('(auto-instrumented)')}` +
           (det.autoInstrumentLoggers.length > 0
             ? `, ${chalk.dim('+ auto-instrumented:')} ${det.autoInstrumentLoggers.join(', ')}`
             : ''),

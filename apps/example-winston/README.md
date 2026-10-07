@@ -25,6 +25,8 @@ This example demonstrates how to use **Winston logger** with autotel for applica
    pnpm add @opentelemetry/instrumentation-winston
    ```
 
+   To export Winston records via OTLP (not just add trace context), `@opentelemetry/winston-transport` must be installed too. This example depends on it.
+
 2. **Configure OTLP endpoint (optional):**
    Create a `.env` file:
 
@@ -41,26 +43,33 @@ This example demonstrates how to use **Winston logger** with autotel for applica
 
 ## How It Works
 
-```typescript
-import winston from 'winston';
-import { init } from 'autotel';
+The instrumentation patches winston as it loads, so `init()` must run before the logger is created. Keep them in separate modules and import telemetry first. Don't pass the logger to `init()`: that forces you to create it too early.
 
-const logger = winston.createLogger({
+```typescript
+// telemetry.ts
+import { init } from 'autotel';
+init({
+  service: 'my-service',
+  autoInstrumentations: ['winston'], // only these load; add 'http' for request spans
+  logs: true, // export log records via OTLP (off by default)
+});
+
+// logger.ts
+import winston from 'winston';
+export const logger = winston.createLogger({
   level: 'info',
   format: winston.format.json(),
   transports: [new winston.transports.Console()],
 });
 
-// Enable Winston auto-instrumentation
-init({
-  service: 'my-service',
-  autoInstrumentations: ['winston'], // ← This injects trace context!
-});
+// index.ts
+import './telemetry'; // first
+import { logger } from './logger';
 
-// Use Winston normally - trace context is auto-injected!
-logger.info('User created', { userId: '123' });
-// Output includes: traceId, spanId, correlationId automatically!
+logger.info('User created', { userId: '123' }); // carries trace_id/span_id inside a span
 ```
+
+The start script runs `tsx --import autotel/register src/index.ts`: winston is loaded with `import`, which only the OTel loader hook can patch. If winston loads before `init()`, or an ESM app starts without the hook, autotel prints a warning at startup.
 
 ## What You'll See
 
@@ -69,12 +78,12 @@ When you run the example, you'll see:
 1. **Winston logs** with trace context automatically injected:
 
    ```
-   2025-01-27T10:30:00.000Z [info]: Creating user {"name":"Alice","email":"alice@example.com","traceId":"abc123","spanId":"def456"}
+   2025-01-27T10:30:00.000Z [info]: Creating user {"name":"Alice","email":"alice@example.com","trace_id":"abc123","span_id":"def456","trace_flags":"01"}
    ```
 
 2. **Traces exported to OTLP** with all spans and attributes
 
-3. **Logs correlated with traces** - every log includes `traceId` and `spanId` for easy correlation
+3. **Logs correlated with traces** - every log includes `trace_id` and `span_id` for easy correlation
 
 ## Verify Configuration
 
@@ -97,7 +106,7 @@ This will check:
 
 ## Key Points
 
-1. **Winston auto-instrumentation** (`autoInstrumentations: ['winston']`) automatically injects `traceId`, `spanId`, and `correlationId` into every Winston log record.
+1. **Winston auto-instrumentation** (`autoInstrumentations: ['winston']`) injects `trace_id`, `span_id` and `trace_flags` into every Winston log record.
 
 2. **No manual wiring needed** - just enable the instrumentation and use Winston normally.
 
@@ -105,8 +114,9 @@ This will check:
 
 ## Troubleshooting
 
-**Q: My logs don't show traceId/spanId**  
-A: Make sure `autoInstrumentations: ['winston']` is enabled in your `init()` call.
+**Q: My logs don't show trace_id/span_id**
+
+A: Check the startup warnings. Usually winston was loaded before `init()` (create the logger in its own module, imported after telemetry), or the app is ESM and node wasn't started with `--import autotel/register`. Logs written outside a span have no trace context either.
 
 **Q: How do I verify Winston instrumentation is working?**  
 A: Run `npx autotel-cli doctor` - it will check your Winston configuration and auto-instrumentation setup.

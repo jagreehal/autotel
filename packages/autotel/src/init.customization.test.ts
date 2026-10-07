@@ -217,7 +217,7 @@ describe('init() customization', () => {
 
     init({
       service: 'embedded-devtools-app',
-      devtools: { embedded: true, host: '127.0.0.1', port: 0 },
+      devtools: { embedded: true, host: '127.0.0.1', port: 9876 },
     });
 
     expect(traceExporterOptions[0]).toMatchObject({
@@ -227,6 +227,45 @@ describe('init() customization', () => {
       url: 'http://127.0.0.1:9876/v1/logs',
     });
     expect(getEmbeddedDevtoolsCloseForTesting()).toBe(close);
+  });
+
+  it('rejects port 0 for embedded devtools', async () => {
+    const { init, setOptionalRequireForTesting } = await loadInitWithMocks();
+    // SAFETY: init() only calls createDevtools on the devtools module.
+    setOptionalRequireForTesting((id: string) =>
+      id === 'autotel-devtools'
+        ? ({ createDevtools: vi.fn() } as any)
+        : undefined,
+    );
+
+    expect(() =>
+      init({ service: 'port-zero-app', devtools: { embedded: true, port: 0 } }),
+    ).toThrow(/fixed devtools.port/);
+  });
+
+  it('pins embedded devtools to its port and warns when it cannot bind', async () => {
+    const { init, setOptionalRequireForTesting } = await loadInitWithMocks();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const createDevtools = vi.fn(() => ({
+      port: 4318,
+      ready: Promise.reject(new Error('could not bind 127.0.0.1:4318')),
+      close: vi.fn(),
+    }));
+    // SAFETY: init() only calls createDevtools on the devtools module.
+    setOptionalRequireForTesting((id: string) =>
+      id === 'autotel-devtools' ? ({ createDevtools } as any) : undefined,
+    );
+
+    init({ service: 'busy-port-app', devtools: { embedded: true } });
+    await vi.waitFor(() =>
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('autotel-devtools could not start'),
+      ),
+    );
+    expect(createDevtools).toHaveBeenCalledWith(
+      expect.objectContaining({ maxPortTries: 1 }),
+    );
+    warn.mockRestore();
   });
 
   it('falls back cleanly when embedded devtools is requested but unavailable', async () => {

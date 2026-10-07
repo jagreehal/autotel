@@ -41,26 +41,33 @@ This example demonstrates how to use **Bunyan logger** with autotel for applicat
 
 ## How It Works
 
-```typescript
-import bunyan from 'bunyan';
-import { init } from 'autotel';
+The instrumentation patches bunyan as it loads, so `init()` must run before the logger is created. Keep them in separate modules and import telemetry first. Don't pass the logger to `init()`: that forces you to create it too early.
 
-const logger = bunyan.createLogger({
+```typescript
+// telemetry.ts
+import { init } from 'autotel';
+init({
+  service: 'my-service',
+  autoInstrumentations: ['bunyan'], // only these load; add 'http' for request spans
+  logs: true, // export log records via OTLP (off by default)
+});
+
+// logger.ts
+import bunyan from 'bunyan';
+export const logger = bunyan.createLogger({
   name: 'my-service',
   level: 'info',
   streams: [{ stream: process.stdout }],
 });
 
-// Enable Bunyan auto-instrumentation
-init({
-  service: 'my-service',
-  autoInstrumentations: ['bunyan'], // ← This injects trace context!
-});
+// index.ts
+import './telemetry'; // first
+import { logger } from './logger';
 
-// Use Bunyan normally - trace context is auto-injected!
-logger.info({ userId: '123' }, 'User created');
-// Output includes: traceId, spanId, correlationId automatically!
+logger.info({ userId: '123' }, 'User created'); // carries trace_id/span_id inside a span
 ```
+
+The start script runs `tsx --import autotel/register src/index.ts`: bunyan is loaded with `import`, which only the OTel loader hook can patch. If bunyan loads before `init()`, or an ESM app starts without the hook, autotel prints a warning at startup.
 
 ## What You'll See
 
@@ -69,12 +76,12 @@ When you run the example, you'll see:
 1. **Bunyan logs** with trace context automatically injected:
 
    ```
-   {"name":"example-bunyan","hostname":"...","pid":12345,"level":30,"msg":"Creating user","name":"Alice","email":"alice@example.com","traceId":"abc123","spanId":"def456","time":"2025-01-27T10:30:00.000Z","v":0}
+   {"name":"example-bunyan","hostname":"...","pid":12345,"level":30,"msg":"Creating user","name":"Alice","email":"alice@example.com","trace_id":"abc123","span_id":"def456","trace_flags":"01","time":"2025-01-27T10:30:00.000Z","v":0}
    ```
 
 2. **Traces exported to OTLP** with all spans and attributes
 
-3. **Logs correlated with traces** - every log includes `traceId` and `spanId` for easy correlation
+3. **Logs correlated with traces** - every log includes `trace_id` and `span_id` for easy correlation
 
 ## Verify Configuration
 
@@ -97,7 +104,7 @@ This will check:
 
 ## Key Points
 
-1. **Bunyan auto-instrumentation** (`autoInstrumentations: ['bunyan']`) automatically injects `traceId`, `spanId`, and `correlationId` into every Bunyan log record.
+1. **Bunyan auto-instrumentation** (`autoInstrumentations: ['bunyan']`) injects `trace_id`, `span_id` and `trace_flags` into every Bunyan log record.
 
 2. **No manual wiring needed** - just enable the instrumentation and use Bunyan normally.
 
@@ -107,8 +114,9 @@ This will check:
 
 ## Troubleshooting
 
-**Q: My logs don't show traceId/spanId**  
-A: Make sure `autoInstrumentations: ['bunyan']` is enabled in your `init()` call.
+**Q: My logs don't show trace_id/span_id**
+
+A: Check the startup warnings. Usually bunyan was loaded before `init()` (create the logger in its own module, imported after telemetry), or the app is ESM and node wasn't started with `--import autotel/register`. Logs written outside a span have no trace context either.
 
 **Q: How do I verify Bunyan instrumentation is working?**  
 A: Run `npx autotel-cli doctor` - it will check your Bunyan configuration and auto-instrumentation setup.

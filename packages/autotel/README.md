@@ -1633,19 +1633,27 @@ npm install pino
 npm install @opentelemetry/instrumentation-pino
 ```
 
+The instrumentation patches pino as it loads, so `init()` must run before the
+logger is created. Keep them in separate modules and import telemetry first.
+Don't pass the logger to `init()`: that forces you to create it too early.
+
 ```typescript
-import pino from 'pino';
-import { init, trace, span, withTracing } from 'autotel';
-
-const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-});
-
+// telemetry.ts
+import { init } from 'autotel';
 init({
   service: 'user-service',
-  logger,
-  autoInstrumentations: ['pino'], // Enable Pino instrumentation for trace context
+  autoInstrumentations: ['http', 'pino'], // only these load
+  logs: true, // export log records via OTLP (off by default)
 });
+
+// logger.ts
+import pino from 'pino';
+export const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+
+// index.ts
+import './telemetry'; // first
+import { trace } from 'autotel';
+import { logger } from './logger';
 
 export const createUser = trace(async (data: UserData) => {
   logger.info({ userId: data.id }, 'Creating user');
@@ -1660,28 +1668,33 @@ export const createUser = trace(async (data: UserData) => {
 });
 ```
 
+**ESM:** pino's entry module is loaded by `import`, which only the OTel loader
+hook can patch. Start node with `--import autotel/register` (autotel warns at
+startup if it's missing, or if pino was loaded before `init()`).
+
 ### Using Winston
 
-**Note:** While `@opentelemetry/auto-instrumentations-node` includes Winston instrumentation, you must install `@opentelemetry/instrumentation-winston` separately for trace context injection to work.
+**Note:** While `@opentelemetry/auto-instrumentations-node` includes Winston instrumentation, you must install `@opentelemetry/instrumentation-winston` separately for trace context injection to work. With `logs: true`, Winston records only reach OTLP if `@opentelemetry/winston-transport` is installed too.
 
 ```bash
-npm install winston @opentelemetry/instrumentation-winston
+npm install winston @opentelemetry/instrumentation-winston @opentelemetry/winston-transport
 ```
 
 ```typescript
-import winston from 'winston';
+// telemetry.ts, imported first
 import { init } from 'autotel';
+init({
+  service: 'user-service',
+  autoInstrumentations: ['winston'],
+  logs: true,
+});
 
-const logger = winston.createLogger({
+// logger.ts
+import winston from 'winston';
+export const logger = winston.createLogger({
   level: 'info',
   format: winston.format.json(),
   transports: [new winston.transports.Console()],
-});
-
-init({
-  service: 'user-service',
-  logger,
-  autoInstrumentations: ['winston'], // Enable Winston instrumentation for trace context
 });
 ```
 
@@ -1694,16 +1707,13 @@ npm install bunyan @opentelemetry/instrumentation-bunyan
 ```
 
 ```typescript
-import bunyan from 'bunyan';
+// telemetry.ts, imported first
 import { init } from 'autotel';
+init({ service: 'user-service', autoInstrumentations: ['bunyan'], logs: true });
 
-const logger = bunyan.createLogger({ name: 'user-service' });
-
-init({
-  service: 'user-service',
-  logger,
-  autoInstrumentations: ['bunyan'], // Enable Bunyan instrumentation for trace context
-});
+// logger.ts
+import bunyan from 'bunyan';
+export const logger = bunyan.createLogger({ name: 'user-service' });
 ```
 
 **Note:** For manual instrumentation configuration, you can also use:
@@ -1713,7 +1723,6 @@ import { BunyanInstrumentation } from '@opentelemetry/instrumentation-bunyan';
 
 init({
   service: 'user-service',
-  logger,
   instrumentations: [new BunyanInstrumentation()], // Manual instrumentation with custom config
 });
 ```
@@ -1742,16 +1751,13 @@ init({
 
 ```typescript
 import { init, trace, span, withTracing, setUser, httpServer } from 'autotel';
-import pino from 'pino';
 
-const logger = pino();
 init({
   service: 'checkout-api',
-  logger,
   canonicalLogLines: {
     enabled: true,
     rootSpansOnly: true, // One canonical log line per request
-    logger, // Use Pino for canonical log lines
+    pretty: true, // Also print each line to the console
   },
 });
 

@@ -344,7 +344,7 @@ OpenTelemetry's ESM instrumentation uses `import-in-the-middle` to hook into mod
 
 ### Logger Integration Examples
 
-- [`example-pino`](https://github.com/jagreehal/autotel/tree/main/apps/example-pino): Pino as first-class logger with `init({ logger })` and trace context injection.
+- [`example-pino`](https://github.com/jagreehal/autotel/tree/main/apps/example-pino): Pino with `autoInstrumentations: ['pino']`, the logger created after `init()`, and trace context in every record
 - [`example-bunyan`](https://github.com/jagreehal/autotel/tree/main/apps/example-bunyan): Bunyan with auto-instrumentation for trace context injection.
 - [`example-winston`](https://github.com/jagreehal/autotel/tree/main/apps/example-winston): Winston with auto-instrumentation for trace context injection.
 - [`example-otel-tui`](https://github.com/jagreehal/autotel/tree/main/apps/example-otel-tui): otel-tui terminal UI with Docker Compose for trace-to-log correlation.

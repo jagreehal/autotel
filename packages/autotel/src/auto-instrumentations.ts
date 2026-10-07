@@ -131,25 +131,104 @@ export type AutoInstrumentationsLoader = (
 ) => AutotelSdkOptions['instrumentations'];
 
 /**
- * Detect if we're running in ESM mode
+ * Whether the app's entry runs as ESM: its extension when it has an explicit
+ * one (`.mjs`/`.cjs`, and `.mts`/`.cts` under tsx), else the cwd
+ * package.json's `type`.
  */
-export function isESMMode(): boolean {
-  // Check if we're in an ESM context by looking for common ESM indicators
+export function isESMMode(entry: string = process.argv[1] ?? ''): boolean {
+  if (/\.c[jt]s$/.test(entry)) return false;
+  if (/\.m[jt]s$/.test(entry)) return true;
   try {
-    // In ESM, module.exports doesn't exist in the global scope the same way
-    // Also check if the package.json type is "module"
     const fs = requireModule<typeof import('node:fs')>('node:fs');
-    try {
-      const pkg = JSON.parse(
-        fs.readFileSync(`${process.cwd()}/package.json`, 'utf8'),
-      );
-      return pkg.type === 'module';
-    } catch {
-      return false;
-    }
+    const pkg = JSON.parse(
+      fs.readFileSync(`${process.cwd()}/package.json`, 'utf8'),
+    );
+    return pkg.type === 'module';
   } catch {
     return false;
   }
+}
+
+/** Set by `autotel/register` so `init()` can tell the ESM hook is in place. */
+export const REGISTER_FLAG = Symbol.for('autotel.register');
+
+/**
+ * Whether the OTel ESM loader hook is registered: by `autotel/register`, or
+ * by pointing node at a `hook.mjs` directly.
+ */
+export function isEsmHookLoaded(
+  flags: string = `${process.execArgv.join(' ')} ${process.env.NODE_OPTIONS ?? ''}`,
+): boolean {
+  return (
+    (globalThis as Record<symbol, unknown>)[REGISTER_FLAG] === true ||
+    flags.includes('hook.mjs')
+  );
+}
+
+const LOGGER_PACKAGES = ['pino', 'winston', 'bunyan'];
+
+function loadedModulePaths(): string[] {
+  try {
+    const { createRequire } =
+      requireModule<typeof import('node:module')>('node:module');
+    // ESM links CJS deps into the cache before any module runs; only count
+    // ones that have actually executed.
+    return Object.entries(createRequire(`${process.cwd()}/`).cache)
+      .filter(([, mod]) => mod?.loaded)
+      .map(([path]) => path);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Names in the array form that loaded nothing: a typo, or a library
+ * auto-instrumentations-node has no instrumentation for (`fastify`, `next`).
+ * Upstream only reports these through `diag`, which is silent by default.
+ * Names a manual instrumentation replaced are not missing.
+ */
+export function missingInstrumentations(
+  names: string[],
+  loaded: Array<{ instrumentationName: string }>,
+  manualInstrumentationNames: Set<string> = new Set(),
+): string[] {
+  const loadedNames = new Set(loaded.map((i) => i.instrumentationName));
+  const replaced = new Set(
+    [...manualInstrumentationNames].map((className) =>
+      INSTRUMENTATION_CLASS_TO_PACKAGE.get(className),
+    ),
+  );
+  return names.filter((name) => {
+    const packageName = toPackageName(name);
+    return !loadedNames.has(packageName) && !replaced.has(packageName);
+  });
+}
+
+/**
+ * Logger packages the config instruments that were already loaded when
+ * `init()` ran. Instrumentations patch a package as it loads, so these never
+ * get trace context: the logger module was imported before `init()`.
+ */
+export function loggersLoadedBeforeInit(
+  integrations: string[] | boolean | InstrumentationSwitches,
+  loadedPaths: string[] = loadedModulePaths(),
+): string[] {
+  if (integrations === false) return [];
+  const requested =
+    integrations === true
+      ? LOGGER_PACKAGES
+      : Array.isArray(integrations)
+        ? integrations
+        : Object.entries(integrations)
+            .filter(([, options]) => options.enabled !== false)
+            .map(([name]) => name);
+  const wanted = new Set(requested.map((name) => toPackageName(name)));
+  const paths = loadedPaths.map((path) => path.replaceAll('\\', '/'));
+  return LOGGER_PACKAGES.filter(
+    (name) =>
+      wanted.has(toPackageName(name)) &&
+      paths.some((path) => path.includes(`/node_modules/${name}/`)),
+  );
 }
 
 /**
@@ -210,6 +289,11 @@ export function _resetAutoInstrumentationsLoader(): void {
   _autoInstrumentationsLoader = null;
 }
 
+const HTTP_PACKAGE = '@opentelemetry/instrumentation-http';
+
+/** The part of `http.IncomingMessage` the ignore hook reads. */
+type IncomingRequest = { socket?: { localPort?: number } };
+
 /**
  * Get auto-instrumentations based on simple integration names
  * Excludes instrumentations that are manually provided to avoid conflicts
@@ -217,6 +301,7 @@ export function _resetAutoInstrumentationsLoader(): void {
 export function getAutoInstrumentations(
   integrations: string[] | boolean | InstrumentationSwitches,
   manualInstrumentationNames: Set<string> = new Set(),
+  ignoredServerPorts: number[] = [],
 ): AutotelSdkOptions['instrumentations'] {
   if (integrations === false) {
     return [];
@@ -252,5 +337,37 @@ export function getAutoInstrumentations(
     config[packageName] = options;
   }
 
-  return getNodeAutoInstrumentations(withAutotelDefaults(config));
+  // Requests to these ports (the embedded devtools server) are telemetry
+  // about telemetry: each OTLP export and UI poll would become a root span,
+  // a canonical log line, and another export.
+  const http = config[HTTP_PACKAGE] ?? {};
+  if (ignoredServerPorts.length > 0 && http.enabled !== false) {
+    const userHook = http.ignoreIncomingRequestHook as
+      ((request: IncomingRequest) => boolean) | undefined;
+    config[HTTP_PACKAGE] = {
+      ...http,
+      ignoreIncomingRequestHook: (request: IncomingRequest) =>
+        ignoredServerPorts.includes(request.socket?.localPort ?? -1) ||
+        (userHook?.(request) ?? false),
+    };
+  }
+
+  const resolved = withAutotelDefaults(config);
+  if (!Array.isArray(integrations)) {
+    return getNodeAutoInstrumentations(resolved);
+  }
+  // The array is an allowlist. getNodeAutoInstrumentations loads everything
+  // it isn't told `enabled: false` about and exports no list of names, so
+  // every name not listed reads as disabled.
+  const listed = new Set(
+    Object.keys(config).filter((name) => config[name]?.enabled === true),
+  );
+  return getNodeAutoInstrumentations(
+    new Proxy(resolved, {
+      get: (target, name) =>
+        typeof name === 'string' && listed.has(name)
+          ? target[name]
+          : { enabled: false },
+    }),
+  );
 }

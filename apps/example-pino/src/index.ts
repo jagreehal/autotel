@@ -1,17 +1,15 @@
 /**
- * Pino Logger Example with autotel (first-class)
+ * Pino Logger Example with autotel
  *
- * Pino is autotel's first-class logger: same signature as autotel's Logger type,
- * one instance for both init() and app logs. No autoInstrumentations or extra
- * package required.
+ * Pino is auto-instrumented: `autoInstrumentations: ['pino']` adds trace
+ * context to every log record and exports it via OTLP. The logger is created
+ * after init() (see telemetry.ts / logger.ts), not passed to it.
  *
  * Run: pnpm start
  */
 
-import 'dotenv/config';
-import pino from 'pino';
+import './telemetry'; // first: runs init() before pino loads
 import {
-  init,
   trace,
   span,
   Metric,
@@ -21,29 +19,7 @@ import {
   withTracing,
   getActiveTraceContext,
 } from 'autotel';
-
-// Create Pino logger first. Autotel's logger contract is Pino-style: object first, message second.
-const logger = pino({
-  name: 'example-pino',
-  level: 'info',
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true,
-      translateTime: 'yyyy-mm-dd HH:MM:ss',
-      ignore: 'pid,hostname',
-    },
-  },
-});
-
-// One logger for both autotel internal logs and app logs. Pino is first-class: no autoInstrumentations needed.
-init({
-  service: 'example-pino-service',
-  logger,
-  debug: true,
-  endpoint:
-    process.env.OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
-});
+import { logger } from './logger';
 
 const metrics = new Metric('example-pino');
 
@@ -188,7 +164,7 @@ async function main() {
       ctx.setAttributes({
         output: 'Successfully answered.',
       });
-    })();
+    });
     logger.info(
       {},
       'TEST PASSED: exactly 2 spans (user-request-trace + llm-call) with same traceId',

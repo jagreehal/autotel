@@ -36,3 +36,6 @@ import * as nodeModule from 'node:module';
 // Use the official OpenTelemetry instrumentation hook which wraps import-in-the-middle
 // This ensures proper integration with OTel's instrumentation system
 nodeModule.register('@opentelemetry/instrumentation/hook.mjs', import.meta.url);
+// Read by init() to skip its "no ESM hook" warning. Symbol.for, not an import,
+// so this file stays standalone.
+(globalThis as Record<symbol, unknown>)[Symbol.for('autotel.register')] = true;

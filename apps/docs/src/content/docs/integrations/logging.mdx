@@ -3,35 +3,46 @@ title: Logging
 description: Integrate Pino, Bunyan, or Winston with autotel for automatic trace context injection.
 ---
 
-Pino is the recommended first-class logger for autotel. Bunyan and Winston also work via OpenTelemetry auto-instrumentation.
+Pino is the recommended logger for autotel. Pino, Bunyan and Winston all get trace context the same way: OpenTelemetry auto-instrumentation, enabled with `autoInstrumentations`.
+
+The same rules apply to all three:
+
+- **Run `init()` before the logger loads.** The instrumentation patches the logger package as it loads. Put `init()` in its own module, import it first, and create the logger in another module.
+- **Don't pass the logger to `init()`.** The `logger` option is only for autotel's own diagnostics, and passing it forces you to create the logger too early.
+- **ESM apps need the loader hook:** `node --import autotel/register app.js`.
+- **Add `logs: true`** to export log records via OTLP. Without it they only get `trace_id` / `span_id` in their output.
+
+autotel prints a warning at startup if the logger loaded before `init()` or an ESM app is missing the hook.
 
 ## Pino (Recommended)
 
-Pino is first-class: pass a single instance to `init()` for both autotel internal logs and app logs.
-
 ```typescript
-import pino from 'pino';
-import { init, trace, withTracing } from 'autotel';
+// instrumentation.ts - imported first
+import { init } from 'autotel';
 
-const logger = pino({
-  name: 'my-app',
-  level: 'info',
-  transport: {
-    target: 'pino-pretty',
-    options: { colorize: true },
-  },
-});
-
-// One logger for autotel + app logs
 init({
   service: 'my-app',
-  logger,
+  autoInstrumentations: ['http', 'pino'], // only these load
+  logs: true,
   endpoint: process.env.OTLP_ENDPOINT,
 });
+```
+
+```typescript
+// logger.ts
+import pino from 'pino';
+
+export const logger = pino({ name: 'my-app', level: 'info' });
+```
+
+```typescript
+// index.ts
+import './instrumentation'; // first
+import { withTracing } from 'autotel';
+import { logger } from './logger';
 
 const createUser = withTracing({})((ctx) => async (name: string) => {
-  logger.info({ name }, 'Creating user');
-  // trace_id, span_id automatically injected into log output
+  logger.info({ name }, 'Creating user'); // trace_id, span_id injected
   const user = await db.users.create({ name });
   logger.info({ userId: user.id }, 'User created');
   return user;
@@ -62,6 +73,7 @@ import { init } from 'autotel';
 init({
   service: 'my-app',
   autoInstrumentations: ['bunyan'],
+  logs: true,
 });
 ```
 
@@ -76,6 +88,12 @@ logger.info({ userId: '123' }, 'Processing request');
 
 ## Winston
 
+```bash
+npm install winston @opentelemetry/auto-instrumentations-node @opentelemetry/winston-transport
+```
+
+`@opentelemetry/winston-transport` is what sends Winston records to OTLP. Without it, `logs: true` still adds `trace_id` / `span_id` but exports nothing.
+
 ```typescript
 // instrumentation.ts
 import { init } from 'autotel';
@@ -83,6 +101,7 @@ import { init } from 'autotel';
 init({
   service: 'my-app',
   autoInstrumentations: ['winston'],
+  logs: true,
 });
 ```
 
@@ -143,10 +162,14 @@ rather than a message.
 worth getting right.
 
 With no `logger`, lines go through the OpenTelemetry Logs API and out to
-whichever OTLP logs backend you configured — Loki and the like. Set a `logger`
-and they go there **instead**, which is easy to do by accident: the top-level
-`logger` on `init()` is the fallback, so setting that alone also diverts them
-away from OTLP.
+whichever OTLP logs backend you configured — Loki and the like. Set
+`canonicalLogLines.logger` and they go there **instead**. The top-level `logger`
+on `init()` is only for autotel's own diagnostics and is never used for lines.
+
+The logger must take pino's `(fields, message)` signature, as pino and bunyan
+do. Winston takes `(message, meta)`, so wrap it:
+`{ info: (fields, msg) => winstonLogger.info(msg ?? '', fields), ... }` for each
+of `debug`, `info`, `warn` and `error`.
 
 On a platform whose log view reads stdout you usually want both:
 
@@ -167,6 +190,6 @@ a no-op provider and never arrive.
 
 ## Examples
 
-- [`example-pino`](https://github.com/jagreehal/autotel/tree/main/apps/example-pino): Pino as first-class logger with `init({ logger })` and trace context injection.
+- [`example-pino`](https://github.com/jagreehal/autotel/tree/main/apps/example-pino): Pino with `autoInstrumentations: ['pino']`, the logger created after `init()`, and trace context in every record
 - [`example-bunyan`](https://github.com/jagreehal/autotel/tree/main/apps/example-bunyan): Bunyan with auto-instrumentation.
 - [`example-winston`](https://github.com/jagreehal/autotel/tree/main/apps/example-winston): Winston with auto-instrumentation.

@@ -12,17 +12,16 @@ Create an `instrumentation.ts` file:
 import 'autotel/register'; // Must be first for ESM
 
 import { init } from 'autotel';
-import pino from 'pino';
-
-const logger = pino({ name: 'my-api' });
 
 init({
   service: 'my-api',
-  logger,
-  autoInstrumentations: ['express', 'http', 'pino'],
+  autoInstrumentations: ['express', 'http', 'pino'], // only these load
+  logs: true,
   endpoint: process.env.OTLP_ENDPOINT,
 });
 ```
+
+Create the pino logger in its own module (`export const logger = pino({ name: 'my-api' })`), not here: it has to load after `init()` to get trace context.
 
 Run with the `--import` flag:
 

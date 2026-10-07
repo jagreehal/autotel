@@ -2,6 +2,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { listenLoopbackDualStack } from '../listen';
+import { createDevtools } from '../../index';
 
 function occupy(port: number): { server: Server; port: number } {
   const s = createServer();
@@ -86,5 +87,36 @@ describe('listenLoopbackDualStack', () => {
     });
     await expect(ready).rejects.toThrow(/could not bind/);
     primary.close();
+  });
+});
+
+describe('createDevtools maxPortTries', () => {
+  it('rejects ready instead of moving off a busy port', async () => {
+    const blocker = occupy(30000 + Math.floor(Math.random() * 10000));
+    occupied.push(blocker);
+
+    const devtools = createDevtools({ port: blocker.port, maxPortTries: 1 });
+    await expect(devtools.ready).rejects.toThrow(/could not bind/);
+    await devtools.close();
+  });
+
+  it('does not leave an unhandled rejection in verbose mode', async () => {
+    const blocker = occupy(30000 + Math.floor(Math.random() * 10000));
+    occupied.push(blocker);
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+
+    const devtools = createDevtools({
+      port: blocker.port,
+      maxPortTries: 1,
+      verbose: true,
+    });
+    await expect(devtools.ready).rejects.toThrow(/could not bind/);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    process.off('unhandledRejection', onUnhandled);
+    await devtools.close();
+
+    expect(unhandled).toEqual([]);
   });
 });

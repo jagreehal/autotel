@@ -1,22 +1,15 @@
 /**
  * Winston Logger Example with autotel
  *
- * This example demonstrates:
- * - Using Winston logger with autotel
- * - Winston auto-instrumentation for trace context injection
- * - Installing @opentelemetry/instrumentation-winston (required)
- * - Logging with trace context automatically injected
- *
- * **Important:** While @opentelemetry/auto-instrumentations-node includes Winston
- * instrumentation, you should install @opentelemetry/instrumentation-winston separately
- * to ensure it's available and working correctly.
+ * `autoInstrumentations: ['winston']` adds trace context to every log record
+ * and exports it via OTLP. init() runs in telemetry.ts and the logger is
+ * created in logger.ts, after it, so winston is patched as it loads.
  *
  * Run: pnpm start
  */
 
-import 'dotenv/config';
+import { DEVTOOLS_PORT } from './telemetry'; // first: runs init() before winston loads
 import {
-  init,
   trace,
   span,
   Metric,
@@ -26,33 +19,7 @@ import {
   withTracing,
   getActiveTraceContext,
 } from 'autotel';
-import { createDevtools } from 'autotel-devtools';
-
-// Start devtools OTLP receiver in-process (no separate terminal needed)
-const devtools = createDevtools({
-  port: 4318,
-  verbose: true,
-});
-
-// Initialize autotel - points traces + logs at the in-process devtools
-init({
-  service: 'example-winston-service',
-  debug: true,
-  // Enable Winston auto-instrumentation to inject trace context into logs
-  autoInstrumentations: ['winston'],
-  // Send OTLP traces + logs to the in-process devtools receiver
-  endpoint: `http://localhost:${devtools.port}`,
-  // Must explicitly enable OTLP log export (disabled by default)
-  logs: true,
-});
-
-// Create Winston logger AFTER init() - instrumentation will hook into it
-import winston from 'winston';
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.json(),
-  transports: [new winston.transports.Console()],
-});
+import { logger } from './logger';
 
 // Create a metrics instance
 const metrics = new Metric('example-winston');
@@ -188,7 +155,7 @@ export const createOrder = withTracing({})(
 
 async function main() {
   logger.info('🚀 Starting autotel Winston example...');
-  logger.info(`🔍 Devtools UI: http://localhost:${devtools.port}\n`);
+  logger.info(`🔍 Devtools UI: http://localhost:${DEVTOOLS_PORT}\n`);
 
   try {
     // TEST: Verify trace() with nested span() doesn't create orphan spans
@@ -220,7 +187,7 @@ async function main() {
       ctx.setAttributes({
         output: 'Successfully answered.',
       });
-    })();
+    });
     logger.info(
       '✅ TEST PASSED: If you see exactly 2 spans (user-request-trace + llm-call) with same traceId, the fix works!\n',
     );
@@ -251,7 +218,6 @@ async function main() {
 
   // Gracefully shutdown
   await shutdown();
-  await devtools.close();
   process.exit(0);
 }
 

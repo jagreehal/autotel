@@ -11,8 +11,22 @@ import { init } from 'autotel';
 
 init({
   service: 'my-fastify-api',
-  autoInstrumentations: ['http', 'fastify'],
+  autoInstrumentations: ['http'],
   endpoint: process.env.OTLP_ENDPOINT,
+});
+```
+
+`@opentelemetry/auto-instrumentations-node` has no Fastify instrumentation, so there is no `'fastify'` name. For hook and handler spans, add Fastify's own [`@fastify/otel`](https://github.com/fastify/otel) through `instrumentations`:
+
+```typescript
+import FastifyOtelInstrumentation from '@fastify/otel';
+
+init({
+  service: 'my-fastify-api',
+  autoInstrumentations: ['http'],
+  instrumentations: [
+    new FastifyOtelInstrumentation({ registerOnInitialization: true }),
+  ],
 });
 ```
 
@@ -57,12 +71,12 @@ await app.listen({ port: 3000 });
 
 ## What Gets Traced
 
-With `autoInstrumentations: ['http', 'fastify']`:
+With `autoInstrumentations: ['http']`:
 
 - **HTTP server spans**: automatic per-request spans
-- **Fastify lifecycle**: hook and handler execution time
+- **Fastify lifecycle**: hook and handler execution time, with `@fastify/otel`
 - **Your `trace()` calls**: business logic spans as children
 
 ## Examples
 
-- [`example-fastify`](https://github.com/jagreehal/autotel/tree/main/apps/example-fastify): Fastify with HTTP/Fastify auto-instrumentation and manual `trace()`.
+- [`example-fastify`](https://github.com/jagreehal/autotel/tree/main/apps/example-fastify): Fastify with HTTP auto-instrumentation and manual `trace()`.

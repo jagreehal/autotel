@@ -36,4 +36,21 @@ describe('init logger resolution', () => {
     expect(warn).toHaveBeenCalledWith({ requestId: 'req-1' }, 'warn');
     expect(error).toHaveBeenCalledWith('error');
   });
+
+  it('keeps `this` bound for method-based loggers like pino', () => {
+    const calls: unknown[] = [];
+    const logger = {
+      prefix: 'p',
+      debug() {},
+      info(this: { prefix: string }, msg: string) {
+        calls.push(`${this.prefix}:${msg}`);
+      },
+      warn() {},
+      error() {},
+    } as unknown as Logger;
+
+    wrapLogger(logger, false, 'debug').info('hi');
+
+    expect(calls).toEqual(['p:hi']);
+  });
 });

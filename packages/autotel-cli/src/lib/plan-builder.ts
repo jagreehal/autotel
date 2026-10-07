@@ -61,18 +61,12 @@ export function buildPlanFromDetection(opts: {
     for (const pkg of p.packages.devOnly) dev.add(pkg);
   }
 
-  // Pino is wired as init({ logger }), so we also need `pino` itself
-  // available. Detection already saw it in deps, but be explicit so a
-  // hand-crafted plan still works.
-  if (detection.primaryLogger === 'pino') prod.add('pino');
-
-  // Auto-instrumentations-node covers the auto-instrumented deps + the
-  // Winston/Bunyan trace-context injection.
+  // Auto-instrumentations-node covers the auto-instrumented deps and every
+  // logger's trace-context injection.
   if (
     detection.autoInstrumentedDeps.length > 0 ||
     detection.autoInstrumentLoggers.length > 0 ||
-    detection.primaryLogger === 'winston' ||
-    detection.primaryLogger === 'bunyan'
+    detection.primaryLogger !== null
   ) {
     prod.add('@opentelemetry/auto-instrumentations-node');
   }

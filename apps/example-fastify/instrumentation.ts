@@ -2,7 +2,8 @@
  * Autotel initialization for the Fastify example.
  *
  * Loaded before the app via: tsx --import ./instrumentation.ts src/index.ts
- * HTTP and Fastify instrumentation provide automatic server spans.
+ * HTTP instrumentation provides the per-request server spans. There is no
+ * 'fastify' auto-instrumentation; add @fastify/otel for hook/handler spans.
  */
 
 import { init } from 'autotel';
@@ -16,7 +17,7 @@ init({
         ? false
         : true,
   debug: 'pretty',
-  autoInstrumentations: ['http', 'fastify'],
+  autoInstrumentations: ['http'],
   endpoint:
     process.env.AUTOTEL_DEVTOOLS === 'off'
       ? process.env.OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT

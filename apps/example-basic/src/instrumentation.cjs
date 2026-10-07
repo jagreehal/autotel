@@ -9,18 +9,14 @@
 
 require('dotenv/config');
 const { init } = require('autotel');
-const {
-  getNodeAutoInstrumentations,
-} = require('@opentelemetry/auto-instrumentations-node');
 
 console.log('🔧 Initializing autotel with pino instrumentation (CJS)...');
 
 init({
   service: 'example-pino-cjs',
   debug: true,
-  instrumentations: getNodeAutoInstrumentations({
-    '@opentelemetry/instrumentation-pino': { enabled: true },
-  }),
+  // Only pino loads (needs @opentelemetry/auto-instrumentations-node installed)
+  autoInstrumentations: ['pino'],
 });
 
 console.log('✅ Autotel initialized\n');

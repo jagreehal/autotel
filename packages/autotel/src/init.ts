@@ -112,6 +112,9 @@ import {
   getAutoInstrumentations,
   getInstrumentationNames,
   isESMMode,
+  isEsmHookLoaded,
+  loggersLoadedBeforeInit,
+  missingInstrumentations,
 } from './auto-instrumentations';
 import {
   createLogExporter,
@@ -337,6 +340,12 @@ export function init(cfg: AutotelConfig): void {
   const minLevel = mergedConfig.minLevel ?? 'info';
   const baseLogger = mergedConfig.logger || silentLogger;
   logger = wrapLogger(baseLogger, silent, minLevel);
+  // Setup warnings reach the console when no diagnostic logger is passed,
+  // which is the recommended setup.
+  const setupWarn = (msg: string) => {
+    if (mergedConfig.logger) logger.warn({}, msg);
+    else if (!silent) console.warn(msg);
+  };
 
   // Warn if re-initializing (same behavior in all environments)
   if (initialized) {
@@ -357,8 +366,7 @@ export function init(cfg: AutotelConfig): void {
   const environment =
     mergedConfig.environment || process.env.NODE_ENV || 'development';
   const metricsEnabled = resolveMetricsFlag(mergedConfig.metrics);
-  const canonicalLogger =
-    mergedConfig.canonicalLogLines?.logger ?? mergedConfig.logger;
+  const canonicalLogger = mergedConfig.canonicalLogLines?.logger;
   const hasCanonicalLogger = Array.isArray(canonicalLogger)
     ? canonicalLogger.length > 0
     : canonicalLogger !== undefined;
@@ -373,22 +381,46 @@ export function init(cfg: AutotelConfig): void {
     mergedConfig.logs ?? (canonicalUsesOtel ? true : 'auto'),
   );
 
+  // The embedded server runs in this process; its port is kept out of tracing.
+  let devtoolsPort: number | undefined;
   if (devtoolsConfig.enabled && devtoolsConfig.embedded) {
     const devtoolsModule = _optionalRequire<{
       createDevtools?: (options?: {
         port?: number;
         host?: string;
         verbose?: boolean;
-      }) => { port: number; close: () => Promise<void> | void };
+        maxPortTries?: number;
+      }) => {
+        port: number;
+        ready?: Promise<unknown>;
+        close: () => Promise<void> | void;
+      };
     }>('autotel-devtools');
 
     if (devtoolsModule?.createDevtools) {
+      if (devtoolsConfig.port === 0) {
+        // The OS picks port 0's real port after init() has returned, by
+        // which time the exporters already point at `:0`.
+        throw new Error(
+          '[autotel] devtools.embedded needs a fixed devtools.port; 0 is not supported',
+        );
+      }
       const devtoolsInstance = devtoolsModule.createDevtools({
         port: devtoolsConfig.port,
         host: devtoolsConfig.host,
         verbose: devtoolsConfig.verbose,
+        // init() is synchronous: the exporters and the ignored-port list are
+        // built from this port now, so the server must not move to another.
+        maxPortTries: 1,
       });
+      devtoolsInstance.ready?.catch((error: unknown) =>
+        setupWarn(
+          `[autotel] autotel-devtools could not start (${error instanceof Error ? error.message : String(error)}). ` +
+            `Telemetry is still sent to ${endpoint}; free the port or set devtools.port.`,
+        ),
+      );
       _devtoolsClose = devtoolsInstance.close;
+      devtoolsPort = devtoolsInstance.port;
       endpoint = `http://${devtoolsConfig.host}:${devtoolsInstance.port}`;
       logger.info(
         {},
@@ -748,16 +780,19 @@ export function init(cfg: AutotelConfig): void {
     mergedConfig.autoInstrumentations !== undefined &&
     mergedConfig.autoInstrumentations !== false
   ) {
-    // Check for ESM mode and provide guidance
-    const isESM = isESMMode();
-    if (isESM) {
-      logger.info(
-        {},
-        '[autotel] ESM mode detected. For auto-instrumentation to work:\n' +
-          '  1. Install @opentelemetry/auto-instrumentations-node as a direct dependency\n' +
-          '  2. Import autotel/register FIRST in your instrumentation file\n' +
-          '  3. Use getNodeAutoInstrumentations() directly instead of autoInstrumentations\n' +
-          '  See: https://github.com/jagreehal/autotel#esm-setup',
+    if (isESMMode() && !isEsmHookLoaded()) {
+      setupWarn(
+        '[autotel] ESM app without the OTel loader hook: packages loaded with `import` ' +
+          '(pino, express, ...) will not be instrumented. Start node with ' +
+          '`--import autotel/register`. See: https://github.com/jagreehal/autotel#esm-setup',
+      );
+    }
+    for (const name of loggersLoadedBeforeInit(
+      mergedConfig.autoInstrumentations,
+    )) {
+      setupWarn(
+        `[autotel] ${name} was loaded before init(), so its logs get no trace context. ` +
+          `Run init() first, and don't create your ${name} logger in the module that calls it.`,
       );
     }
 
@@ -781,7 +816,23 @@ export function init(cfg: AutotelConfig): void {
       const autoInstrumentations = getAutoInstrumentations(
         mergedConfig.autoInstrumentations,
         manualInstrumentationNames,
+        devtoolsPort === undefined ? [] : [devtoolsPort],
       );
+      if (Array.isArray(mergedConfig.autoInstrumentations)) {
+        const missing = missingInstrumentations(
+          mergedConfig.autoInstrumentations,
+          (autoInstrumentations ?? []) as Array<{
+            instrumentationName: string;
+          }>,
+          manualInstrumentationNames,
+        );
+        if (missing.length > 0) {
+          setupWarn(
+            `[autotel] autoInstrumentations: no instrumentation loaded for ${missing.join(', ')}. ` +
+              'Check the spelling; @opentelemetry/auto-instrumentations-node has none for some libraries (fastify, next).',
+          );
+        }
+      }
       if (autoInstrumentations && autoInstrumentations.length > 0) {
         finalInstrumentations = [
           ...finalInstrumentations,
@@ -789,8 +840,7 @@ export function init(cfg: AutotelConfig): void {
         ];
       }
     } catch (error) {
-      logger.warn(
-        {},
+      setupWarn(
         `[autotel] Failed to configure auto-instrumentations: ${error instanceof Error ? error.message : String(error)}`,
       );
     }

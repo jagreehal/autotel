@@ -235,9 +235,11 @@
                       "github",
                       "gitlab",
                       "bitbucket",
+                      "forgejo",
                       "codePen",
                       "farcaster",
                       "discord",
+                      "fluxer",
                       "gitter",
                       "twitter",
                       "x.com",
@@ -252,6 +254,7 @@
                       "instagram",
                       "stackOverflow",
                       "telegram",
+                      "whatsApp",
                       "rss",
                       "facebook",
                       "email",
@@ -268,6 +271,8 @@
                       "zulip",
                       "pinterest",
                       "tiktok",
+                      "goodreads",
+                      "hypothesis",
                       "astro",
                       "solidjs",
                       "alpine",
@@ -299,6 +304,7 @@
                       "figma",
                       "sketch",
                       "npm",
+                      "npmx",
                       "sourcehut",
                       "substack",
                       "chrome",
@@ -318,6 +324,7 @@
                       "seti:cpp",
                       "seti:clojure",
                       "seti:coldfusion",
+                      "seti:coffee",
                       "seti:config",
                       "seti:crystal",
                       "seti:crystal_embedded",
@@ -454,6 +461,7 @@
                   },
                   {
                     "type": "string",
+                    "format": "starts_with",
                     "pattern": "^<svg.*"
                   }
                 ]
@@ -464,16 +472,10 @@
                   "type": "string"
                 },
                 "additionalProperties": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "boolean"
-                    }
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
                   ]
                 }
               }

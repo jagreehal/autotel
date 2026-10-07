@@ -446,4 +446,20 @@ describe('init() integrations vs instrumentations', () => {
       'HttpInstrumentation',
     );
   });
+
+  it('prints setup warnings to the console when no logger is passed, unless silent', async () => {
+    // Tests run from packages/autotel ("type": "module") without the loader hook.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { init } = await loadInitWithMocks();
+
+    init({ service: 'test-app', autoInstrumentations: true });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('without the OTel loader hook'),
+    );
+
+    warn.mockClear();
+    init({ service: 'test-app', autoInstrumentations: true, silent: true });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });
