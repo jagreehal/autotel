@@ -229,6 +229,39 @@ to **Agents**.
   / MDM / VS Code), e.g. `npx autotel-devtools claude --print-env`.
 - `--log-prompts`: capture prompt _text_ (default is private: length only).
 
+To route **every** new session here without a wrapper, write the route into the
+agents' own config once:
+
+```bash
+npx autotel-devtools agents enable                       # Claude Code + Codex
+npx autotel-devtools agents enable --target=codex --endpoint=http://127.0.0.1:14318
+npx autotel-devtools agents status
+npx autotel-devtools agents disable
+```
+
+- **Claude Code**: sets the same env as above in `~/.claude/settings.json`
+  (`$CLAUDE_CONFIG_DIR`). A signal-specific endpoint, `OTEL_SDK_DISABLED`, or an
+  active `ENABLE_BETA_TRACING_DETAILED` + `BETA_TRACING_ENDPOINT` pair is taken
+  over too, since each would otherwise win. Claude Desktop's Setup profile
+  overrides user settings, so route it there separately.
+- **Codex**: appends a marked `[otel]` block (log, trace and metrics exporters,
+  OTLP/HTTP binary) to `~/.codex/config.toml` (`$CODEX_HOME`). If the file
+  already configures `otel` anywhere else, it refuses and changes nothing.
+- What was written is recorded in `~/.config/autotel-devtools/agents.json`
+  (`$XDG_CONFIG_HOME`). `disable` removes only values still as written, leaves
+  anything you changed since, and does **not** restore earlier destinations.
+  Restart the agent after either command.
+- **Repository**: `--repository=path|name|off` (default `path`). Claude Code
+  gets a SessionStart hook that sends the session's repository (the main
+  checkout, so worktrees group together) to the receiver; the Agents tab then
+  shows it per session and filters by it. `name` sends no filesystem path,
+  `off` installs no hook. Codex has no user-level hook to install.
+
+An agent can ask what a session spent: `GET /api/agents/usage?repository=<name>&latest=prompt`
+(also `session`, `prompt`, `agent`, `latest=session`), or the `agent_usage` tool in
+`autotel-mcp`. Every total says whether cost and tokens are `complete`, `partial`
+(a lower bound) or `unknown` (not zero: nothing was measured).
+
 What you get per session: a **timeline** (prompts → tool calls → API requests →
 decisions), a **rollup** (cost, tokens, requests, lines changed), and breakdowns
 by **tool category**, **MCP server** (`mcp__server__tool`), **sub-agent** (`Task`)
@@ -365,6 +398,33 @@ else's page, where `document.modelContext` belongs to that page. Registered
 against the browser's WebMCP API directly, with no runtime dependency; in a
 browser without WebMCP nothing is registered.
 
+## Semantic-convention validation
+
+Devtools can replay what it has received into [weaver](https://github.com/open-telemetry/weaver)'s live check and report what upstream OpenTelemetry semantic conventions say about it: deprecated attributes, names not in the registry, attributes that are not stable yet.
+
+weaver is optional and not bundled. Put it on `PATH` (or point `AUTOTEL_WEAVER_BIN` at it); without it both routes answer `status: "unavailable"` with an install hint. weaver resolves the upstream registry from GitHub on each run, so a run needs network.
+
+```bash
+curl -X POST localhost:4318/api/validation/run   # replay held telemetry into weaver, return findings
+curl localhost:4318/api/validation               # latest result; "stale": true once newer telemetry arrived
+```
+
+Findings are grouped by advice and counted per entity, violations first:
+
+```json
+{
+  "level": "violation",
+  "id": "deprecated",
+  "attribute": "http.method",
+  "signal": "span",
+  "signalName": "GET /orders",
+  "count": 12,
+  "message": "Attribute 'http.method' is deprecated; reason = 'renamed', note = 'Replaced by `http.request.method`.'."
+}
+```
+
+The replay uses the newest 200 OTLP batches per signal, so older telemetry the viewer still shows can fall outside a run.
+
 ## Issues
 
 Failures are grouped into **issues**, the way Cloudflare Workers Issues and
@@ -443,6 +503,7 @@ npx autotel-devtools --port 4319 --host 0.0.0.0
 npx autotel-devtools --db ./telemetry.db        # keep telemetry across restarts
 npx autotel-devtools claude                     # receiver + launch Claude Code wired to it
 npx autotel-devtools claude --print-env         # print the telemetry env, don't launch
+npx autotel-devtools agents enable              # route Claude Code + Codex here persistently
 ```
 
 Arguments:

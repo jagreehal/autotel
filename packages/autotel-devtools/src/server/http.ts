@@ -1,4 +1,6 @@
 // src/server/http.ts
+import { mapFreshness } from './coverage/freshness';
+import { AGENT_KINDS } from 'autotel-agents';
 import {
   createServer,
   type IncomingMessage,
@@ -506,6 +508,34 @@ export function attachDevtoolsRoutes(
        * describes that tree, so anywhere else would describe someone else's
        * code.
        */
+      /*
+       * Coding-agent spend for an agent to ask about: "what did the last
+       * prompt in this repository cost?". Each total says whether it is
+       * complete, partial or unknown, so an unpriced model never reads as $0.
+       */
+      if (req.method === 'GET' && url.split('?')[0] === '/api/agents/usage') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        const params = new URL(url, 'http://localhost').searchParams;
+        const latest = params.get('latest');
+        const agent = AGENT_KINDS.find((kind) => kind === params.get('agent'));
+        sendJson(
+          res,
+          200,
+          devtools.getAgentUsage({
+            sessionId: params.get('session') ?? undefined,
+            promptId: params.get('prompt') ?? undefined,
+            repository: params.get('repository') ?? undefined,
+            agent,
+            latest:
+              latest === 'session' || latest === 'prompt' ? latest : undefined,
+          }),
+        );
+        return;
+      }
+
       if (req.method === 'GET' && url === '/api/coverage') {
         if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
           sendJson(res, 403, { error: 'Forbidden' });
@@ -535,17 +565,39 @@ export function attachDevtoolsRoutes(
           const parsed = JSON.parse(readFileSync(mapPath, 'utf8')) as {
             routes?: MapRoute[];
           };
-          sendJson(
-            res,
-            200,
-            joinCoverage(parsed.routes ?? [], devtools.observedSpans()),
-          );
+          sendJson(res, 200, {
+            ...joinCoverage(parsed.routes ?? [], devtools.observedSpans()),
+            freshness: mapFreshness(sourceRoot, mapPath),
+          });
         } catch (e) {
           sendJson(res, 400, {
             error: 'Unreadable instrumentation map',
             message: e instanceof Error ? e.message : String(e),
           });
         }
+        return;
+      }
+
+      /*
+       * Live semconv validation. `weaver` is optional: without it both routes
+       * answer 200 with `status: 'unavailable'` and an install hint, so a
+       * client can tell "not installed" from a server error.
+       */
+      if (
+        (req.method === 'GET' && url === '/api/validation') ||
+        (req.method === 'POST' && url === '/api/validation/run')
+      ) {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        sendJson(
+          res,
+          200,
+          req.method === 'GET'
+            ? devtools.validation.get()
+            : await devtools.validation.run(),
+        );
         return;
       }
 

@@ -1,5 +1,7 @@
 // src/server/server.ts
 import { WebSocketServer, WebSocket } from 'ws';
+import { createValidator, type Validator } from './validation';
+import type { OtlpJson } from './otlp-proto';
 import { encodeTraces } from '../wire/wire';
 import type { Server as HTTPServer } from 'node:http';
 import { createServer } from 'node:http';
@@ -13,6 +15,9 @@ import { foldWebMcpTools, type WebMcpInventory } from './webmcp-aggregator';
 import {
   ingestAgentEvents,
   ingestAgentMetrics,
+  usageReport,
+  type UsageFilter,
+  type UsageReport,
   type AgentSessionStore,
   type AgentRawEvent,
   type OtelMetricRecord,
@@ -139,6 +144,8 @@ export class DevtoolsServer {
   private store: DevtoolsStore;
   /** Failures → issues → automations. See `issue-engine.ts`. */
   readonly issueEngine: IssueEngine;
+  /** Live semconv validation over what was ingested (needs `weaver` on PATH). */
+  readonly validation: Validator = createValidator();
 
   /** Issue state: status, occurrences, destinations, automations, runs. */
   get issueStore() {
@@ -398,6 +405,9 @@ export class DevtoolsServer {
   }
 
   ingestOtlp(signal: 'traces' | 'logs' | 'metrics', payload: unknown): number {
+    // SAFETY: both transports hand over a JSON body or a protobuf decode's
+    // `toObject`, each a JSON value; the encoder rejects a non-object.
+    this.validation.capture(signal, payload as OtlpJson);
     if (signal === 'traces') {
       const traces = parseOtlpTraces(payload);
       this.addTraces(traces);
@@ -602,6 +612,11 @@ export class DevtoolsServer {
     return this.store.getStats();
   }
 
+  /** Coding-agent token and cost usage, filtered; see `usageReport`. */
+  getAgentUsage(filter: UsageFilter): UsageReport {
+    return usageReport(this.agentSessions.values(), filter);
+  }
+
   describeTrace(traceId: string) {
     return this.store.describeTrace(traceId);
   }
@@ -651,10 +666,12 @@ export class DevtoolsServer {
     this.agentSessions.clear();
     this.errorAggregator.clear();
     this.store.clear();
+    this.validation.clear();
   }
 
   clearSignal(signal: 'traces' | 'logs' | 'metrics'): void {
     this.store.clearSignal(signal);
+    this.validation.clear(signal);
     if (signal === 'traces') {
       this.traces = [];
       this.errorAggregator.clear();

@@ -2,7 +2,7 @@
 // src/cli.ts
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DevtoolsServer } from './server/server';
@@ -12,6 +12,14 @@ import { hostHeaderIsLoopback } from './server/origin-guard';
 import { listenLoopbackDualStack } from './server/listen';
 import { probePortHolder } from './server/identity';
 import { startOtlpGrpcReceiver } from './server/grpc';
+import {
+  buildAgentEnv,
+  parseTargets,
+  REPOSITORY_MODES,
+  runAgentSetup,
+  runRepositoryHook,
+} from './agent-setup';
+import type { RepositoryMode } from './agent-setup';
 
 interface CliOptions {
   port: number;
@@ -30,6 +38,7 @@ function printHelp(): void {
 
 Usage: autotel-devtools [port] [options]
        autotel-devtools claude [claude args] [--print-env] [--log-prompts]
+       autotel-devtools agents <enable|disable|status> [--target=claude-code,codex]
 
 Subcommands:
   claude               Start the receiver AND launch Claude Code wired to it
@@ -38,6 +47,16 @@ Subcommands:
                        tool / MCP / sub-agent / skill usage live.
                          --print-env    Print the telemetry env block and exit (don't launch)
                          --log-prompts  Capture prompt text (default: length only / private)
+  agents               Route coding agents here persistently, by editing their config:
+                       Claude Code ~/.claude/settings.json (CLAUDE_CONFIG_DIR) and
+                       Codex ~/.codex/config.toml (CODEX_HOME). disable removes only
+                       values still as written; previous destinations are not restored.
+                         --target <list>  claude-code,codex (default: both)
+                         --endpoint <url> Receiver base URL (default: http://127.0.0.1:4318)
+                         --log-prompts    Capture prompt text
+                         --repository <m> path | name | off (default: path). Claude Code
+                                          gets a SessionStart hook naming the session's
+                                          repository, so the Agents tab can filter by it
 
 Arguments:
   port                 Port to listen on (shorthand for --port; must be a positive integer)
@@ -77,6 +96,7 @@ Examples:
   npx autotel-devtools -p 4319 -H 0.0.0.0
   npx autotel-devtools claude                 # watch Claude Code in the Agents tab
   npx autotel-devtools claude --print-env     # just print the env (for MDM / VS Code)
+  npx autotel-devtools agents enable          # every new Claude Code / Codex session, here
 
 Then point your app:
   OTEL_EXPORTER_OTLP_PROTOCOL=http/json OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node app.js
@@ -318,30 +338,6 @@ async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
   };
 }
 
-// Telemetry env that wires Claude Code (and any OTel-via-env CLI) to this
-// receiver for a live local view. HTTP/protobuf remains the most portable
-// Claude Code configuration; the same receiver also accepts OTLP/gRPC.
-// session.id kept on metrics so metric-only signals join their session.
-function buildAgentEnv(uiBase: string, logPrompts: boolean) {
-  const env = {
-    CLAUDE_CODE_ENABLE_TELEMETRY: '1',
-    // Spans are beta-gated. Without this the interaction → llm_request → tool
-    // hierarchy, and the sub-agent tree `parent_agent_id` draws inside it, is
-    // never emitted — metrics and logs cannot reconstruct either.
-    CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: '1',
-    OTEL_TRACES_EXPORTER: 'otlp',
-    OTEL_METRICS_EXPORTER: 'otlp',
-    OTEL_LOGS_EXPORTER: 'otlp',
-    OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
-    OTEL_EXPORTER_OTLP_ENDPOINT: uiBase,
-    OTEL_METRIC_EXPORT_INTERVAL: '1000',
-    OTEL_LOGS_EXPORT_INTERVAL: '1000',
-    OTEL_METRICS_INCLUDE_SESSION_ID: 'true',
-  };
-  // Private by default: prompt *text* only flows when explicitly opted in.
-  return logPrompts ? { ...env, OTEL_LOG_USER_PROMPTS: '1' } : env;
-}
-
 function printEnvBlock(env: Record<string, string>): void {
   for (const [key, value] of Object.entries(env)) {
     process.stdout.write(`export ${key}=${value}\n`);
@@ -452,8 +448,65 @@ async function runClaudeSubcommand(argv: string[]): Promise<void> {
   });
 }
 
+async function runAgentsSubcommand(argv: string[]): Promise<void> {
+  const [action, ...rest] = argv;
+  if (action === 'hook') {
+    // Claude Code's SessionStart hook. Whatever happens, exit 0 quietly: a
+    // missing receiver is normal and must not show up as a hook error.
+    try {
+      let input = '';
+      for await (const chunk of process.stdin) input += chunk;
+      await runRepositoryHook(input);
+    } catch {
+      // receiver down or payload unexpected: nothing to correlate
+    }
+    return;
+  }
+  if (action !== 'enable' && action !== 'disable' && action !== 'status') {
+    process.stderr.write(
+      '[autotel-devtools] usage: autotel-devtools agents <enable|disable|status> [--target=claude-code,codex] [--endpoint=<url>] [--log-prompts]\n',
+    );
+    process.exit(1);
+  }
+  const host = process.env.AUTOTEL_DEVTOOLS_HOST || '127.0.0.1';
+  const port = parsePort(process.env.AUTOTEL_DEVTOOLS_PORT || '4318');
+  let endpoint = `http://${host === 'localhost' ? '127.0.0.1' : host}:${port}`;
+  let target: string | undefined;
+  let logPrompts = false;
+  let repository: RepositoryMode = 'path';
+  for (let i = 0; i < rest.length; i++) {
+    const [flag, inline] = rest[i].split(/=(.*)/s, 2);
+    const value = () => inline ?? rest[++i];
+    if (flag === '--target') target = value();
+    else if (flag === '--endpoint') endpoint = value();
+    else if (flag === '--log-prompts') logPrompts = true;
+    else if (flag === '--repository') {
+      const wanted = value();
+      const mode = REPOSITORY_MODES.find((known) => known === wanted);
+      if (!mode)
+        throw new Error(`--repository expects ${REPOSITORY_MODES.join(', ')}`);
+      repository = mode;
+    } else throw new Error(`unknown option ${rest[i]}`);
+  }
+  const result = runAgentSetup(action, parseTargets(target), {
+    endpoint,
+    logPrompts,
+    repository,
+    // Absolute path to this CLI, so the hook starts fast. After moving the
+    // install, re-run `agents enable`.
+    hookCommand: `${JSON.stringify(process.execPath)} ${JSON.stringify(realpathSync(process.argv[1]))} agents hook`,
+  });
+  for (const line of result.lines) process.stdout.write(`${line}\n`);
+  if (!result.ok) process.exit(1);
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+
+  if (argv[0] === 'agents') {
+    await runAgentsSubcommand(argv.slice(1));
+    return;
+  }
 
   // Subcommand: `autotel-devtools claude [claude args] [--print-env] [--log-prompts]`
   if (argv[0] === 'claude') {

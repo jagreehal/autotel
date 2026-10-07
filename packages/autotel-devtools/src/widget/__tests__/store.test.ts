@@ -18,7 +18,12 @@ import {
   selectedTraceIdsSignal,
   toggleTraceSelection,
   deleteSelectedTraces,
+  agentSessionsSignal,
+  agentRepositoryFilterSignal,
+  sortedAgentSessionsSignal,
 } from '../store.svelte';
+import { ingestEventRecord, REPOSITORY_EVENT } from 'autotel-agents';
+import type { AgentSessionStore } from 'autotel-agents';
 import {
   makeTrace,
   makeLog,
@@ -400,5 +405,36 @@ describe('windowedErrorGroupsSignal', () => {
       end: NOW,
     };
     expect(windowedErrorGroupsSignal.value).toEqual([]);
+  });
+});
+
+describe('agent repository filter', () => {
+  // Real sessions from the reducer, stamped by the hook's correlation event.
+  const sessionsIn = (...pairs: [id: string, repo: string][]) => {
+    const store: AgentSessionStore = new Map();
+    for (const [id, repo] of pairs)
+      ingestEventRecord(store, {
+        eventName: REPOSITORY_EVENT,
+        timestamp: 0,
+        attributes: { 'session.id': id, 'repository.name': repo },
+        resource: {},
+      });
+    return [...store.values()];
+  };
+
+  afterEach(() => clearAllData());
+
+  it('narrows to the chosen repository', () => {
+    agentSessionsSignal.value = sessionsIn(['a', 'one'], ['b', 'two']);
+    agentRepositoryFilterSignal.value = 'one';
+    expect(sortedAgentSessionsSignal.value.map((s) => s.id)).toEqual(['a']);
+  });
+
+  it('ignores a filter no session matches, and clears it with the data', () => {
+    agentRepositoryFilterSignal.value = 'gone';
+    agentSessionsSignal.value = sessionsIn(['b', 'two']);
+    expect(sortedAgentSessionsSignal.value.map((s) => s.id)).toEqual(['b']);
+    clearAllData();
+    expect(agentRepositoryFilterSignal.value).toBeNull();
   });
 });

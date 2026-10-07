@@ -50,6 +50,27 @@ export interface TelemetryBackend {
    * `undefined` means "not supported here": callers group issues themselves.
    */
   listIssues?(query: IssueListQuery): Promise<Issue[] | undefined>;
+
+  /**
+   * Coding-agent token and cost usage (devtools, from Claude Code / Codex /
+   * opencode telemetry). `undefined` means this backend does not keep it.
+   */
+  agentUsage?(query: AgentUsageQuery): Promise<object | undefined>;
+
+  /**
+   * Received telemetry checked against upstream semantic conventions (devtools,
+   * through `weaver`). `run` starts a fresh check; otherwise the latest result.
+   * `undefined` means this backend does not validate.
+   */
+  semconvValidation?(run: boolean): Promise<object | undefined>;
+}
+
+export interface AgentUsageQuery {
+  session?: string;
+  prompt?: string;
+  repository?: string;
+  agent?: string;
+  latest?: 'session' | 'prompt';
 }
 
 export interface IssueListQuery {

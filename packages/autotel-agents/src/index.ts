@@ -25,6 +25,7 @@ export type {
   AgentEvent,
   ToolUsage,
   UsageBreakdown,
+  AccountingStatus,
   McpConnectionInfo,
   PluginInfo,
   HookStats,
@@ -57,6 +58,7 @@ export {
   CLAUDE_CODE_KNOWN_EVENT_NAMES,
 } from './adapters/claude-code';
 export { opencodeAdapter } from './adapters/opencode';
+export { codexAdapter } from './adapters/codex';
 
 export {
   DEFAULT_TIMELINE_LIMIT,
@@ -67,9 +69,19 @@ export {
   ingestAgentEvents,
   ingestAgentMetrics,
   summarizeSessions,
+  accountingStatus,
+  REPOSITORY_EVENT,
+  AGENT_KINDS,
 } from './reduce';
 export type { IngestOptions, AgentAggregate } from './reduce';
 
+export { usageReport } from './usage';
+export type {
+  UsageFilter,
+  UsageReport,
+  SessionUsage,
+  UsageCompleteness,
+} from './usage';
 export { parseToolName, isMcpTool } from './mcp';
 export type { ParsedToolName } from './mcp';
 export {

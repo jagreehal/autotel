@@ -20,7 +20,7 @@ AgentRawEvent    ─┘  → normalize → reduce                      └─ ti
 ```
 
 - **`types.ts`**: decoded-OTLP input types + normalized `AgentSession`/`AgentEvent` model.
-- **`adapters/`**: `createPrefixAdapter({ kind, prefix, scopeHint })` factory; `claude-code` + `opencode` adapters; `registry.ts` (ordered, first match wins). Add Codex = one adapter, registered here.
+- **`adapters/`**: `createPrefixAdapter({ kind, prefix, scopeHint })` factory; `claude-code` + `opencode` prefix adapters, `codex` hand-written (its contract differs); `registry.ts` (ordered, first match wins). A new agent = one adapter, registered here.
 - **`reduce.ts`**: pure stateful reducers over a caller-owned `Map`: `ingestEventRecord` / `ingestMetricRecord` (+ batch `ingestAgent*`), `summarizeSessions`.
 - **`mcp.ts`**: `parseToolName` splits `mcp__<server>__<tool>`.
 - **`tool-taxonomy.ts`**: `classifyTool` (file/shell/search/web/todo/subagent/skill/mcp); `Task`→sub-agent, `Skill`→skill.
@@ -32,6 +32,7 @@ AgentRawEvent    ─┘  → normalize → reduce                      └─ ti
 - **Events are authoritative** for the timeline and cost/token totals (`api_request`). The `token.usage`/`cost.usage` **metrics overlap and are NOT summed** into rollups: only metric-only signals (lines_of_code, commit, pull_request, active_time, code_edit_tool.decision) fold in by `session.id`. Don't change this without re-checking double-counting.
 - **Cumulative vs delta temporality.** `delta` counter points are summed; `cumulative` points are differenced per series via `session.metricState` (re-exporting a cumulative total must not inflate). Absent temporality ⇒ treated as `delta` (Claude Code's default). Claude Code defaults to delta; opencode/standard SDKs default to cumulative.
 - **Positive-signal detection only.** An adapter claims a record by name prefix, instrumentation scope, OR resource `service.name`: never by a bare `event.name` like `api_request`, which any app could emit.
+- **Unknown is not zero.** A request with no cost/tokens is counted in `unpricedRequests`/`untokenedRequests` (and `UsageBreakdown.unpriced`), so readers can say a total is partial or unknown via `accountingStatus`.
 - **No enums** (union types / `as const`); functions over classes.
 - Adding an agent must not require touching the reducers or the devtools UI.
 

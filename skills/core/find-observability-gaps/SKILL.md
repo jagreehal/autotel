@@ -76,6 +76,29 @@ Health checks, probes, metrics endpoints, and pages that fetch nothing are exemp
 
 `status` is `pass`, `fail`, or `n/a`. An `n/a` with `suppressed: true` was waived by a comment; an `n/a` without it means the question does not apply here.
 
+## When the map and a live trace disagree
+
+The scan reads source; devtools and the backend see what ran. Before rewriting
+a handler, give each route one verdict and a reason a reviewer can re-check
+without re-running anything:
+
+- **COVERED**: a live span names this route (method and path, or the operation
+  name), from this service. Reason: the span name and where it was seen.
+- **GAP**: the route was exercised and nothing names it. Reason: what was
+  exercised and what was searched for.
+- **UNCERTAIN**: something partial matched (same path from another service, a
+  wildcard route, middleware that may cover it) or the route was never
+  exercised. Reason: the exact criterion that diverged. Do not fix and do not
+  waive; ask.
+
+Match on what the span identifies, never on a similar name. An empty reason is
+not a verdict. The devtools coverage view applies the same rule: a route counts
+as seen only on evidence that names it.
+
+Past "is it traced", whether the telemetry would catch an incident (dependency
+reasons, queue lag, freshness, release context) is in
+[`references/incident-readiness.md`](references/incident-readiness.md).
+
 ## Gating CI
 
 ```bash
@@ -112,3 +135,5 @@ The default view names three for a reason. Sensitive routes weigh double; a dark
 - Skill `autotel-cli` for the rest of the command surface, including `doctor`.
 - Skill `review-otel-patterns` for the judgement the scanner cannot make.
 - Skill `autotel-request-logging` and skill `autotel-structured-errors` for the APIs most fixes reach for.
+- [`references/incident-readiness.md`](references/incident-readiness.md) for the signals an incident needs beyond a traced handler.
+- Skill `design-alertable-metrics` for turning those signals into alert rules.

@@ -71,17 +71,21 @@ Probes well-known endpoints and picks what responds. Falls back to fixture data 
 
 Tools are registered per backend capability. Agents only see tools the backend can actually serve.
 
-| Group                     | Tools                                                                                                                                                                                 |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Trace investigation       | `search_traces`, `search_spans`, `get_trace`, `summarize_trace`                                                                                                                       |
-| Topology / discovery      | `list_services`, `list_operations`, `service_map`, `discover_services`, `discover_trace_fields`, `discover_log_fields`                                                                |
-| Diagnosis                 | `list_issues`, `get_issue`, `find_errors`, `find_anomalies`, `find_root_cause`, `check_slos`, `explain_slowdown`                                                                      |
-| Cross-signal              | `correlate` (trace + metrics + logs for a traceId)                                                                                                                                    |
-| LLM analytics             | `get_llm_usage` (with USD cost), `get_llm_expensive_traces` (ranked by USD), `get_llm_slow_traces`, `get_llm_model_stats`, `list_llm_models`, `list_llm_tools`                        |
-| Metrics / logs            | `list_metrics`, `search_logs`                                                                                                                                                         |
-| OTel semantic conventions | `semconv_list_namespaces`, `semconv_get_namespace`, `semconv_refresh_cache`                                                                                                           |
-| Collector schema          | `collector_list_components`, `collector_component_schema`, `collector_component_readme`, `collector_validate_component_config`, `collector_get_versions`, `collector_refresh_catalog` |
-| Health                    | `backend_health`, `backend_capabilities`, `list_capabilities`                                                                                                                         |
+| Group                      | Tools                                                                                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trace investigation        | `search_traces`, `search_spans`, `get_trace`, `summarize_trace`                                                                                                                       |
+| Topology / discovery       | `list_services`, `list_operations`, `service_map`, `discover_services`, `discover_trace_fields`, `discover_log_fields`                                                                |
+| Diagnosis                  | `list_issues`, `get_issue`, `find_errors`, `find_anomalies`, `find_root_cause`, `check_slos`, `explain_slowdown`                                                                      |
+| Cross-signal               | `correlate` (trace + metrics + logs for a traceId)                                                                                                                                    |
+| LLM analytics              | `get_llm_usage` (with USD cost), `get_llm_expensive_traces` (ranked by USD), `get_llm_slow_traces`, `get_llm_model_stats`, `list_llm_models`, `list_llm_tools`                        |
+| Metrics / logs             | `list_metrics`, `search_logs`                                                                                                                                                         |
+| OTel semantic conventions  | `semconv_list_namespaces`, `semconv_get_namespace`, `semconv_refresh_cache`                                                                                                           |
+| Collector schema           | `collector_list_components`, `collector_component_schema`, `collector_component_readme`, `collector_validate_component_config`, `collector_get_versions`, `collector_refresh_catalog` |
+| Health                     | `backend_health`, `backend_capabilities`, `list_capabilities`                                                                                                                         |
+| Coding agents (devtools)   | `agent_usage`: spend by session, prompt, repository or agent, with `cost` / `tokens` completeness                                                                                     |
+| Live validation (devtools) | `semconv_validate`: received telemetry against semantic conventions through `weaver`; `run: true` re-checks                                                                           |
+
+Report `agent_usage` totals with their completeness: `partial` is a lower bound and `unknown` is not zero.
 
 Start triage with `list_issues` (grouped failures with status, count, trend, versions and affected users), then `get_issue` for the stack, latest trace and nearby logs.
 

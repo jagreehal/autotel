@@ -62,6 +62,30 @@ rollup.byPrompt['0b4e…']; // one user prompt, start to finish
 
 A request naming no skill is filed under none, never under `"unknown"`.
 
+### Report spend with its completeness
+
+`usageReport(sessions, filter)` totals a session, one prompt, a repository or an agent. `latest: 'prompt'` answers "what did my last request cost". Each total carries `cost` and `tokens` as `complete`, `partial` or `unknown`:
+
+```ts
+import { usageReport } from 'autotel-agents';
+
+const report = usageReport(store.values(), {
+  repository: 'autotel',
+  latest: 'prompt',
+});
+report.total.costUsd; // a lower bound when report.cost is 'partial'
+report.cost; // 'unknown' means nothing was priced: say so, do not print $0
+report.uncorrelatedSessions; // sessions with no repository, left out
+```
+
+A request with no cost counts in `unpriced`, one with no token counts in `untokened`, on the rollup and on every breakdown. Codex reports no cost, so its spend reads `unknown` until a price applies.
+
+### Codex and repository tagging
+
+`codexAdapter` reads `codex.*` log events. The completed response (`codex.sse_event` or `codex.websocket_event` with `event.kind: response.completed`) is the request; a failed transport attempt is an error. Cached input is split out of `input_token_count` into `cacheReadTokens`.
+
+An `autotel.agent.repository` log record (`REPOSITORY_EVENT`) sets `session.repository`. `autotel-devtools agents enable` installs the Claude Code SessionStart hook that sends it.
+
 ### Break usage down by MCP server
 
 ```ts

@@ -32,6 +32,10 @@
         entries: CoverageEntry[];
         seenCount: number;
         total: number;
+        freshness?: {
+          status: 'fresh' | 'stale' | 'unknown';
+          newerFile?: string;
+        };
       }
     | { status: 'missing'; message: string }
     | { status: 'error'; message: string };
@@ -100,6 +104,13 @@
   </div>
 
   <div class="flex-1 overflow-auto px-4 py-3">
+    {#if state.status === 'ok' && state.freshness?.status === 'stale'}
+      <!-- An entry point added since the map was written is in neither list. -->
+      <p class="mb-3 text-xs text-warning">
+        Map older than {state.freshness.newerFile}: re-run
+        <code>npx autotel-cli map</code>
+      </p>
+    {/if}
     {#if state.status === 'loading' || state.status === 'idle'}
       <p class="text-xs text-fg-subtle">Loading…</p>
     {:else if state.status === 'missing'}

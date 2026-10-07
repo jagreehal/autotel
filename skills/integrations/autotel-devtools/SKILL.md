@@ -71,15 +71,18 @@ export const loadUser = withTracing({ name: 'user.load' })(
 
 ## Server Endpoints
 
-| Route                                          | What                                                               |
-| ---------------------------------------------- | ------------------------------------------------------------------ |
-| `POST /v1/traces` · `/v1/logs` · `/v1/metrics` | OTLP receivers: JSON or protobuf (`application/x-protobuf`)        |
-| `GET /`                                        | Dashboard UI (see Views below)                                     |
-| `POST /api/query/{traces,logs,errors,metrics}` | Server-side query over the durable store                           |
-| `POST /api/query/webmcp`                       | WebMCP tool surface, folded server-side over every page of results |
-| `GET /widget.js`                               | Embeddable widget bundle (IIFE)                                    |
-| `GET /healthz`                                 | Health check                                                       |
-| `WS /ws`                                       | WebSocket stream (history replay on connect)                       |
+| Route                                              | What                                                               |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| `POST /v1/traces` · `/v1/logs` · `/v1/metrics`     | OTLP receivers: JSON or protobuf (`application/x-protobuf`)        |
+| `GET /`                                            | Dashboard UI (see Views below)                                     |
+| `POST /api/query/{traces,logs,errors,metrics}`     | Server-side query over the durable store                           |
+| `POST /api/query/webmcp`                           | WebMCP tool surface, folded server-side over every page of results |
+| `GET /api/agents/usage`                            | Coding-agent spend by session, prompt, repository or agent         |
+| `GET /api/coverage`                                | Entry points with no telemetry, plus `freshness` of the map        |
+| `GET /api/validation` · `POST /api/validation/run` | Received telemetry checked against semconv (needs `weaver`)        |
+| `GET /widget.js`                                   | Embeddable widget bundle (IIFE)                                    |
+| `GET /healthz`                                     | Health check                                                       |
+| `WS /ws`                                           | WebSocket stream (history replay on connect)                       |
 
 ## Views in the UI
 
@@ -163,6 +166,17 @@ npx autotel-devtools --port 4319 --host 0.0.0.0 --title "My App"
 | `--port`   | `-p`  | Listen port (default 4318); walks to next free port if taken |
 | `--host`   | `-H`  | Bind host (default 127.0.0.1)                                |
 | `--title`  | `-t`  | Dashboard title                                              |
+
+Route coding agents here for every new session, by editing their own config:
+
+```bash
+npx autotel-devtools agents enable          # Claude Code + Codex
+npx autotel-devtools agents enable --repository=name --target=claude-code
+npx autotel-devtools agents status
+npx autotel-devtools agents disable         # removes only values still as written
+```
+
+Claude Code gets the telemetry env in `~/.claude/settings.json` plus a SessionStart hook that tags each session with its repository (`--repository=path|name|off`). Codex gets a marked `[otel]` block in `~/.codex/config.toml`; a file that already configures `otel` is left untouched. Restart the agent afterwards.
 
 ## Works With
 

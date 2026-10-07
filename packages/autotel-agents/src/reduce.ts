@@ -15,6 +15,7 @@ import {
   foldToolContext,
   pendToolContext,
 } from './compaction';
+import { str } from './attrs';
 import { mergeAttrs, readIdentity } from './identity';
 import { TOOL_CATEGORIES } from './tool-taxonomy';
 import {
@@ -23,6 +24,7 @@ import {
 } from './adapters/registry';
 import type { AgentMetricSignal, SessionIdentity } from './adapters/types';
 import type {
+  AccountingStatus,
   AgentEvent,
   AgentKind,
   AgentRawEvent,
@@ -68,7 +70,7 @@ function wireKeyed<T>(): Record<string, T> {
   return Object.create(null) as Record<string, T>;
 }
 
-function emptyUsage(): UsageBreakdown {
+export function emptyUsage(): UsageBreakdown {
   return {
     requests: 0,
     costUsd: 0,
@@ -76,6 +78,8 @@ function emptyUsage(): UsageBreakdown {
     outputTokens: 0,
     cacheReadTokens: 0,
     cacheCreationTokens: 0,
+    unpriced: 0,
+    untokened: 0,
   };
 }
 
@@ -89,6 +93,8 @@ function emptyRollup(): AgentSessionRollup {
     cacheReadTokens: 0,
     cacheCreationTokens: 0,
     apiRequests: 0,
+    unpricedRequests: 0,
+    untokenedRequests: 0,
     apiErrors: 0,
     apiRefusals: 0,
     prompts: 0,
@@ -201,6 +207,9 @@ function bumpUsage(
   usage.outputTokens += event.outputTokens ?? 0;
   usage.cacheReadTokens += event.cacheReadTokens ?? 0;
   usage.cacheCreationTokens += event.cacheCreationTokens ?? 0;
+  if (event.costUsd === undefined) usage.unpriced += 1;
+  if (event.inputTokens === undefined && event.outputTokens === undefined)
+    usage.untokened += 1;
 }
 
 /** Count a tool against its category and (for sub-agents/skills) its named bucket. */
@@ -226,11 +235,23 @@ export function foldEvent(
   session.eventCount += 1;
   event.id = `${session.id}:${session.eventCount}`;
   touch(session, event.timestamp);
+  // Exporters batch and retry, so events arrive out of order: the latest
+  // prompt is the one with the newest event, not the one ingested last.
+  if (
+    event.promptId &&
+    event.timestamp >= (session.latestPromptAt ?? -Infinity)
+  ) {
+    session.latestPromptId = event.promptId;
+    session.latestPromptAt = event.timestamp;
+  }
 
   const { rollup } = session;
   switch (event.type) {
     case 'api_request': {
       rollup.apiRequests += 1;
+      if (event.costUsd === undefined) rollup.unpricedRequests += 1;
+      if (event.inputTokens === undefined && event.outputTokens === undefined)
+        rollup.untokenedRequests += 1;
       rollup.inputTokens += event.inputTokens ?? 0;
       rollup.outputTokens += event.outputTokens ?? 0;
       rollup.cacheReadTokens += event.cacheReadTokens ?? 0;
@@ -405,6 +426,39 @@ export function foldMetricSignal(
 }
 
 /**
+ * Correlation-only event naming the repository a session runs in. No agent
+ * reports its working directory, so a SessionStart hook sends this beside the
+ * agent's own telemetry. Attributes: `session.id`, `agent.kind`,
+ * `repository.name`, and `repository.path` unless the hook redacts paths.
+ */
+export const REPOSITORY_EVENT = 'autotel.agent.repository';
+
+/** Every agent an adapter recognises. */
+export const AGENT_KINDS = ['claude-code', 'opencode', 'codex'] as const;
+const KNOWN_KINDS: ReadonlySet<string> = new Set<AgentKind>(AGENT_KINDS);
+
+function foldRepository(
+  store: AgentSessionStore,
+  record: AgentRawEvent,
+): AgentSession | null {
+  const attrs = record.attributes;
+  const sessionId = str(attrs, 'session.id');
+  const name = str(attrs, 'repository.name');
+  if (!sessionId || !name) return null;
+  const kind = str(attrs, 'agent.kind') ?? '';
+  const session = getOrCreate(
+    store,
+    sessionId,
+    // SAFETY: membership in AGENT_KINDS is exactly the AgentKind check.
+    KNOWN_KINDS.has(kind) ? (kind as AgentKind) : 'unknown',
+    record.timestamp,
+  );
+  const path = str(attrs, 'repository.path');
+  session.repository = path ? { name, path } : { name };
+  return session;
+}
+
+/**
  * Ingest a decoded OTLP log record. No-op (returns null) if no adapter claims it
  * or the record lacks a session id.
  */
@@ -413,6 +467,8 @@ export function ingestEventRecord(
   record: AgentRawEvent,
   options: IngestOptions = {},
 ): AgentSession | null {
+  if (record.eventName === REPOSITORY_EVENT)
+    return foldRepository(store, record);
   const adapter = detectAdapterForEvent(record);
   if (!adapter) return null;
   const event = adapter.normalizeEvent(record);
@@ -482,6 +538,8 @@ export interface AgentAggregate {
   inputTokens: number;
   outputTokens: number;
   apiRequests: number;
+  unpricedRequests: number;
+  untokenedRequests: number;
   apiErrors: number;
   accepted: number;
   rejected: number;
@@ -508,7 +566,7 @@ export interface AgentAggregate {
 }
 
 /** Add one session's slices of a dimension into the cross-session totals. */
-function mergeUsage(
+export function mergeUsage(
   into: Record<string, UsageBreakdown>,
   from: Record<string, UsageBreakdown>,
 ): void {
@@ -520,6 +578,8 @@ function mergeUsage(
     total.outputTokens += usage.outputTokens;
     total.cacheReadTokens += usage.cacheReadTokens;
     total.cacheCreationTokens += usage.cacheCreationTokens;
+    total.unpriced += usage.unpriced;
+    total.untokened += usage.untokened;
   }
 }
 
@@ -532,6 +592,8 @@ export function summarizeSessions(
     inputTokens: 0,
     outputTokens: 0,
     apiRequests: 0,
+    unpricedRequests: 0,
+    untokenedRequests: 0,
     apiErrors: 0,
     accepted: 0,
     rejected: 0,
@@ -555,6 +617,8 @@ export function summarizeSessions(
     agg.inputTokens += rollup.inputTokens;
     agg.outputTokens += rollup.outputTokens;
     agg.apiRequests += rollup.apiRequests;
+    agg.unpricedRequests += rollup.unpricedRequests;
+    agg.untokenedRequests += rollup.untokenedRequests;
     agg.apiErrors += rollup.apiErrors;
     agg.accepted += rollup.accepted;
     agg.rejected += rollup.rejected;
@@ -601,4 +665,17 @@ export function summarizeSessions(
     agg.hooks.cancelled += rollup.hooks.cancelled;
   }
   return agg;
+}
+
+/**
+ * Whether a total over `requests` is a measurement, given how many of them were
+ * `missing` the value. A session that made no requests has measured nothing,
+ * which is `unknown`, not a zero spend.
+ */
+export function accountingStatus(
+  requests: number,
+  missing: number,
+): AccountingStatus {
+  if (requests === 0 || missing >= requests) return 'unknown';
+  return missing > 0 ? 'partial' : 'complete';
 }

@@ -1,4 +1,5 @@
 import type { Attributes } from '@opentelemetry/api';
+import type { IdentifyFn, TaskHandleOptions } from './task-handles';
 import type {
   GuardLike,
   McpSecurityClassifier,
@@ -56,6 +57,38 @@ export interface McpInstrumentationConfig {
    * sessions.
    */
   sessionId?: string;
+
+  /**
+   * Correlate one agent's calls on a stateless (2026-07-28) server: adds a
+   * `session_id` parameter to every tool, issued on the first call and echoed
+   * back on later ones (SEP-2567 explicit handles), recorded as
+   * `gen_ai.conversation.id`. `{ agentId: true }` also asks for a self-chosen
+   * `agent_id` (`gen_ai.agent.id`); `{ resolveSessionId }` derives the session
+   * from your own identifier instead and changes no schema. Off by default:
+   * agents see the extra parameters.
+   */
+  sessionHandles?: boolean | TaskHandleOptions;
+
+  /**
+   * Add a `context` parameter asking the agent, in one sentence, why it is
+   * calling the tool; recorded as `mcp.tool.call.intent`. Model-written free
+   * text: route it through your attribute redactor. Off by default.
+   */
+  captureIntent?: boolean | { description?: string };
+
+  /**
+   * List a `get_more_tools` tool agents call to report a capability they
+   * looked for and could not find; each report is a tool span carrying
+   * `mcp.missing_tool.description`. Off by default.
+   */
+  reportMissingTools?: boolean;
+
+  /**
+   * Resolve the caller to a stable user id (`user.id`) from the request and
+   * the SDK context (`ctx.http.authInfo` on v2). Runs alongside the tool and
+   * is never awaited: a slow or failing lookup loses the attribute, not time.
+   */
+  identify?: IdentifyFn;
 
   /**
    * Enable metrics (operation duration histograms).
@@ -216,6 +249,10 @@ export function resolveConfig(config?: McpInstrumentationConfig): Required<
     | 'guard'
     | 'bridgeSecurityEvents'
     | 'securityEventBridge'
+    | 'sessionHandles'
+    | 'captureIntent'
+    | 'reportMissingTools'
+    | 'identify'
   >
 > & {
   customAttributes?: McpInstrumentationConfig['customAttributes'];

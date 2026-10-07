@@ -108,7 +108,8 @@
     "tsdown": "^0.23.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2",
-    "vitest-mock-extended": "^5.1.1"
+    "vitest-mock-extended": "^5.1.1",
+    "zod": "^4.6.5"
   },
   "repository": {
     "type": "git",

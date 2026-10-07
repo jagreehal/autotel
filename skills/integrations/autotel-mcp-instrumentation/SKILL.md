@@ -96,6 +96,21 @@ A handler that returns `inputRequired(...)` paused rather than completed: the
 span gets `mcp.input_required=true` and its status is left UNSET, so a pause is
 counted as neither work nor a success, and the client's retry is not a duplicate.
 
+## Correlating calls on a stateless server
+
+MCP 2026-07-28 has no session. Turn on task handles and each tool gets a `session_id` parameter the agent echoes back, recorded as `gen_ai.conversation.id`. All four options are off by default because agents see the parameters:
+
+```typescript
+instrumentMcpServer(server, {
+  sessionHandles: { agentId: true }, // session_id + agent_id → gen_ai.agent.id
+  captureIntent: true, // context → mcp.tool.call.intent
+  reportMissingTools: true, // get_more_tools → mcp.missing_tool.description
+  identify: (request, ctx) => userIdFrom(ctx), // → user.id, never awaited
+});
+```
+
+The wrapper reads and removes the parameters before the SDK validates the request, so handlers never see them and strict schemas still pass. A tool that declares its own `session_id` or `context` keeps it. Already have a session id? `sessionHandles: { resolveSessionId }` uses yours and changes no schema.
+
 ## Security observability
 
 The MCP boundary is where untrusted data enters an agent. This package makes the

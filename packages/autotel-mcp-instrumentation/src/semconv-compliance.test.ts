@@ -22,7 +22,10 @@ vi.mock('@opentelemetry/api', () => ({
   },
   context: {
     with: (_ctx: unknown, fn: () => unknown) => fn(),
+    // task-handles reads its facts off the active context; none are set here.
+    active: () => ({ getValue: () => null }),
   },
+  createContextKey: (description: string) => Symbol.for(description),
 }));
 
 vi.mock('autotel', () => ({

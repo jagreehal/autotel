@@ -6,6 +6,9 @@ import {
   ingestMetricRecord,
   parseToolName,
   summarizeSessions,
+  accountingStatus,
+  REPOSITORY_EVENT,
+  usageReport,
 } from './index';
 import { CLAUDE_CODE_KNOWN_EVENT_NAMES } from './adapters/claude-code';
 import type {
@@ -564,6 +567,8 @@ describe('usage breakdowns', () => {
       outputTokens: 10,
       cacheReadTokens: 200,
       cacheCreationTokens: 40,
+      unpriced: 0,
+      untokened: 0,
     });
     expect(byModel['claude-haiku-4-5'].costUsd).toBeCloseTo(0.01);
   });
@@ -710,5 +715,342 @@ describe('aggregate breakdowns', () => {
     expect(agg.byEffort['high'].requests).toBe(1);
     expect(agg.bySkill['tdd'].costUsd).toBeCloseTo(0.25);
     expect(agg.byAgent['Explore'].requests).toBe(1);
+  });
+});
+
+describe('codex adapter', () => {
+  const CONV = 'conv-1';
+  function codex(eventName: string, attributes: Attributes): AgentRawEvent {
+    return {
+      eventName,
+      timestamp: 1000,
+      attributes: { 'conversation.id': CONV, ...attributes },
+      resource: { 'service.name': 'codex_cli_rs' },
+    };
+  }
+
+  it('reads tokens off response.completed, with cached input split out', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(
+      store,
+      codex('codex.sse_event', {
+        'event.kind': 'response.completed',
+        model: 'gpt-5-codex',
+        'turn.id': 'turn-1',
+        input_token_count: 1000,
+        cached_token_count: 800,
+        output_token_count: 50,
+        reasoning_token_count: 20,
+      }),
+    );
+    const session = store.get(CONV)!;
+    expect(session.agent).toBe('codex');
+    expect(session.rollup).toMatchObject({
+      apiRequests: 1,
+      inputTokens: 200,
+      cacheReadTokens: 800,
+      outputTokens: 50,
+    });
+    expect(session.rollup.byPrompt['turn-1']?.requests).toBe(1);
+  });
+
+  it('drops stream deltas and successful transport attempts', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(
+      store,
+      codex('codex.sse_event', { 'event.kind': 'response.output_text.delta' }),
+    );
+    ingestEventRecord(
+      store,
+      codex('codex.api_request', { 'http.response.status_code': 200 }),
+    );
+    expect(store.size).toBe(0);
+  });
+
+  it('counts a failed attempt as an error, not a request', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(
+      store,
+      codex('codex.api_request', {
+        'http.response.status_code': 429,
+        'error.message': 'rate limited',
+      }),
+    );
+    expect(store.get(CONV)!.rollup).toMatchObject({
+      apiRequests: 0,
+      apiErrors: 1,
+    });
+  });
+
+  it('maps approval outcomes and tool results', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(
+      store,
+      codex('codex.tool_decision', {
+        tool_name: 'shell',
+        decision: 'approved_for_session',
+      }),
+    );
+    ingestEventRecord(
+      store,
+      codex('codex.tool_decision', { tool_name: 'shell', decision: 'denied' }),
+    );
+    ingestEventRecord(
+      store,
+      codex('codex.tool_result', {
+        tool_name: 'shell',
+        success: 'false',
+        duration_ms: 12,
+      }),
+    );
+    const { rollup } = store.get(CONV)!;
+    expect(rollup).toMatchObject({ accepted: 1, rejected: 1, toolCalls: 1 });
+    expect(rollup.tools['shell']).toMatchObject({ count: 1, failures: 1 });
+  });
+
+  it('leaves redacted prompt text out', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(
+      store,
+      codex('codex.user_prompt', { prompt_length: 12, prompt: '[REDACTED]' }),
+    );
+    const [prompt] = store.get(CONV)!.timeline;
+    expect(prompt).toMatchObject({ type: 'user_prompt', promptLength: 12 });
+    expect(prompt?.promptText).toBeUndefined();
+  });
+
+  it('does not open sessions from metrics it cannot attribute', () => {
+    const store: AgentSessionStore = new Map();
+    ingestMetricRecord(store, {
+      name: 'codex.turn.token_usage',
+      dataPoints: [{ value: 5, timestamp: 1, attributes: {} }],
+      resource: { 'service.name': 'codex_cli_rs' },
+    });
+    expect(store.size).toBe(0);
+  });
+});
+
+describe('accounting status', () => {
+  it('marks spend unknown when no request was priced, partial when some were', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(
+      store,
+      event('claude_code.api_request', {
+        model: 'some-unpriced-model',
+        input_tokens: 10,
+      }),
+    );
+    let { rollup } = store.get(SESSION)!;
+    expect(rollup.unpricedRequests).toBe(1);
+    expect(accountingStatus(rollup.apiRequests, rollup.unpricedRequests)).toBe(
+      'unknown',
+    );
+    expect(rollup.byModel['some-unpriced-model']?.unpriced).toBe(1);
+
+    ingestEventRecord(
+      store,
+      event('claude_code.api_request', { model: 'x', cost_usd: 0.5 }),
+    );
+    ({ rollup } = store.get(SESSION)!);
+    expect(rollup.untokenedRequests).toBe(1);
+    expect(accountingStatus(rollup.apiRequests, rollup.unpricedRequests)).toBe(
+      'partial',
+    );
+    expect(summarizeSessions(store.values()).unpricedRequests).toBe(1);
+  });
+
+  it('calls no requests unknown, not complete', () => {
+    expect(accountingStatus(0, 0)).toBe('unknown');
+    expect(accountingStatus(3, 0)).toBe('complete');
+  });
+});
+
+describe('repository correlation', () => {
+  it('stamps the session with the repository the hook reports', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(store, {
+      eventName: REPOSITORY_EVENT,
+      timestamp: 1,
+      attributes: {
+        'session.id': SESSION,
+        'agent.kind': 'claude-code',
+        'repository.name': 'autotel',
+        'repository.path': '/src/autotel',
+      },
+      resource: {},
+    });
+    ingestEventRecord(
+      store,
+      event('claude_code.user_prompt', { prompt_length: 3 }),
+    );
+    const session = store.get(SESSION)!;
+    expect(session.agent).toBe('claude-code');
+    expect(session.repository).toEqual({
+      name: 'autotel',
+      path: '/src/autotel',
+    });
+    expect(session.rollup.prompts).toBe(1);
+  });
+});
+
+describe('codex websocket transport', () => {
+  const ws = (eventName: string, attributes: Attributes): AgentRawEvent => ({
+    eventName,
+    timestamp: 1,
+    attributes: { 'conversation.id': 'conv-ws', ...attributes },
+    resource: {},
+  });
+
+  it('counts a completed websocket response as the request and a failure as an error', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(
+      store,
+      ws('codex.websocket_event', {
+        'event.kind': 'response.completed',
+        input_token_count: 10,
+        output_token_count: 2,
+      }),
+    );
+    ingestEventRecord(
+      store,
+      ws('codex.websocket_event', {
+        'event.kind': 'response.output_text.delta',
+      }),
+    );
+    ingestEventRecord(
+      store,
+      ws('codex.websocket_request', {
+        success: false,
+        'error.message': 'closed',
+      }),
+    );
+    ingestEventRecord(store, ws('codex.websocket_request', { success: true }));
+    const session = store.get('conv-ws')!;
+    expect(session.rollup).toMatchObject({ apiRequests: 1, apiErrors: 1 });
+    expect(session.timeline).toHaveLength(2);
+  });
+});
+
+describe('usageReport', () => {
+  function seed(): AgentSessionStore {
+    const store: AgentSessionStore = new Map();
+    const at = (ts: number, raw: AgentRawEvent) => ({ ...raw, timestamp: ts });
+    for (const [id, repo, ts] of [
+      ['s-old', 'autotel', 1],
+      ['s-new', 'autotel', 5],
+      ['s-other', 'other', 3],
+    ] as const) {
+      ingestEventRecord(
+        store,
+        at(ts, {
+          eventName: REPOSITORY_EVENT,
+          timestamp: ts,
+          attributes: { 'session.id': id, 'repository.name': repo },
+          resource: {},
+        }),
+      );
+      for (const prompt of ['p1', 'p2'])
+        ingestEventRecord(
+          store,
+          at(ts, {
+            ...event('claude_code.api_request', {
+              'prompt.id': `${id}-${prompt}`,
+              model: 'claude-sonnet-4-6',
+              input_tokens: 10,
+              output_tokens: 5,
+              cost_usd: 0.1,
+            }),
+            attributes: {
+              'session.id': id,
+              'prompt.id': `${id}-${prompt}`,
+              model: 'claude-sonnet-4-6',
+              input_tokens: 10,
+              output_tokens: 5,
+              cost_usd: 0.1,
+            },
+          }),
+        );
+    }
+    ingestEventRecord(store, event('claude_code.user_prompt', {}));
+    return store;
+  }
+
+  it('totals a repository and counts sessions it could not attribute', () => {
+    const report = usageReport(seed().values(), { repository: 'autotel' });
+    expect(report.sessions.map((s) => s.id)).toEqual(['s-new', 's-old']);
+    expect(report.total).toMatchObject({ requests: 4, inputTokens: 40 });
+    expect(report.cost).toBe('complete');
+    expect(report.uncorrelatedSessions).toBe(1);
+  });
+
+  it('answers "the last prompt" from the most recent session', () => {
+    const report = usageReport(seed().values(), {
+      repository: 'autotel',
+      latest: 'prompt',
+    });
+    expect(report.sessions).toHaveLength(1);
+    expect(report.sessions[0]).toMatchObject({
+      id: 's-new',
+      latestPromptId: 's-new-p2',
+    });
+    expect(report.total.requests).toBe(1);
+  });
+
+  it('reports nothing measured as unknown, not zero', () => {
+    const report = usageReport(seed().values(), { sessionId: SESSION });
+    expect(report.total.requests).toBe(0);
+    expect(report.cost).toBe('unknown');
+  });
+
+  it('keeps "latest prompt" right after the timeline has evicted it', () => {
+    const store: AgentSessionStore = new Map();
+    for (const [prompt, cost] of [
+      ['p1', 1],
+      ['p2', 2],
+    ] as const)
+      ingestEventRecord(
+        store,
+        event('claude_code.api_request', {
+          'prompt.id': prompt,
+          model: 'x',
+          cost_usd: cost,
+        }),
+        { timelineLimit: 1 },
+      );
+    // Unprompted events push p2's request out of the one-slot timeline.
+    ingestEventRecord(store, event('claude_code.tool_result', {}), {
+      timelineLimit: 1,
+    });
+    const report = usageReport(store.values(), { latest: 'prompt' });
+    expect(report.sessions[0]?.latestPromptId).toBe('p2');
+    expect(report.total.costUsd).toBe(2);
+  });
+
+  it('returns nothing, not the session total, when no prompt is known', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(
+      store,
+      event('claude_code.api_request', { model: 'x', cost_usd: 3 }),
+    );
+    const report = usageReport(store.values(), { latest: 'prompt' });
+    expect(report.sessions).toEqual([]);
+    expect(report.cost).toBe('unknown');
+  });
+
+  it('keeps the newest prompt when an older one arrives late', () => {
+    const store: AgentSessionStore = new Map();
+    const request = (prompt: string, timestamp: number, cost: number) => ({
+      ...event('claude_code.api_request', {
+        'prompt.id': prompt,
+        model: 'x',
+        cost_usd: cost,
+      }),
+      timestamp,
+    });
+    ingestEventRecord(store, request('p2', 2000, 2));
+    ingestEventRecord(store, request('p1', 1000, 1)); // delayed export
+    const report = usageReport(store.values(), { latest: 'prompt' });
+    expect(report.sessions[0]?.latestPromptId).toBe('p2');
+    expect(report.total.costUsd).toBe(2);
   });
 });

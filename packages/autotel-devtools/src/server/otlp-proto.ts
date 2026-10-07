@@ -394,3 +394,47 @@ export function decodeOtlpMetricsRequest(
     body,
   );
 }
+
+const REQUEST_TYPES = {
+  traces: 'opentelemetry.proto.trace.v1.ExportTraceServiceRequest',
+  logs: 'opentelemetry.proto.logs.v1.ExportLogsServiceRequest',
+  metrics: 'opentelemetry.proto.metrics.v1.ExportMetricsServiceRequest',
+} as const;
+
+/** An OTLP request as JSON: an OTLP/JSON body, or a protobuf decode's `toObject`. */
+export type OtlpJson =
+  string | number | boolean | null | OtlpJson[] | { [key: string]: OtlpJson };
+
+const HEX_ID = /^(?:[\da-f]{16}|[\da-f]{32})$/i;
+const ID_KEYS = new Set(['traceId', 'spanId', 'parentSpanId']);
+
+// OTLP/JSON carries ids as hex, but protobufjs reads a `bytes` string as
+// base64; ids decoded from protobuf are already base64 and pass through.
+function idsToBase64(value: OtlpJson): OtlpJson {
+  if (Array.isArray(value)) return value.map(idsToBase64);
+  if (!(value instanceof Object)) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      ID_KEYS.has(key) && HEX_ID.test(String(item))
+        ? Buffer.from(String(item), 'hex').toString('base64')
+        : idsToBase64(item),
+    ]),
+  );
+}
+
+/**
+ * Encode an OTLP/JSON-shaped request (what the decoders above return, or an
+ * OTLP/JSON body) back to protobuf, for re-export over gRPC. Fields outside the
+ * embedded schema subset are dropped.
+ */
+export function encodeOtlpRequest(
+  signal: keyof typeof REQUEST_TYPES,
+  request: OtlpJson,
+): Uint8Array {
+  const messageType = getRoot().lookupType(REQUEST_TYPES[signal]);
+  const plain = idsToBase64(request);
+  if (!(plain instanceof Object) || Array.isArray(plain))
+    throw new TypeError(`OTLP ${signal} request is not an object`);
+  return messageType.encode(messageType.fromObject(plain)).finish();
+}

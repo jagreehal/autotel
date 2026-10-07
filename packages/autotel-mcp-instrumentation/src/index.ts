@@ -23,6 +23,11 @@ export type { TraceMcpHandlerOptions } from './server';
 export { instrumentMcpClient } from './client';
 
 export type { McpInstrumentationConfig, McpTraceMeta } from './types';
+export type {
+  IdentifyFn,
+  TaskHandleOptions,
+  SessionSource,
+} from './task-handles';
 
 export { DEFAULT_CONFIG, resolveSecurityEventBridge } from './types';
 
