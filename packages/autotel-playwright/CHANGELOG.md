@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.10
+
+### Patch Changes
+
+- Updated dependencies [db02467]
+  - autotel@8.0.0
+
 ## 0.5.9
 
 ### Patch Changes
