@@ -474,13 +474,40 @@ export const agentSessionsSignal = signal<AgentSession[]>([]);
 export const selectedAgentSessionIdSignal = signal<string | null>(null);
 
 /** Sessions newest-active first. */
-export const sortedAgentSessionsSignal = computed(() =>
-  [...agentSessionsSignal.value].sort((a, b) => b.lastSeen - a.lastSeen),
+/** Repository name the Agents tab is narrowed to; null shows every session. */
+export const agentRepositoryFilterSignal = signal<string | null>(null);
+
+/** Repository names sessions reported, for the filter's options. */
+export const agentRepositoriesSignal = computed(() =>
+  [
+    ...new Set(
+      agentSessionsSignal.value.flatMap((s) =>
+        s.repository ? [s.repository.name] : [],
+      ),
+    ),
+  ].sort(),
 );
 
-/** Aggregate strip across all current sessions. */
+// A session with no repository cannot be proven to belong to the filtered one,
+// so it is left out rather than guessed in.
+// A filter no current session matches (data cleared, new repo) is ignored, so
+// the tab never sits empty with the control that would clear it hidden.
+const filteredAgentSessionsSignal = computed(() => {
+  const repo = agentRepositoryFilterSignal.value;
+  const all = agentSessionsSignal.value;
+  const matching = repo ? all.filter((s) => s.repository?.name === repo) : all;
+  return matching.length > 0 ? matching : all;
+});
+
+export const sortedAgentSessionsSignal = computed(() =>
+  [...filteredAgentSessionsSignal.value].sort(
+    (a, b) => b.lastSeen - a.lastSeen,
+  ),
+);
+
+/** Aggregate strip across the sessions on screen. */
 export const agentAggregateSignal = computed<AgentAggregate>(() =>
-  summarizeSessions(agentSessionsSignal.value),
+  summarizeSessions(filteredAgentSessionsSignal.value),
 );
 
 /** The session selected in the Agents tab (defaults to most recently active). */
@@ -930,6 +957,7 @@ export function clearAllData() {
   storeErrorGroupsSignal.value = [];
   logsSignal.value = [];
   agentSessionsSignal.value = [];
+  agentRepositoryFilterSignal.value = null;
   selectedAgentSessionIdSignal.value = null;
   pendingTracesSignal.value = [];
   pendingLogsSignal.value = [];

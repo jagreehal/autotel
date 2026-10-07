@@ -1,16 +1,17 @@
 import type { AgentRawEvent, OtelMetricRecord } from '../types';
 import { claudeCodeAdapter } from './claude-code';
+import { codexAdapter } from './codex';
 import { opencodeAdapter } from './opencode';
 import type { AgentAdapter } from './types';
 
 /**
  * Ordered adapter registry. First match claims the record. Claude Code is most
- * specific (dedicated scope), so it leads. Add Codex here when its contract
- * lands — one line, no other changes.
+ * specific (dedicated scope), so it leads.
  */
 export const adapters: readonly AgentAdapter[] = [
   claudeCodeAdapter,
   opencodeAdapter,
+  codexAdapter,
 ];
 
 export function detectAdapterForMetric(

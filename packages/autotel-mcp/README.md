@@ -536,6 +536,20 @@ them can run an investigation without stopping to ask about each query.
 </details>
 
 <details>
+<summary><b>Live validation (1)</b></summary>
+
+- **semconv_validate**: Check received telemetry against OpenTelemetry semantic conventions through `weaver live-check` (deprecated attributes and their replacements, undefined names). `run: true` re-checks; a `stale` result predates newer telemetry. Devtools backend with `weaver` on PATH only.
+
+</details>
+
+<details>
+<summary><b>Coding agents (1)</b></summary>
+
+- **agent_usage**: Token and cost usage of Claude Code / Codex / opencode sessions seen by autotel-devtools, by session, prompt/turn, repository or agent (`latest: "prompt"` for the last request). Every total says whether cost and tokens are `complete`, `partial` or `unknown`. Devtools backend only; others answer `unavailable`.
+
+</details>
+
+<details>
 <summary><b>Signals (3)</b></summary>
 
 - **list_metrics**: Available metric series

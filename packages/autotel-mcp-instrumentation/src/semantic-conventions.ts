@@ -107,6 +107,17 @@ export const MCP_SEMCONV = {
   // on a stateless deployment, where there is no session to group by.
   FAILURE_CATEGORY: 'mcp.failure.category', // low cardinality, safe on metrics
   FAILURE_FINGERPRINT: 'mcp.failure.fingerprint', // span-only: one per cause
+
+  // === Task handles (opt-in; see task-handles.ts) ===
+  // A stateless server's only link between one agent's calls is a handle the
+  // agent echoes back. The ids use upstream GenAI / user names; how the
+  // session was resolved and what the agent said it wanted are extensions.
+  CONVERSATION_ID: 'gen_ai.conversation.id',
+  AGENT_ID: 'gen_ai.agent.id',
+  USER_ID: 'user.id',
+  SESSION_HANDLE_SOURCE: 'mcp.session_handle.source', // minted|supplied|invalid|foreign|hook
+  TOOL_CALL_INTENT: 'mcp.tool.call.intent',
+  MISSING_TOOL_DESCRIPTION: 'mcp.missing_tool.description',
 } as const;
 
 /**

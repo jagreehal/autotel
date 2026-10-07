@@ -409,6 +409,25 @@ const instrumented = instrumentMcpServer(server, {
 });
 ```
 
+## Correlating calls on a stateless server
+
+MCP 2026-07-28 has no session, so two calls from one agent doing one task arrive as strangers. The protocol's answer is an explicit handle the agent carries itself (SEP-2567). Turn it on and every tool gets a `session_id` parameter: the first call sends `start` and is issued an id, later calls echo it, and each span records it as `gen_ai.conversation.id`. All four options are off by default, because agents see the parameters they add.
+
+```typescript
+instrumentMcpServer(server, {
+  sessionHandles: { agentId: true }, // session_id, plus a self-chosen agent_id → gen_ai.agent.id
+  captureIntent: true, // `context`: one sentence of why → mcp.tool.call.intent
+  reportMissingTools: true, // a get_more_tools tool → mcp.missing_tool.description
+  identify: (request, ctx) => hashOf(ctx.http?.authInfo?.token), // → user.id, never awaited
+});
+```
+
+- The parameters are read and removed at the request, before the SDK validates it, so your handlers never see them and a strict schema still accepts the call. A tool that declares its own `session_id` or `context` keeps it.
+- The id is announced as the first content block and as `structuredContent.mcp_session` (declared on output schemas, so validating clients accept it). A value this server did not issue is refused, not adopted: `mcp.session_handle.source` is `invalid` and the agent is told to re-send the right one.
+- Already have a session (a token hash, your own id)? `sessionHandles: { resolveSessionId: (request, ctx) => id }` uses it and changes no schema.
+- Works per request: a 2026-07-28 server built inside `createMcpHandler` rebuilds what its listing advertised before the first call.
+- `captureIntent` records model-written free text. Route it through your attribute redactor.
+
 ## Security Observability
 
 MCP is where untrusted data crosses into your agent. The

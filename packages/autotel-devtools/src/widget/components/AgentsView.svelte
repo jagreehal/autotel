@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Agents tab — observe coding agents (Claude Code now; opencode/Codex next)
+   * Agents tab — observe coding agents (Claude Code, opencode, Codex)
    * from the OpenTelemetry metrics + log events they emit. Session-centric:
    * a sessions list → per-session timeline + rollup, with an aggregate strip
    * across all sessions. Sessions are reconstructed server-side by the
@@ -31,6 +31,8 @@
     sortedAgentSessionsSignal,
     selectedAgentSessionSignal,
     agentAggregateSignal,
+    agentRepositoriesSignal,
+    agentRepositoryFilterSignal,
     selectAgentSession,
   } from '../store.svelte';
   import {
@@ -61,6 +63,20 @@
     if (usd === 0) return '$0';
     return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`;
   }
+
+  // A total over requests that were not all priced is a lower bound, and one
+  // over none of them is not a measurement: `$?` rather than a confident `$0`.
+  // Same rule as autotel-agents' accountingStatus, inlined for bundle size.
+  function spend(usd: number, requests: number, unpriced: number): string {
+    if (!unpriced) return cost(usd);
+    return unpriced >= requests ? '$?' : `${cost(usd)}+?`;
+  }
+  const spendOf = (u: UsageBreakdown) =>
+    spend(u.costUsd, u.requests, u.unpriced);
+  const rollupSpend = (r: AgentSession['rollup']) =>
+    spend(r.costUsd, r.apiRequests, r.unpricedRequests);
+
+  const repositories = $derived(agentRepositoriesSignal.value);
 
   function shortId(id: string): string {
     return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
@@ -275,7 +291,11 @@
       <span
         class="flex items-center gap-1 px-2 py-1 bg-subtle rounded-md text-fg"
       >
-        <DollarSign size={12} class="text-emerald-500" />{cost(agg.costUsd)}
+        <DollarSign size={12} class="text-emerald-500" />{spend(
+          agg.costUsd,
+          agg.apiRequests,
+          agg.unpricedRequests,
+        )}
       </span>
       <span
         class="flex items-center gap-1 px-2 py-1 bg-subtle rounded-md text-fg"
@@ -309,21 +329,18 @@
         {@render chip(Sparkles, `${name} ${n}`, 'text-fuchsia-600')}
       {/each}
       {#each usage(agg.byEffort) as [effort, u] (effort)}
-        {@render chip(Gauge, `${effort} ${cost(u.costUsd)}`, 'text-amber-600')}
+        {@render chip(Gauge, `${effort} ${spendOf(u)}`, 'text-amber-600')}
       {/each}
       {#each usage(agg.bySkill) as [name, u] (name)}
-        {@render chip(
-          Sparkles,
-          `${name} ${cost(u.costUsd)}`,
-          'text-fuchsia-600',
-        )}
+        {@render chip(Sparkles, `${name} ${spendOf(u)}`, 'text-fuchsia-600')}
       {/each}
       {#each usage(agg.byAgent) as [name, u] (name)}
-        {@render chip(Bot, `${name} ${cost(u.costUsd)}`, 'text-violet-600')}
+        {@render chip(Bot, `${name} ${spendOf(u)}`, 'text-violet-600')}
       {/each}
       {#each usage(agg.byModel) as [model, u] (model)}
         <span class="px-2 py-1 bg-subtle rounded-md text-fg-muted font-mono"
-          >{model} ×{u.requests} {cost(u.costUsd)}</span
+          >{model} ×{u.requests}
+          {spendOf(u)}</span
         >
       {/each}
     </div>
@@ -331,6 +348,25 @@
     <div class="flex-1 flex min-h-0">
       <!-- Sessions list -->
       <div class="w-64 flex-shrink-0 overflow-y-auto border-r border-line">
+        {#if repositories.length > 0}
+          <select
+            class="w-full px-3 py-1.5 border-b border-line bg-transparent text-xs text-fg"
+            aria-label="Filter sessions by repository"
+            value={repositories.includes(
+              agentRepositoryFilterSignal.value ?? '',
+            )
+              ? agentRepositoryFilterSignal.value
+              : ''}
+            onchange={(e) =>
+              (agentRepositoryFilterSignal.value =
+                e.currentTarget.value || null)}
+          >
+            <option value="">All repositories</option>
+            {#each repositories as repo (repo)}
+              <option value={repo}>{repo}</option>
+            {/each}
+          </select>
+        {/if}
         {#each sessions as s (s.id)}
           <button
             class="w-full text-left px-3 py-2.5 border-b border-line hover:bg-subtle transition-colors {selected?.id ===
@@ -343,10 +379,12 @@
               <span class="font-mono text-xs text-fg truncate"
                 >{shortId(s.id)}</span
               >
-              <span class="text-[11px] text-fg-muted">{s.agent}</span>
+              <span class="text-[11px] text-fg-muted truncate"
+                >{s.repository ? `${s.repository.name} · ` : ''}{s.agent}</span
+              >
             </div>
             <div class="flex items-center gap-2 mt-1 text-[11px] text-fg-muted">
-              <span>{cost(s.rollup.costUsd)}</span>
+              <span>{rollupSpend(s.rollup)}</span>
               <span>·</span>
               <span>{formatNumber(rollupTotalTokens(s))} tok</span>
               <span>·</span>
@@ -373,7 +411,7 @@
             </div>
             <div class="flex flex-wrap gap-2 mt-2 text-[11px]">
               <span class="px-2 py-0.5 bg-subtle rounded text-fg"
-                >{cost(selected.rollup.costUsd)}
+                >{rollupSpend(selected.rollup)}
                 {#if selected.rollup.costEstimatedUsd > 0}
                   <span class="text-amber-500" title="includes estimated cost"
                     >~</span

@@ -22,7 +22,7 @@ const budgets = [
   // reason and per-field roles. Mostly explanatory copy: 739,975 / 219,479.
   // +2 KB raw / +1 KB gzip for explain guidance per instrumentation (setup,
   // the manual driver path, or "no plan capture"): 742,281 / 220,295.
-  { file: 'fullpage.global.js', raw: 743_000, gzip: 221_000 },
+  { file: 'fullpage.global.js', raw: 745_000, gzip: 221_000 },
 ];
 
 let failed = false;

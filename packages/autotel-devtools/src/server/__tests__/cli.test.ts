@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { resolve as pathResolve } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve as pathResolve } from 'node:path';
 
 const CLI_PATH = pathResolve(__dirname, '../../../dist/cli.js');
 const PKG_DIR = pathResolve(__dirname, '../../../');
@@ -26,6 +28,27 @@ describe('CLI', () => {
     expect(output).toContain('export OTEL_LOGS_EXPORTER=otlp');
     // Prompt text stays out unless it is asked for.
     expect(output).not.toContain('OTEL_LOG_USER_PROMPTS');
+  });
+
+  it('reads --repository as one argument, leaving the next option alone', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'autotel-cli-'));
+    const saved = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      const output = await runCli([
+        'agents',
+        'enable',
+        '--repository',
+        'off',
+        '--target',
+        'claude-code',
+      ]);
+      expect(output).toContain('repository: off');
+      expect(output).not.toContain('codex:');
+    } finally {
+      process.env.HOME = saved;
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it('prints help with --help', async () => {

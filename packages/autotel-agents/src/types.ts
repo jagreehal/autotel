@@ -256,7 +256,22 @@ export interface UsageBreakdown {
   outputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
+  /**
+   * Requests in this slice with no cost, reported or estimated. `costUsd` is a
+   * lower bound whenever this is above zero — see {@link accountingStatus}.
+   */
+  unpriced: number;
+  /** Requests in this slice that carried no token counts at all. */
+  untokened: number;
 }
+
+/**
+ * How much of a total was actually measured. `complete`: every request carried
+ * the value. `partial`: some did, so the total is a lower bound. `unknown`:
+ * none did (or there were no requests), so the total is not a measurement and
+ * must not read as zero.
+ */
+export type AccountingStatus = 'complete' | 'partial' | 'unknown';
 
 /**
  * Running totals for a session. Kept indefinitely even as the raw `timeline`
@@ -273,6 +288,10 @@ export interface AgentSessionRollup {
   cacheReadTokens: number;
   cacheCreationTokens: number;
   apiRequests: number;
+  /** Requests with no cost, reported or estimated (e.g. an unpriced model). */
+  unpricedRequests: number;
+  /** Requests that carried no token counts at all. */
+  untokenedRequests: number;
   apiErrors: number;
   /** Requests the model declined. Billed like any other call, but no output. */
   apiRefusals: number;
@@ -356,6 +375,18 @@ export interface AgentSession {
   organization?: string;
   terminal?: string;
   appVersion?: string;
+  /**
+   * Repository the session ran in, from an {@link REPOSITORY_EVENT} a
+   * SessionStart hook emits. `path` is absent when the hook ran in `name` mode.
+   */
+  repository?: { name: string; path?: string };
+  /**
+   * The prompt the session worked on most recently. Kept here, not read off
+   * `timeline`, which is ring-buffered and loses it in a long session.
+   */
+  latestPromptId?: string;
+  /** When `latestPromptId` was last seen, so a late older event cannot replace it. */
+  latestPromptAt?: number;
   firstSeen: number;
   lastSeen: number;
   /** Total events ever seen (drives stable event ids; survives timeline eviction). */

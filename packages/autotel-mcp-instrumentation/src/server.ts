@@ -2,6 +2,12 @@ import { context, SpanStatusCode } from '@opentelemetry/api';
 import { withTracing, SpanKind, type TraceContext } from 'autotel';
 import { serverParentContext } from './context';
 import {
+  GET_MORE_TOOLS,
+  installTaskHandles,
+  readTaskFacts,
+  type TaskFacts,
+} from './task-handles';
+import {
   applyFailureGrouping,
   classifyFailure,
   extractFailureText,
@@ -289,6 +295,18 @@ function getSpanName(
   return `${getMethodName(type)} ${name}`;
 }
 
+/** What the request-level task handles resolved for this call (task-handles.ts). */
+function applyTaskFacts(ctx: TraceContext, task: TaskFacts): void {
+  if (task.conversationId)
+    ctx.setAttribute(MCP_SEMCONV.CONVERSATION_ID, task.conversationId);
+  if (task.sessionSource)
+    ctx.setAttribute(MCP_SEMCONV.SESSION_HANDLE_SOURCE, task.sessionSource);
+  if (task.agentId) ctx.setAttribute(MCP_SEMCONV.AGENT_ID, task.agentId);
+  if (task.intent) ctx.setAttribute(MCP_SEMCONV.TOOL_CALL_INTENT, task.intent);
+  if (task.missingTool)
+    ctx.setAttribute(MCP_SEMCONV.MISSING_TOOL_DESCRIPTION, task.missingTool);
+}
+
 /**
  * Wrap a handler function with spec-compliant OpenTelemetry tracing
  */
@@ -315,6 +333,7 @@ function wrapHandler<T extends (...args: any[]) => any>(
     // the context is also tells us whether there is a payload at all.
     const request = readRequestFacts(args);
     const callPayload = readCallPayload(args, request);
+    const task = type === 'tool' ? readTaskFacts() : undefined;
 
     // Parent: the caller's context from _meta, or the host's span when the
     // host has already joined that trace (see serverParentContext).
@@ -376,6 +395,8 @@ function wrapHandler<T extends (...args: any[]) => any>(
           ctx.setAttribute(MCP_SEMCONV.SESSION_ID, sessionIdText);
         }
 
+        if (task) applyTaskFacts(ctx, task);
+
         if (manifestAssessmentPromise) {
           applyManifestAssessment(
             ctx,
@@ -436,7 +457,12 @@ function wrapHandler<T extends (...args: any[]) => any>(
         }
 
         try {
-          const result = await handler(...args);
+          // `identify` runs beside the handler; whatever it settled by now
+          // is recorded, and it is never waited for.
+          const result = await Promise.resolve(handler(...args)).finally(() => {
+            if (task?.userId)
+              ctx.setAttribute(MCP_SEMCONV.USER_ID, task.userId);
+          });
 
           // Security: result size signal, output budget, classifier (contaminated-output vector)
           if (result !== undefined) {
@@ -706,6 +732,10 @@ export function instrumentMcpServer<T extends Record<string, any>>(
   config?: McpInstrumentationConfig,
 ): T {
   const mergedConfig = resolveConfig(config);
+  if (config)
+    installTaskHandles(server, config, (handler) =>
+      wrapHandler('tool', GET_MORE_TOOLS, handler, mergedConfig),
+    );
 
   return new Proxy(server, {
     get(target, prop) {

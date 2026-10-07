@@ -1,6 +1,6 @@
 # autotel-agents
 
-Browser-safe domain layer for **observing coding agents**, Claude Code, opencode, and (soon) Codex, from the OpenTelemetry **metrics and log events** they emit.
+Browser-safe domain layer for **observing coding agents**, Claude Code, opencode and Codex, from the OpenTelemetry **metrics and log events** they emit.
 
 It turns a stream of decoded OTLP records into a session-centric model you can render: who did what, which tools and MCP servers were used, how many tokens/dollars, accept vs reject.
 
@@ -81,19 +81,36 @@ session.rollup.tools['Read']?.contextTokens; // tokens Read's results added
 
 Tools that ran in parallel share the step's growth in proportion to `tool_result_size_bytes` when the agent reports it, evenly otherwise. A `Task` is charged by the parent's own growth once the sub-agent returns; the sub-agent's Reads are charged against its own requests. Nothing is charged across a compaction.
 
+## Codex
+
+Codex does not mirror Claude Code's contract, so it has its own adapter (`codexAdapter`). The request is the `codex.sse_event` whose `event.kind` is `response.completed`: that is where the usage lands. `codex.api_request` is one HTTP attempt and only counts when it failed. OpenAI counts cached input inside `input_token_count`, so cached is split out into `cacheReadTokens`. Codex reports no cost and no OpenAI model is priced, so its spend is unknown (see below), never `$0`. Its token metrics carry no conversation id and are not attributed.
+
+## Unknown is not zero
+
+Every `api_request` with no cost, reported or estimated, counts in `rollup.unpricedRequests` and the slice's `unpriced`; one with no token counts in `untokenedRequests`. `accountingStatus(requests, missing)` turns those into `complete`, `partial` (the total is a lower bound) or `unknown` (nothing measured, including no requests at all). The devtools Agents tab shows `$1.20+?` and `$?` accordingly.
+
+## Usage reports
+
+`usageReport(sessions, { sessionId, promptId, repository, agent, latest })` answers "what did that spend?" with each session's usage (or one prompt's), the total, and `cost` / `tokens` completeness. A repository filter never guesses: sessions that reported no repository are left out and counted in `uncorrelatedSessions`. Devtools serves it at `GET /api/agents/usage`, and `autotel-mcp` exposes it as `agent_usage`.
+
+## Repository
+
+No agent reports its working directory. A SessionStart hook sends an `autotel.agent.repository` log record (`REPOSITORY_EVENT`) with `session.id`, `agent.kind`, `repository.name` and, unless redacted, `repository.path`; the reducer stamps `session.repository`. `autotel-devtools agents enable` installs that hook for Claude Code.
+
 ## Adding an agent
 
 ```ts
 import { createPrefixAdapter } from 'autotel-agents';
 
-export const codexAdapter = createPrefixAdapter({
-  kind: 'codex',
-  prefix: 'codex.',
-  scopeHint: 'codex',
+export const myAgentAdapter = createPrefixAdapter({
+  kind: 'opencode',
+  prefix: 'opencode.',
+  scopeHint: 'opencode',
+  serviceHint: 'opencode',
 });
 ```
 
-Register it in `src/adapters/registry.ts`. No reducer or UI changes.
+An agent that mirrors Claude Code's names under its own prefix is one `createPrefixAdapter` call; one that does not implements `AgentAdapter` directly, as `adapters/codex.ts` does. Register it in `src/adapters/registry.ts`. No reducer or UI changes.
 
 ## License
 

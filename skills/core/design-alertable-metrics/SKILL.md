@@ -198,6 +198,7 @@ decision, not on raw error counts.
 
 - [`tune-sampling`](../tune-sampling/SKILL.md) — trace volume and cost; metrics are unsampled and stay complete
 - [`find-observability-gaps`](../find-observability-gaps/SKILL.md) — which handlers emit nothing at all yet
+- [`incident-readiness`](../find-observability-gaps/references/incident-readiness.md): which signals an incident needs per area (dependency, queue, freshness, release)
 - [`autotel-backends`](../../integrations/autotel-backends/SKILL.md) — vendor presets for the export side
 - [`autotel-grafana`](../../integrations/autotel-grafana/SKILL.md) — turning these metrics into dashboards and alert rules that live in the repo
 - [`autotel-schema`](../../integrations/autotel-schema/SKILL.md) — pinning attribute names as a versioned contract and diffing for breaking changes

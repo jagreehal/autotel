@@ -13,6 +13,8 @@ import { registerDiagnosisTools } from './diagnosis';
 import { registerCorrelationTools } from './correlation';
 import { registerSemanticConventionTools } from './semantic-conventions';
 import { registerEstimateTools } from './estimate';
+import { registerAgentUsageTools } from './agent-usage';
+import { registerLiveValidationTools } from './live-validation';
 import { registerResources } from '../resources/index';
 import type { RuntimeSignalAvailability } from '../modules/signal-availability';
 
@@ -32,6 +34,9 @@ export function registerTools(
   registerSemanticConventionTools(server);
   // Pure arithmetic over caller-supplied figures — no backend, no signals.
   registerEstimateTools(server);
+  // Answers for itself when the backend keeps no agent sessions.
+  registerAgentUsageTools(server, backend);
+  registerLiveValidationTools(server, backend);
 
   const tracesEnabled =
     runtimeAvailability?.traces.enabled ?? caps.traces === 'available';

@@ -381,6 +381,13 @@ The `GEN_AI` / `GEN_AI_OPERATION` / `GEN_AI_PROVIDER` constants in
 `autotel-genai/semconv` are the source of truth. Use them instead of string
 literals.
 
+## Readiness review
+
+Whether an AI path's telemetry is enough to explain an incident (one span owner
+per operation, trace shape under streaming and callbacks, failure classes,
+context-pressure signals, content-capture modes, incident pattern → signal) is
+in [`references/genai-readiness.md`](references/genai-readiness.md).
+
 ## Boundaries
 
 - ✅ Always: canonical `gen_ai.*` names from `autotel-genai/semconv`; reuse core

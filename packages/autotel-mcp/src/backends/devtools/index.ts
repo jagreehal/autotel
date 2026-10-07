@@ -1,7 +1,7 @@
 /* oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-known-value-widening -- These types describe the autotel devtools payload as it arrives on the wire, where an attribute bag genuinely is an open dictionary of unread values. The tag maps built from them are open by the same token: an attribute set is not a fixed field list. */
 
 import type { Issue } from 'autotel-devtools/issues';
-import type { IssueListQuery } from '../telemetry';
+import type { AgentUsageQuery, IssueListQuery } from '../telemetry';
 import { HttpError, jsonGet, jsonPost } from '../../lib/http';
 import { compileTraceQuery } from './query-pushdown';
 import {
@@ -194,6 +194,33 @@ export class DevtoolsBackend implements TelemetryBackend {
     } catch {
       this.hasIssuesApi = false;
       return undefined;
+    }
+  }
+
+  /** Devtools' `usageReport` over its agent sessions, passed through as-is. */
+  async agentUsage(query: AgentUsageQuery): Promise<object | undefined> {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query))
+      if (value) params.set(key, value);
+    try {
+      return await jsonGet<object>(
+        `${this.baseUrl}/api/agents/usage?${params}`,
+      );
+    } catch (error) {
+      // A devtools without the route answers 404: report it as unsupported.
+      if (error instanceof HttpError && error.status === 404) return undefined;
+      throw error;
+    }
+  }
+
+  async semconvValidation(run: boolean): Promise<object | undefined> {
+    try {
+      return run
+        ? await jsonPost<object>(`${this.baseUrl}/api/validation/run`, {})
+        : await jsonGet<object>(`${this.baseUrl}/api/validation`);
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 404) return undefined;
+      throw error;
     }
   }
 

@@ -58,7 +58,7 @@ export const HANDLED_EVENT_NAMES: readonly string[] = [
 ];
 
 /** Compose a full ToolRef: MCP split + category + (defensive) sub-agent/skill id. */
-function buildToolRef(name: string, attrs: Attributes): ToolRef {
+export function buildToolRef(name: string, attrs: Attributes): ToolRef {
   const category = classifyTool(name);
   const ref: ToolRef = { ...parseToolName(name), category };
   if (category === 'subagent') {
