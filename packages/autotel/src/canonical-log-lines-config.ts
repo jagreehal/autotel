@@ -41,10 +41,11 @@ export interface CanonicalLogLinesConfig {
   enabled: boolean;
   /**
    * Logger(s) to emit canonical log lines through. Pass an array to fan out to
-   * several. When omitted, lines go to the OTel Logs API instead.
+   * several. When omitted, lines go to the OTel Logs API instead. The
+   * top-level `logger` is for autotel's diagnostics and is not used here.
    *
-   * Note this falls back to the top-level `logger` on AutotelConfig, so
-   * setting that alone also diverts canonical log lines away from OTLP.
+   * Called as `logger[level](fields, message)`, pino's signature (bunyan's
+   * too). Winston takes `(message, meta)`, so wrap it.
    */
   logger?: Logger | Logger[];
   /**

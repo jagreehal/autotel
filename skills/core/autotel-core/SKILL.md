@@ -158,6 +158,34 @@ getRequestLogger() requires an active span. Register middleware that creates a s
 
 Source: packages/autotel/src/request-logger.ts
 
+### HIGH Pass the app's pino/winston/bunyan logger to init()
+
+Wrong:
+
+```typescript
+import pino from 'pino';
+import { init } from 'autotel';
+
+const logger = pino();
+init({ service: 'api', logger });
+```
+
+Correct:
+
+```typescript
+// instrumentation.ts, loaded first (ESM: node --import autotel/register)
+import { init } from 'autotel';
+init({ service: 'api', autoInstrumentations: ['http', 'pino'], logs: true });
+
+// logger.ts
+import pino from 'pino';
+export const logger = pino();
+```
+
+The instrumentation patches pino as it loads, so create the logger in its own module after `init()`. `init({ logger })` only receives autotel's own diagnostics. The `autoInstrumentations` array is an allowlist: list `'http'` for request spans. Winston also needs `@opentelemetry/winston-transport` for OTLP export.
+
+Source: packages/autotel/src/auto-instrumentations.ts
+
 ### HIGH Use await import() for init-time optional deps
 
 Wrong:

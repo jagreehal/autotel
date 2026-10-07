@@ -26,13 +26,12 @@ tsx --import ./instrumentation.ts src/index.ts
 
 ## Available Instrumentations
 
-Pass short names to `autoInstrumentations`:
+Pass short names to `autoInstrumentations`. The array is the full list: only the instrumentations named load. Include `'http'` for per-request server spans, or use `true` for everything.
 
 | Short Name             | Instruments        |
 | ---------------------- | ------------------ |
 | `'http'`               | Node.js HTTP/HTTPS |
 | `'express'`            | Express            |
-| `'fastify'`            | Fastify            |
 | `'nestjs-core'`        | NestJS core        |
 | `'pino'`               | Pino logger        |
 | `'bunyan'`             | Bunyan logger      |
@@ -95,7 +94,7 @@ autoInstrumentations:
 | ------------------------------ | --------------------------------------------------------- |
 | Quick setup, common frameworks | `autoInstrumentations: ['express', 'http']`               |
 | Specific packages only         | `instrumentations: [new PgInstrumentation()]`             |
-| Everything (heavy)             | `instrumentations: getNodeAutoInstrumentations()`         |
+| Everything (heavy)             | `autoInstrumentations: true`                              |
 | YAML-driven config             | `autoInstrumentations: [express, http]` in `autotel.yaml` |
 
 ## ESM Requirements

@@ -40,7 +40,7 @@ describe('renderPlanPreview', () => {
     const out = stripAnsi(renderPlanPreview(samplePlan));
     expect(out).toContain('hono@^4.0.0');
     expect(out).toContain('pino@^9.0.0');
-    expect(out).toContain('Logger: pino (first-class)');
+    expect(out).toContain('Logger: pino (auto-instrumented)');
     expect(out).toContain('+ auto-instrumented: winston');
     expect(out).toContain('Covered by auto-instrumentations-node: express, pg');
     expect(out).toContain('Backend: datadog');

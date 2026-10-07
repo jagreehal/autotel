@@ -19,17 +19,18 @@ export function wrapLogger(
 ): Logger {
   if (silent) return silentLogger;
   const threshold = LOG_LEVELS[minLevel];
-  const wrap = (fn: Logger['info'], level: LogLevel): Logger['info'] => {
+  // Call through `base` so method-based loggers (pino, bunyan) keep `this`.
+  const wrap = (level: LogLevel): Logger['info'] => {
     if (LOG_LEVELS[level] < threshold) {
       return (() => {}) as Logger['info'];
     }
     return ((...args: Parameters<Logger['info']>) =>
-      fn(...args)) as Logger['info'];
+      base[level](...args)) as Logger['info'];
   };
   return {
-    debug: wrap(base.debug, 'debug'),
-    info: wrap(base.info, 'info'),
-    warn: wrap(base.warn, 'warn'),
-    error: wrap(base.error, 'error'),
+    debug: wrap('debug'),
+    info: wrap('info'),
+    warn: wrap('warn'),
+    error: wrap('error'),
   };
 }

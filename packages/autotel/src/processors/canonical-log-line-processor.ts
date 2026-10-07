@@ -149,7 +149,6 @@ export interface CanonicalLogLineOptions {
  * const logger = pino();
  * init({
  *   service: 'my-app',
- *   logger,
  *   canonicalLogLines: {
  *     enabled: true,
  *     logger, // Use Pino for canonical log lines

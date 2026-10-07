@@ -1,7 +1,7 @@
 /**
  * Fastify + autotel example
  *
- * Uses autoInstrumentations: ['http', 'fastify'] for HTTP/Fastify tracing.
+ * Uses autoInstrumentations: ['http'] for per-request server spans.
  * Run: pnpm start
  */
 

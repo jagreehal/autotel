@@ -5,7 +5,7 @@ This example shows how to use [Fastify](https://fastify.dev) with autotel for HT
 ## What This Example Shows
 
 - Fastify app with autotel initialized before the app loads
-- `autoInstrumentations: ['http', 'fastify']` for automatic server spans
+- `autoInstrumentations: ['http']` for automatic server spans
 - Manual `trace()` in handlers for custom spans (e.g. DB calls)
 - Error handling and status codes
 
@@ -23,7 +23,7 @@ Autotel is initialized in `instrumentation.ts` (loaded via `--import`) with Fast
 ```typescript
 import Fastify from 'fastify';
 import { init } from 'autotel';
-// init in instrumentation.ts with autoInstrumentations: ['http', 'fastify']
+// init in instrumentation.ts with autoInstrumentations: ['http']
 
 const app = Fastify();
 app.get('/users/:id', async (request, reply) => {

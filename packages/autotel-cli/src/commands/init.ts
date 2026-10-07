@@ -12,8 +12,7 @@ import {
   addSubscriberConfig,
   addPluginInit,
   renderCodeFile,
-  setPinoLogger,
-  addAutoInstrumentationLogger,
+  addAutoInstrumentation,
 } from '../lib/code-builder';
 import { generateEnvExample } from '../lib/env-generator';
 import { atomicWrite, fileExists, readFileSafe } from '../lib/fs';
@@ -32,6 +31,16 @@ import { getQuickPreset, getPreset } from '../presets/index';
 import { promptConfirm, promptExistingConfigAction } from '../ui/prompts';
 import * as output from '../ui/output';
 import { isCI } from '../ui/spinner';
+
+/**
+ * Detected deps whose auto-instrumentation goes by another name. `next` and
+ * `fastify` have none in auto-instrumentations-node; http covers them.
+ */
+const DEP_INSTRUMENTATION: Record<string, string[]> = {
+  '@aws-sdk/client-s3': ['aws-sdk'],
+  next: [],
+  fastify: [],
+};
 
 /**
  * Run the init command.
@@ -317,12 +326,23 @@ function applyPlan(args: {
   addImport(codeFile, { source: 'autotel/register', sideEffect: true });
   addImport(codeFile, { source: 'autotel', specifiers: ['init'] });
 
-  // Logger
-  if (plan.detected?.primaryLogger === 'pino') {
-    setPinoLogger(codeFile);
-  }
-  for (const l of plan.detected?.autoInstrumentLoggers ?? []) {
-    addAutoInstrumentationLogger(codeFile, l);
+  // autoInstrumentations is an allowlist: name every detected logger and
+  // library, plus http for request spans. next and fastify map to no name,
+  // so http is added whenever anything was detected.
+  const detected = plan.detected;
+  const loggers = [
+    ...(detected?.primaryLogger ? [detected.primaryLogger] : []),
+    ...(detected?.autoInstrumentLoggers ?? []),
+  ];
+  const deps = detected?.autoInstrumentedDeps ?? [];
+  if (loggers.length > 0 || deps.length > 0) {
+    for (const name of [
+      'http',
+      ...loggers,
+      ...deps.flatMap((dep) => DEP_INSTRUMENTATION[dep] ?? [dep]),
+    ]) {
+      addAutoInstrumentation(codeFile, name);
+    }
   }
 
   for (const preset of presets) {
@@ -380,7 +400,6 @@ function applyPlan(args: {
         ...codeFile.backendImports,
         ...codeFile.pluginImports,
         ...codeFile.subscriberImports,
-        ...codeFile.loggerImports,
       ].map((i) => i.source),
     );
     const addedAuto = diffAutoInstrumentations(

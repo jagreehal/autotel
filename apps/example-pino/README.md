@@ -1,12 +1,13 @@
 # Pino Logger Example
 
-This example shows how to use **Pino** with autotel as the recommended, first-class logger: one Pino instance for both autotel internal logs and your application logs. No extra instrumentation package is required.
+This example shows Pino with autotel: `autoInstrumentations: ['pino']` adds `trace_id` / `span_id` to every log record and exports it via OTLP.
 
 ## What This Example Shows
 
-- One Pino instance passed to `init({ logger })` and used everywhere (autotel + app)
-- Pino-style signature: `logger.info({ metadata }, 'message')` : object first, message second (autotel's native logger contract)
-- No `@opentelemetry/auto-instrumentations-node` or `autoInstrumentations` required; Pino works with autotel out of the box. Optional: add `autoInstrumentations: ['pino']` (and the auto-instrumentations package) if you want traceId/spanId injected into every log record for log-to-trace correlation.
+- `init()` in its own module (`src/telemetry.ts`), imported first
+- The Pino logger created in another module (`src/logger.ts`), after `init()` has run, so the instrumentation patches pino as it loads
+- The logger is **not** passed to `init()`. That option is only for autotel's own diagnostics, and passing it forces you to create pino too early
+- `--import autotel/register` in the start script: pino is loaded with `import`, which only the OTel loader hook can patch
 
 ## Setup
 
@@ -32,22 +33,27 @@ This example shows how to use **Pino** with autotel as the recommended, first-cl
 
 ## How It Works
 
-Create a Pino logger and pass it to `init()`. The same logger is used by autotel for its own logs and by your app. No auto-instrumentations package needed.
-
 ```typescript
-import pino from 'pino';
+// telemetry.ts
 import { init } from 'autotel';
+init({ service: 'my-app', autoInstrumentations: ['pino'], logs: true });
 
-const logger = pino({ level: 'info' });
+// logger.ts
+import pino from 'pino';
+export const logger = pino({ level: 'info' });
 
-init({
-  service: 'my-app',
-  logger, // Same logger for autotel and app
-});
+// index.ts
+import './telemetry'; // first
+import { logger } from './logger';
 
-// Pino signature: object first, message second
-logger.info({ userId: '123' }, 'User created');
+logger.info({ userId: '123' }, 'User created'); // carries trace_id/span_id inside a span
 ```
+
+```bash
+node --import autotel/register dist/index.js   # or: tsx --import autotel/register src/index.ts
+```
+
+Needs `@opentelemetry/auto-instrumentations-node` installed. If pino loads before `init()`, or an ESM app starts without `--import autotel/register`, autotel prints a warning at startup.
 
 ## See Also
 

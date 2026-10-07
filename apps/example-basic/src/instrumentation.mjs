@@ -14,21 +14,13 @@ import 'autotel/register';
 import 'dotenv/config';
 import { init } from 'autotel';
 
-// For ESM, import the specific instrumentation you need
-// This is included in @opentelemetry/auto-instrumentations-node
-// Install: pnpm add @opentelemetry/auto-instrumentations-node
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-
 console.log('🔧 Initializing autotel with pino instrumentation...');
 
 init({
   service: 'example-pino-esm',
   debug: true,
-  // Use getNodeAutoInstrumentations with specific config
-  instrumentations: getNodeAutoInstrumentations({
-    // Enable only pino (disable everything else for minimal overhead)
-    '@opentelemetry/instrumentation-pino': { enabled: true },
-  }),
+  // Only pino loads (needs @opentelemetry/auto-instrumentations-node installed)
+  autoInstrumentations: ['pino'],
 });
 
 console.log('✅ Autotel initialized\n');

@@ -92,4 +92,89 @@ describe('init no-plan-source behavior', () => {
     await expect(runInit(options)).rejects.toBeInstanceOf(AutotelError);
     expect(promptBackendMock).not.toHaveBeenCalled();
   });
+
+  it('lists every detected logger and library in the autoInstrumentations allowlist', async () => {
+    fs.writeFileSync(
+      path.join(tempDir, 'package.json'),
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: {
+          express: '^5.0.0',
+          winston: '^3.0.0',
+          next: '^15.0.0',
+          '@aws-sdk/client-s3': '^3.0.0',
+        },
+      }),
+      'utf8',
+    );
+
+    await runInit({
+      cwd: tempDir,
+      dryRun: false,
+      noInstall: true,
+      printInstallCmd: false,
+      verbose: false,
+      quiet: true,
+      workspaceRoot: false,
+      yes: true,
+      force: false,
+      noDetect: false,
+      detectOnly: false,
+      scanEnv: false,
+      json: false,
+      noSecrets: false,
+      noInteractive: true,
+    });
+
+    const file = fs
+      .readdirSync(tempDir, { recursive: true })
+      .map(String)
+      .find((f) => /instrumentation\.(m?[jt]s)$/.test(f));
+    const out = fs.readFileSync(path.join(tempDir, file!), 'utf8');
+    expect(out).toContain(
+      "autoInstrumentations: ['http', 'winston', 'express', 'aws-sdk'],",
+    );
+    expect(out).not.toContain('logger:');
+  });
+
+  it.each(['next', 'fastify'])(
+    'gives a %s-only project http request spans',
+    async (framework) => {
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: 'app',
+          version: '1.0.0',
+          dependencies: { [framework]: '^1.0.0' },
+        }),
+        'utf8',
+      );
+
+      await runInit({
+        cwd: tempDir,
+        dryRun: false,
+        noInstall: true,
+        printInstallCmd: false,
+        verbose: false,
+        quiet: true,
+        workspaceRoot: false,
+        yes: true,
+        force: false,
+        noDetect: false,
+        detectOnly: false,
+        scanEnv: false,
+        json: false,
+        noSecrets: false,
+        noInteractive: true,
+      });
+
+      const file = fs
+        .readdirSync(tempDir, { recursive: true })
+        .map(String)
+        .find((f) => /instrumentation\.(m?[jt]s)$/.test(f));
+      const out = fs.readFileSync(path.join(tempDir, file!), 'utf8');
+      expect(out).toContain("autoInstrumentations: ['http'],");
+    },
+  );
 });

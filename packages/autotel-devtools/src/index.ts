@@ -12,6 +12,11 @@ export interface CreateDevtoolsOptions {
   port?: number;
   host?: string;
   verbose?: boolean;
+  /**
+   * How many ports to try, walking forward from `port` while each is busy.
+   * Default 20. Pass 1 to bind `port` or fail: `ready` rejects instead.
+   */
+  maxPortTries?: number;
   maxHistory?: number;
   maxTraceCount?: number;
   maxLogCount?: number;
@@ -112,6 +117,7 @@ export function createDevtools(
     primary: httpServer,
     port,
     host,
+    maxTries: options.maxPortTries,
     attachSecondary: (s) => {
       attachDevtoolsRoutes(s, wsServer, { loopbackOnly, sourceRoot });
       // The live tail has to answer on this family too, or a client using the
@@ -120,9 +126,14 @@ export function createDevtools(
     },
   });
   if (options.verbose) {
-    listeners.ready.then(({ warnings }) => {
-      for (const w of warnings) console.warn(`[autotel-devtools] ${w}`);
-    });
+    // The rejection belongs to whoever awaits `ready`; this side chain only
+    // prints warnings and must not raise a second, unhandled one.
+    listeners.ready.then(
+      ({ warnings }) => {
+        for (const w of warnings) console.warn(`[autotel-devtools] ${w}`);
+      },
+      () => {},
+    );
   }
 
   const exporter = new DevtoolsSpanExporter(wsServer);

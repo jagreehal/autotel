@@ -4,8 +4,9 @@
  * **Zero-Config Option:** Don't provide a logger to `init()` and autotel uses
  * a built-in structured JSON logger with automatic trace context injection.
  *
- * **BYOL (Bring Your Own Logger):** Pass Pino or Bunyan to `init()` for
- * automatic instrumentation with trace context and OTLP log export.
+ * **BYOL (Bring Your Own Logger):** Use `autoInstrumentations: ['pino']`
+ * (or `'winston'`, `'bunyan'`) for trace context and OTLP log export. Don't
+ * pass the logger to `init()`; create it after `init()` runs so it is patched.
  *
  * ## Logger Signature
  *
@@ -64,29 +65,20 @@
  *
  * @example Using Pino (recommended for production, auto-instrumented)
  * ```typescript
- * import pino from 'pino';  // npm install pino
+ * // telemetry.ts - imported first (ESM: also `node --import autotel/register`)
  * import { init } from 'autotel';
+ * init({ service: 'my-app', autoInstrumentations: ['pino'], logs: true });
  *
- * const logger = pino({ level: 'info' });
- * init({ service: 'my-app', logger });
+ * // logger.ts - created after init(), so pino is patched as it loads
+ * import pino from 'pino';
+ * export const logger = pino({ level: 'info' });
  *
  * // Logs automatically include traceId/spanId and export via OTLP!
  * logger.info({ userId: '123' }, 'User created');
  * ```
  *
- * @example Using Bunyan (auto-instrumented, same signature as Pino)
- * ```typescript
- * import bunyan from 'bunyan';  // npm install bunyan @opentelemetry/instrumentation-bunyan
- * import { init } from 'autotel';
- * import { BunyanInstrumentation } from '@opentelemetry/instrumentation-bunyan';
- *
- * const logger = bunyan.createLogger({ name: 'my-app' });
- * init({
- *   service: 'my-app',
- *   logger,
- *   instrumentations: [new BunyanInstrumentation()]
- * });
- * ```
+ * Bunyan and Winston work the same way: `autoInstrumentations: ['bunyan']`
+ * or `['winston']`, logger created after `init()`.
  *
  * @example Custom logger (MUST use Pino-compatible signature)
  * ```typescript

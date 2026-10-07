@@ -1,22 +1,15 @@
 /**
  * Bunyan Logger Example with autotel
  *
- * This example demonstrates:
- * - Using Bunyan logger with autotel
- * - Bunyan auto-instrumentation for trace context injection
- * - Installing @opentelemetry/instrumentation-bunyan (required)
- * - Logging with trace context automatically injected
- *
- * **Important:** While @opentelemetry/auto-instrumentations-node includes Bunyan
- * instrumentation, you should install @opentelemetry/instrumentation-bunyan separately
- * to ensure it's available and working correctly.
+ * `autoInstrumentations: ['bunyan']` adds trace context to every log record
+ * and exports it via OTLP. init() runs in telemetry.ts and the logger is
+ * created in logger.ts, after it, so bunyan is patched as it loads.
  *
  * Run: pnpm start
  */
 
-import 'dotenv/config';
+import './telemetry'; // first: runs init() before bunyan loads
 import {
-  init,
   trace,
   span,
   Metric,
@@ -26,28 +19,7 @@ import {
   withTracing,
   getActiveTraceContext,
 } from 'autotel';
-
-// Initialize autotel FIRST - this sets up Bunyan instrumentation
-init({
-  service: 'example-bunyan-service',
-  debug: true,
-  // Enable Bunyan auto-instrumentation to inject trace context into logs
-  autoInstrumentations: ['bunyan'],
-  // OTLP endpoint for Grafana (set via OTLP_ENDPOINT env var)
-  endpoint: process.env.OTLP_ENDPOINT || 'http://localhost:4318',
-});
-
-// Create Bunyan logger AFTER init() - instrumentation will hook into it
-import bunyan from 'bunyan';
-const logger = bunyan.createLogger({
-  name: 'example-bunyan',
-  level: 'info',
-  streams: [
-    {
-      stream: process.stdout,
-    },
-  ],
-});
+import { logger } from './logger';
 
 // Create a metrics instance
 const metrics = new Metric('example-bunyan');
@@ -219,7 +191,7 @@ async function main() {
       ctx.setAttributes({
         output: 'Successfully answered.',
       });
-    })();
+    });
     logger.info(
       '✅ TEST PASSED: If you see exactly 2 spans (user-request-trace + llm-call) with same traceId, the fix works!\n',
     );

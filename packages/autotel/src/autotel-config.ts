@@ -155,7 +155,7 @@ export interface AutotelConfig {
    * })
    * ```
    *
-   * @example Enable specific auto-instrumentations
+   * @example Enable only these (the array is an allowlist; include `'http'` for request spans)
    * ```typescript
    * init({
    *   service: 'my-app',
@@ -163,7 +163,7 @@ export interface AutotelConfig {
    * })
    * ```
    *
-   * @example Configure specific auto-instrumentations
+   * @example Everything, with per-package overrides (unlisted packages still load)
    * ```typescript
    * init({
    *   service: 'my-app',
@@ -557,7 +557,8 @@ export interface AutotelConfig {
    * Logger instance for internal autotel diagnostic messages
    *
    * This logger is used by autotel internally to log initialization, warnings,
-   * and debug information. Any logger with info/warn/error/debug methods works.
+   * and debug information. It is called pino-style, `(fields, message)`, so pino
+   * and bunyan work as is; wrap a `(message, meta)` logger such as winston.
    *
    * **For OTel instrumentation of your application logs**, use the `autoInstrumentations` option:
    * - `autoInstrumentations: ['pino']` - Injects traceId/spanId into Pino logs
@@ -565,18 +566,17 @@ export interface AutotelConfig {
    *
    * Default: silent logger (no-op)
    *
-   * @example Pino with OTel instrumentation
+   * @example Pino with trace context (no `logger` needed)
    * ```typescript
-   * import pino from 'pino'
+   * // telemetry.ts - imported first, before anything that creates the logger
    * import { init } from 'autotel'
+   * init({ service: 'my-app', autoInstrumentations: ['pino'], logs: true })
    *
-   * const logger = pino({ level: 'info' })
-   * init({
-   *   service: 'my-app',
-   *   logger,                       // For autotel's internal logs
-   *   autoInstrumentations: ['pino'] // For OTel trace context in YOUR logs
-   * })
+   * // logger.ts - created after init(), so pino is patched as it loads
+   * import pino from 'pino'
+   * export const logger = pino()
    * ```
+   * Under ESM, start node with `--import autotel/register` too.
    *
    * @example Custom logger for autotel diagnostics
    * ```typescript
@@ -590,18 +590,10 @@ export interface AutotelConfig {
    * ```
    *
    * @remarks
-   * This is also the fallback logger for canonical log lines, so setting it
-   * sends them here INSTEAD of the OTel Logs API — and therefore stops them
-   * reaching an OTLP logs backend such as Loki. On a platform whose log view
-   * reads stdout you usually want both, which is what
-   * `canonicalLogLines.otel` is for:
-   *
-   * ```typescript
-   * init({
-   *   service: 'my-app',
-   *   canonicalLogLines: { enabled: true, logger, otel: true },
-   * })
-   * ```
+   * Don't pass your app logger here to get trace context: creating it before
+   * `init()` loads its package before the instrumentation, so it is never
+   * patched. Canonical log lines do not use this logger either; set
+   * `canonicalLogLines.logger` (or `pretty`) for those.
    */
   logger?: Logger;
 
