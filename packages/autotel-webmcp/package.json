@@ -30,7 +30,7 @@
     "type-check": "tsc --noEmit"
   },
   "peerDependencies": {
-    "autotel-web": "^2.2.1"
+    "autotel-web": "^2.2.2"
   },
   "keywords": [
     "webmcp",
