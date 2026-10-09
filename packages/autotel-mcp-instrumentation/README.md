@@ -253,6 +253,24 @@ Client spans carry the same attributes as server spans, with `SpanKind.CLIENT`.
 
 **Hosted servers.** When the server runs inside a request that is already traced in the caller's trace (a Lambda invocation, an HTTP server span), tool, resource and prompt spans parent on that host span: caller → host → tool. Baggage from `_meta` still applies. With no host span, or a host in another trace, the `_meta` context is the parent.
 
+#### `instrumentMcpTransport(transport)`
+
+Adds the active trace context to `params._meta` on every request a transport sends, so the server's spans join the caller's trace. Use it when the MCP client keeps its SDK `Client` private and `instrumentMcpClient` can't reach it: `@ai-sdk/mcp`, `@tanstack/ai-mcp` and similar.
+
+```typescript
+import { createMCPClient } from '@ai-sdk/mcp';
+import { Experimental_StdioMCPTransport } from '@ai-sdk/mcp/mcp-stdio';
+import { instrumentMcpTransport } from 'autotel-mcp-instrumentation/client';
+
+const mcp = await createMCPClient({
+  transport: instrumentMcpTransport(
+    new Experimental_StdioMCPTransport({ command: 'node', args: ['server.js'] }),
+  ),
+});
+```
+
+It creates no spans. Whatever span is active when the tool runs becomes the parent of the server span: with `autotel-genai` that is the agent's `execute_tool` span, giving `execute_tool → tools/call → (server work)` across the process boundary. `_meta` keys the caller already set take precedence, so it composes with `instrumentMcpClient`. Responses and notifications pass through unchanged. It patches `send` in place and returns the same transport.
+
 ### Context Utilities
 
 #### `extractOtelContextFromMeta(meta?)`

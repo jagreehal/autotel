@@ -47,6 +47,12 @@ const server = instrumentMcpServer(new Server(...));
 to wrap the client so tool/resource/prompt calls create spans and propagate
 context. `callTool` takes an object: `callTool({ name, arguments })`.
 
+**Clients that hide the SDK `Client`** (`@ai-sdk/mcp`, `@tanstack/ai-mcp`):
+wrap the transport with `instrumentMcpTransport(transport)` from
+`autotel-mcp-instrumentation/client`. It adds the active `traceparent` to
+`params._meta` on every request, so server spans join the caller's trace. It
+creates no spans, and `_meta` keys the caller set take precedence.
+
 **Frameworks with a request hook.** `traceMcpHandler(handler, { type, name, config })`
 traces one handler with the same spans and metrics, for frameworks that expose
 middleware in place of the SDK's `register*` methods. `autotel-skybridge` uses it.

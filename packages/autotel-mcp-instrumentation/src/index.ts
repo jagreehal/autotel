@@ -20,7 +20,7 @@ export {
 export { instrumentMcpServer, traceMcpHandler } from './server';
 export type { TraceMcpHandlerOptions } from './server';
 
-export { instrumentMcpClient } from './client';
+export { instrumentMcpClient, instrumentMcpTransport } from './client';
 
 export type { McpInstrumentationConfig, McpTraceMeta } from './types';
 export type {

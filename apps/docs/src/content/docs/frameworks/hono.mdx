@@ -51,12 +51,16 @@ app.get('/orders/:id', (c) => {
 ## Streaming responses
 
 A handler returning an SSE, NDJSON, or AI stream returns before the work
-finishes. Emit the request snapshot at that moment and you capture a request
-that has barely started, while everything the stream adds later lands nowhere.
+finishes. `otel()` ends the request span, `http.server.request.duration` and the
+active-request count when the body has been sent, so a 60-second agent run
+records as 60 seconds. An error part-way through the stream lands on the span; a
+client disconnect ends it without one. In tests, read the body
+(`await res.text()`) before you assert on the span.
 
-`autotelMiddleware()` from `autotel-adapters/hono` waits for the body. Use it in
-place of `otel()` when you stream: it creates the span, the request logger, and
-emits the snapshot once the stream closes, errors, or gets cancelled.
+For the request snapshot as well, use `autotelMiddleware()` from
+`autotel-adapters/hono` in place of `otel()`: it creates the span and the
+request logger, and emits the snapshot once the stream closes, errors, or gets
+cancelled.
 
 ```typescript
 import { autotelMiddleware, useLogger } from 'autotel-adapters/hono';

@@ -25,6 +25,7 @@ import {
 import { errorName } from './error-name.js';
 import type { McpMetricAttributes } from './types.js';
 import {
+  asRecord,
   asString,
   callIfPresent,
   callMethod,
@@ -803,4 +804,71 @@ export function instrumentMcpClient<T extends Record<string, any>>(
       return value;
     },
   });
+}
+
+/** The one transport method {@link instrumentMcpTransport} wraps. */
+interface SendingTransport {
+  send(message: never, ...rest: never[]): Promise<void>;
+}
+
+/**
+ * Add the active trace context to `params._meta` of every request a transport
+ * sends, so the server's spans join the caller's trace.
+ *
+ * For MCP clients you cannot wrap with {@link instrumentMcpClient} because
+ * they keep their SDK `Client` private: `@ai-sdk/mcp`, `@tanstack/ai-mcp`, and
+ * the like. It creates no spans; the span active at call time (an agent's
+ * `execute_tool`, say) becomes the server span's parent. Keys the caller
+ * already put in `_meta` win, so it composes with `instrumentMcpClient`.
+ * Responses and notifications pass through unchanged.
+ *
+ * Patches `transport.send` in place and returns the same transport.
+ *
+ * @example
+ * ```typescript
+ * import { createMCPClient } from '@ai-sdk/mcp';
+ * import { Experimental_StdioMCPTransport } from '@ai-sdk/mcp/mcp-stdio';
+ * import { instrumentMcpTransport } from 'autotel-mcp-instrumentation/client';
+ *
+ * const mcp = await createMCPClient({
+ *   transport: instrumentMcpTransport(
+ *     new Experimental_StdioMCPTransport({ command: 'node', args: ['server.js'] }),
+ *   ),
+ * });
+ * ```
+ */
+export function instrumentMcpTransport<T extends SendingTransport>(
+  transport: T,
+): T {
+  // SAFETY: send is called with whatever the client passes; withTraceMeta
+  // only rewrites JSON-RPC requests and hands everything else back untouched.
+  const send = transport.send.bind(transport) as (
+    message: unknown,
+    ...rest: unknown[]
+  ) => Promise<void>;
+  transport.send = ((message: unknown, ...rest: unknown[]) =>
+    send(withTraceMeta(message), ...rest)) as T['send'];
+  return transport;
+}
+
+function withTraceMeta(message: unknown): unknown {
+  const request = asRecord(message);
+  // A request has both a method and an id; notifications and responses don't.
+  if (!request || typeof request.method !== 'string' || !('id' in request))
+    return message;
+  const { traceparent, tracestate, baggage } = injectOtelContextToMeta();
+  if (!traceparent) return message;
+  const params = asRecord(request.params) ?? {};
+  return {
+    ...request,
+    params: {
+      ...params,
+      _meta: {
+        traceparent,
+        ...(tracestate ? { tracestate } : {}),
+        ...(baggage ? { baggage } : {}),
+        ...asRecord(params._meta),
+      },
+    },
+  };
 }

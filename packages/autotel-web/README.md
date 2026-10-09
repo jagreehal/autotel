@@ -273,6 +273,8 @@ init({
 });
 ```
 
+A streamed response (`text/event-stream`, `application/x-ndjson`) ends its span when the body finishes, errors or gets cancelled, so an AI chat that streams for a minute records as a minute. Other responses end at the headers. The returned `Response` and its clones keep the network response's `url`, `redirected` and `type`.
+
 ### Sharing a page with the collector's own UI
 
 autotel-devtools serves its widget and query API from the same origin as `/v1/traces`, and the widget polls that API from your page. Fetch instrumentation would trace every poll and show each one as its own trace. Tell autotel-web the collector owns its whole origin:
