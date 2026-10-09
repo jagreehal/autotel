@@ -438,6 +438,84 @@ function headerDenialReason(url: string): string {
 }
 
 /**
+ * A response whose body keeps arriving after the headers: server-sent events
+ * (AI SDK chat, `EventSource`-style APIs) and NDJSON streams.
+ *
+ * Deliberately not every body: plenty of browser code never reads a response
+ * (`if (res.ok)`, fire-and-forget POSTs), and waiting on a body nobody reads
+ * would drop the span. A stream is always read - that is why it was asked for.
+ */
+function isStreamingResponse(response: Response): boolean {
+  const type = response.headers.get('content-type') ?? '';
+  return (
+    response.body !== null &&
+    (type.startsWith('text/event-stream') ||
+      type.startsWith('application/x-ndjson'))
+  );
+}
+
+function errorType(error: unknown): string {
+  return error instanceof Error ? error.name : 'Error';
+}
+
+/**
+ * The same response, its body passed through a stream that calls `onEnd` once:
+ * when the body finishes, errors (with the error), or the reader cancels.
+ */
+function observeBody(
+  response: Response,
+  onEnd: (error?: unknown) => void,
+): Response {
+  let ended = false;
+  const end = (error?: unknown) => {
+    if (ended) return;
+    ended = true;
+    onEnd(error);
+  };
+  const reader = response.body!.getReader();
+  const observed = new Response(
+    new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            end();
+          } else {
+            controller.enqueue(value);
+          }
+        } catch (error) {
+          controller.error(error);
+          end(error);
+        }
+      },
+      cancel(reason) {
+        end();
+        return reader.cancel(reason);
+      },
+    }),
+    response,
+  );
+  return withNetworkMetadata(observed, response);
+}
+
+/**
+ * A constructed Response has no url, redirect flag or type; callers read them,
+ * so carry the network response's over - onto its clones too, since a native
+ * `clone()` copies only what the constructor knows.
+ */
+function withNetworkMetadata(target: Response, source: Response): Response {
+  for (const key of ['url', 'redirected', 'type'] as const) {
+    Object.defineProperty(target, key, { value: source[key] });
+  }
+  const clone = target.clone.bind(target);
+  Object.defineProperty(target, 'clone', {
+    value: () => withNetworkMetadata(clone(), source),
+  });
+  return target;
+}
+
+/**
  * Patch fetch() to auto-inject traceparent headers
  */
 function patchFetch(): void {
@@ -535,63 +613,52 @@ function patchFetch(): void {
     const fetchPromise = originalFetch!(input, { ...init, headers });
 
     // Not conditional on the header having been sent - see above.
-    if (traceparent && isConfigured()) {
-      fetchPromise.then(
-        (response) => {
-          const endTime = performance.timeOrigin + performance.now();
-          const parsed = parseTraceparent(traceparent);
-          if (parsed) {
-            let pathname: string;
-            try {
-              pathname = new URL(url, window.location.origin).pathname;
-            } catch {
-              pathname = url;
-            }
-            recordSpan(
-              parsed.traceId,
-              parsed.spanId,
-              `browser ${pathname}`,
-              startTime,
-              endTime,
-              {
-                // Tag local spans with current baggage regardless of destination —
-                // this is our own telemetry and never leaves our collector.
-                ...getBaggageEntries(),
-                'http.request.method': method,
-                'url.full': url,
-                'http.response.status_code': response.status,
-              },
-            );
-          }
-        },
-        () => {
-          const endTime = performance.timeOrigin + performance.now();
-          const parsed = parseTraceparent(traceparent);
-          if (parsed) {
-            let pathname: string;
-            try {
-              pathname = new URL(url, window.location.origin).pathname;
-            } catch {
-              pathname = url;
-            }
-            recordSpan(
-              parsed.traceId,
-              parsed.spanId,
-              `browser ${pathname}`,
-              startTime,
-              endTime,
-              {
-                ...getBaggageEntries(),
-                'http.request.method': method,
-                'url.full': url,
-              },
-            );
-          }
+    if (!traceparent || !isConfigured()) return fetchPromise;
+    const record = (attrs: Record<string, string | number>) => {
+      const parsed = parseTraceparent(traceparent);
+      if (!parsed) return;
+      let pathname: string;
+      try {
+        pathname = new URL(url, window.location.origin).pathname;
+      } catch {
+        pathname = url;
+      }
+      recordSpan(
+        parsed.traceId,
+        parsed.spanId,
+        `browser ${pathname}`,
+        startTime,
+        performance.timeOrigin + performance.now(),
+        {
+          // Tag local spans with current baggage regardless of destination —
+          // this is our own telemetry and never leaves our collector.
+          ...getBaggageEntries(),
+          'http.request.method': method,
+          'url.full': url,
+          ...attrs,
         },
       );
-    }
-
-    return fetchPromise;
+    };
+    return fetchPromise.then(
+      (response) => {
+        const status = { 'http.response.status_code': response.status };
+        // A stream (an AI chat, server-sent events) is still arriving when the
+        // headers do: end the span when it finishes, not at the headers.
+        if (isStreamingResponse(response)) {
+          return observeBody(response, (error) =>
+            record(
+              error ? { ...status, 'error.type': errorType(error) } : status,
+            ),
+          );
+        }
+        record(status);
+        return response;
+      },
+      (error: unknown) => {
+        record({});
+        throw error;
+      },
+    );
   };
 }
 

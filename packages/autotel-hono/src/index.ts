@@ -97,6 +97,50 @@ function resolveMeter(config: NormalizedOtelConfig): Meter {
   return getMeter();
 }
 
+/**
+ * Swap in a pass-through body that calls `onEnd` once: when the body has been
+ * fully sent, errors, or the client goes away. That is when the request ends
+ * for a streamed body (`stream`, `streamSSE`, AI SDK UI streams) and, a moment
+ * after the handler returns, for a buffered one; the headers cannot tell the
+ * two apart, since Hono's `stream()` sets none.
+ *
+ * Returns false, changing nothing, when there is no body to wait for: a null
+ * body, an error, or HEAD, whose body Hono discards unread.
+ */
+function onBodyEnd(c: Context, onEnd: (cause?: unknown) => void): boolean {
+  if (c.error || !c.res.body || c.req.method === 'HEAD') return false;
+  let ended = false;
+  const end = (cause?: unknown) => {
+    if (ended) return;
+    ended = true;
+    onEnd(cause);
+  };
+  const res = c.res;
+  const reader = res.body!.getReader();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          end();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        controller.error(error);
+        end(error);
+      }
+    },
+    cancel(reason) {
+      end();
+      return reader.cancel(reason);
+    },
+  });
+  c.res = new Response(body, res);
+  return true;
+}
+
 export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
   const config = normalizeConfig(userConfig);
   const tracer = resolveTracer(config);
@@ -178,6 +222,7 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
     if (!tracer) {
       try {
         await next();
+        if (onBodyEnd(c, (cause) => finalize(undefined, cause))) return;
         finalize();
       } catch (error) {
         finalize(undefined, error);
@@ -200,6 +245,7 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
       },
       parent,
       async (span) => {
+        let deferred = false;
         try {
           for (const [k, v] of Object.entries(
             deferredRequestHeaderAttributes,
@@ -207,12 +253,19 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
             span.setAttribute(k, v);
           }
           await next();
+          // The response isn't sent when the handler returns (a streamed body
+          // may run for minutes): end the span when the body has been sent.
+          deferred = onBodyEnd(c, (cause) => {
+            finalize(span, cause);
+            span.end(config.getTime?.());
+          });
+          if (deferred) return;
           finalize(span, c.error);
         } catch (error) {
           finalize(span, error);
           throw error;
         } finally {
-          span.end(config.getTime?.());
+          if (!deferred) span.end(config.getTime?.());
         }
       },
     );
