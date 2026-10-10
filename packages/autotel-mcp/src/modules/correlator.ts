@@ -5,6 +5,45 @@ export interface RootCauseResult {
   reason: string;
   percentOfTrace: number;
   path: string[]; // e.g. ["gateway/GET /api", "db/query"]
+  /** The bottleneck's own time, not spent waiting on child spans. */
+  selfTimeMs: number;
+  /** Where the trace's time actually went, largest self time first. */
+  topSelfTime: Array<{
+    service: string;
+    operation: string;
+    spanId: string;
+    selfTimeMs: number;
+  }>;
+}
+
+/**
+ * Each span's self time: its duration minus the union of its children's
+ * intervals, clipped to its own. A handler that awaits a slow query has a
+ * long duration and almost no self time; the query is where the time went.
+ */
+export function selfTimes(spans: readonly SpanRecord[]): Map<string, number> {
+  const children = buildChildMap([...spans]);
+  const result = new Map<string, number>();
+  for (const span of spans) {
+    const start = span.startTimeUnixMs;
+    const end = start + span.durationMs;
+    const intervals = (children.get(span.spanId) ?? [])
+      .map((child): [number, number] => [
+        Math.max(start, child.startTimeUnixMs),
+        Math.min(end, child.startTimeUnixMs + child.durationMs),
+      ])
+      .filter(([from, to]) => to > from)
+      .sort((a, b) => a[0] - b[0]);
+    let covered = 0;
+    let cursor = start;
+    for (const [from, to] of intervals) {
+      if (to <= cursor) continue;
+      covered += to - Math.max(from, cursor);
+      cursor = to;
+    }
+    result.set(span.spanId, Math.max(0, span.durationMs - covered));
+  }
+  return result;
 }
 
 function findRootSpan(spans: SpanRecord[]): SpanRecord {
@@ -58,6 +97,7 @@ export function findRootCause(trace: TraceRecord): RootCauseResult {
   const parentMap = buildParentMap(spans);
 
   const errorSpans = spans.filter((s) => s.hasError);
+  const self = selfTimes(spans);
 
   let bottleneck: SpanRecord;
   let reason: string;
@@ -104,13 +144,12 @@ export function findRootCause(trace: TraceRecord): RootCauseResult {
       ? `Span "${bottleneck.operationName}" in service "${bottleneck.serviceName}" encountered an error: ${errorMessage}`
       : `Span "${bottleneck.operationName}" in service "${bottleneck.serviceName}" reported an error`;
   } else {
-    // No errors — pick slowest span by duration, preferring non-root spans
-    // (root duration includes all children, so children represent the real bottleneck)
-    const nonRootSpans = spans.filter((s) => s.spanId !== rootSpan.spanId);
-    const candidates = nonRootSpans.length > 0 ? nonRootSpans : spans;
-    const sorted = [...candidates].sort((a, b) => b.durationMs - a.durationMs);
-    bottleneck = sorted[0];
-    reason = `Span "${bottleneck.operationName}" in service "${bottleneck.serviceName}" is the slowest span at ${bottleneck.durationMs}ms`;
+    // No errors: the span with the most self time, since a parent's total
+    // duration includes its children.
+    bottleneck = [...spans].sort(
+      (a, b) => (self.get(b.spanId) ?? 0) - (self.get(a.spanId) ?? 0),
+    )[0];
+    reason = `Span "${bottleneck.operationName}" in service "${bottleneck.serviceName}" spent the most time itself: ${round(self.get(bottleneck.spanId) ?? 0)}ms of its ${round(bottleneck.durationMs)}ms, not waiting on child spans`;
   }
 
   // Use the trace's wall-clock window (max end - min start) rather than
@@ -132,5 +171,26 @@ export function findRootCause(trace: TraceRecord): RootCauseResult {
 
   const path = buildPathToSpan(bottleneck, parentMap);
 
-  return { bottleneck, reason, percentOfTrace, path };
+  const topSelfTime = [...spans]
+    .sort((a, b) => (self.get(b.spanId) ?? 0) - (self.get(a.spanId) ?? 0))
+    .slice(0, 5)
+    .map((span) => ({
+      service: span.serviceName,
+      operation: span.operationName,
+      spanId: span.spanId,
+      selfTimeMs: round(self.get(span.spanId) ?? 0),
+    }));
+
+  return {
+    bottleneck,
+    reason,
+    percentOfTrace,
+    path,
+    selfTimeMs: round(self.get(bottleneck.spanId) ?? 0),
+    topSelfTime,
+  };
+}
+
+function round(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }

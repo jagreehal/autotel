@@ -57,17 +57,23 @@ const UNSUPPORTED_METRIC_DETAIL =
 export class LokiBackend implements TelemetryBackend {
   readonly kind = 'loki' as const;
 
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    /** Auth for hosted stacks (Grafana Cloud basic auth); empty for local. */
+    private readonly headers: Record<string, string> = {},
+  ) {}
 
   async healthCheck(): Promise<BackendHealth> {
+    // An authenticated read proves the token can query; Grafana Cloud serves
+    // no /ready.
     try {
-      const res = await fetch(`${this.baseUrl}/ready`);
-      if (res.ok) {
-        return { healthy: true, message: 'Loki ready' };
-      }
+      const data = await jsonGet<LokiLabelResponse>(
+        `${this.baseUrl}/loki/api/v1/labels`,
+        { headers: this.headers },
+      );
       return {
-        healthy: false,
-        message: `Loki /ready returned ${res.status}`,
+        healthy: true,
+        message: `Loki reachable, ${(data.data ?? []).length} labels`,
       };
     } catch (error) {
       return {
@@ -89,6 +95,7 @@ export class LokiBackend implements TelemetryBackend {
     try {
       const data = await jsonGet<LokiLabelResponse>(
         `${this.baseUrl}/loki/api/v1/label/${SERVICE_LABEL}/values`,
+        { headers: this.headers },
       );
       return { services: (data.data ?? []).sort() };
     } catch {
@@ -170,6 +177,7 @@ export class LokiBackend implements TelemetryBackend {
 
     const data = await jsonGet<LokiQueryResponse>(
       `${this.baseUrl}/loki/api/v1/query_range?${params}`,
+      { headers: this.headers },
     );
 
     const streams = data.data?.result ?? [];

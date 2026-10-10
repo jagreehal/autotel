@@ -9,6 +9,7 @@ import {
   type MetricsQueryInput,
   type LogsQueryInput,
   READ_ONLY,
+  limitHint,
 } from './shared';
 
 export function registerSignalTools(
@@ -76,9 +77,13 @@ function registerLogTools(server: McpServer, backend: TelemetryBackend): void {
       }),
     },
     async (input: LogsQueryInput) =>
-      respondSafe(
-        () => backend.searchLogs(toLogSearchQuery(input)),
-        'search_logs',
-      ),
+      respondSafe(async () => {
+        const limit = input.limit ?? 50;
+        const result = await backend.searchLogs({
+          ...toLogSearchQuery(input),
+          limit,
+        });
+        return { ...result, ...limitHint(result.items.length, limit) };
+      }, 'search_logs'),
   );
 }

@@ -72,6 +72,23 @@ export function buildToolCatalog(): ToolCatalogEntry[] {
       intent: 'hand an issue to a fixer',
     },
     {
+      name: 'aggregate_spans',
+      description:
+        'Count, error rate and latency percentiles grouped by any span field.',
+      intent: 'compare endpoints, versions or services',
+    },
+    {
+      name: 'aggregate_logs',
+      description: 'Log counts and top message patterns per group.',
+      intent: 'see what a service is logging',
+    },
+    {
+      name: 'what_changed',
+      description:
+        'Version changes in the window with error rate and p95 before and after.',
+      intent: 'tie a regression to a deploy',
+    },
+    {
       name: 'list_llm_models',
       description: 'Discover LLM models in use and their usage frequency.',
       intent: 'track model adoption',

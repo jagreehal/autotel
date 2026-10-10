@@ -137,7 +137,7 @@ export function buildServiceMap(
   return { nodes, edges };
 }
 
-function percentile(values: number[], p: number): number {
+export function percentile(values: number[], p: number): number {
   if (values.length === 0) return 0;
   const index = Math.min(
     values.length - 1,

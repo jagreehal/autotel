@@ -67,11 +67,11 @@ const searchResponse = {
 };
 
 describe('DatadogBackend', () => {
-  it('declares traces available and the other signals unsupported', () => {
+  it('declares every signal available', () => {
     expect(backend().capabilities()).toEqual({
       traces: 'available',
-      metrics: 'unsupported',
-      logs: 'unsupported',
+      metrics: 'available',
+      logs: 'available',
     });
   });
 
@@ -202,7 +202,7 @@ describe('DatadogBackend', () => {
     );
   });
 
-  it('hydrates every matching trace so service filters retain downstream spans', async () => {
+  it('hydrates every matching trace in one request so service filters retain downstream spans', async () => {
     const fetchSpy = vi
       .fn()
       .mockResolvedValueOnce({
@@ -226,7 +226,10 @@ describe('DatadogBackend', () => {
       'payments',
     ]);
     const hydrationBody = requestBody<DatadogSearchRequest>(fetchSpy, 1);
-    expect(hydrationBody.data.attributes.filter.query).toBe('trace_id:trace-1');
+    expect(hydrationBody.data.attributes.filter.query).toBe(
+      'trace_id:(trace-1)',
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
   // A search with no `from`/`to` falls back to Datadog's short default window,
@@ -247,9 +250,313 @@ describe('DatadogBackend', () => {
     );
   });
 
-  it('reports metrics and logs as unsupported', async () => {
-    expect((await backend().listMetrics()).unsupported).toBe(true);
-    expect((await backend().searchLogs()).unsupported).toBe(true);
+  it('reads a metric as one series per service', async () => {
+    const fetchSpy = respond({
+      series: [
+        {
+          metric: 'trace.http.server.request.hits',
+          scope: 'service:dev-api',
+          pointlist: [
+            [1791619860000, 1],
+            [1791619880000, null],
+          ],
+          unit: [{ name: 'hit' }, null],
+        },
+      ],
+    });
+    installFetch(fetchSpy);
+
+    const [series] = await backend().getMetricSeries(
+      'trace.http.server.request.hits',
+      { serviceName: 'dev-api' },
+    );
+
+    const url = new URL(String(fetchSpy.mock.calls[0]![0]));
+    expect(url.pathname).toBe('/api/v1/query');
+    expect(url.searchParams.get('query')).toBe(
+      'avg:trace.http.server.request.hits{service:dev-api} by {service}',
+    );
+    expect(series).toEqual({
+      metricName: 'trace.http.server.request.hits',
+      unit: 'hit',
+      points: [{ timestampUnixMs: 1791619860000, value: 1 }],
+      attributes: { service: 'dev-api' },
+    });
+  });
+
+  it('aggregates spans server-side with exact counts and an error request', async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          data: [
+            {
+              attributes: {
+                by: { service: 'dev-api', resource_name: 'GET /ping' },
+                compute: {
+                  c0: 1831,
+                  c1: 2_000_000,
+                  c2: 1_000_000,
+                  c3: 22_087_307,
+                  c4: 50_000_000,
+                  c5: 90_000_000,
+                },
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          data: [
+            {
+              attributes: {
+                by: { service: 'dev-api', resource_name: 'GET /ping' },
+                compute: { c0: 18 },
+              },
+            },
+          ],
+        }),
+      });
+    installFetch(fetchSpy);
+
+    const [row] = (await backend().aggregateSpans({
+      groupBy: ['service', 'operation'],
+    }))!;
+
+    expect(row).toMatchObject({
+      group: { service: 'dev-api', operation: 'GET /ping' },
+      count: 1831,
+      errorCount: 18,
+      errorRate: 0.01,
+      p95Ms: 22.087,
+    });
+    type AggregateBody = {
+      data: {
+        attributes: {
+          compute: { aggregation: string }[];
+          filter: { query: string };
+          group_by: { facet: string; limit: number }[];
+        };
+      };
+    };
+    // Datadog names the 50th percentile `median`.
+    expect(
+      requestBody<AggregateBody>(fetchSpy, 0).data.attributes.compute.map(
+        (c) => c.aggregation,
+      ),
+    ).toEqual(['count', 'avg', 'median', 'pc95', 'pc99', 'max']);
+    // Errors are counted for exactly the groups the totals chose.
+    const errorsBody = requestBody<AggregateBody>(fetchSpy, 1);
+    expect(errorsBody.data.attributes.filter.query).toBe(
+      'status:error service:(dev-api) resource_name:("GET /ping")',
+    );
+    // Every level sorts by count so the limit keeps the busiest groups.
+    const byCount = {
+      sort: { aggregation: 'count', order: 'desc', type: 'measure' },
+    };
+    expect(
+      requestBody<AggregateBody>(fetchSpy, 0).data.attributes.group_by,
+    ).toEqual([
+      { facet: 'service', limit: 20, ...byCount },
+      { facet: 'resource_name', limit: 20, ...byCount },
+    ]);
+    expect(errorsBody.data.attributes.group_by).toEqual([
+      { facet: 'service', limit: 1, ...byCount },
+      { facet: 'resource_name', limit: 1, ...byCount },
+    ]);
+  });
+
+  // Tag filters run after the fetch; truncation follows the page size.
+  it('reports a full span page as truncated even after local filtering', async () => {
+    const page = Array.from({ length: 10 }, (_, i) => ({
+      attributes: {
+        trace_id: `t${i}`,
+        span_id: `s${i}`,
+        service: 'api',
+        custom: { http: { route: i === 0 ? '/a' : '/b' } },
+      },
+    }));
+    installFetch(respond({ data: page }));
+
+    const result = await backend().searchSpans({
+      limit: 10,
+      tags: { 'http.route': '/a' },
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.truncated).toBe(true);
+  });
+
+  // Service, operation and the error flag compile to Datadog's query; other
+  // filters go to the sample path.
+  it('declines to aggregate server-side a filter it cannot compile', async () => {
+    const fetchSpy = vi.fn();
+    installFetch(fetchSpy);
+
+    for (const query of [
+      { tags: { 'gen_ai.system': 'openai' } },
+      { minDurationMs: 100 },
+      { spanMinDurationMs: 100 },
+      { statusCode: 'ERROR' as const },
+      {
+        filters: [
+          { field: 'http.route', operator: 'equals' as const, value: '/a' },
+        ],
+      },
+    ]) {
+      await expect(backend().aggregateSpans(query)).resolves.toBeUndefined();
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('links a trace to the regional UI host', () => {
+    expect(backend().traceUrl('abc')).toBe(
+      'https://app.datadoghq.com/apm/trace/abc',
+    );
+    expect(
+      new DatadogBackend({
+        baseUrl: 'us5.datadoghq.com',
+        apiKey: 'a',
+        appKey: 'b',
+      }).traceUrl('abc'),
+    ).toBe('https://us5.datadoghq.com/apm/trace/abc');
+  });
+
+  it('flattens nested custom attributes, reads ns duration, treats parent "0" as root', async () => {
+    installFetch(
+      respond({
+        data: [
+          {
+            attributes: {
+              trace_id: 't',
+              span_id: 's',
+              parent_id: '0',
+              service: 'api',
+              resource_name: 'GET /ping',
+              start_timestamp: '2026-10-10T08:45:15.535Z',
+              end_timestamp: '2026-10-10T08:45:15.536Z',
+              status: 'error',
+              error: { message: 'boom', type: 'Error' },
+              custom: {
+                duration: 1015173,
+                http: { method: 'GET', response: { status_code: 200 } },
+                span: { kind: 'server' },
+              },
+            },
+          },
+        ],
+      }),
+    );
+
+    const span = (await backend().getTrace('t'))!.spans[0]!;
+    expect(span.parentSpanId).toBeNull();
+    expect(span.durationMs).toBeCloseTo(1.015173);
+    expect(span.tags['http.method']).toBe('GET');
+    expect(span.tags['http.response.status_code']).toBe(200);
+    expect(span.tags['span.kind']).toBe('server');
+    expect(span.tags['error.message']).toBe('boom');
+    expect(span.tags.http).toBeUndefined();
+  });
+
+  it('flags a trace whose spans filled the page as truncated', async () => {
+    const spans = Array.from({ length: 1000 }, (_, i) => ({
+      attributes: { trace_id: 't', span_id: `s${i}`, service: 'api' },
+    }));
+    installFetch(respond({ data: spans }));
+
+    const trace = (await backend().getTrace('t'))!;
+    expect(trace.truncated).toBe(true);
+    expect((await backend().summarizeTrace('t'))!.truncated).toBe(true);
+  });
+
+  it('keeps a trace crowded out of a full hydration page', async () => {
+    const big = Array.from({ length: 1000 }, (_, i) => ({
+      attributes: { trace_id: 'big', span_id: `s${i}`, service: 'api' },
+    }));
+    const small = {
+      attributes: { trace_id: 'small', span_id: 'x', service: 'api' },
+    };
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ data: [big[0], small] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ data: big }),
+      });
+    installFetch(fetchSpy);
+
+    const result = await backend().searchTraces({ limit: 5 });
+    expect(result.items.map((t) => t.traceId)).toEqual(['big', 'small']);
+    expect(result.items.every((t) => t.truncated)).toBe(true);
+  });
+
+  it('searches logs and maps OTLP trace correlation', async () => {
+    const fetchSpy = respond({
+      data: [
+        {
+          attributes: {
+            timestamp: '2026-10-08T15:42:54.830Z',
+            status: 'info',
+            message: 'Found credentials',
+            service: 'parser',
+            tags: ['env:beta2'],
+            attributes: { otel: { trace_id: 'abc', span_id: 'def' } },
+          },
+        },
+      ],
+    });
+    installFetch(fetchSpy);
+
+    const result = await backend().searchLogs({
+      serviceName: 'parser',
+      traceId: 'abc',
+      text: 'Found credentials',
+    });
+
+    expect(fetchSpy.mock.calls[0]![0]).toBe(
+      'https://api.datadoghq.com/api/v2/logs/events/search',
+    );
+    const body = requestBody<{ filter: { query: string } }>(fetchSpy);
+    expect(body.filter.query).toBe(
+      'service:parser trace_id:abc "Found credentials"',
+    );
+    expect(result.items[0]).toMatchObject({
+      severityText: 'INFO',
+      body: 'Found credentials',
+      serviceName: 'parser',
+      traceId: 'abc',
+      spanId: 'def',
+    });
+    expect(result.items[0]!.attributes?.env).toBe('beta2');
+  });
+
+  it('turns a 429 into advice to wait instead of retrying in a loop', async () => {
+    installFetch(
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers(),
+        text: async () => 'Too many requests',
+      }),
+    );
+
+    await expect(backend().getTrace('t')).rejects.toThrow(
+      /Wait about a minute/,
+    );
   });
 
   // A bare site is the natural thing to configure — it is what Datadog's own

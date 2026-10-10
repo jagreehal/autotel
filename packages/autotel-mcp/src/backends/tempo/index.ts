@@ -99,7 +99,31 @@ const MAX_FULL_FETCH = 50;
 export class TempoBackend implements TelemetryBackend {
   readonly kind = 'tempo' as const;
 
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    /** Auth for hosted stacks (Grafana Cloud basic auth); empty for local. */
+    private readonly headers: Record<string, string> = {},
+    /** Grafana in front of this Tempo, for trace links; Tempo has no UI. */
+    private readonly grafana?: { url: string; datasourceUid: string },
+  ) {}
+
+  traceUrl(traceId: string): string | undefined {
+    if (!this.grafana) return undefined;
+    const datasource = { type: 'tempo', uid: this.grafana.datasourceUid };
+    const panes = {
+      a: {
+        datasource: datasource.uid,
+        queries: [
+          { refId: 'A', datasource, queryType: 'traceql', query: traceId },
+        ],
+        range: { from: 'now-7d', to: 'now' },
+      },
+    };
+    const url = new URL('/explore', this.grafana.url);
+    url.searchParams.set('schemaVersion', '1');
+    url.searchParams.set('panes', JSON.stringify(panes));
+    return url.toString();
+  }
 
   async healthCheck(): Promise<BackendHealth> {
     try {
@@ -108,6 +132,7 @@ export class TempoBackend implements TelemetryBackend {
       params.set('limit', '1');
       await jsonGet<TempoSearchResponse>(
         `${this.baseUrl}/api/search?${params}`,
+        { headers: this.headers },
       );
       return { healthy: true, message: 'Tempo reachable' };
     } catch (error) {
@@ -132,6 +157,7 @@ export class TempoBackend implements TelemetryBackend {
     try {
       const data = await jsonGet<TempoTagValuesResponse>(
         `${this.baseUrl}/api/search/tag/service.name/values`,
+        { headers: this.headers },
       );
       if (data.tagValues && data.tagValues.length > 0) {
         return { services: [...data.tagValues].sort() };
@@ -145,6 +171,7 @@ export class TempoBackend implements TelemetryBackend {
     params.set('limit', '1000');
     const data = await jsonGet<TempoSearchResponse>(
       `${this.baseUrl}/api/search?${params}`,
+      { headers: this.headers },
     );
     const services = new Set<string>();
     for (const trace of data.traces ?? []) {
@@ -159,6 +186,7 @@ export class TempoBackend implements TelemetryBackend {
     params.set('limit', '100');
     const data = await jsonGet<TempoSearchResponse>(
       `${this.baseUrl}/api/search?${params}`,
+      { headers: this.headers },
     );
     const operations = new Set<string>();
     for (const trace of data.traces ?? []) {
@@ -189,6 +217,7 @@ export class TempoBackend implements TelemetryBackend {
 
     const searchResult = await jsonGet<TempoSearchResponse>(
       `${this.baseUrl}/api/search?${params}`,
+      { headers: this.headers },
     );
     const headers = searchResult.traces ?? [];
 
@@ -218,6 +247,7 @@ export class TempoBackend implements TelemetryBackend {
     try {
       const data = await jsonGet<TempoTraceResponse>(
         `${this.baseUrl}/api/traces/${encodeURIComponent(traceId)}`,
+        { headers: this.headers },
       );
       return parseOtlpTrace(data, traceId);
     } catch {

@@ -74,12 +74,17 @@ const UNSUPPORTED_LOG_DETAIL =
 export class PrometheusBackend implements TelemetryBackend {
   readonly kind = 'prometheus' as const;
 
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    /** Auth for hosted stacks (Grafana Cloud basic auth); empty for local. */
+    private readonly headers: Record<string, string> = {},
+  ) {}
 
   async healthCheck(): Promise<BackendHealth> {
     try {
       const info = await jsonGet<PromBuildInfoResponse>(
         `${this.baseUrl}/api/v1/status/buildinfo`,
+        { headers: this.headers },
       );
       if (info.status !== 'success') {
         return {
@@ -111,6 +116,7 @@ export class PrometheusBackend implements TelemetryBackend {
     try {
       const data = await jsonGet<PromLabelValuesResponse>(
         `${this.baseUrl}/api/v1/label/${SERVICE_LABEL}/values`,
+        { headers: this.headers },
       );
       return { services: (data.data ?? []).sort() };
     } catch {
@@ -165,11 +171,13 @@ export class PrometheusBackend implements TelemetryBackend {
     // deployments disable it), so we still swallow its failures.
     const namesRes = await jsonGet<PromLabelValuesResponse>(
       `${this.baseUrl}/api/v1/label/__name__/values`,
+      { headers: this.headers },
     );
     // SAFETY: metadata is optional enrichment, and an empty `data` is the
     // documented shape for "nothing known" - which is what a failure means.
     const metaRes = await jsonGet<PromMetadataResponse>(
       `${this.baseUrl}/api/v1/metadata`,
+      { headers: this.headers },
     ).catch(() => ({ data: {} }) as PromMetadataResponse);
 
     const allNames = namesRes.data ?? [];
@@ -218,6 +226,7 @@ export class PrometheusBackend implements TelemetryBackend {
 
     const data = await jsonGet<PromQueryResponse>(
       `${this.baseUrl}/api/v1/query_range?${params}`,
+      { headers: this.headers },
     );
     if (data.status !== 'success' || !data.data) return [];
 

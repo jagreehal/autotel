@@ -260,16 +260,44 @@ Query an existing Jaeger instance. Traces only (metrics and logs unsupported by 
 AUTOTEL_BACKEND=jaeger JAEGER_BASE_URL=http://localhost:16686 npx autotel-mcp
 ```
 
+### Grafana Cloud
+
+Grafana Cloud is Tempo, Loki and Prometheus behind basic auth, so use the
+`stack` backend with credentials. Each signal has its own URL and user id
+(Stack details page in grafana.com), and one access policy token reads them
+all. Give the token the `traces:read`, `logs:read` and `metrics:read` scopes:
+the OTLP write token your app exports with cannot query.
+
+```bash
+export GRAFANA_CLOUD_TOKEN=glc_...    # access policy token with read scopes
+export TEMPO_BASE_URL=https://tempo-prod-XX-prod-REGION.grafana.net/tempo
+export TEMPO_USERNAME=123456
+export LOKI_BASE_URL=https://logs-prod-XXX.grafana.net
+export LOKI_USERNAME=123457
+export PROMETHEUS_BASE_URL=https://prometheus-prod-XX-prod-REGION.grafana.net/api/prom
+export PROMETHEUS_USERNAME=123458
+export GRAFANA_URL=https://YOUR-STACK.grafana.net   # optional: trace links
+
+AUTOTEL_BACKEND=stack npx autotel-mcp
+```
+
+`backend_health` runs a real query on each signal, so a token without read
+scope fails the health check. A token with no user id
+is sent as a bearer token, for a self-hosted stack behind an auth proxy.
+
 ### Datadog
 
-Query Datadog APM. Traces only, because the spans API carries no metrics or logs.
+Query Datadog APM traces, Logs and Metrics. Logs sent over OTLP keep their
+trace id, so `correlate` returns a trace with its logs. Filtered by service,
+operation or `errorOnly`, `aggregate_spans` runs on Datadog's analytics API and
+covers every span in the window.
 
 Datadog splits its credentials by direction. An API key writes telemetry in. An
 application key reads it back out, and every query here sends both:
 
 ```bash
 export DD_API_KEY=...          # Organization Settings -> API Keys
-export DD_APP_KEY=...          # Organization Settings -> Application Keys, scoped apm_read
+export DD_APP_KEY=...          # Organization Settings -> Application Keys, scoped apm_read, logs_read_data, metrics_read, timeseries_query
 export DD_SITE=datadoghq.eu    # bare site, defaults to datadoghq.com
 
 AUTOTEL_BACKEND=datadog npx autotel-mcp
@@ -285,11 +313,17 @@ AUTOTEL_BACKEND=datadog AUTOTEL_TRANSPORT=http npx autotel-mcp &
 curl -s localhost:3000/health
 ```
 
-A healthy response counts the services Datadog returned and reports `traces:
-available` with metrics and logs `unsupported`. A missing application key fails
+A healthy response counts the services in the APM catalog and reports every
+signal `available`. `list_services` adds every service with spans in the
+last day. A missing application key fails
 the health check and names the variable, so you never read an empty result as
 "no data". HTTP 403 means Datadog accepted the request and refused it: check
 that `DD_SITE` matches the org and that the application key carries `apm_read`.
+
+The spans search API is tightly rate limited, as low as 5 requests a minute per
+org. A trace search costs two requests whatever its `limit`, and a 429 tells
+the agent to wait a minute. Datadog returns at most
+1000 spans per request, so a larger trace comes back with `truncated: true`.
 
 ### Cloudflare
 
@@ -345,12 +379,19 @@ everything.
 | `--tempo-url`          | `TEMPO_BASE_URL`          | `http://localhost:3200`                       | Tempo URL                                       |
 | `--prometheus-url`     | `PROMETHEUS_BASE_URL`     | `http://localhost:9090`                       | Prometheus URL                                  |
 | `--loki-url`           | `LOKI_BASE_URL`           | `http://localhost:3100`                       | Loki URL                                        |
+| `--tempo-user`         | `TEMPO_USERNAME`          | —                                             | Grafana Cloud Tempo user id                     |
+| `--loki-user`          | `LOKI_USERNAME`           | —                                             | Grafana Cloud Loki user id                      |
+| `--prometheus-user`    | `PROMETHEUS_USERNAME`     | —                                             | Grafana Cloud Prometheus user id                |
+| `--grafana-url`        | `GRAFANA_URL`             | —                                             | Grafana fronting Tempo, for trace links         |
+| `--toolsets`           | `AUTOTEL_TOOLSETS`        | `all`                                         | Tool groups to register                         |
+| `--omit-tools`         | `AUTOTEL_OMIT_TOOLS`      | —                                             | Tool names to leave out                         |
 | `--datadog-site`       | `DD_SITE`                 | `datadoghq.com`                               | Datadog region                                  |
 | `--cloudflare-account` | `CLOUDFLARE_ACCOUNT_ID`   | —                                             | Cloudflare account id                           |
 
 Credentials have no flag form. `argv` is readable by any process that can list
 the process table, so `LOGFIRE_READ_TOKEN`, `DD_API_KEY`, `DD_APP_KEY`,
-`SIGNOZ_API_KEY` and `CLOUDFLARE_API_TOKEN` come from the environment only.
+`SIGNOZ_API_KEY`, `CLOUDFLARE_API_TOKEN` and `GRAFANA_CLOUD_TOKEN` come from the
+environment only.
 Passing one as a flag is an error that names the variable to set instead.
 
 An unrecognised flag is reported on stderr and ignored, not treated as an error:
@@ -480,7 +521,26 @@ them can run an investigation without stopping to ask about each query.
 
 ## Tools
 
-41 tools organized by investigation workflow.
+50 tools organized by investigation workflow, when the backend serves traces,
+metrics and logs. Tools for a signal the backend lacks are not registered.
+
+Every tool rejects an argument it does not take, naming it. A result that stops at its
+`limit` carries a `hint` on how to get the rest. Traces carry a `url` into the
+backend's own UI where it has one (Datadog, Jaeger, SigNoz, Tempo through
+Grafana).
+
+Load only the groups you need, so the client spends less context on tool
+descriptions:
+
+```bash
+AUTOTEL_TOOLSETS=core,llm npx autotel-mcp     # core, llm, collector, semconv, estimate; default all
+AUTOTEL_OMIT_TOOLS=service_map npx autotel-mcp
+```
+
+`core` is everything for investigating traces, metrics and logs. `llm` is the
+LLM analytics and `agent_usage`. `collector` and `semconv` are the collector
+config and semantic-convention references; `estimate` is
+`estimate_telemetry_cost`.
 
 <details>
 <summary><b>Discovery (5)</b></summary>
@@ -507,11 +567,20 @@ them can run an investigation without stopping to ask about each query.
 <summary><b>Diagnosis (4)</b></summary>
 
 - **find_anomalies**: Scan for statistical outliers: latency spikes, error rate jumps
-- **find_root_cause**: Walk a trace span tree to identify the bottleneck span
+- **find_root_cause**: The error's origin span, or the span with the most self time (time not spent waiting on child spans), plus the top five self-time spans
 - **find_errors**: Aggregate error spans grouped by service and operation
 - **list_issues**: Failures (thrown and handled exceptions, HTTP 5xx, error logs, log floods, runaway alarms) grouped into issues with status, count, first/last seen, trend, regression, versions and affected users/accounts/sessions
 - **get_issue**: One issue's stack trace, latest trace and its logs, and the service logs around it: the context to hand a coding agent
 - **check_slos**: Report SLO violations given p99 latency and error rate targets
+- **what_changed**: Every service whose `service.version` changed in the window, when, and its error rate and p95 before and after. Built from spans, so it needs no deploy events
+
+</details>
+
+<details>
+<summary><b>Analytics (2)</b></summary>
+
+- **aggregate_spans**: Count, error rate and avg/p50/p95/p99/max latency grouped by service, operation, version or any span attribute, optionally per time bucket. Exact on Datadog (server-side) when filtering by service, operation or errorOnly; any other filter, or a time bucket, uses a sample across the window so every filter applies
+- **aggregate_logs**: Log counts by service, severity or any attribute, with the most frequent message patterns (ids and numbers masked)
 
 </details>
 
@@ -553,7 +622,6 @@ them can run an investigation without stopping to ask about each query.
 <summary><b>Signals (3)</b></summary>
 
 - **list_metrics**: Available metric series
-- **get_metric_series**: Time-series data for a metric
 - **search_logs**: Log search by severity, service, trace ID, text
 
 </details>

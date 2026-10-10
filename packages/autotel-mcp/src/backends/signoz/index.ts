@@ -242,6 +242,13 @@ export class SignozBackend implements TelemetryBackend {
     return { items, totalCount: items.length };
   }
 
+  traceUrl(traceId: string): string {
+    return new URL(
+      `/trace/${encodeURIComponent(traceId)}`,
+      this.baseUrl,
+    ).toString();
+  }
+
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     const endMs = Date.now();
     return this.getTraceInWindow(

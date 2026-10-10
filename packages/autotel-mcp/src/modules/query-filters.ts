@@ -312,7 +312,10 @@ function getTraceFieldValues(trace: TraceRecord, field: string): TagValue[] {
   return values;
 }
 
-function getSpanFieldValues(span: SpanRecord, field: string): TagValue[] {
+export function getSpanFieldValues(
+  span: SpanRecord,
+  field: string,
+): TagValue[] {
   const values: TagValue[] = [];
   const normalized = normalizeField(field);
   if (normalized === 'trace_id') values.push(span.traceId);

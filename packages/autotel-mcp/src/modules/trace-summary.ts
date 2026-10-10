@@ -42,6 +42,7 @@ export function summarizeTrace(trace: TraceRecord): TraceSummary {
 
   return {
     traceId: trace.traceId,
+    ...(trace.truncated ? { truncated: true } : {}),
     serviceName: deriveServiceName(trace),
     durationMs: deriveDurationMs(trace),
     statusCode: deriveStatusCode(trace),

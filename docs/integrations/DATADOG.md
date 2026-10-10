@@ -594,7 +594,9 @@ Datadog splits its credentials by direction:
 | Application key | `DD-APPLICATION-KEY` | Reads telemetry back out.                           | Organization Settings -> Application Keys |
 
 Every read endpoint, `/api/v2/apm/services` and `/api/v2/spans/events` among
-them, requires both headers. Scope the application key `apm_read`.
+them, requires both headers. Scope the application key `apm_read`,
+`logs_read_data`, `metrics_read` and `timeseries_query` to read traces, logs and
+metrics.
 
 An app that only exports to Datadog needs the API key alone, so a working
 `.env` from an exporting service usually lacks the application key. Add it:
@@ -623,11 +625,16 @@ A healthy backend counts the services it found:
   "detail": "12 services available",
   "signals": {
     "traces": "available",
-    "metrics": "unsupported",
-    "logs": "unsupported"
+    "metrics": "available",
+    "logs": "available"
   }
 }
 ```
+
+Filtered by service, operation or `errorOnly`, `aggregate_spans` runs on
+Datadog's spans analytics API, and its counts and percentiles cover every span
+in the window. The spans API allows as few as five
+requests a minute per org: a trace search costs two, a span search one.
 
 To check the credentials alone, ask Datadog directly:
 

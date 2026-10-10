@@ -119,3 +119,19 @@ describe('configuration errors', () => {
     expect(() => loadConfig()).not.toThrow(/"expected":/);
   });
 });
+
+describe('toolsets', () => {
+  it('defaults to every group and splits a list', () => {
+    expect(loadConfig([], {}).toolsets).toEqual(['all']);
+    expect(loadConfig(['--toolsets', 'core, llm'], {}).toolsets).toEqual([
+      'core',
+      'llm',
+    ]);
+  });
+
+  it('rejects an unknown toolset by name', () => {
+    expect(() => loadConfig([], { AUTOTEL_TOOLSETS: 'cor' })).toThrow(
+      /unknown toolset "cor"/,
+    );
+  });
+});

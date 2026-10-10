@@ -56,6 +56,8 @@ export interface SpanRecord {
 export interface TraceRecord {
   traceId: string;
   spans: SpanRecord[];
+  /** The backend capped the span page, so this trace is missing spans. */
+  truncated?: boolean;
 }
 
 // Search queries
@@ -134,6 +136,11 @@ export interface SearchResult<T> {
   totalCount: number;
   unsupported?: boolean;
   detail?: string;
+  /**
+   * The backend's page filled before local filtering, so more matches may
+   * exist. Absent means the caller judges by `items.length` against its limit.
+   */
+  truncated?: boolean;
 }
 
 export type TraceSearchResult = SearchResult<TraceRecord>;
@@ -211,6 +218,8 @@ export interface TraceSummary {
   modelsUsed: string[];
   serviceCount: number;
   topOperations: Array<{ operation: string; count: number }>;
+  /** Counts cover only the spans the backend returned. */
+  truncated?: boolean;
 }
 
 // Instrumentation
