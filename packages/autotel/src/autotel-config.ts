@@ -300,7 +300,9 @@ export interface AutotelConfig {
    *
    * Unlike {@link spanProcessors}, which replaces the pipeline autotel would
    * have built, these are added to it. Use them for processors that enrich
-   * rather than export, so `destinations` keeps working:
+   * rather than export, so `destinations` keeps working. On flush and
+   * shutdown they drain before the exporters do, so a span an enricher ends
+   * while draining is still exported:
    *
    * @example
    * ```typescript

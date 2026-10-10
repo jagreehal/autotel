@@ -103,13 +103,13 @@
     if (deepLink) applyNav(deepLink);
   });
 
-  // Apply the pending deep-link once its trace has arrived over the wire.
+  // Apply the pending deep-link once its trace has arrived over the wire. The
+  // tab is the caller's (applyNav, MetricsView), so a GenAI link stays on GenAI.
   $effect(() => {
     const target = pendingDeepLinkSignal.value;
     if (!target) return;
     if (!tracesSignal.value.some((t) => t.traceId === target.traceId)) return;
     setSelectedTrace(target.traceId, target.spanId ?? null);
-    setSelectedTab('traces');
     pendingDeepLinkSignal.value = null;
   });
 

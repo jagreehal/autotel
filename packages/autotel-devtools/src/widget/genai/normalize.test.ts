@@ -2,9 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { toGenAiSpan } from './normalize';
-import { isGenAiSpan } from './detect';
-import { buildToolResultIndex, hydrateToolResults } from './stitch';
+import { toGenAiSpan, unwrapMcpToolResult } from './normalize';
+import { isGenAiSpan, findMcpServerToolHalves } from './detect';
+import {
+  buildToolResultIndex,
+  hydrateToolResults,
+  mergeServerToolSpan,
+} from './stitch';
 import type { SpanData } from '../types';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -943,5 +947,179 @@ describe('summarizeRun — reported cost counts as priced', () => {
     expect(summary.totalCostUsd).toBeCloseTo(0.0075, 9);
     expect(summary.costKnown).toBe(true);
     expect(summary.costComplete).toBe(true);
+  });
+});
+
+describe('toGenAiSpan — execute_tool arguments and result', () => {
+  const span = (attributes: SpanData['attributes']): SpanData => ({
+    traceId: 't',
+    spanId: 's',
+    name: 'execute_tool sample_documents',
+    kind: 'INTERNAL',
+    startTime: 0,
+    endTime: 0,
+    duration: 0,
+    status: { code: 'UNSET' },
+    attributes: {
+      'gen_ai.operation.name': 'execute_tool',
+      'gen_ai.tool.name': 'sample_documents',
+      'gen_ai.tool.call.id': 'call_1',
+      ...attributes,
+    },
+  });
+
+  it('parses JSON arguments and result onto tool', () => {
+    const n = toGenAiSpan(
+      span({
+        'gen_ai.tool.call.arguments': '{"collection":"Payment","limit":2}',
+        'gen_ai.tool.call.result': '{"content":[{"type":"text","text":"[]"}]}',
+      }),
+    );
+    expect(n.tool).toEqual({
+      name: 'sample_documents',
+      callId: 'call_1',
+      arguments: { collection: 'Payment', limit: 2 },
+      result: { content: [{ type: 'text', text: '[]' }] },
+    });
+    expect(n.extras.raw['gen_ai.tool.call.result']).toBeUndefined();
+  });
+
+  it('keeps a plain-text result as text', () => {
+    const n = toGenAiSpan(span({ 'gen_ai.tool.call.result': 'not json' }));
+    expect(n.tool?.result).toBe('not json');
+    expect(n.tool?.arguments).toBeUndefined();
+  });
+});
+
+describe('unwrapMcpToolResult', () => {
+  it('parses JSON text parts', () => {
+    expect(
+      unwrapMcpToolResult({
+        _meta: {},
+        content: [{ type: 'text', text: '[{"a":1}]' }],
+      }),
+    ).toEqual([{ a: 1 }]);
+  });
+
+  it('prefers structuredContent, keeps errors, passes other values through', () => {
+    expect(
+      unwrapMcpToolResult({
+        content: [{ type: 'text', text: 'x' }],
+        structuredContent: { n: 2 },
+      }),
+    ).toEqual({ n: 2 });
+    expect(
+      unwrapMcpToolResult({
+        isError: true,
+        content: [{ type: 'text', text: 'denied' }],
+      }),
+    ).toEqual({ error: 'denied' });
+    const image = { content: [{ type: 'image', data: '' }] };
+    expect(unwrapMcpToolResult(image)).toBe(image);
+    expect(unwrapMcpToolResult('plain')).toBe('plain');
+  });
+});
+
+describe('findMcpServerToolHalves + mergeServerToolSpan', () => {
+  const tool = (
+    spanId: string,
+    name: string,
+    opts: {
+      parent?: string;
+      kind?: SpanData['kind'];
+      callId?: string;
+      mcp?: boolean;
+      attrs?: SpanData['attributes'];
+    } = {},
+  ): SpanData => ({
+    traceId: 't',
+    spanId,
+    parentSpanId: opts.parent,
+    name,
+    kind: opts.kind ?? 'INTERNAL',
+    startTime: 0,
+    endTime: 0,
+    duration: 0,
+    status: { code: 'UNSET' },
+    attributes: {
+      'gen_ai.operation.name': 'execute_tool',
+      'gen_ai.tool.name': name,
+      ...(opts.callId ? { 'gen_ai.tool.call.id': opts.callId } : {}),
+      ...(opts.mcp ? { 'mcp.method.name': 'tools/call' } : {}),
+      ...opts.attrs,
+    },
+  });
+  const server = (spanId: string, parent: string, extra = {}) =>
+    tool(spanId, 'aggregate', { parent, kind: 'SERVER', mcp: true, ...extra });
+
+  it('pairs an MCP server tools/call with the client tool span above it', () => {
+    const spans = [
+      tool('c', 'aggregate', { callId: 'call_1' }),
+      server('s', 'c'),
+    ];
+    expect(findMcpServerToolHalves(spans)).toEqual(new Map([['s', 'c']]));
+  });
+
+  it('leaves recursive and repeated executions alone', () => {
+    // A tool calling itself in-process: no server end.
+    const recursive = [
+      tool('a', 'aggregate', { callId: 'call_1' }),
+      tool('b', 'aggregate', { parent: 'a', callId: 'call_2' }),
+    ];
+    expect(findMcpServerToolHalves(recursive).size).toBe(0);
+    // Server span carrying a different call id.
+    const conflicting = [
+      tool('c', 'aggregate', { callId: 'call_1' }),
+      server('s', 'c', { callId: 'call_2' }),
+    ];
+    expect(findMcpServerToolHalves(conflicting).size).toBe(0);
+    // One client span that made two MCP calls.
+    const twice = [
+      tool('c', 'aggregate'),
+      server('s1', 'c'),
+      server('s2', 'c'),
+    ];
+    expect(findMcpServerToolHalves(twice).size).toBe(0);
+    // A different tool under the client.
+    const other = [
+      tool('c', 'find'),
+      tool('s', 'aggregate', { parent: 'c', kind: 'SERVER', mcp: true }),
+    ];
+    expect(findMcpServerToolHalves(other).size).toBe(0);
+  });
+
+  it('merges what only the server captured into the client row', () => {
+    const client = toGenAiSpan(tool('c', 'aggregate', { callId: 'call_1' }));
+    const serverSpan = toGenAiSpan({
+      ...server('s', 'c', {
+        attrs: {
+          'gen_ai.tool.call.arguments': '{"collection":"Payment"}',
+          'gen_ai.tool.call.result': '{"content":[]}',
+        },
+      }),
+      status: { code: 'ERROR', message: 'denied' },
+    });
+    mergeServerToolSpan(client, serverSpan);
+    expect(client.tool).toMatchObject({
+      name: 'aggregate',
+      callId: 'call_1',
+      arguments: { collection: 'Payment' },
+      result: { content: [] },
+    });
+    expect(client.status).toBe('error');
+    expect(client.errorMessage).toBe('denied');
+  });
+
+  it("takes the server's error message when the client has none", () => {
+    const client = toGenAiSpan({
+      ...tool('c', 'aggregate'),
+      status: { code: 'ERROR' },
+    });
+    const serverSpan = toGenAiSpan({
+      ...server('s', 'c'),
+      status: { code: 'ERROR', message: 'collection is denied' },
+    });
+    mergeServerToolSpan(client, serverSpan);
+    expect(client.errorMessage).toBe('collection is denied');
   });
 });

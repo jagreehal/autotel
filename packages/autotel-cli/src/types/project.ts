@@ -149,6 +149,10 @@ export interface MapOptions extends GlobalOptions {
   /** Write `autotel.map.json`. */
   write: boolean;
   json: boolean;
+  /** `human` (default), `json` (same as `--json`), or `github` (workflow annotations). */
+  format?: string;
+  /** Most annotations `--format github` emits. */
+  limit?: string;
   outputFile?: string;
 }
 

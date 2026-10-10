@@ -9,7 +9,7 @@
  * For all other providers, uses the standard ai SDK streamText.
  */
 import type { LanguageModel } from 'ai';
-import type { AIProviderType } from './types';
+import type { AIModelResult } from './provider';
 
 /** A tool as the AI SDK takes one: a description plus a parameter schema. */
 type AiTool = {
@@ -32,7 +32,7 @@ type StreamResult = {
 };
 
 export async function providerStreamText(
-  providerType: AIProviderType,
+  providerType: AIModelResult['providerType'],
   params: StreamTextParams,
 ): Promise<StreamResult> {
   if (providerType === 'ollama') {

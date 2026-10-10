@@ -117,6 +117,12 @@ export interface AgentSecuritySignals {
   securityEvent?: string;
 }
 
+/** A span's identity: span ids are only unique within their trace. */
+export interface SpanRef {
+  traceId: string;
+  spanId: string;
+}
+
 export interface GenAiSpan {
   traceId: string;
   spanId: string;
@@ -168,7 +174,13 @@ export interface GenAiSpan {
   agent?: { id?: string; name?: string; description?: string };
   // The executed tool, on `execute_tool` spans (`gen_ai.tool.*`). Distinct from
   // `toolCalls` (a model's *requests* to call tools) and from `agent`.
-  tool?: { name?: string; callId?: string };
+  // `arguments`/`result` come from `gen_ai.tool.call.{arguments,result}` (opt-in content).
+  tool?: {
+    name?: string;
+    callId?: string;
+    arguments?: unknown;
+    result?: unknown;
+  };
   handoff?: { fromAgent?: string; toAgent?: string };
   guardrail?: { name?: string; triggered?: boolean };
   conversationId?: string;

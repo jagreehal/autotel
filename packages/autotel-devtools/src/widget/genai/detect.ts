@@ -19,3 +19,47 @@ export function isGenAiSpan(span: SpanData): boolean {
   }
   return false;
 }
+
+const toolOf = (s: SpanData) =>
+  s.attributes?.['gen_ai.operation.name'] === 'execute_tool'
+    ? s.attributes['gen_ai.tool.name']
+    : undefined;
+
+/**
+ * MCP server tool spans that are the far end of a client tool span, as
+ * server spanId → client spanId. Such a pair is one call seen from both ends
+ * (the server's `tools/call` under the client's `execute_tool`), so the GenAI
+ * list shows it once. A pair needs evidence of both ends (a SERVER-kind
+ * `tools/call` under a non-server tool span), the same tool name, no
+ * conflicting call ids, and must be the client's only such child: a tool that
+ * calls itself, or calls twice, is several executions and is left alone.
+ */
+export function findMcpServerToolHalves(
+  spans: SpanData[],
+): Map<string, string> {
+  const byId = new Map(spans.map((s) => [s.spanId, s]));
+  const byClient = new Map<string, string[]>();
+  for (const server of spans) {
+    if (server.kind !== 'SERVER') continue;
+    if (server.attributes?.['mcp.method.name'] !== 'tools/call') continue;
+    const client = server.parentSpanId
+      ? byId.get(server.parentSpanId)
+      : undefined;
+    if (!client || client.kind === 'SERVER') continue;
+    const name = toolOf(server);
+    if (name == null || name !== toolOf(client)) continue;
+    const serverCall = server.attributes['gen_ai.tool.call.id'];
+    const clientCall = client.attributes['gen_ai.tool.call.id'];
+    if (serverCall != null && clientCall != null && serverCall !== clientCall)
+      continue;
+    byClient.set(client.spanId, [
+      ...(byClient.get(client.spanId) ?? []),
+      server.spanId,
+    ]);
+  }
+  const halves = new Map<string, string>();
+  for (const [client, servers] of byClient) {
+    if (servers.length === 1) halves.set(servers[0], client);
+  }
+  return halves;
+}

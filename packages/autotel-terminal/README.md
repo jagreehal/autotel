@@ -57,7 +57,28 @@ Port 4319 is used by default to avoid clashing with the standard OTLP port (4318
 -t, --title <title>  Dashboard title (env: AUTOTEL_TERMINAL_TITLE)
 -h, --help           Show help message
 -v, --version        Show version number
+--model <spec>       AI assistant model (env: AI_MODEL), see below
+--base-url <url>     Endpoint for the model (env: AI_BASE_URL)
+--ai-api-key <key>   API key, overriding the provider's own variable (env: AI_API_KEY)
 ```
+
+### AI assistant: bring your own model
+
+Press `a` in the dashboard to ask questions about the telemetry. There is no
+default remote model and no shared key: you pick the model, and its provider
+reads its own key from the environment.
+
+| `--model`                                                     | Provider                | Key                                          | Install                     |
+| ------------------------------------------------------------- | ----------------------- | -------------------------------------------- | --------------------------- |
+| `openai/gpt-5` (or `gateway:openai/gpt-5`)                    | Vercel AI Gateway       | `AI_GATEWAY_API_KEY`, or a Vercel OIDC token | nothing extra               |
+| `openai:gpt-5`                                                | OpenAI                  | `OPENAI_API_KEY`                             | `@ai-sdk/openai`            |
+| `openai-compatible:qwen3 --base-url http://localhost:1234/v1` | Any OpenAI-style server | `AI_API_KEY` if it needs one                 | `@ai-sdk/openai-compatible` |
+| `ollama:granite4`                                             | Local Ollama            | none                                         | `ai-sdk-ollama`             |
+
+With no model set, a local Ollama is used when one answers (model `granite4`);
+otherwise the assistant stays off. A provider whose package is missing says
+which package to install. `--ai-provider`/`--ai-model` and `AI_PROVIDER`/`AI_MODEL`
+still work.
 
 ### OTLP Endpoints
 
@@ -273,7 +294,21 @@ interface TerminalOptions {
 
   /** Enable colors (default: true if TTY) */
   colors?: boolean;
+
+  /**
+   * AI assistant model: any AI SDK model, used as-is, or a `--model` spec
+   * string. Unset: a local Ollama if one answers, else no assistant.
+   */
+  ai?: { model?: LanguageModel | string; apiKey?: string; baseUrl?: string };
 }
+```
+
+Any AI SDK provider works, since the model is passed in:
+
+```typescript
+import { anthropic } from '@ai-sdk/anthropic';
+
+renderTerminal({ ai: { model: anthropic('claude-sonnet-5-5') } }, stream);
 ```
 
 **Example:**

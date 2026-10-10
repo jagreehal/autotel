@@ -748,7 +748,11 @@ describe('init() customization', () => {
     const options = sdkInstances.at(-1)!.options;
     // SAFETY: init() passes the processors it built; the assertions below are
     // about which ones ended up in that list.
-    const processors = options.spanProcessors as SpanProcessor[];
+    const [top, ...rest] = options.spanProcessors as SpanProcessor[];
+    expect(rest).toEqual([]);
+    // One composite, so the enrichers drain before the exporters shut down.
+    const processors = (top as unknown as { processors: SpanProcessor[] })
+      .processors;
     expect(processors[0]).toBe(enricher);
     expect(processors.length).toBeGreaterThan(1);
   });
@@ -817,7 +821,9 @@ describe('init() customization', () => {
     const options = sdkInstances.at(-1)!.options;
     // SAFETY: init() passes the processors it built; the assertions below are
     // about which ones ended up in that list.
-    const processors = options.spanProcessors as SpanProcessor[];
+    const [top] = options.spanProcessors as SpanProcessor[];
+    const processors = (top as unknown as { processors: SpanProcessor[] })
+      .processors;
     // Identity, not just position: the enricher reaches the SDK unwrapped, so
     // it mutates the real span. Compared by constructor name because
     // `vi.resetModules()` gives `init` its own copy of the class.

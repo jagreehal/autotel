@@ -2,15 +2,15 @@
   import { Bot, ArrowRight, Cpu, AlertTriangle, Shield } from '@lucide/svelte';
   import { cn } from '../../utils/cn';
   import { formatDuration } from '../../utils';
-  import type { GenAiSpan } from '../../genai/types';
+  import type { GenAiSpan, SpanRef } from '../../genai/types';
 
   interface Props {
     rows: Array<{ normalized: GenAiSpan; service: string; traceId: string }>;
-    onSelectSpan?: (spanId: string) => void;
-    selectedSpanId?: string | null;
+    onSelectSpan?: (span: SpanRef) => void;
+    selected?: SpanRef | null;
   }
 
-  let { rows, onSelectSpan, selectedSpanId }: Props = $props();
+  let { rows, onSelectSpan, selected }: Props = $props();
 
   interface Group {
     conversationId: string;
@@ -190,7 +190,7 @@
           <div
             class="relative flex-1 h-6 bg-subtle border border-line-subtle rounded"
           >
-            {#each spans as s (s.spanId)}
+            {#each spans as s (`${s.traceId}:${s.spanId}`)}
               {@const leftPct =
                 ((s.startMs - group.startMs) / lanes.durationMs) * 100}
               {@const widthPct = Math.max(
@@ -198,12 +198,14 @@
                 ((s.endMs - s.startMs) / lanes.durationMs) * 100,
               )}
               {@const errored = s.status === 'error'}
-              {@const active = s.spanId === selectedSpanId}
+              {@const active =
+                s.spanId === selected?.spanId &&
+                s.traceId === selected?.traceId}
               {@const isWrapper =
                 lanes.wrapperIdsByLane.get(lane)?.has(s.spanId) ?? false}
               <button
                 type="button"
-                onclick={() => onSelectSpan?.(s.spanId)}
+                onclick={() => onSelectSpan?.(s)}
                 title={`${s.operation} · ${formatDuration(s.endMs - s.startMs)}${s.usage.inputTokens != null ? ` · ${s.usage.inputTokens}→${s.usage.outputTokens ?? '—'}` : ''}${isWrapper ? ' (wraps children)' : ''}`}
                 class={cn(
                   'absolute top-0.5 bottom-0.5 rounded text-[10px] font-mono px-1 truncate flex items-center gap-1 transition-all',

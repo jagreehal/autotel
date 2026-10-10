@@ -124,4 +124,6 @@ const config: AttributeRedactorConfig = {
 init({ attributeRedactor: config });
 ```
 
+Each key pattern is tested against the full key and its last dot segment, so `/^x-internal-/i` also matches `http.request.header.x-internal-id`. String arrays under a matching key have each element replaced.
+
 For free-text fields outside the span pipeline (logs, error messages, frontend payloads), use `createStringRedactor('default')`. Same masks, returns a `(s: string) => string`.

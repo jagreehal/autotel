@@ -12,6 +12,7 @@ import {
   writeMapFile,
   type BaselineComparison,
 } from '../lib/map/baseline';
+import { formatGithubAnnotations } from '../lib/map/github';
 import { collectProjectFacts } from '../lib/map/project-facts';
 import {
   findEntry,
@@ -59,6 +60,55 @@ function parseMinScore(value: string | undefined): number | undefined {
     });
   }
   return threshold;
+}
+
+const FORMATS = ['human', 'json', 'github'] as const;
+type MapFormat = (typeof FORMATS)[number];
+
+/**
+ * Read `--format`, with `--json` as the long-standing spelling of `--format
+ * json`. Two formats cannot share stdout, so asking for both is refused rather
+ * than letting one silently win.
+ */
+function parseFormat(value: string | undefined, json: boolean): MapFormat {
+  if (value === undefined || value === '') return json ? 'json' : 'human';
+  const format = FORMATS.find((name) => name === value);
+  if (!format) {
+    throw new AutotelError({
+      type: 'validation',
+      code: AutotelErrorCodes.E_INVALID_FLAG,
+      message: `Unknown --format "${value}"`,
+      fix: `Pass one of: ${FORMATS.join(', ')}`,
+      expected: { formats: [...FORMATS] },
+    });
+  }
+  if (json && format !== 'json') {
+    throw new AutotelError({
+      type: 'validation',
+      code: AutotelErrorCodes.E_INVALID_FLAG,
+      message: `--json and --format ${format} both claim stdout`,
+      fix: 'Drop --json, or pass --format json',
+    });
+  }
+  return format;
+}
+
+/** GitHub's cap: it keeps this many annotations per level per step and drops the rest. */
+export const DEFAULT_ANNOTATION_LIMIT = 10;
+
+/** Read `--limit`; the whole string has to parse, for the same reason as `--min-score`. */
+function parseLimit(value: string | undefined): number {
+  if (value === undefined || value === '') return DEFAULT_ANNOTATION_LIMIT;
+  const limit = Number(value);
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new AutotelError({
+      type: 'validation',
+      code: AutotelErrorCodes.E_INVALID_FLAG,
+      message: `--limit expects a whole number of 1 or more, got "${value}"`,
+      fix: 'Pass e.g. --limit 10',
+    });
+  }
+  return limit;
 }
 
 /** What resolveFramework() answers with. */
@@ -213,10 +263,36 @@ export function runMap(options: MapOptions): void {
   /* Before the scan, not after: an unusable threshold should cost nothing, and
      validating it afterwards means reading the whole project and writing
      autotel.map.json before admitting it cannot gate on the result. */
+  const format = parseFormat(options.format, options.json);
+  const limit = parseLimit(options.limit);
   const minScore = parseMinScore(options.minScore);
   const result = runMapScan(options);
 
-  if (options.json) {
+  const human = () =>
+    formatMapResult(result, {
+      all: options.all,
+      ...(options.entry !== undefined ? { entry: options.entry } : {}),
+      ...(minScore !== undefined ? { minScore } : {}),
+    });
+
+  if (format === 'github') {
+    /* Annotations are the stdout contract; the report goes to stderr so the
+       job log reads the same as a local run. */
+    process.stdout.write(
+      `${formatGithubAnnotations(
+        result.scan,
+        result.baseline,
+        {
+          projectRoot: result.projectRoot,
+          ...(process.env.GITHUB_WORKSPACE
+            ? { workspace: process.env.GITHUB_WORKSPACE }
+            : {}),
+        },
+        { limit, ...(minScore !== undefined ? { minScore } : {}) },
+      )}\n`,
+    );
+    process.stderr.write(`${human()}\n`);
+  } else if (format === 'json') {
     printJson({
       ok: true,
       command: 'map',
@@ -231,13 +307,7 @@ export function runMap(options: MapOptions): void {
       map: result.scan.map,
     });
   } else {
-    process.stdout.write(
-      `${formatMapResult(result, {
-        all: options.all,
-        ...(options.entry !== undefined ? { entry: options.entry } : {}),
-        ...(minScore !== undefined ? { minScore } : {}),
-      })}\n`,
-    );
+    process.stdout.write(`${human()}\n`);
   }
 
   if (minScore !== undefined && result.scan.map.score < minScore) {

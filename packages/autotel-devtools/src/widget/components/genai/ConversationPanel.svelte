@@ -189,11 +189,30 @@
   </div>
 {/snippet}
 
-{#if span.messages.length === 0}
+{#if span.operation === 'execute_tool' && (span.tool?.arguments !== undefined || span.tool?.result !== undefined)}
+  <div class="p-3">
+    {#key span.spanId}
+      <ToolCallCard
+        open
+        call={{
+          id: span.tool.callId,
+          name: span.tool.name ?? span.name,
+          arguments: span.tool.arguments,
+          result: span.tool.result,
+        }}
+      />
+    {/key}
+  </div>
+{:else if span.messages.length === 0}
   {#if span.operation === 'execute_handoff' || span.handoff}
     {@render handoffPanel(span)}
   {:else if span.operation === 'invoke_agent' || span.operation === 'create_agent'}
     {@render agentRunPanel(span)}
+  {:else if span.operation === 'execute_tool'}
+    <div class="p-4 text-sm text-fg-subtle italic">
+      No tool arguments or result on this span. Enable content capture in your
+      instrumentation to see them.
+    </div>
   {:else}
     <div class="p-4 text-sm text-fg-subtle italic">
       No conversation payload on this span. Enable content capture (<code

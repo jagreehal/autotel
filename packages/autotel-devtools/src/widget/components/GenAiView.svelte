@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { GenAiSpan } from '../genai/types';
+  import type { GenAiSpan, SpanRef } from '../genai/types';
   import { formatTokenCounts, formatCostUsd } from '../utils/genaiFormat';
   import { formatDuration } from '../utils';
   import { groupRuns } from '../genai/summary';
@@ -10,12 +10,15 @@
   // one agent run rather than the whole capture buffer.
   function runRowsFor(
     rows: Array<{ normalized: GenAiSpan; traceId: string }>,
-    spanId: string | undefined,
+    span: SpanRef | undefined,
   ): Array<{ normalized: GenAiSpan; traceId: string }> {
-    if (!spanId) return [];
+    if (!span) return [];
     const runs = groupRuns(rows);
     const run = runs.find((r) =>
-      r.rows.some((row) => row.normalized.spanId === spanId),
+      r.rows.some(
+        (row) =>
+          row.traceId === span.traceId && row.normalized.spanId === span.spanId,
+      ),
     );
     return run?.rows ?? [];
   }
@@ -25,7 +28,7 @@
   }
 
   function formatCost(cost: GenAiSpan['cost']): string {
-    return formatCostUsd(cost?.total, cost?.source === 'table');
+    return formatCostUsd(cost?.total, cost?.source !== 'unknown');
   }
 
   type Mode = 'list' | 'timeline' | 'trace';
@@ -63,6 +66,9 @@
   import { Sparkles } from '@lucide/svelte';
   import {
     genAiRowsSignal,
+    selectedSpanIdSignal,
+    selectedTraceIdSignal,
+    setSelectedTrace,
     openSpanInWaterfall,
     genaiQuerySignal,
   } from '../store.svelte';
@@ -81,7 +87,21 @@
   import { cn } from '../utils/cn';
 
   const rows = $derived(genAiRowsSignal.value);
-  let selectedSpanId = $state<string | null>(null);
+  // The global selection, so the URL names the GenAI span and a shared link
+  // reopens it. Matched on trace and span: span ids are unique only per trace.
+  const selectedRow = $derived(
+    rows.find(
+      (r) =>
+        r.traceId === selectedTraceIdSignal.value &&
+        (r.normalized.spanId === selectedSpanIdSignal.value ||
+          r.serverSpanId === selectedSpanIdSignal.value),
+    ),
+  );
+  const selectedSpanId = $derived(selectedRow?.normalized.spanId ?? null);
+  function select(span: SpanRef | null): void {
+    if (span) setSelectedTrace(span.traceId, span.spanId);
+    else selectedSpanIdSignal.value = null;
+  }
   let mode = $state<Mode>('list');
   // Global so the full-page UI reflects it in the shareable URL.
   const query = $derived(genaiQuerySignal.value);
@@ -96,16 +116,16 @@
     // No row focused + Up jumps to the last span (Traces/Errors go to the first).
     fromUnsetUp: 'last',
     onActivate: (index) => {
-      selectedSpanId = filtered[index].normalized.spanId;
+      select(filtered[index].normalized);
     },
     scrollToIndex: (index) =>
       rowEls[index]?.scrollIntoView({ block: 'nearest' }),
   });
   const isFiltered = $derived(query.length > 0);
   const selected = $derived(
-    filtered.find((r) => r.normalized.spanId === selectedSpanId) ??
+    (selectedRow && filtered.includes(selectedRow) ? selectedRow : undefined) ??
       filtered[0] ??
-      rows.find((r) => r.normalized.spanId === selectedSpanId) ??
+      selectedRow ??
       rows[0],
   );
   const hasConversations = $derived(
@@ -121,12 +141,7 @@
 
   // The agent run (conversation group) the selected span belongs to. Scopes
   // both the summary strip and the guided tour to one run.
-  const runRows = $derived(
-    runRowsFor(
-      rows,
-      selected?.normalized.spanId ?? selectedSpanId ?? undefined,
-    ),
-  );
+  const runRows = $derived(runRowsFor(rows, selected?.normalized));
   const runSummary = $derived(summarizeRun(runRows.map((r) => r.normalized)));
   const runTrace = $derived(buildRunTrace(runRows.map((r) => r.normalized)));
 
@@ -144,7 +159,7 @@
     // The tour narrates the detail panes, which live in list mode.
     mode = 'list';
     // Ensure single-column mode shows the detail pane during the tour.
-    if (selectedSpanId === null) selectedSpanId = runRows[0].normalized.spanId;
+    if (selectedSpanId === null) select(runRows[0].normalized);
     tourIndex = 0;
     tourActive = true;
   }
@@ -156,10 +171,8 @@
   // tour is open just moves the tour to that step, handled in the list).
   $effect(() => {
     if (!tourActive) return;
-    const stepSpanId = tourSteps[tourIndex]?.span.spanId;
-    if (stepSpanId && stepSpanId !== selectedSpanId) {
-      selectedSpanId = stepSpanId;
-    }
+    const step = tourSteps[tourIndex]?.span;
+    if (step && step !== selectedRow?.normalized) select(step);
   });
 </script>
 
@@ -251,9 +264,9 @@
     <div class="flex-1 overflow-hidden">
       <AgentTimeline
         {rows}
-        selectedSpanId={selected?.normalized.spanId ?? null}
-        onSelectSpan={(id) => {
-          selectedSpanId = id;
+        selected={selected?.normalized ?? null}
+        onSelectSpan={(span) => {
+          select(span);
           mode = 'list';
         }}
       />
@@ -274,9 +287,9 @@
       {:else}
         <RunTraceView
           nodes={runTrace}
-          selectedSpanId={selected?.normalized.spanId ?? null}
-          onSelectSpan={(id) => {
-            selectedSpanId = id;
+          selected={selected?.normalized ?? null}
+          onSelectSpan={(span) => {
+            select(span);
             mode = 'list';
           }}
         />
@@ -315,7 +328,7 @@
           <div class="flex items-center justify-between px-3 pt-2">
             <button
               type="button"
-              onclick={() => (selectedSpanId = null)}
+              onclick={() => select(null)}
               class="@md:hidden inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-fg-subtle hover:text-fg hover:bg-hover transition-colors"
             >
               <ArrowLeft size={11} />
@@ -381,8 +394,8 @@
     {#if filtered.length === 0}
       <li class="px-3 py-6 text-xs text-fg-subtle text-center">No matches</li>
     {/if}
-    {#each filtered as row, i (row.normalized.spanId)}
-      {@const active = row.normalized.spanId === selected?.normalized.spanId}
+    {#each filtered as row, i (`${row.traceId}:${row.normalized.spanId}`)}
+      {@const active = row === selected}
       {@const errored = row.normalized.status === 'error'}
       {@const label = spanLabel(row.normalized)}
       <li role="option" aria-selected={active}>
@@ -392,12 +405,12 @@
           data-row-index={i}
           onclick={() => {
             nav.cursor = i;
-            selectedSpanId = row.normalized.spanId;
+            select(row.normalized);
             // During a tour, clicking a span jumps the narration to that step
             // rather than fighting the step→selection sync.
             if (tourActive) {
               const stepIdx = tourSteps.findIndex(
-                (s) => s.span.spanId === row.normalized.spanId,
+                (s) => s.span === row.normalized,
               );
               if (stepIdx >= 0) tourIndex = stepIdx;
             }

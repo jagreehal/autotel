@@ -81,7 +81,11 @@ export type BuiltinPatternName = keyof typeof builtinPatterns;
  * Attribute redactor configuration
  */
 export interface AttributeRedactorConfig {
-  /** Patterns to match against attribute keys (redacts entire value if key matches) */
+  /**
+   * Patterns to match against attribute keys (redacts entire value if key matches).
+   * Each is tested against the full key and against its last dot segment, so
+   * `/^password$/i` matches `password` and `user.password`.
+   */
   keyPatterns?: RegExp[];
 
   /** Patterns to match against attribute values (redacts matched portion) */
@@ -412,6 +416,22 @@ function resolveConfig(
 }
 
 /**
+ * A key pattern matches the full attribute key or its last dot segment, so an
+ * anchored name pattern (`^password$`) also catches `user.password` and
+ * `http.request.header.authorization`. Only the last segment: `auth.method`
+ * names metadata about auth, not a credential.
+ */
+function keyIsSensitive(key: string, keyPatterns: RegExp[]): boolean {
+  const lastSegment = key.slice(key.lastIndexOf('.') + 1);
+  return keyPatterns.some((pattern) => {
+    pattern.lastIndex = 0;
+    if (pattern.test(key)) return true;
+    pattern.lastIndex = 0;
+    return lastSegment !== key && pattern.test(lastSegment);
+  });
+}
+
+/**
  * Create a redactor function from config
  */
 function createRedactorFromConfig(
@@ -439,17 +459,19 @@ function createRedactorFromConfig(
     // Numbers, booleans and other non-string attributes are not credentials;
     // replacing them with the string '[REDACTED]' silently changes their
     // type and corrupts downstream consumers (LLM token counters etc.).
+    // String arrays count too: semconv headers (`http.request.header.*`) are
+    // string[], and each element is replaced so the type survives.
     const text = asString(value);
-    if (text !== undefined) {
-      for (const pattern of keyPatterns) {
-        pattern.lastIndex = 0;
-        if (pattern.test(key)) {
-          return defaultReplacement;
-        }
-      }
-      if (pathSet.has(key)) {
-        return defaultReplacement;
-      }
+    const isStringArray =
+      Array.isArray(value) &&
+      value.every((item) => asString(item) !== undefined);
+    if (
+      (text !== undefined || isStringArray) &&
+      (keyIsSensitive(key, keyPatterns) || pathSet.has(key))
+    ) {
+      return Array.isArray(value)
+        ? value.map(() => defaultReplacement)
+        : defaultReplacement;
     }
 
     // For non-string values, return as-is

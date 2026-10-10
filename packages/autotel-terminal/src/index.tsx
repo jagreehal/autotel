@@ -86,12 +86,8 @@ import { buildErrorSummaries } from './lib/error-model';
 import { buildServiceGraph } from './lib/topology-model';
 import { renderTopologyAscii } from './lib/topology-render';
 import { exportTraceToJson } from './lib/export-model';
-import type { AIConfig, ChatMessage, AIState } from './ai/types';
-import {
-  resolveConfigWithAutoDetect,
-  createAIModel,
-  type AIModelResult,
-} from './ai/provider';
+import type { AIOptions, ChatMessage, AIState } from './ai/types';
+import { resolveAIModel, MODEL_HINT, type AIModelResult } from './ai/provider';
 import { buildSystemPrompt } from './ai/system-prompt';
 import { createTelemetryTools, type ToolContext } from './ai/tools';
 import { providerStreamText } from './ai/stream';
@@ -146,9 +142,11 @@ export interface TerminalOptions {
   colors?: boolean;
 
   /**
-   * AI assistant configuration. Auto-detects Ollama/OpenAI if not provided.
+   * AI assistant model: any AI SDK model (`{ model: openai('gpt-5') }`), or a
+   * spec (`{ model: 'ollama:granite4' }`). Uses a local Ollama when it answers
+   * and nothing is set; otherwise the assistant stays off.
    */
-  ai?: Partial<AIConfig>;
+  ai?: AIOptions;
 }
 
 const THROTTLE_MS = 50;
@@ -164,7 +162,7 @@ interface DashboardProps {
   colors: boolean;
   stream: TerminalSpanStream;
   logStream?: TerminalLogStream | null;
-  aiConfig?: Partial<AIConfig>;
+  aiConfig?: AIOptions;
 }
 
 function Dashboard({
@@ -213,19 +211,21 @@ function Dashboard({
   // Initialize AI model on mount
   useEffect(() => {
     let cancelled = false;
-    resolveConfigWithAutoDetect(aiConfig).then(async (config) => {
-      if (cancelled || !config) return;
-      try {
-        const result = await createAIModel(config);
+    resolveAIModel(aiConfig).then(
+      (result) => {
+        if (cancelled || !result) return;
         aiModelRef.current = result;
         setAiState({ status: 'idle' });
-      } catch {
+      },
+      (error: unknown) => {
+        if (cancelled) return;
+        // The message names the missing package or the setting to add.
         setAiState({
           status: 'error',
-          message: 'Failed to initialize AI model',
+          message: error instanceof Error ? error.message : String(error),
         });
-      }
-    });
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -1269,9 +1269,7 @@ function Dashboard({
           {aiState.status === 'unconfigured' ? (
             <Box flexDirection="column">
               <Text dimColor>No AI provider configured.</Text>
-              <Text dimColor>
-                Set AI_PROVIDER and AI_MODEL env vars, or start Ollama locally.
-              </Text>
+              <Text dimColor>{MODEL_HINT}</Text>
               <Text dimColor>Press a to close this view.</Text>
             </Box>
           ) : (
@@ -2509,6 +2507,7 @@ export type {
   SpanEvent,
   SpanLink,
 } from './span-stream';
+export type { AIOptions } from './ai/types';
 export { StreamingSpanProcessor } from './streaming-processor';
 export { createTerminalSpanStream } from './span-stream';
 export { getTerminalLogStream } from './log-stream';

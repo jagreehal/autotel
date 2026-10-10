@@ -229,7 +229,15 @@ export function createProgram(): Command {
       'Compare against a committed autotel.map.json and exit 1 on regression (path, or git:<ref>)',
     )
     .option('--no-write', 'Skip writing autotel.map.json')
-    .option('--json', 'Output machine-readable JSON')
+    .option('--json', 'Output machine-readable JSON (same as --format json)')
+    .option(
+      '--format <name>',
+      'Output: human (default), json, github (workflow annotations on stdout)',
+    )
+    .option(
+      '--limit <n>',
+      "Most annotations --format github emits (default 10, GitHub's per-step cap)",
+    )
     .option('--output-file <path>', 'Persist JSON output to this path')
     .option(
       '--workspace-root',
@@ -252,6 +260,8 @@ export function createProgram(): Command {
         // Commander maps --no-write to opts.write = false.
         write: opts.write !== false,
         json: opts.json ?? false,
+        format: opts.format,
+        limit: opts.limit,
         outputFile: opts.outputFile,
       };
       runMap(options);
@@ -505,6 +515,7 @@ export async function run(): Promise<void> {
   const argvJoined = process.argv.slice(2).join(' ');
   const isJsonOnly =
     process.argv.includes('--json') ||
+    /(^|\s)--format(=|\s+)json\b/.test(argvJoined) ||
     /^(schema|commands|examples|version|health|capabilities|discover|query|trace|diagnose|topology|correlate|llm|semconv|score|collector)\b/.test(
       argvJoined,
     );

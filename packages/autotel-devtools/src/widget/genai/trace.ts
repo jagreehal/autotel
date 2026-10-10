@@ -11,6 +11,7 @@
 //     separate span — so it is synthesized as a child of that step.
 
 import { MODEL_OPS, AGENT_OPS } from './operations';
+import { unwrapMcpToolResult } from './normalize';
 import type { GenAiSpan } from './types';
 
 export type TraceKind =
@@ -33,6 +34,7 @@ export interface TraceNode {
   tokens?: { input?: number; output?: number };
   /** The originating GenAI span, when the node maps to one (for selection). */
   spanId?: string;
+  traceId?: string;
   children: TraceNode[];
 }
 
@@ -82,11 +84,12 @@ function answerText(span: GenAiSpan): string | undefined {
   return undefined;
 }
 
-/** Result of an `execute_tool` span — Logfire stashes it as `tool_response`. */
+/** Result of an `execute_tool` span: `gen_ai.tool.call.result`, or Logfire's `tool_response`. */
 function executeToolResult(span: GenAiSpan): string {
   const raw = span.extras?.raw ?? {};
-  const result = raw['tool_response'] ?? raw['tool_result'];
-  return result == null ? '' : preview(result);
+  const result =
+    span.tool?.result ?? raw['tool_response'] ?? raw['tool_result'];
+  return result == null ? '' : preview(unwrapMcpToolResult(result));
 }
 
 export function buildRunTrace(spans: GenAiSpan[]): TraceNode[] {
@@ -133,7 +136,12 @@ export function buildRunTrace(spans: GenAiSpan[]): TraceNode[] {
   function build(span: GenAiSpan, depth: number): TraceNode {
     const op = span.operation;
     const durationMs = span.endMs - span.startMs;
-    const base = { startMs: span.startMs, durationMs, spanId: span.spanId };
+    const base = {
+      startMs: span.startMs,
+      durationMs,
+      spanId: span.spanId,
+      traceId: span.traceId,
+    };
 
     if (op === 'execute_handoff' || span.handoff) {
       const from = span.handoff?.fromAgent ?? '?';

@@ -62,6 +62,9 @@ export {
   type SpanNameNormalizingProcessorOptions,
 } from './span-name-normalizer';
 
+// spanEnrichers in front of exporters, drained first on flush and shutdown
+export { EnrichedSpanProcessor } from './enriched-span-processor';
+
 // Attribute redacting processor
 export {
   AttributeRedactingProcessor,

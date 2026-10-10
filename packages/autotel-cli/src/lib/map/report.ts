@@ -31,6 +31,16 @@ function lostPoints(route: RouteEntry): number {
   return (100 - route.score) * weight;
 }
 
+/** Entry points with gaps, most points lost first: the "Fix these first" order. */
+export function fixFirst(routes: readonly RouteEntry[]): RouteEntry[] {
+  return routes
+    .filter(
+      (route) =>
+        classifyRouteObservability(route) !== 'exempt' && route.score < 100,
+    )
+    .toSorted((a, b) => lostPoints(b) - lostPoints(a));
+}
+
 /**
  * The default view: the number, the tally, and the three entry points worth
  * fixing first.
@@ -63,13 +73,7 @@ export function formatReport(
     ),
   );
 
-  const worst = map.routes
-    .filter(
-      (route) =>
-        classifyRouteObservability(route) !== 'exempt' && route.score < 100,
-    )
-    .toSorted((a, b) => lostPoints(b) - lostPoints(a))
-    .slice(0, 3);
+  const worst = fixFirst(map.routes).slice(0, 3);
 
   if (worst.length > 0) {
     lines.push('');

@@ -15,6 +15,7 @@ export default defineConfig({
     'src/ai-sdk-bridge.ts',
     'src/observer/index.ts',
     'src/agent/index.ts',
+    'src/signals.ts',
   ],
   format: ['esm', 'cjs'],
   dts: true,
