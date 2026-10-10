@@ -28,6 +28,25 @@ export function normalizeTags(
   return tags;
 }
 
+const SPAN_KINDS = ['internal', 'server', 'client', 'producer', 'consumer'];
+
+/**
+ * `span.kind` as a tag (`server`, `client`...), the name Jaeger already uses,
+ * from an OTLP enum number (1-5), an OTLP JSON name (`SPAN_KIND_SERVER`) or
+ * a plain one (`SERVER`). Empty when the kind is unspecified or unknown.
+ */
+export function spanKindTag(kind: unknown): Record<string, TagValue> {
+  const name =
+    typeof kind === 'number'
+      ? SPAN_KINDS[kind - 1]
+      : typeof kind === 'string'
+        ? kind.toLowerCase().replace(/^span_kind_/, '')
+        : undefined;
+  return name !== undefined && SPAN_KINDS.includes(name)
+    ? { 'span.kind': name }
+    : {};
+}
+
 /** Read a tag as a finite number, parsing numeric strings. */
 export function readNumericTag(
   value: TagValue | undefined,

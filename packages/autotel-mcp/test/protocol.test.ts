@@ -11,6 +11,7 @@ import {
 } from '@modelcontextprotocol/node';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { createApp, MCP_PROTOCOL_VERSION, type App } from '../src/app';
+import { MCP_APP_MIME_TYPE, TRACE_VIEW_URI } from '../src/apps/trace-view';
 import type { AddressInfo } from 'node:net';
 
 /**
@@ -115,6 +116,20 @@ describe('MCP 2026-07-28', () => {
     const [content] = result.content as { type: string; text: string }[];
     expect(content?.type).toBe('text');
     expect(JSON.parse(content!.text)).toMatchObject({ ok: true });
+
+    await client.close();
+  });
+
+  it('serves get_trace with its waterfall view (MCP Apps)', async () => {
+    const client = await connect();
+    const { tools } = await client.listTools();
+    const getTrace = tools.find((tool) => tool.name === 'get_trace');
+    expect(getTrace?._meta).toEqual({ ui: { resourceUri: TRACE_VIEW_URI } });
+
+    const { contents } = await client.readResource({ uri: TRACE_VIEW_URI });
+    const [view] = contents as { mimeType?: string; text?: string }[];
+    expect(view?.mimeType).toBe(MCP_APP_MIME_TYPE);
+    expect(view?.text).toMatch(/^<!doctype html>.*<script>/s);
 
     await client.close();
   });

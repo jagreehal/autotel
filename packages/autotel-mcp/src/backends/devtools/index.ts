@@ -36,6 +36,7 @@ import type {
 } from '../../types';
 import {
   exceptionTags,
+  spanKindTag,
   inferErrorStatusFromTags,
   normalizeTags,
 } from '../span-mapping';
@@ -564,6 +565,7 @@ export class DevtoolsBackend implements TelemetryBackend {
     const spans: SpanRecord[] = trace.spans.map((span) => {
       const tags = {
         ...exceptionTags(span.events, span.status?.message),
+        ...spanKindTag(span.kind),
         ...normalizeTags(span.attributes),
       };
       const statusCode = resolveStatus(span.status?.code, tags);

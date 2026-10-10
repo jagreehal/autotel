@@ -100,6 +100,9 @@ Start triage with `list_issues` (grouped failures with status, count, trend, ver
 | `otel://dashboards/grafana-llm`                             | Grafana dashboard JSON for LLM workloads (import directly) |
 | `otel://semconv/namespaces`                                 | OTel semantic-convention namespaces                        |
 | `otel://collector/versions` / `otel://collector/components` | OTel collector schema catalog                              |
+| `ui://autotel/trace-view.html`                              | Waterfall view for `get_trace` (MCP Apps)                  |
+
+Clients that render MCP Apps (Claude, ChatGPT, VS Code) show `get_trace` as an interactive waterfall. A span the user clicks reaches the model as context, so a follow-up question refers to it.
 
 ## Environment Variables
 

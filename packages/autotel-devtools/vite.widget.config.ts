@@ -28,11 +28,14 @@ const LEAN_MODULES = [
  * obvious. The basename test is only a cheap filter so the common import does
  * no resolution work; the resolved path is what decides.
  */
-function leanModules(): Plugin {
-  const swaps = LEAN_MODULES.map((name) => ({
+function leanModules(
+  modules: readonly string[] = LEAN_MODULES,
+  suffix = 'lean',
+): Plugin {
+  const swaps = modules.map((name) => ({
     basename: name.slice(name.lastIndexOf('/') + 1),
     full: resolve(__dirname, `${name}.ts`),
-    lean: resolve(__dirname, `${name}.lean.ts`),
+    lean: resolve(__dirname, `${name}.${suffix}.ts`),
   }));
   return {
     name: 'autotel-lean-modules',
@@ -63,16 +66,30 @@ function leanModules(): Plugin {
  *    tools, because every kilobyte here is one that page's users download.
  *  - `fullpage.global.js` (`FULLPAGE=1`) is the viewer application, with every
  *    view and no size budget.
+ *  - `mcp-app-trace.global.js` (`MCP_APP=1`) is the waterfall alone, the view
+ *    autotel-mcp's `get_trace` hands to chat hosts (MCP Apps).
  */
 const fullpage = process.env.FULLPAGE === '1';
+const mcpApp = process.env.MCP_APP === '1';
+
+/** The MCP App build swaps the store for the two signals the waterfall reads. */
+const MCP_APP_MODULES = ['src/widget/store.svelte'];
 
 export default defineConfig({
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/widget/auto.ts'),
+      entry: resolve(
+        __dirname,
+        mcpApp ? 'src/widget/mcp-app/trace.ts' : 'src/widget/auto.ts',
+      ),
       name: 'AutotelDevtools',
       formats: ['iife'],
-      fileName: () => (fullpage ? 'fullpage.global.js' : 'widget.global.js'),
+      fileName: () =>
+        mcpApp
+          ? 'mcp-app-trace.global.js'
+          : fullpage
+            ? 'fullpage.global.js'
+            : 'widget.global.js',
     },
     outDir: 'dist',
     emptyOutDir: false, // don't wipe server build
@@ -91,7 +108,11 @@ export default defineConfig({
     },
   },
   plugins: [
-    ...(fullpage ? [] : [leanModules()]),
+    ...(mcpApp
+      ? [leanModules(MCP_APP_MODULES, 'mcp-app')]
+      : fullpage
+        ? []
+        : [leanModules()]),
     // emitCss:false keeps Svelte from emitting separate stylesheets — all
     // widget styling comes from the inlined styles.css injected into the shadow
     // root (component <style> blocks are forbidden, see MIGRATION.md).

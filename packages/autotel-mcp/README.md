@@ -594,6 +594,13 @@ MCP resources give agents context without burning tool calls:
 | `otel://backend/capabilities`    | Active backend's signal support                   |
 | `otel://collector/config`        | OTLP receiver config guidance                     |
 | `otel://instrumentation/scoring` | Scoring rubric explanation                        |
+| `ui://autotel/trace-view.html`   | Waterfall view for `get_trace` (MCP Apps)         |
+
+## Traces in the chat
+
+`get_trace` comes with an interactive waterfall. Clients that render MCP Apps (Claude, ChatGPT, VS Code) draw the trace inline: span timings, kinds and failures, the same waterfall as autotel-devtools. Click a span and the model gets its name, timing, status and key attributes, so your next question is about that span. Other clients get the JSON as before.
+
+Claude Desktop, Claude Code and VS Code run autotel-mcp locally, so the built-in collector works as is. Claude.ai and ChatGPT connect to remote servers only: run `--transport http` on a public HTTPS address, with `--allowed-hosts` naming it.
 
 ## License
 

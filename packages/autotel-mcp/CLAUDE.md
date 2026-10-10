@@ -26,6 +26,8 @@ You are working on the MCP investigation server. This is NOT the instrumentation
 - `src/tools/`: MCP tool registrations, split by investigation domain
 - `src/modules/`: Pure logic (no MCP dependency), testable in isolation
 - `src/resources/`: MCP resource registrations
+- `src/apps/`: MCP Apps views. `trace-view.ts` serves the autotel-devtools waterfall as `ui://autotel/trace-view.html` and links it from `get_trace`. The build copies the script into `dist/` (`copy` in `tsdown.config.ts`), because autotel-devtools is a dev dependency and is not installed beside a published autotel-mcp
+- `span.kind` is a tag on every backend that knows it (`spanKindTag` in `span-mapping.ts`): the waterfall colours bars by kind
 
 ## Commands
 
