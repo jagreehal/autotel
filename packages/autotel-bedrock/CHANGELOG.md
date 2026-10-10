@@ -1,5 +1,12 @@
 # autotel-bedrock
 
+## 2.0.1
+
+### Patch Changes
+
+- Updated dependencies [47f8bd7]
+  - autotel-genai@0.16.0
+
 ## 2.0.0
 
 ### Patch Changes
