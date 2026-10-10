@@ -122,7 +122,7 @@ Autotel re-exports common OpenTelemetry utilities in modules organized by purpos
 
 **`autotel/testing`** - High-level testing utilities with assertions:
 
-- `createTraceCollector()` - Auto-configured trace collector with helpers
+- `createTraceCollector()` - Auto-configured trace collector with helpers. Registers the W3C trace-context and baggage propagator, so `propagation.inject`/`extract` work without `init()`
 - Trace-tree helpers: `getSpansByTraceId()`, `getRootSpans()`, `getDescendants()`
 - `expectSpan(nameOrCriteria)` - Require exactly one match by name, IDs, kind, and/or attributes
 - `assertTraceCreated()`, `assertTraceSucceeded()`, `assertTraceFailed()`, etc.

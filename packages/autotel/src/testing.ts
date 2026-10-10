@@ -27,6 +27,7 @@ import {
   type Attributes,
   type AttributeValue,
   context,
+  propagation,
   trace as otelTrace,
   type Span,
   type SpanContext,
@@ -41,6 +42,11 @@ import {
   createContextKey,
 } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import {
+  CompositePropagator,
+  W3CBaggagePropagator,
+  W3CTraceContextPropagator,
+} from '@opentelemetry/core';
 import * as nodeAsyncHooks from 'node:async_hooks';
 import { type Logger } from './logger';
 import { configure } from './config';
@@ -172,6 +178,22 @@ function ensureContextManager(): void {
 }
 
 /**
+ * Registers the W3C trace-context and baggage propagator that `init()` would,
+ * so `propagation.inject`/`extract` work in tests. Keeps one the test set.
+ */
+function ensurePropagator(): void {
+  if (propagation.fields().length > 0) return;
+  propagation.setGlobalPropagator(
+    new CompositePropagator({
+      propagators: [
+        new W3CTraceContextPropagator(),
+        new W3CBaggagePropagator(),
+      ],
+    }),
+  );
+}
+
+/**
  * Create an in-memory trace collector for testing
  *
  * IMPORTANT: This automatically configures the global tracer to record spans.
@@ -199,6 +221,7 @@ function ensureContextManager(): void {
  */
 export function createTraceCollector(): TraceCollector {
   ensureContextManager();
+  ensurePropagator();
   const spans: TestSpan[] = [];
   const activeMockSpanStorage = new nodeAsyncHooks.AsyncLocalStorage<Span>();
   let nextTraceId = 1;

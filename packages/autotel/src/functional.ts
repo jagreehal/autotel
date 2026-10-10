@@ -498,6 +498,27 @@ function run<TReturn = unknown>(
 
 export const trace = Object.assign(traceImpl, { run });
 
+/** `T` when it has no awaitable member; otherwise `never`, so the match fails. */
+type NotThenable<T> = T extends PromiseLike<unknown> ? never : T;
+
+interface TracingWrapper<TCfgArgs extends unknown[], TCfgReturn> {
+  // Async handler: `Promise<T>`. PromiseLike covers awaitable non-Promises
+  // such as ORM query builders.
+  <TArgs extends TCfgArgs, TReturn extends TCfgReturn>(
+    fnFactory: (ctx: TraceContext) => (...args: TArgs) => PromiseLike<TReturn>,
+  ): (...args: TArgs) => Promise<TReturn>;
+  // Sync handler: `T`. A union with a thenable member falls through.
+  <TArgs extends TCfgArgs, TReturn extends TCfgReturn>(
+    fnFactory: (ctx: TraceContext) => (...args: TArgs) => NotThenable<TReturn>,
+  ): (...args: TArgs) => TReturn;
+  // Sync or async depending on input: `T | Promise<T>`.
+  <TArgs extends TCfgArgs, TReturn extends TCfgReturn>(
+    fnFactory: (
+      ctx: TraceContext,
+    ) => (...args: TArgs) => TReturn | PromiseLike<TReturn>,
+  ): WrappedFunction<TArgs, TReturn>;
+}
+
 /**
  * Approach 2: withTracing() - Middleware-style composable wrapper
  *
@@ -534,15 +555,18 @@ export const trace = Object.assign(traceImpl, { run });
 export function withTracing<
   TCfgArgs extends unknown[] = unknown[],
   TCfgReturn = unknown,
->(options: TracingOptions<TCfgArgs, TCfgReturn> = {}) {
-  return <TArgs extends TCfgArgs, TReturn extends TCfgReturn>(
+>(
+  options: TracingOptions<TCfgArgs, TCfgReturn> = {},
+): TracingWrapper<TCfgArgs, TCfgReturn> {
+  return (<TArgs extends TCfgArgs, TReturn extends TCfgReturn>(
     fnFactory: (
       ctx: TraceContext,
-      // PromiseLike, not just Promise: an ORM query builder is awaitable
-      // without being a Promise, and the wrapper waits for it either way.
     ) => (...args: TArgs) => TReturn | PromiseLike<TReturn>,
   ): WrappedFunction<TArgs, TReturn> =>
-    wrapFactoryWithTracing<TArgs, TReturn>(fnFactory, options);
+    wrapFactoryWithTracing<TArgs, TReturn>(
+      fnFactory,
+      options,
+    )) as TracingWrapper<TCfgArgs, TCfgReturn>;
 }
 
 /**

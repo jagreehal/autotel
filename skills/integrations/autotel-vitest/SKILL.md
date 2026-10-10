@@ -130,6 +130,8 @@ test('traces user creation', async () => {
 });
 ```
 
+`createTraceCollector()` registers the W3C trace-context and baggage propagator unless the test set its own, so `propagation.inject`/`extract` work without `init()`.
+
 ### Trace context helpers (re-exported from autotel)
 
 ```typescript
