@@ -11,6 +11,16 @@ export interface CompactTrace {
   /** Spans in the trace, even when only the roots are returned. */
   spanCount: number;
   spans: CompactSpan[];
+  /** The backend capped the span page; spanCount is a floor, not a total. */
+  truncated?: boolean;
+  /** The trace in the backend's own UI. */
+  url?: string;
+}
+
+/** Options shared by the trace compactors. */
+export interface CompactTraceOptions {
+  includeSpans?: boolean;
+  traceUrl?: (traceId: string) => string | undefined;
 }
 
 export interface CompactTraceResult {
@@ -94,8 +104,9 @@ export function compactSpans(result: {
  */
 export function compactTrace(
   trace: TraceRecord,
-  options?: { includeSpans: boolean },
+  options?: CompactTraceOptions,
 ): CompactTrace {
+  const url = options?.traceUrl?.(trace.traceId);
   const resource = hoistResource(trace.spans);
   const kept =
     (options?.includeSpans ?? true)
@@ -107,6 +118,8 @@ export function compactTrace(
     resource,
     spanCount: trace.spans.length,
     spans: kept.map((span) => withoutResource(span, resource)),
+    ...(trace.truncated ? { truncated: true } : {}),
+    ...(url ? { url } : {}),
   };
 }
 
@@ -115,11 +128,13 @@ export function compactTraceResult(
   // Roots only unless asked otherwise: a search that happens to cross an N+1
   // returns hundreds of spans per trace, and the caller scanning results has
   // no way to know that before making the call.
-  options?: { includeSpans: boolean },
+  options?: CompactTraceOptions,
 ): CompactTraceResult {
   const includeSpans = options?.includeSpans ?? false;
   return {
     totalCount: result.totalCount,
-    items: result.items.map((trace) => compactTrace(trace, { includeSpans })),
+    items: result.items.map((trace) =>
+      compactTrace(trace, { ...options, includeSpans }),
+    ),
   };
 }

@@ -88,7 +88,10 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
         },
       },
     );
-    registerTools(server, backend, availability);
+    registerTools(server, backend, availability, {
+      toolsets: config.toolsets,
+      omitTools: config.omitTools,
+    });
     return server;
   };
 

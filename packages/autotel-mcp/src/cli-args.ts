@@ -38,6 +38,13 @@ export const VALUE_FLAGS = new Map<string, string>([
   ['--tempo-url', 'TEMPO_BASE_URL'],
   ['--prometheus-url', 'PROMETHEUS_BASE_URL'],
   ['--loki-url', 'LOKI_BASE_URL'],
+  // Grafana Cloud instance ids: they name, they do not grant.
+  ['--tempo-user', 'TEMPO_USERNAME'],
+  ['--prometheus-user', 'PROMETHEUS_USERNAME'],
+  ['--loki-user', 'LOKI_USERNAME'],
+  ['--grafana-url', 'GRAFANA_URL'],
+  ['--toolsets', 'AUTOTEL_TOOLSETS'],
+  ['--omit-tools', 'AUTOTEL_OMIT_TOOLS'],
   ['--logfire-url', 'LOGFIRE_BASE_URL'],
   ['--signoz-url', 'SIGNOZ_BASE_URL'],
   // A region hostname, not a secret. autotel-cli exposes it as a flag too.
@@ -56,6 +63,7 @@ const ENV_ONLY = new Map<string, string>([
   ['--datadog-app-key', 'DD_APP_KEY'],
   ['--signoz-api-key', 'SIGNOZ_API_KEY'],
   ['--cloudflare-token', 'CLOUDFLARE_API_TOKEN'],
+  ['--grafana-token', 'GRAFANA_CLOUD_TOKEN'],
 ]);
 
 export interface ParsedArgs {
@@ -160,6 +168,17 @@ Options:
       --tempo-url <url>      Tempo base URL                [TEMPO_BASE_URL]
       --prometheus-url <url> Prometheus base URL      [PROMETHEUS_BASE_URL]
       --loki-url <url>       Loki base URL                  [LOKI_BASE_URL]
+      --tempo-user <id>      Grafana Cloud Tempo user id   [TEMPO_USERNAME]
+      --prometheus-user <id> Grafana Cloud Prometheus user id
+                                                     [PROMETHEUS_USERNAME]
+      --loki-user <id>       Grafana Cloud Loki user id     [LOKI_USERNAME]
+      --grafana-url <url>    Grafana fronting Tempo, for trace links
+                             (datasource uid: GRAFANA_TEMPO_DATASOURCE,
+                             default grafanacloud-traces)    [GRAFANA_URL]
+      --toolsets <list>      Tool groups to register: core, llm, collector,
+                             semconv, estimate, or all (default)
+                                                           [AUTOTEL_TOOLSETS]
+      --omit-tools <list>    Tool names to leave out    [AUTOTEL_OMIT_TOOLS]
       --logfire-url <url>    Logfire base URL            [LOGFIRE_BASE_URL]
       --signoz-url <url>     SigNoz base URL              [SIGNOZ_BASE_URL]
       --datadog-site <host>  Datadog region, e.g. datadoghq.eu     [DD_SITE]
@@ -173,7 +192,7 @@ Flags override environment variables, which override defaults.
 Credentials are read from the environment only, never from flags, because argv
 is visible to any process that can list the process table:
   LOGFIRE_READ_TOKEN, DD_API_KEY, DD_APP_KEY, SIGNOZ_API_KEY,
-  CLOUDFLARE_API_TOKEN
+  CLOUDFLARE_API_TOKEN, GRAFANA_CLOUD_TOKEN
 
 Unknown flags are reported on stderr and ignored, not treated as errors.
 

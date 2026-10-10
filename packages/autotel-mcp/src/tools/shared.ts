@@ -56,6 +56,28 @@ export async function respondSafe<TResult>(
   }
 }
 
+/**
+ * A hint for a result that stopped at its limit: there may be more, and here
+ * is how to narrow the query.
+ */
+export function limitHint(
+  returned: number,
+  limit: number,
+  max = 100,
+  /** The backend's own page-full signal, which survives local filtering. */
+  truncated?: boolean,
+): { hint: string } | Record<string, never> {
+  if (!(truncated ?? returned >= limit)) return {};
+  const raise = limit < max ? ` or raise limit (up to ${max})` : '';
+  return {
+    hint: `Returned ${returned} from a full page; there are probably more. Narrow the time window or add a filter${raise}.`,
+  };
+}
+
+export const TRUNCATED_TRACE_HINT = {
+  hint: 'This trace has more spans than the backend returns in one page, so counts cover only the spans shown. Look at one part with search_spans (serviceName, operationName) or find_root_cause.',
+};
+
 export const tagValueSchema = z.union([z.string(), z.number(), z.boolean()]);
 
 export const filterSchema = z.object({

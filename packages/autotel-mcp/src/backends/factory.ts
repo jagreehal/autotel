@@ -59,15 +59,25 @@ export async function createBackend(config: AppConfig): Promise<BackendHandle> {
       break;
     }
     case 'tempo': {
-      backend = new TempoBackend(config.tempoBaseUrl);
+      backend = new TempoBackend(
+        config.tempoBaseUrl,
+        grafanaAuth(config, config.tempoUsername),
+        grafanaLinks(config),
+      );
       break;
     }
     case 'prometheus': {
-      backend = new PrometheusBackend(config.prometheusBaseUrl);
+      backend = new PrometheusBackend(
+        config.prometheusBaseUrl,
+        grafanaAuth(config, config.prometheusUsername),
+      );
       break;
     }
     case 'loki': {
-      backend = new LokiBackend(config.lokiBaseUrl);
+      backend = new LokiBackend(
+        config.lokiBaseUrl,
+        grafanaAuth(config, config.lokiUsername),
+      );
       break;
     }
     case 'logfire': {
@@ -117,18 +127,53 @@ export async function createBackend(config: AppConfig): Promise<BackendHandle> {
   return { backend, start, stop };
 }
 
+/**
+ * Grafana Cloud reads with basic auth: the signal's user id (Tempo, Loki and
+ * Prometheus each have their own) and one read-scoped access policy token.
+ * A token with no user id is sent as a bearer token, for a self-hosted stack
+ * behind an auth proxy.
+ */
+export function grafanaAuth(
+  config: Pick<AppConfig, 'grafanaCloudToken'>,
+  username: string,
+): Record<string, string> {
+  const token = config.grafanaCloudToken;
+  if (!token) return {};
+  if (!username) return { Authorization: `Bearer ${token}` };
+  const encoded = Buffer.from(`${username}:${token}`).toString('base64');
+  return { Authorization: `Basic ${encoded}` };
+}
+
+function grafanaLinks(
+  config: Pick<AppConfig, 'grafanaUrl' | 'grafanaTempoDatasource'>,
+): { url: string; datasourceUid: string } | undefined {
+  return config.grafanaUrl
+    ? { url: config.grafanaUrl, datasourceUid: config.grafanaTempoDatasource }
+    : undefined;
+}
+
 function buildStackBackend(config: AppConfig): TelemetryBackend {
   const parts: CompositeBackendParts = {};
   if (process.env.TEMPO_BASE_URL) {
-    parts.traces = new TempoBackend(config.tempoBaseUrl);
+    parts.traces = new TempoBackend(
+      config.tempoBaseUrl,
+      grafanaAuth(config, config.tempoUsername),
+      grafanaLinks(config),
+    );
   } else if (process.env.JAEGER_BASE_URL) {
     parts.traces = new JaegerBackend(config.jaegerBaseUrl);
   }
   if (process.env.PROMETHEUS_BASE_URL) {
-    parts.metrics = new PrometheusBackend(config.prometheusBaseUrl);
+    parts.metrics = new PrometheusBackend(
+      config.prometheusBaseUrl,
+      grafanaAuth(config, config.prometheusUsername),
+    );
   }
   if (process.env.LOKI_BASE_URL) {
-    parts.logs = new LokiBackend(config.lokiBaseUrl);
+    parts.logs = new LokiBackend(
+      config.lokiBaseUrl,
+      grafanaAuth(config, config.lokiUsername),
+    );
   }
   if (!parts.traces && !parts.metrics && !parts.logs) {
     throw new Error(

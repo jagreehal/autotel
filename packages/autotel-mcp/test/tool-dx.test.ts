@@ -152,3 +152,39 @@ describe('score_span_instrumentation', () => {
     await client.close();
   });
 });
+
+describe('agent guard rails', () => {
+  it('rejects an argument the tool does not take', async () => {
+    const client = await connect();
+    const result = await client.callTool({
+      name: 'search_traces',
+      arguments: { hasError: true },
+    });
+    const [content] = result.content as { type: string; text: string }[];
+    expect(content!.text).toMatch(/hasError/);
+    await client.close();
+  });
+
+  it('aggregates spans from a sample when the backend cannot', async () => {
+    const client = await connect();
+    const body = (await callJson(client, 'aggregate_spans', {
+      from: '1970-01-01T00:00:00Z',
+      to: '1970-01-01T00:01:00Z',
+      groupBy: ['service'],
+    })) as { data: { source: string; rows: { count: number }[] } };
+    expect(body.data.source).toBe('sample');
+    expect(body.data.rows.length).toBeGreaterThan(0);
+    await client.close();
+  });
+
+  it('reports version changes and unversioned services', async () => {
+    const client = await connect();
+    const body = (await callJson(client, 'what_changed', {
+      from: '1970-01-01T00:00:00Z',
+      to: '1970-01-01T00:01:00Z',
+    })) as { data: { changes: unknown[]; unversioned: string[] } };
+    expect(Array.isArray(body.data.changes)).toBe(true);
+    expect(body.data.unversioned.length).toBeGreaterThan(0);
+    await client.close();
+  });
+});

@@ -15,7 +15,10 @@ const MAX_BACKOFF_MS = 10_000;
 
 /** Delay before the next attempt: `Retry-After` if the server sent one, else exponential. */
 function retryDelayMs(response: Response, attempt: number): number {
-  const header = response.headers?.get?.('Retry-After');
+  // Datadog sends X-RateLimit-Reset (seconds to reset) instead.
+  const header =
+    response.headers?.get?.('Retry-After') ??
+    response.headers?.get?.('X-RateLimit-Reset');
   if (header !== null && header !== undefined && header.trim() !== '') {
     const seconds = Number(header);
     // `Retry-After` is either delta-seconds or an HTTP date.

@@ -126,6 +126,10 @@ export class CompositeBackend implements TelemetryBackend {
     };
   }
 
+  traceUrl(traceId: string): string | undefined {
+    return this.traces?.traceUrl?.(traceId);
+  }
+
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     if (this.traces) return this.traces.getTrace(traceId);
     return null;

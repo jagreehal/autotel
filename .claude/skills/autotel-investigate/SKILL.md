@@ -41,16 +41,16 @@ Every command that reads telemetry needs a backend. Pick one and reuse it:
 | Auto-detect localhost               | `--backend auto`                                                   |
 | Local JSON fixture                  | `--backend fixture --fixture-path ./telemetry.json`                |
 
-Hosted vendors (traces only — `capabilities` will report metrics and logs unsupported):
+Hosted vendors (`capabilities` reports which signals each serves; Datadog serves traces, logs and metrics, the others traces):
 
 | Backend          | Flags                                                                    | Credentials (environment only)                                           |
 | ---------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
 | Pydantic Logfire | `--backend logfire [--logfire-base-url https://logfire-eu.pydantic.dev]` | `LOGFIRE_READ_TOKEN` (must be **read**-scope; a write token is rejected) |
-| Datadog APM      | `--backend datadog [--datadog-site datadoghq.eu]`                        | `DD_API_KEY` **and** `DD_APP_KEY` (both required; see below)             |
+| Datadog          | `--backend datadog [--datadog-site datadoghq.eu]`                        | `DD_API_KEY` **and** `DD_APP_KEY` (both required; see below)             |
 | SigNoz           | `--backend signoz --signoz-base-url https://signoz.example.com`          | `SIGNOZ_API_KEY` (omit for an unauthenticated self-hosted instance)      |
 | Cloudflare       | `--backend cloudflare --cloudflare-account <account id>`                 | `CLOUDFLARE_API_TOKEN` (Account Analytics Read)                          |
 
-Datadog needs two keys because it splits credentials by direction. The API key writes telemetry in; the application key reads it back out, scoped `apm_read`. An `.env` copied from a service that exports to Datadog carries the API key alone, so `DD_APP_KEY` is the one that goes missing. `autotel health` names it rather than returning an empty result. A 403 means the keys reached Datadog and it refused them: either `DD_SITE` does not match the org, or the application key lacks `apm_read`.
+Datadog needs two keys because it splits credentials by direction. The API key writes telemetry in; the application key reads it back out, scoped `apm_read`, `logs_read_data`, `metrics_read` and `timeseries_query`. An `.env` copied from a service that exports to Datadog carries the API key alone, so `DD_APP_KEY` is the one that goes missing. `autotel health` names it rather than returning an empty result. A 403 means the keys reached Datadog and it refused them: either `DD_SITE` does not match the org, or the application key lacks `apm_read`.
 
 Credentials are read from the environment and never accepted as flags — argv is visible to anything that can list the process table. Never ask the user to paste a key into the chat; ask them to export it.
 
@@ -118,6 +118,6 @@ Always parse the JSON; never try to read prose from stdout.
 ## When to use this vs the MCP server
 
 - Use this skill when: the user just wants an answer, you're driving a one-shot prompt, or no MCP server is configured.
-- Prefer `autotel-mcp` when: the session is an extended incident review with many follow-ups against a slow remote backend (the persistent connection wins on repeated queries).
+- Prefer `autotel-mcp` when: the session is an extended incident review with many follow-ups against a slow remote backend (the persistent connection wins on repeated queries), or you need its analysis tools: `aggregate_spans` (counts and percentiles grouped by any field), `aggregate_logs` (top message patterns), `what_changed` (version changes with before/after error rate and p95).
 
-Both return the same data. Pick the one with less ceremony for the situation.
+Both read the same backends. Pick the one with less ceremony for the situation.

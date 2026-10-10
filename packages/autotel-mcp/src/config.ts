@@ -31,6 +31,23 @@ function invalidHostname(entry: string): string | undefined {
   return undefined;
 }
 
+/** Tool groups `AUTOTEL_TOOLSETS` selects from. */
+export const TOOLSETS = [
+  'core',
+  'llm',
+  'collector',
+  'semconv',
+  'estimate',
+] as const;
+export type Toolset = (typeof TOOLSETS)[number];
+
+function commaList(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 const hostnameList = z
   .string()
   .default('')
@@ -106,6 +123,32 @@ const configSchema = z.object({
   tempoBaseUrl: z.string().default('http://localhost:3200'),
   prometheusBaseUrl: z.string().default('http://localhost:9090'),
   lokiBaseUrl: z.string().default('http://localhost:3100'),
+  // Grafana Cloud: one read-scoped access policy token, a user id per signal.
+  grafanaCloudToken: z.string().default(''),
+  // Grafana that fronts Tempo, for trace links (Tempo itself has no UI).
+  grafanaUrl: z.string().default(''),
+  grafanaTempoDatasource: z.string().default('grafanacloud-traces'),
+  tempoUsername: z.string().default(''),
+  prometheusUsername: z.string().default(''),
+  lokiUsername: z.string().default(''),
+  toolsets: z
+    .string()
+    .default('all')
+    .transform((value) => commaList(value))
+    .superRefine((entries, ctx) => {
+      for (const entry of entries) {
+        if (entry === 'all' || (TOOLSETS as readonly string[]).includes(entry))
+          continue;
+        ctx.addIssue({
+          code: 'custom',
+          message: `unknown toolset "${entry}"; use ${TOOLSETS.join(', ')} or all`,
+        });
+      }
+    }),
+  omitTools: z
+    .string()
+    .default('')
+    .transform((value) => commaList(value)),
   fixturePath: z.string().default('./fixtures/telemetry.json'),
   // Hosted vendor backends. Credentials come from the environment only, never
   // from flags — argv is visible to any process that can list the process table.
@@ -180,6 +223,14 @@ export function resolveConfig(
     tempoBaseUrl: read('TEMPO_BASE_URL'),
     prometheusBaseUrl: read('PROMETHEUS_BASE_URL'),
     lokiBaseUrl: read('LOKI_BASE_URL'),
+    grafanaCloudToken: env.GRAFANA_CLOUD_TOKEN,
+    grafanaUrl: read('GRAFANA_URL'),
+    grafanaTempoDatasource: read('GRAFANA_TEMPO_DATASOURCE'),
+    tempoUsername: read('TEMPO_USERNAME'),
+    prometheusUsername: read('PROMETHEUS_USERNAME'),
+    lokiUsername: read('LOKI_USERNAME'),
+    toolsets: read('AUTOTEL_TOOLSETS'),
+    omitTools: read('AUTOTEL_OMIT_TOOLS'),
     fixturePath: read('AUTOTEL_FIXTURE_PATH'),
     logfireBaseUrl: read('LOGFIRE_BASE_URL'),
     // A region hostname, not a credential, so it has a flag like the rest.

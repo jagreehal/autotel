@@ -182,6 +182,11 @@ export class JaegerBackend implements TelemetryBackend {
     return { items, totalCount: items.length };
   }
 
+  traceUrl(traceId: string): string {
+    // The Jaeger UI is served from the same origin as its query API.
+    return `${this.baseUrl}/trace/${encodeURIComponent(traceId)}`;
+  }
+
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     const data = await jsonGet<JaegerTraceResponse>(
       `${this.baseUrl}/api/traces/${encodeURIComponent(traceId)}`,

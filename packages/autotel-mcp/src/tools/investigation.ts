@@ -9,6 +9,8 @@ import {
   type TraceQueryInput,
   type SpanQueryInput,
   READ_ONLY,
+  limitHint,
+  TRUNCATED_TRACE_HINT,
 } from './shared';
 import {
   compactSpans,
@@ -21,6 +23,8 @@ export function registerInvestigationTools(
   server: McpServer,
   backend: TelemetryBackend,
 ): void {
+  const traceUrl = backend.traceUrl?.bind(backend);
+
   server.registerTool(
     'search_traces',
     {
@@ -32,16 +36,14 @@ export function registerInvestigationTools(
       }),
     },
     async (input: TraceQueryInput & { includeSpans: boolean }) =>
-      respondSafe(
-        async () =>
-          compactTraceResult(
-            await backend.searchTraces(toTraceSearchQuery(input)),
-            {
-              includeSpans: input.includeSpans,
-            },
-          ),
-        'search_traces',
-      ),
+      respondSafe(async () => {
+        const limit = input.limit ?? 20;
+        const result = compactTraceResult(
+          await backend.searchTraces({ ...toTraceSearchQuery(input), limit }),
+          { includeSpans: input.includeSpans, traceUrl },
+        );
+        return { ...result, ...limitHint(result.items.length, limit) };
+      }, 'search_traces'),
   );
 
   server.registerTool(
@@ -56,11 +58,18 @@ export function registerInvestigationTools(
       }),
     },
     async (input: SpanQueryInput) =>
-      respondSafe(
-        async () =>
-          compactSpans(await backend.searchSpans(toSpanSearchQuery(input))),
-        'search_spans',
-      ),
+      respondSafe(async () => {
+        const limit = input.limit ?? 50;
+        const found = await backend.searchSpans({
+          ...toSpanSearchQuery(input),
+          limit,
+        });
+        const result = compactSpans(found);
+        return {
+          ...result,
+          ...limitHint(result.items.length, limit, 100, found.truncated),
+        };
+      }, 'search_spans'),
   );
 
   server.registerTool(
@@ -75,9 +84,11 @@ export function registerInvestigationTools(
     async ({ traceId }: { traceId: string }) =>
       respondSafe(async () => {
         const trace = await backend.getTrace(traceId);
-        return trace === null || trace === undefined
-          ? trace
-          : compactTrace(trace);
+        if (trace === null || trace === undefined) return trace;
+        return {
+          ...compactTrace(trace, { traceUrl }),
+          ...(trace.truncated ? TRUNCATED_TRACE_HINT : {}),
+        };
       }, 'get_trace'),
   );
   registerTraceView(server);
@@ -90,6 +101,15 @@ export function registerInvestigationTools(
       inputSchema: z.object({ traceId: z.string().min(1) }),
     },
     async ({ traceId }: { traceId: string }) =>
-      respondSafe(() => backend.summarizeTrace(traceId), 'summarize_trace'),
+      respondSafe(async () => {
+        const summary = await backend.summarizeTrace(traceId);
+        if (!summary) return summary;
+        const url = traceUrl?.(traceId);
+        return {
+          ...summary,
+          ...(url ? { url } : {}),
+          ...(summary.truncated ? TRUNCATED_TRACE_HINT : {}),
+        };
+      }, 'summarize_trace'),
   );
 }

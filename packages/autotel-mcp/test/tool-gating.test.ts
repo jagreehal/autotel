@@ -46,7 +46,10 @@ function stubBackend(caps: BackendCapabilities): TelemetryBackend {
   } satisfies TelemetryBackend;
 }
 
-function collectRegisteredTools(backend: TelemetryBackend): Set<string> {
+function collectRegisteredTools(
+  backend: TelemetryBackend,
+  selection?: Parameters<typeof registerTools>[3],
+): Set<string> {
   const server = new McpServer({ name: 't', version: '0.0.0' });
   const registered = new Set<string>();
   const original = server.registerTool.bind(server);
@@ -62,7 +65,7 @@ function collectRegisteredTools(backend: TelemetryBackend): Set<string> {
     ) => ReturnType<typeof server.registerTool>;
     return forward(name, ...rest);
   }) as typeof server.registerTool;
-  registerTools(server, backend);
+  registerTools(server, backend, undefined, selection);
   return registered;
 }
 
@@ -177,5 +180,32 @@ describe('pickErrorMessage precedence', () => {
   it('returns undefined when no recognised key carries a string', () => {
     expect(pickErrorMessage({})).toBeUndefined();
     expect(pickErrorMessage({ 'error.message': 42 })).toBeUndefined();
+  });
+});
+
+describe('toolsets', () => {
+  const all = {
+    traces: 'available',
+    metrics: 'available',
+    logs: 'available',
+  } as const;
+
+  it('registers only the chosen groups', () => {
+    const names = collectRegisteredTools(stubBackend(all), {
+      toolsets: ['core'],
+    });
+    expect(names.has('search_traces')).toBe(true);
+    expect(names.has('aggregate_spans')).toBe(true);
+    expect(names.has('get_llm_usage')).toBe(false);
+    expect(names.has('collector_list_components')).toBe(false);
+    expect(names.has('semconv_list_namespaces')).toBe(false);
+  });
+
+  it('leaves out named tools whatever their group', () => {
+    const names = collectRegisteredTools(stubBackend(all), {
+      omitTools: ['service_map'],
+    });
+    expect(names.has('service_map')).toBe(false);
+    expect(names.has('collector_list_components')).toBe(true);
   });
 });
