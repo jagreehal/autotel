@@ -7,6 +7,7 @@ import {
   AttributeRedactingProcessor,
   REDACTOR_PATTERNS,
   REDACTOR_PRESETS,
+  createAttributeRedactor,
   createRedactedSpan,
   normalizeAttributeRedactorConfig,
   type AttributeRedactorFn,
@@ -235,10 +236,38 @@ describe('AttributeRedactingProcessor', () => {
         expect(mockProcessor.endedSpans[0]!.attributes.apiKey).toBe(
           '[REDACTED]',
         );
-        // db.password doesn't match the pattern (not exact match)
+        // The last dot segment is matched too.
         expect(mockProcessor.endedSpans[0]!.attributes['db.password']).toBe(
-          'dbpass',
+          '[REDACTED]',
         );
+      });
+
+      it('should redact nested sensitive keys by their last segment', () => {
+        const redact = createAttributeRedactor('default');
+
+        expect(redact('user.password', 'hunter2')).toBe('[REDACTED]');
+        expect(redact('err.token', 'abc')).toBe('[REDACTED]');
+        expect(redact('payment.client.api_key', 'k')).toBe('[REDACTED]');
+        // Semconv request headers are string arrays; the type is kept.
+        expect(
+          redact('http.request.header.authorization', [
+            'Bearer abc',
+            'Basic x',
+          ]),
+        ).toEqual(['[REDACTED]', '[REDACTED]']);
+      });
+
+      it('should not redact keys that only contain a sensitive word', () => {
+        const redact = createAttributeRedactor('default');
+
+        expect(redact('password_policy.min_length', '12')).toBe('12');
+        expect(redact('auth.method', 'oauth')).toBe('oauth');
+        expect(redact('token_count', '42')).toBe('42');
+        expect(redact('gen_ai.usage.input_tokens', 1228)).toBe(1228);
+        expect(redact('gen_ai.usage.output_tokens', 237)).toBe(237);
+        expect(redact('http.request.header.accept', ['text/html'])).toEqual([
+          'text/html',
+        ]);
       });
 
       it('should not redact non-sensitive fields', () => {
@@ -272,14 +301,13 @@ describe('AttributeRedactingProcessor', () => {
         });
 
         const span = createMockReadableSpan({
-          'http.header.authorization':
-            'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
+          'log.message': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
         });
         processor.onEnd(span);
 
-        expect(
-          mockProcessor.endedSpans[0]!.attributes['http.header.authorization'],
-        ).toBe('Bearer ***');
+        expect(mockProcessor.endedSpans[0]!.attributes['log.message']).toBe(
+          'Bearer ***',
+        );
       });
 
       it('should redact JWTs with smart masking', () => {
@@ -288,12 +316,12 @@ describe('AttributeRedactingProcessor', () => {
         });
 
         const span = createMockReadableSpan({
-          'auth.token':
+          'log.detail':
             'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U',
         });
         processor.onEnd(span);
 
-        expect(mockProcessor.endedSpans[0]!.attributes['auth.token']).toBe(
+        expect(mockProcessor.endedSpans[0]!.attributes['log.detail']).toBe(
           'eyJ***.***',
         );
       });

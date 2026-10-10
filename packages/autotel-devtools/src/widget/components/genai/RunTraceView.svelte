@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import type { TraceKind, TraceNode } from '../../genai/trace';
+  import type { SpanRef } from '../../genai/types';
   import { formatDuration } from '../../utils';
   import {
     Bot,
@@ -46,10 +47,10 @@
 
   interface Props {
     nodes: TraceNode[];
-    selectedSpanId?: string | null;
-    onSelectSpan?: (spanId: string) => void;
+    selected?: SpanRef | null;
+    onSelectSpan?: (span: SpanRef) => void;
   }
-  let { nodes, selectedSpanId = null, onSelectSpan }: Props = $props();
+  let { nodes, selected = null, onSelectSpan }: Props = $props();
 
   const rows = $derived(flattenTrace(nodes));
 </script>
@@ -62,11 +63,17 @@
       {@const style = KIND_STYLE[node.kind]}
       {@const Icon = style.icon}
       {@const selectable = node.spanId != null}
-      {@const active = node.spanId != null && node.spanId === selectedSpanId}
+      {@const active =
+        node.spanId != null &&
+        node.spanId === selected?.spanId &&
+        node.traceId === selected?.traceId}
       <button
         type="button"
         disabled={!selectable}
-        onclick={() => node.spanId && onSelectSpan?.(node.spanId)}
+        onclick={() =>
+          node.spanId &&
+          node.traceId &&
+          onSelectSpan?.({ traceId: node.traceId, spanId: node.spanId })}
         class={cn(
           'group flex w-full items-center gap-2 py-1 pr-3 text-left transition-colors',
           selectable ? 'hover:bg-subtle cursor-pointer' : 'cursor-default',

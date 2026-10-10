@@ -51,3 +51,20 @@ export function hydrateToolResults(
     }
   }
 }
+
+// Mutates `client` in place: fills what only the MCP server end captured (its
+// arguments, its result, its error) so folding the server row loses nothing.
+export function mergeServerToolSpan(
+  client: GenAiSpan,
+  server: GenAiSpan,
+): void {
+  if (server.tool) {
+    client.tool ??= { name: server.tool.name };
+    client.tool.arguments ??= server.tool.arguments;
+    client.tool.result ??= server.tool.result;
+  }
+  if (server.status === 'error') {
+    client.status = 'error';
+    client.errorMessage ??= server.errorMessage;
+  }
+}

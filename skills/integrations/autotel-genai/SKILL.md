@@ -236,6 +236,34 @@ the numbers. Pass `promptVersion`, `promptLabel` and `promptHash` through
 `traceGenAI({ workflow: {...} })` so cost, latency and evaluation score become
 splittable by prompt change.
 
+### Request judgments: `autotel-genai/signals` (experimental)
+
+`defineSignal` declares a yes/no, pick-one or rubric question about a finished
+request span, with a `when` predicate and optional `keep` and `cacheKey`.
+`createSignals({ model, signals })` batches the signals due for one request into
+one call to an AI SDK evaluation model you supply (no default model or key).
+Register it in `spanEnrichers` so pending answers drain before export; with your
+own `NodeSDK`, wrap it as `new EnrichedSpanProcessor([signals], [exporter])`.
+
+```typescript
+import { createSignals, defineSignal } from 'autotel-genai/signals';
+
+const fault = defineSignal({
+  name: 'fault',
+  when: (e) => (e.status ?? 0) >= 500,
+  ask: 'Who is responsible for this failure?',
+  choice: { client: 'Bad input', app: 'Our code', upstream: 'A dependency' },
+});
+
+init({ spanEnrichers: [createSignals({ model, signals: [fault] })] });
+```
+
+Answers land as `signals.<name>.value`, `.confidence`, `.score` and `.kept`:
+fresh ones on a `signals {request}` child span, cached ones on the request span.
+Attributes are redacted before they reach the model; `state` narrows what is
+sent. `stats()` reports calls, skipped, errors, cached and kept. Use
+`scriptedEvaluationModel` in tests.
+
 ### Streaming performance: `autotel-genai/streaming`
 
 Streaming latency is two numbers: **time to first chunk** (the wait) and

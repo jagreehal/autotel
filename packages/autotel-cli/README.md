@@ -201,6 +201,9 @@ npx autotel-cli map --min-score 70
 
 # Fail CI when a check that used to pass now fails
 npx autotel-cli map --baseline git:origin/main
+
+# Annotate the pull request diff in GitHub Actions
+npx autotel-cli map --format github --baseline git:origin/main --no-write
 ```
 
 **Detected frameworks:** `next`, `nitro` (Nuxt), `tanstack-start`, `sveltekit`, `hono`, `express`, `fastify`, `elysia`, `cloudflare`. Override with `--framework <name>`.
@@ -242,7 +245,17 @@ costs no score and is never counted as coverage;
 - `--min-score <n>` - Exit 1 when the global score is below this threshold
 - `--baseline [source]` - Compare against a committed map (path, or `git:<ref>`); exit 1 on regression
 - `--no-write` - Skip writing `autotel.map.json`
-- `--json` / `--output-file <path>` - Machine-readable output
+- `--json` / `--output-file <path>` - Machine-readable output (`--json` is the same as `--format json`)
+- `--format github` - GitHub Actions [workflow annotations](https://docs.github.com/en/actions/reference/workflow-commands-for-github-actions) on stdout; the report goes to stderr and the exit code is unchanged
+- `--limit <n>` - Most annotations `--format github` emits (default 10, how many GitHub keeps per step)
+
+**Annotating pull requests:** with `--baseline`, `--format github` emits the regressions as errors: the checks this pull request broke, nothing already on the map. Without one, it emits the "Fix these first" list, worst entry point first, as warnings. The first line carries the score, as an error when `--min-score` or the baseline failed the run, and says how many findings `--limit` left out. Paths are rebased on `GITHUB_WORKSPACE`, so a package scanned with `--cwd` inside a monorepo still annotates the right file.
+
+```
+::warning file=src/index.ts,line=6,title=autotel map%3A trace::no trace() or span() — this handler is invisible when it breaks
+::warning file=src/index.ts,line=6,title=autotel map%3A audit::no audit trail (money: path says "payment") — withAudit() survives tail sampling
+::notice title=autotel map::score 15/100 (at-risk): 0 instrumented, 0 partial, 3 dark; 6 more findings not shown
+```
 
 ### `autotel codemod trace <path>`
 

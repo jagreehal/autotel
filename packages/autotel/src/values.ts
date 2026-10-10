@@ -205,6 +205,77 @@ export function toError(cause: unknown): Error {
 }
 
 /**
+ * Fields an HTTP client hangs on its errors (axios, got, fetch wrappers):
+ * the request and response, with their headers - Authorization, cookies, API
+ * keys. Never copied, whatever they hold.
+ */
+const REQUEST_ERROR_KEYS = new Set([
+  'config',
+  'request',
+  'response',
+  'headers',
+  'options',
+]);
+
+/**
+ * An Error as a record: name, message, stack, its cause (recursively), and the
+ * scalar fields the thrower attached (`code`, `status`, `errno`...). JSON
+ * writes an Error as `{}`, and its message alone drops the rest.
+ *
+ * Only scalar fields are copied: an object on an error is usually the request
+ * or response that failed, with its credentials, and redaction may be off.
+ * `seen` breaks cycles: an error already being written becomes
+ * `<circular-reference>`.
+ */
+export function errorToRecord(
+  error: Error,
+  seen: WeakSet<object> = new WeakSet(),
+): UnknownRecord {
+  seen.add(error);
+  const record: UnknownRecord = { name: error.name, message: error.message };
+  if (error.stack) record.stack = error.stack;
+  // SAFETY: an Error is an object; its own enumerable keys are the fields
+  // the thrower attached, read one at a time.
+  const fields = error as unknown as UnknownRecord;
+  for (const key of Object.keys(error)) {
+    if (REQUEST_ERROR_KEYS.has(key.toLowerCase())) continue;
+    const value = fields[key];
+    const scalar = asString(value) ?? asNumber(value) ?? asBoolean(value);
+    if (scalar !== undefined) record[key] = scalar;
+  }
+  // `cause` from the constructor option is own but not enumerable.
+  const cause = error.cause;
+  if (cause instanceof Error) {
+    record.cause = seen.has(cause)
+      ? '<circular-reference>'
+      : errorToRecord(cause, seen);
+  } else {
+    const scalar = asString(cause) ?? asNumber(cause) ?? asBoolean(cause);
+    if (scalar !== undefined) record.cause = scalar;
+  }
+  return record;
+}
+
+/** JSON.stringify, with any Error inside written as its {@link errorToRecord}. */
+export function stringifyWithErrors(value: unknown): string | undefined {
+  const seen = new WeakSet<object>();
+  // The holder is an object or an array; `Reflect.get` reads either.
+  const raw = (holder: unknown, key: string, v: unknown): unknown =>
+    typeof holder === 'object' && holder !== null
+      ? Reflect.get(holder, key)
+      : v;
+  return JSON.stringify(value, function (key, v: unknown) {
+    // The raw value, not `v`: JSON has already called `toJSON`, and an HTTP
+    // client error's toJSON (axios) hands back its config, headers and all.
+    const original = raw(this, key, v);
+    if (!(original instanceof Error)) return v;
+    return seen.has(original)
+      ? '<circular-reference>'
+      : errorToRecord(original, seen);
+  });
+}
+
+/**
  * A value as an OTel attribute, or undefined when it cannot be one.
  *
  * OTel accepts scalars and homogeneous arrays of scalars. Anything else - a
@@ -217,8 +288,10 @@ export function toAttributeValue(value: unknown): AttributeValue | undefined {
   if (scalar !== undefined) return scalar;
   if (Array.isArray(value)) return toAttributeArray(value);
   if (value instanceof Set) return toAttributeArray([...value]);
-  if (value instanceof Map) return JSON.stringify(Object.fromEntries(value));
-  return JSON.stringify(value);
+  if (value instanceof Map) {
+    return stringifyWithErrors(Object.fromEntries(value));
+  }
+  return stringifyWithErrors(value);
 }
 
 /** The scalars in an array, dropping the entries OTel cannot carry. */
@@ -229,7 +302,7 @@ function toAttributeArray(values: unknown[]): AttributeValue | undefined {
   if (numbers.length === values.length) return numbers;
   const booleans = values.filter((v) => typeof v === 'boolean');
   if (booleans.length === values.length) return booleans;
-  return values.length > 0 ? JSON.stringify(values) : undefined;
+  return values.length > 0 ? stringifyWithErrors(values) : undefined;
 }
 
 /** Whether a Node-style `process` global exists at all - edge runtimes have none. */

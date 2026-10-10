@@ -59,6 +59,7 @@ class NoopSpanProcessor implements SpanProcessor {
 }
 import { BaggageSpanProcessor } from './baggage-span-processor';
 import { RequestAttributesSpanProcessor } from './request-attributes';
+import { EnrichedSpanProcessor } from './enriched-span-processor';
 import { FilteringSpanProcessor } from './filtering-span-processor';
 import {
   PolicyLogRecordProcessor,
@@ -661,8 +662,12 @@ export function init(cfg: AutotelConfig): void {
   }
 
   // Unlike `spanProcessors`, these add to the pipeline instead of replacing it.
+  // One processor rather than a flat list so the enrichers drain before the
+  // exporters shut down: the SDK shuts siblings down concurrently.
   if (mergedConfig.spanEnrichers && mergedConfig.spanEnrichers.length > 0) {
-    spanProcessors.unshift(...mergedConfig.spanEnrichers);
+    spanProcessors = [
+      new EnrichedSpanProcessor(mergedConfig.spanEnrichers, spanProcessors),
+    ];
   }
 
   // Build array of metric readers (supports multiple)

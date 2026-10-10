@@ -105,6 +105,7 @@ npx autotel-cli map src/routes/checkout.ts       # one entry point and its fixes
 npx autotel-cli map --json --no-write            # every finding with evidence + fix
 npx autotel-cli map --min-score 70               # exit 1 below the threshold
 npx autotel-cli map --baseline git:origin/main   # exit 1 when a check regresses
+npx autotel-cli map --format github --limit 10   # GitHub Actions annotations on the PR diff
 ```
 
 Writes `autotel.map.json` next to `package.json`; commit it so `--baseline` has something to compare against. For the checks, scoring, and waiver comments, use skill `find-observability-gaps`.

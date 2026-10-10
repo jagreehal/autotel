@@ -4,6 +4,8 @@ import {
   asNumber,
   asPlainRecordOrMap,
   asString,
+  errorToRecord,
+  stringifyWithErrors,
   type UnknownRecord,
 } from './values';
 
@@ -17,7 +19,8 @@ const CIRCULAR_REFERENCE = '<circular-reference>';
  * Convert a value that arrived from outside to an OTel-compatible
  * AttributeValue. Returns undefined when the value cannot be represented -
  * which is how flattenToAttributes below learns it has an object to descend
- * into rather than a leaf to record.
+ * into rather than a leaf to record. An Error is one of those: it flattens to
+ * its name, message, stack, cause and fields, not its message alone.
  *
  * Total by construction: this runs on whatever an application hands an
  * attribute setter, so a value that cannot be read is a marker in the
@@ -38,7 +41,6 @@ export function toAttributeValue(value: unknown): AttributeValue | undefined {
     if (value instanceof Date) {
       return Number.isNaN(value.getTime()) ? INVALID_DATE : value.toISOString();
     }
-    if (value instanceof Error) return value.message;
   } catch {
     return SERIALIZATION_FAILED;
   }
@@ -54,7 +56,7 @@ function toAttributeArray(values: unknown[]): AttributeValue {
   const booleans = values.filter((v) => asBoolean(v) !== undefined);
   if (booleans.length === values.length) return booleans.map(Boolean);
   try {
-    return JSON.stringify(values);
+    return stringifyWithErrors(values) ?? SERIALIZATION_FAILED;
   } catch {
     return SERIALIZATION_FAILED;
   }
@@ -95,7 +97,10 @@ export function flattenToAttributes(
           continue;
         }
 
-        const nested = asPlainRecordOrMap(value);
+        const nested =
+          value instanceof Error
+            ? errorToRecord(value)
+            : asPlainRecordOrMap(value);
         if (nested !== undefined) {
           // Keyed on the value itself, not on `nested`: a Map flattens to a
           // fresh object each time, which a WeakSet would never recognise.
@@ -110,7 +115,7 @@ export function flattenToAttributes(
 
         // undefined from JSON.stringify means there is nothing to record - a
         // function or a symbol - rather than a failure to record it.
-        const json = JSON.stringify(value);
+        const json = stringifyWithErrors(value);
         if (json !== undefined) out[nextKey] = json;
       } catch {
         out[nextKey] = SERIALIZATION_FAILED;

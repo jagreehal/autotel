@@ -19,7 +19,7 @@ export const ToolRun: Story = { args: { rows: timelineRows() } };
 export const SpanSelected: Story = {
   args: {
     rows: timelineRows(),
-    selectedSpanId: timelineRows()[0]?.normalized.spanId ?? null,
+    selected: timelineRows()[0]?.normalized ?? null,
     onSelectSpan: () => {},
   },
 };

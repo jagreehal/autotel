@@ -42,6 +42,11 @@ function parseJson<T = unknown>(v: unknown): T | undefined {
   }
 }
 
+// Tool payloads are usually JSON strings, but a plain-text result is still worth showing.
+function jsonOrRaw(v: unknown): unknown {
+  return v == null ? undefined : (parseJson(v) ?? v);
+}
+
 interface RawMessage {
   role: string;
   content?: unknown;
@@ -147,6 +152,24 @@ type ToolPart =
   | { kind: 'call'; call: GenAiToolCall }
   | { kind: 'result'; result: { id?: string; value: unknown } }
   | { kind: 'text'; text: string };
+
+/** The readable value inside an MCP `CallToolResult`: `structuredContent` when
+ *  present, else its text parts (JSON-parsed when they hold JSON). Anything
+ *  else is returned as-is. An error result keeps the flag as `{ error }`. */
+export function unwrapMcpToolResult(result: unknown): unknown {
+  const r = asObject(result);
+  if (!r || !Array.isArray(r.content)) return result;
+  if (r.content.length === 0 && r.structuredContent === undefined)
+    return result;
+  const texts: unknown[] = [];
+  for (const part of r.content) {
+    const p = asObject(part);
+    if (p?.type !== 'text' || typeof p.text !== 'string') return result;
+    texts.push(jsonOrRaw(p.text));
+  }
+  const value = r.structuredContent ?? (texts.length === 1 ? texts[0] : texts);
+  return r.isError === true ? { error: value } : value;
+}
 
 // Unwrap a tool-result payload: both encodings may wrap the value as
 // `{ type, value }`, so pull `.value` out when present, else use it as-is.
@@ -594,6 +617,8 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   'gen_ai.agent.description',
   'gen_ai.tool.name',
   'gen_ai.tool.call.id',
+  'gen_ai.tool.call.arguments',
+  'gen_ai.tool.call.result',
   'gen_ai.handoff.from_agent',
   'gen_ai.handoff.to_agent',
   'gen_ai.guardrail.name',
@@ -901,6 +926,8 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
   const agentDescription = str(attrs['gen_ai.agent.description']);
   const toolName = str(attrs['gen_ai.tool.name']);
   const toolCallId = str(attrs['gen_ai.tool.call.id']);
+  const toolArgs = jsonOrRaw(attrs['gen_ai.tool.call.arguments']);
+  const toolResult = jsonOrRaw(attrs['gen_ai.tool.call.result']);
   const handoffFrom = str(attrs['gen_ai.handoff.from_agent']);
   const handoffTo = str(attrs['gen_ai.handoff.to_agent']);
   const guardrailName = str(attrs['gen_ai.guardrail.name']);
@@ -1009,7 +1036,12 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
         : undefined,
     tool:
       toolName || toolCallId
-        ? { name: toolName, callId: toolCallId }
+        ? {
+            name: toolName,
+            callId: toolCallId,
+            arguments: toolArgs,
+            result: toolResult,
+          }
         : undefined,
     handoff:
       handoffFrom || handoffTo

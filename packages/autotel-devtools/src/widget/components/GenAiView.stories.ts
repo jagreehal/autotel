@@ -57,17 +57,24 @@ function fixtureSpan(fixture: JsonFixture): SpanData {
 }
 
 function seedTraces(fixtures: SpanData[][]): () => void {
-  const traces: TraceData[] = fixtures.map((spans, i) => ({
-    traceId: `fixture-${i}`,
-    correlationId: `fixture-${i}`,
-    rootSpan: spans[0],
-    spans,
-    startTime: spans[0]?.startTime ?? 0,
-    endTime: spans[spans.length - 1]?.endTime ?? 0,
-    duration: 0,
-    status: 'OK',
-    service: `fixture-service-${i}`,
-  }));
+  // Every span carries its trace's id, as it does once the store groups them:
+  // some recordings split one run across several trace ids, and selection
+  // matches a row on its trace and span together.
+  const traces: TraceData[] = fixtures.map((recorded, i) => {
+    const traceId = `fixture-${i}`;
+    const spans = recorded.map((span) => ({ ...span, traceId }));
+    return {
+      traceId,
+      correlationId: traceId,
+      rootSpan: spans[0],
+      spans,
+      startTime: spans[0]?.startTime ?? 0,
+      endTime: spans[spans.length - 1]?.endTime ?? 0,
+      duration: 0,
+      status: 'OK',
+      service: `fixture-service-${i}`,
+    };
+  });
   tracesSignal.value = traces;
   return () => {
     tracesSignal.value = [];

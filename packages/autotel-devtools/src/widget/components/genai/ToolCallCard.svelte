@@ -3,12 +3,15 @@
   import { cn } from '../../utils/cn';
   import { humanizeName } from '../../utils/humanize';
   import JsonField from '../JsonField.svelte';
+  import { unwrapMcpToolResult } from '../../genai/normalize';
   import type { GenAiToolCall } from '../../genai/types';
 
   interface Props {
     call: GenAiToolCall;
+    // Starts expanded on an execute_tool span, where the call is the whole payload.
+    open?: boolean;
   }
-  let { call }: Props = $props();
+  let { call, open = false }: Props = $props();
 
   // Keep the exact tool id as the visible label (devs match it to code), but
   // surface a readable Title Case form as a tooltip when it differs.
@@ -16,8 +19,6 @@
   const nameTitle = $derived(
     readableName && readableName !== call.name ? readableName : undefined,
   );
-
-  let open = $state(false);
 
   function formatToolParams(args: unknown): string {
     if (args == null || typeof args !== 'object' || Array.isArray(args))
@@ -51,7 +52,7 @@
         })()
       : call.arguments,
   );
-  const result = $derived(call.result);
+  const result = $derived(unwrapMcpToolResult(call.result));
   const paramSummary = $derived(formatToolParams(args));
 </script>
 

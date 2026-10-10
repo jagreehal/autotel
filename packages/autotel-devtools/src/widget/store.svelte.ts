@@ -22,9 +22,13 @@ import {
   resolveWindow,
   type WindowSelection,
 } from './timeWindow';
-import { isGenAiSpan } from './genai/detect';
+import { isGenAiSpan, findMcpServerToolHalves } from './genai/detect';
 import { toGenAiSpan } from './genai/normalize';
-import { buildToolResultIndex, hydrateToolResults } from './genai/stitch';
+import {
+  buildToolResultIndex,
+  hydrateToolResults,
+  mergeServerToolSpan,
+} from './genai/stitch';
 import type { GenAiSpan } from './genai/types';
 import type { SpanData } from './types';
 import { stringAttr } from './attrs';
@@ -541,6 +545,8 @@ export interface GenAiRow {
   normalized: GenAiSpan;
   service: string;
   traceId: string;
+  /** The MCP server span folded into this row, so a link to it opens here. */
+  serverSpanId?: string;
 }
 
 export const genAiRowsSignal = computed<GenAiRow[]>(() => {
@@ -548,15 +554,34 @@ export const genAiRowsSignal = computed<GenAiRow[]>(() => {
   // Windowed, so the GenAI list reflects the range the toolbar names.
   for (const trace of windowedTracesSignal.value) {
     const toolResultIndex = buildToolResultIndex(trace.spans);
+    // An MCP call seen from both ends shows as the client's row, with what only
+    // the server captured merged in. The waterfall still shows both spans.
+    const serverHalves = findMcpServerToolHalves(trace.spans);
+    const normalizedById = new Map<string, GenAiSpan>();
     for (const span of trace.spans) {
       if (!isGenAiSpan(span)) continue;
       const normalized = toGenAiSpan(span);
       hydrateToolResults(normalized, toolResultIndex);
+      normalizedById.set(span.spanId, normalized);
+    }
+    for (const [serverId, clientId] of serverHalves) {
+      const client = normalizedById.get(clientId);
+      const server = normalizedById.get(serverId);
+      if (client && server) mergeServerToolSpan(client, server);
+    }
+    const serverOf = new Map(
+      [...serverHalves].map(([serverId, clientId]) => [clientId, serverId]),
+    );
+    for (const span of trace.spans) {
+      const normalized = normalizedById.get(span.spanId);
+      if (!normalized || serverHalves.has(span.spanId)) continue;
       rows.push({
         raw: span,
         normalized,
-        service: trace.service,
+        // The span's own service: a trace rooted in the browser still has server and MCP spans.
+        service: stringAttr(span.attributes, 'service.name') ?? trace.service,
         traceId: trace.traceId,
+        serverSpanId: serverOf.get(span.spanId),
       });
     }
   }

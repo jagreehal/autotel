@@ -81,6 +81,8 @@ node app.js
 ### TerminalOptions
 
 ```typescript
+import { openai } from '@ai-sdk/openai';
+
 renderTerminal(
   {
     title: 'My App Traces', // Dashboard title
@@ -88,11 +90,8 @@ renderTerminal(
     maxSpans: 200, // Max spans to display (default: 100)
     colors: true, // Auto-detected from TTY if omitted
     ai: {
-      // Optional AI assistant config
-      provider: 'ollama', // 'ollama' | 'openai' | 'openai-compatible'
-      model: 'granite4', // Model name
-      apiKey: 'sk-...', // For cloud providers
-      baseUrl: 'http://...', // Custom endpoint
+      // Any AI SDK model, or a spec string such as 'ollama:granite4'
+      model: openai('gpt-5'),
     },
   },
   stream,
@@ -140,10 +139,9 @@ autotel-terminal \
   --port 4319 \               # env: AUTOTEL_TERMINAL_PORT
   --host 127.0.0.1 \          # env: AUTOTEL_TERMINAL_HOST
   --title "My Dashboard" \    # env: AUTOTEL_TERMINAL_TITLE
-  --ai-provider ollama \      # env: AI_PROVIDER
-  --ai-model granite4 \       # env: AI_MODEL
-  --ai-api-key sk-... \       # env: AI_API_KEY
-  --ai-base-url http://...    # env: AI_BASE_URL
+  --model ollama:granite4 \   # env: AI_MODEL
+  --base-url http://... \     # env: AI_BASE_URL (openai-compatible)
+  --ai-api-key sk-...         # env: AI_API_KEY, overrides the provider's own key
 ```
 
 CLI OTLP endpoints (all accept OTLP JSON format):
@@ -157,7 +155,16 @@ CLI OTLP endpoints (all accept OTLP JSON format):
 
 ### AI assistant
 
-Auto-detects Ollama (if running locally) or OpenAI (if `OPENAI_API_KEY` is set). Press `a` in the dashboard to toggle the AI panel. The assistant can answer questions about the spans currently visible in the dashboard.
+You bring the model; there is no default remote model. `--model` takes:
+
+| Spec                                     | Provider            | Key                    | Install                     |
+| ---------------------------------------- | ------------------- | ---------------------- | --------------------------- |
+| `openai/gpt-5` or `gateway:openai/gpt-5` | Vercel AI Gateway   | `AI_GATEWAY_API_KEY`   | nothing extra               |
+| `openai:gpt-5`                           | OpenAI              | `OPENAI_API_KEY`       | `@ai-sdk/openai`            |
+| `openai-compatible:<id>` + `--base-url`  | OpenAI-style server | `AI_API_KEY` if needed | `@ai-sdk/openai-compatible` |
+| `ollama:granite4`                        | Local Ollama        | none                   | `ai-sdk-ollama`             |
+
+The provider packages are optional peers: install the one you use. With no model set, a local Ollama is used when it answers. Press `a` in the dashboard to toggle the AI panel. The assistant can answer questions about the spans currently visible in the dashboard.
 
 ### Dashboard keyboard controls
 

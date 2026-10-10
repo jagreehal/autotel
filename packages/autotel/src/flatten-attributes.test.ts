@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toAttributeValue, flattenToAttributes } from './flatten-attributes';
+import { createAttributeRedactor } from './attribute-redacting-processor';
 
 describe('toAttributeValue', () => {
   it('returns primitives as-is', () => {
@@ -23,8 +24,8 @@ describe('toAttributeValue', () => {
     expect(toAttributeValue(d)).toBe('2025-01-01T00:00:00.000Z');
   });
 
-  it('converts Error to its message', () => {
-    expect(toAttributeValue(new Error('boom'))).toBe('boom');
+  it('leaves an Error to flatten, rather than reducing it to its message', () => {
+    expect(toAttributeValue(new Error('boom'))).toBeUndefined();
   });
 
   it('returns a Set as the array it carries', () => {
@@ -174,5 +175,107 @@ describe('values that cannot be converted', () => {
     expect(flattenToAttributes({ hostile })).toEqual({
       hostile: '<serialization-failed>',
     });
+  });
+});
+
+describe('Errors inside fields', () => {
+  const paymentError = () =>
+    Object.assign(
+      new Error('card declined', { cause: new TypeError('gateway timeout') }),
+      { name: 'PaymentError', code: 'E_DECLINED', status: 402 },
+    );
+
+  it('flattens an Error to its name, message, stack, cause and fields', () => {
+    const attrs = flattenToAttributes({ payment: { error: paymentError() } });
+    expect(attrs).toMatchObject({
+      'payment.error.name': 'PaymentError',
+      'payment.error.message': 'card declined',
+      'payment.error.code': 'E_DECLINED',
+      'payment.error.status': 402,
+      'payment.error.cause.name': 'TypeError',
+      'payment.error.cause.message': 'gateway timeout',
+    });
+    expect(attrs['payment.error.stack']).toContain('card declined');
+    expect(attrs['payment.error.cause.stack']).toContain('gateway timeout');
+  });
+
+  it('writes an Error inside an array as its record, not {}', () => {
+    const attrs = flattenToAttributes({ errors: [paymentError()] });
+    const [written] = JSON.parse(String(attrs.errors)) as Array<
+      Record<string, unknown>
+    >;
+    expect(written).toMatchObject({
+      name: 'PaymentError',
+      message: 'card declined',
+      code: 'E_DECLINED',
+      status: 402,
+      cause: { name: 'TypeError', message: 'gateway timeout' },
+    });
+  });
+
+  it('survives an Error whose cause chain loops', () => {
+    const a = new Error('a');
+    const b = new Error('b', { cause: a });
+    Object.assign(a, { cause: b });
+    const attrs = flattenToAttributes({ error: a });
+    expect(attrs['error.cause.message']).toBe('b');
+    expect(attrs['error.cause.cause']).toBe('<circular-reference>');
+    expect(JSON.parse(String(flattenToAttributes({ e: [a] }).e))).toMatchObject(
+      [{ cause: { cause: '<circular-reference>' } }],
+    );
+  });
+
+  it("keeps an HTTP client error's code and status, never its request or response", () => {
+    // The shape axios throws: credentials in config.headers and on the request.
+    const error = Object.assign(
+      new Error('Request failed with status code 401'),
+      {
+        name: 'AxiosError',
+        code: 'ERR_BAD_REQUEST',
+        status: 401,
+        isAxiosError: true,
+        config: {
+          url: '/charge',
+          headers: { Authorization: 'Bearer secret-token', Cookie: 'sid=abc' },
+        },
+        request: { _header: 'Authorization: Bearer secret-token' },
+        response: {
+          status: 401,
+          headers: { 'set-cookie': 'sid=abc' },
+          data: { apiKey: 'sk_live_123' },
+        },
+        headers: { Authorization: 'Bearer secret-token' },
+        toJSON: () => ({ config: { headers: { Authorization: 'x' } } }),
+      },
+    );
+    for (const attrs of [
+      flattenToAttributes({ error }),
+      flattenToAttributes({ errors: [error] }),
+    ]) {
+      const text = JSON.stringify(attrs);
+      expect(text).toContain('ERR_BAD_REQUEST');
+      expect(text).toContain('401');
+      expect(text).not.toMatch(
+        /secret-token|sid=abc|sk_live_123|headers|config/,
+      );
+    }
+    expect(flattenToAttributes({ error })).toMatchObject({
+      'error.code': 'ERR_BAD_REQUEST',
+      'error.status': 401,
+      'error.isAxiosError': true,
+    });
+  });
+
+  it('leaves the error fields to the redactor', () => {
+    const redact = createAttributeRedactor('strict');
+    const error = Object.assign(new Error('rejected api_key=sk_live_123'), {
+      token: 'tok_456',
+    });
+    const attrs = flattenToAttributes({ error });
+    const redacted = Object.fromEntries(
+      Object.entries(attrs).map(([k, v]) => [k, redact(k, v)]),
+    );
+    expect(JSON.stringify(redacted)).not.toContain('sk_live_123');
+    expect(attrs['error.token']).toBe('tok_456');
   });
 });

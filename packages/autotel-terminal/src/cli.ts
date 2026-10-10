@@ -41,13 +41,21 @@ Options:
   -v, --version              Show version number
 
 AI Options:
-  --ai-provider <provider>   AI provider: ollama, openai, openai-compatible (env: AI_PROVIDER)
-  --ai-model <model>         AI model name (env: AI_MODEL)
-  --ai-api-key <key>         API key for cloud providers (env: AI_API_KEY)
-  --ai-base-url <url>        Custom AI endpoint URL (env: AI_BASE_URL)
+  --model <spec>             Model for the assistant (env: AI_MODEL):
+                               ollama:<id>               local Ollama
+                               openai:<id>               reads OPENAI_API_KEY
+                               openai-compatible:<id>    any OpenAI-style server, with --base-url
+                               <provider>/<id>           Vercel AI Gateway, reads AI_GATEWAY_API_KEY
+                                                         (or gateway:<provider>/<id>)
+  --base-url <url>           Endpoint URL (env: AI_BASE_URL)
+  --ai-api-key <key>         API key, overriding the provider's own variable (env: AI_API_KEY)
+  --ai-provider <provider>   Provider, with --model naming just the id (env: AI_PROVIDER)
+  --ai-model, --ai-base-url  Aliases of --model and --base-url
 
-  Auto-detection: if Ollama is running locally, it is used automatically.
-  If OPENAI_API_KEY is set, OpenAI is used. Press 'a' in the dashboard to toggle AI.
+  With no model set, a local Ollama is used when it answers; otherwise the
+  assistant stays off. The non-gateway providers are optional packages:
+  install ai-sdk-ollama, @ai-sdk/openai or @ai-sdk/openai-compatible to use one.
+  Press 'a' in the dashboard to toggle AI.
 
 Endpoints:
   POST /v1/traces            Receive OTLP JSON trace data
@@ -57,8 +65,9 @@ Endpoints:
 
 Examples:
   npx autotel-terminal
-  npx autotel-terminal --ai-provider ollama --ai-model granite4
-  AI_API_KEY=sk-... npx autotel-terminal --ai-provider openai --ai-model gpt-4o
+  npx autotel-terminal --model ollama:granite4
+  AI_GATEWAY_API_KEY=... npx autotel-terminal --model openai/gpt-5
+  npx autotel-terminal --model openai-compatible:qwen3 --base-url http://localhost:1234/v1
 ` + '\n',
   );
 }
@@ -116,7 +125,7 @@ function parseArgs(argv: string[]): CliOptions | null {
       i++;
       continue;
     }
-    if (arg === '--ai-model' && next) {
+    if ((arg === '--model' || arg === '--ai-model') && next) {
       options.ai.model = next;
       i++;
       continue;
@@ -126,7 +135,7 @@ function parseArgs(argv: string[]): CliOptions | null {
       i++;
       continue;
     }
-    if (arg === '--ai-base-url' && next) {
+    if ((arg === '--base-url' || arg === '--ai-base-url') && next) {
       options.ai.baseUrl = next;
       i++;
     }

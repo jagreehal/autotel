@@ -3200,12 +3200,6 @@ importers:
 
   packages/autotel-terminal:
     dependencies:
-      '@ai-sdk/openai':
-        specifier: ^4.0.78
-        version: 4.0.83(zod@4.6.5)
-      '@ai-sdk/openai-compatible':
-        specifier: ^3.0.57
-        version: 3.0.62(zod@4.6.5)
       '@json-render/core':
         specifier: ^0.21.0
         version: 0.21.0(zod@4.6.5)
@@ -3218,9 +3212,6 @@ importers:
       ai:
         specifier: ^7.0.118
         version: 7.0.118(zod@4.6.5)
-      ai-sdk-ollama:
-        specifier: ^4.3.0
-        version: 4.3.0(ai@7.0.118(zod@4.6.5))(zod@4.6.5)
       ink:
         specifier: ^7.1.1
         version: 7.1.1(@types/react@19.3.0)(react@19.3.0)
@@ -3231,6 +3222,12 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@ai-sdk/openai':
+        specifier: ^4.0.78
+        version: 4.0.83(zod@4.6.5)
+      '@ai-sdk/openai-compatible':
+        specifier: ^3.0.57
+        version: 3.0.62(zod@4.6.5)
       '@arethetypeswrong/cli':
         specifier: ^0.18.5
         version: 0.18.5
@@ -3243,6 +3240,9 @@ importers:
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0
+      ai-sdk-ollama:
+        specifier: ^4.3.0
+        version: 4.3.0(ai@7.0.118(zod@4.6.5))(zod@4.6.5)
       autotel:
         specifier: workspace:*
         version: link:../autotel

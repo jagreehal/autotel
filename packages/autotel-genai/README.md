@@ -610,6 +610,81 @@ session-level latency are ordinary queries. This is the same hierarchy vendor
 LLM-analytics products sell as `$ai_session_id`; here it is spec, so it works
 wherever the spans land.
 
+### Signals: model judgments on requests (experimental)
+
+`autotel-genai/signals` asks an evaluation model questions about finished
+requests and records the answer as a typed attribute with a confidence:
+`signals.fault.value = 'upstream'`, `signals.fault.confidence = 0.93`. Group by
+it, alert on it, or use it to keep requests sampling would drop. It is built on
+the AI SDK's `experimental_evaluate` model contract, so it is experimental.
+
+You bring the model. There is no default model or provider and no key handling:
+pass any AI SDK evaluation model (`EvaluationModelV4`), configured the way that
+provider documents.
+
+```ts
+import { init } from 'autotel';
+import { createSignals, defineSignal } from 'autotel-genai/signals';
+
+const fault = defineSignal({
+  name: 'fault',
+  when: (e) => (e.status ?? 0) >= 500,
+  ask: 'Who is responsible for this failure?',
+  choice: {
+    client: 'Bad input, expired session, client mistake',
+    app: 'Our own code or configuration',
+    upstream: 'A third-party dependency failed',
+  },
+  cacheKey: (e) => String(e['error.type'] ?? e.name),
+});
+
+const silentFailure = defineSignal({
+  name: 'silent_failure',
+  when: (e) => e.status === 200 && e.name === 'POST /api/checkout',
+  ask: 'Returned 200, but the customer did not get what they came for',
+  keep: (v) => v.value && v.confidence > 0.8,
+});
+
+init({
+  service: 'shop',
+  spanEnrichers: [
+    createSignals({
+      model: evaluationModel, // any AI SDK evaluation model
+      signals: [fault, silentFailure],
+      budget: { perMinute: 600 },
+    }),
+  ],
+});
+```
+
+- **Register it in `spanEnrichers`,** not `spanProcessors`: autotel drains
+  enrichers before its exporters shut down, so answers still pending at exit
+  are exported. With your own `NodeSDK`, keep that order with
+  `new EnrichedSpanProcessor([signals], [exportProcessor])` from `autotel`.
+- **What is judged:** request spans, meaning spans with no parent or a remote
+  one. A signal's `when` sees the span's attributes plus `name`, `status`
+  (`http.response.status_code`), `error` and `durationMs`. All signals due for
+  one request go into one model call.
+- **Where answers land:** a span is immutable once it ends and a model call is
+  async, so fresh answers go on a `signals {request}` child span in the same
+  trace, which also parents the traced `evaluate` call. Answers served from
+  `cacheKey` are known at once and go on the request span itself.
+- **`keep`:** tail sampling decides per span when the span ends. A cached answer
+  that keeps marks the request span kept before tail sampling reads it. A fresh
+  answer arrives after that, so the request span and its children may already
+  be dropped; the signals span always exports, and when `keep` holds on a
+  dropped request it carries the request's attributes as `signals.event.*`.
+  Use `cacheKey` on keep signals that should promote the request span itself.
+- **What leaves the process:** the request's attributes, after
+  `redact` (default: the `default` redaction preset, because request spans reach
+  this processor before the export pipeline's redactor). Use `state` to send
+  only the fields a question needs, and `maxStateChars` to skip large requests.
+- **Failure:** over budget, during the cooldown after a failed call, or past
+  `timeoutMs` (default 2s), requests go unjudged and pass through unchanged.
+  `stats()` counts calls, skipped, errors, cached and kept.
+- **Tests:** `scriptedEvaluationModel((name, question, state) => answer)` stands
+  in for a provider and records every call.
+
 ### Sending the same spans to PostHog
 
 PostHog ingests plain OTLP: `PostHogSpanProcessor` from `@posthog/ai/otel`
