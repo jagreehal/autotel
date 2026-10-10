@@ -93,12 +93,13 @@ services:
       # it serves anything, so it is the last thing to come up. Gate on it, not
       # on the databases: a healthy ClickHouse does not mean ingest is open.
       #
-      # $$(hostname), not localhost: Next.js binds this container's IP and
-      # refuses connections on the loopback address.
+      # $$HOSTNAME, not localhost: Next.js binds this container's IP and
+      # refuses connections on the loopback address. Docker sets HOSTNAME in
+      # every container; the image ships no `hostname` binary.
       test:
         [
           'CMD-SHELL',
-          'wget -qO- http://$$(hostname):3000/api/public/health >/dev/null || exit 1',
+          'wget -qO- http://$$HOSTNAME:3000/api/public/health >/dev/null || exit 1',
         ]
       interval: 5s
       timeout: 5s
