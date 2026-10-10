@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { SpanKind } from '@opentelemetry/api';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import { SpanKind, context, propagation } from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
 import { withTracing } from './functional';
 import { createTraceCollector } from './testing';
@@ -61,5 +61,38 @@ describe('createTraceCollector trace-level helpers', () => {
     expect(() => collector.expectSpan('duplicate')).toThrow(
       'Expected exactly one span matching "duplicate", found 2',
     );
+  });
+});
+
+describe('createTraceCollector propagation', () => {
+  it('registers a W3C propagator so header propagation works without init()', async () => {
+    createTraceCollector();
+    const traced = withTracing({ name: 'outgoing' })(() => () => {
+      const headers: Record<string, string> = {};
+      propagation.inject(context.active(), headers);
+      return headers;
+    });
+    expect(traced().traceparent).toMatch(/^00-[\da-f]{32}-[\da-f]{16}-01$/);
+  });
+});
+
+describe('withTracing types', () => {
+  it('types an async factory as Promise<T>, a sync one as T', () => {
+    const asyncFn = withTracing({ name: 'a' })(() => async (n: number) => n);
+    const syncFn = withTracing({ name: 's' })(() => (n: number) => n);
+    expectTypeOf(asyncFn).returns.toEqualTypeOf<Promise<number>>();
+    expectTypeOf(syncFn).returns.toEqualTypeOf<number>();
+  });
+
+  it('types a sync-or-thenable handler as T | Promise<T>', () => {
+    const mixedFn = withTracing({ name: 'm' })(
+      () =>
+        (flag: boolean): number | PromiseLike<number> =>
+          flag ? 1 : Promise.resolve(2),
+    );
+    expectTypeOf(mixedFn).returns.toEqualTypeOf<number | Promise<number>>();
+    expectTypeOf(mixedFn).toExtend<
+      (flag: boolean) => number | Promise<number>
+    >();
   });
 });
