@@ -1,0 +1,7 @@
+@import 'tailwindcss' source(none);
+@import '../theme.css';
+@source './*.svelte';
+@source '../components/{WaterfallView,WaterfallRow,SpanHoverCard,TreeGutter,ResizablePanel}.svelte';
+@source '../components/*.svelte.ts';
+@source '../utils';
+@source '../*.ts';

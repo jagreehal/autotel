@@ -15,6 +15,7 @@ import {
   compactTrace,
   compactTraceResult,
 } from '../modules/trace-payload';
+import { registerTraceView, traceViewToolMeta } from '../apps/trace-view';
 
 export function registerInvestigationTools(
   server: McpServer,
@@ -68,6 +69,8 @@ export function registerInvestigationTools(
       description: 'Get a trace by trace ID.',
       annotations: READ_ONLY,
       inputSchema: z.object({ traceId: z.string().min(1) }),
+      // Hosts that render MCP Apps draw the trace as a waterfall.
+      ...traceViewToolMeta(),
     },
     async ({ traceId }: { traceId: string }) =>
       respondSafe(async () => {
@@ -77,6 +80,7 @@ export function registerInvestigationTools(
           : compactTrace(trace);
       }, 'get_trace'),
   );
+  registerTraceView(server);
 
   server.registerTool(
     'summarize_trace',

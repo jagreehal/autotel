@@ -1,7 +1,7 @@
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { CollectorStore } from './store';
-import { exceptionTags } from '../span-mapping';
+import { exceptionTags, spanKindTag } from '../span-mapping';
 import type { SourceMapResolver } from 'autotel-devtools/sourcemaps';
 import type {
   SpanRecord,
@@ -106,6 +106,7 @@ interface OtlpSpan {
   spanId?: string;
   parentSpanId?: string;
   name?: string;
+  kind?: number | string;
   startTimeUnixNano?: string | number;
   endTimeUnixNano?: string | number;
   status?: { code?: number; message?: string };
@@ -133,6 +134,7 @@ function spanTags(
       })),
       s.status?.message,
     ),
+    ...spanKindTag(s.kind),
     ...attrsToRecord(s.attributes),
   };
   // Map bundle frames back to source before anything groups or shows them.

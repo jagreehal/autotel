@@ -33,6 +33,7 @@ import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
 import {
   exceptionTags,
+  spanKindTag,
   inferErrorStatusFromTags,
   readNumericTag,
 } from '../span-mapping';
@@ -69,6 +70,7 @@ type OtlpSpan = {
   spanId: string;
   parentSpanId?: string;
   name: string;
+  kind?: number | string;
   startTimeUnixNano?: string | number;
   endTimeUnixNano?: string | number;
   attributes?: OtlpAttribute[];
@@ -389,6 +391,7 @@ function parseOtlpSpan(
       })),
       span.status?.message,
     ),
+    ...spanKindTag(span.kind),
     ...parseOtlpAttributes(span.attributes),
   };
   const startNs = toNumber(span.startTimeUnixNano) ?? 0;

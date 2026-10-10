@@ -43,6 +43,7 @@
       "import": "./dist/issues/index.js",
       "require": "./dist/issues/index.cjs"
     },
+    "./mcp-app/trace": "./dist/mcp-app-trace.global.js",
     "./sourcemaps": {
       "types": "./dist/server/sourcemap.d.ts",
       "import": "./dist/server/sourcemap.js",
@@ -69,7 +70,7 @@
     "widget"
   ],
   "scripts": {
-    "build": "tsdown && vite build --config vite.widget.config.ts && FULLPAGE=1 vite build --config vite.widget.config.ts",
+    "build": "tsdown && vite build --config vite.widget.config.ts && FULLPAGE=1 vite build --config vite.widget.config.ts && MCP_APP=1 vite build --config vite.widget.config.ts",
     "dev": "tsdown --watch",
     "type-check": "svelte-check --tsconfig ./tsconfig.json && tsc --noEmit",
     "lint": "oxlint -c oxlint.json --disable-nested-config src",

@@ -4,11 +4,12 @@ Standalone OTLP receiver with a Svelte 5-based web UI for local development obse
 
 ## Architecture
 
-Three build outputs:
+Four build outputs:
 
 - **Server** (tsdown): Node.js library + CLI: receives OTLP over HTTP, stores it in sqlite, answers queries, streams to the browser over WebSocket
 - **Embedded widget** (`widget.global.js`, Vite IIFE): `<autotel-devtools>` custom element with Shadow DOM isolation. **Reduced view set**: it is a guest in someone else's product page, so every kilobyte is one their users download
 - **Full-page viewer** (`fullpage.global.js`, same config with `FULLPAGE=1`): every view, with a looser budget than the embedded bundle
+- **MCP App trace view** (`mcp-app-trace.global.js`, `MCP_APP=1`, exported as `autotel-devtools/mcp-app/trace`): `WaterfallView` alone, the view autotel-mcp serves for `get_trace`. Entry `src/widget/mcp-app/trace.ts`. It runs in a chat host's sandboxed iframe, so the stylesheet goes on the document rather than a shadow root, and `host.ts` speaks the MCP Apps `postMessage` protocol with no SDK. It stays small two ways: `mcp-app/styles.css` scans only the waterfall's files (`source(none)` plus `@source`, theme from `theme.css`), and the build swaps the store for `store.svelte.mcp-app.ts`, the two signals the waterfall reads. `mcp-app/styles.test.ts` fails when the view renders a component the stylesheet does not scan. autotel-mcp copies the file into its own `dist/` at build time
 
 Both browser bundles come from **one entry and one component library**; the only intended difference is which view registry is bundled (`src/widget/views/registry.ts` vs `registry.lean.ts`, swapped by a resolver plugin in `vite.widget.config.ts`). `TAB_DEFS` is filtered against the registry, so a build cannot offer a tab whose view it did not bundle. `GET /widget.js?mode=fullpage` serves the full bundle; a bare `/widget.js`, what an embedder's script tag requests, serves the reduced one.
 

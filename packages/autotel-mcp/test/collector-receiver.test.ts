@@ -37,6 +37,7 @@ describe('OtlpReceiver', () => {
                   traceId: traceIdHex,
                   spanId: spanIdHex,
                   name: 'GET /test',
+                  kind: 2,
                   startTimeUnixNano: String(Date.now() * 1_000_000),
                   endTimeUnixNano: String((Date.now() + 100) * 1_000_000),
                   status: { code: 1 },
@@ -58,6 +59,7 @@ describe('OtlpReceiver', () => {
     const trace = await store.getTrace(traceIdHex);
     expect(trace).not.toBeNull();
     expect(trace!.spans[0].operationName).toBe('GET /test');
+    expect(trace!.spans[0].tags['span.kind']).toBe('server');
     expect(trace!.spans[0].serviceName).toBe('test-svc');
   });
 
