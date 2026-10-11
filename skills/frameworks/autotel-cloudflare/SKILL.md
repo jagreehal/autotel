@@ -88,6 +88,8 @@ Leave it at `'auto'`. Outside any wrapper (Durable Object RPC methods, entrypoin
 
 To query spans and Workers logs Cloudflare stored, run autotel-mcp or `autotel investigate` with `--backend cloudflare` (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` with Account Analytics Read).
 
+`instrumentWorkflow` works in both modes. With `nativeTracing: 'off'` it registers the OTLP provider itself and exports the run and step spans before `run()` resolves.
+
 `wrangler dev` runs native tracing as well and sends spans to the Local Explorer. To stream local spans to `npx autotel-devtools`, put `NATIVE_TRACING=off` in `.dev.vars` and pass `nativeTracing: env.NATIVE_TRACING`.
 
 ## No SDK: Tail Worker

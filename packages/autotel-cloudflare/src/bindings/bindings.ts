@@ -36,6 +36,7 @@ import {
   asNumber,
   asRecord,
   asString,
+  boundMethod,
   hasMethod,
   hasMethods,
   member,
@@ -699,9 +700,9 @@ export function instrumentServiceBinding<F extends Fetcher>(
       const value = member(target, prop);
       const method = asFunction(value);
       if (method !== undefined) {
-        // Bind native methods to the original target to prevent
-        // "Illegal invocation" errors
-        return method.bind(target);
+        // Call on the original target: native methods throw "Illegal
+        // invocation" on another `this`, and RPC stubs have no usable bind.
+        return boundMethod(method, target);
       }
       return value;
     },

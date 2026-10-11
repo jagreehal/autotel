@@ -77,6 +77,43 @@ export function fetcherDouble(fetcher: object): Fetcher {
   return runtimeDouble(fetcher);
 }
 
+/**
+ * An RPC stub, the way workerd hands a Workflow its `step` and a Worker an
+ * RPC service binding. Every member name reads as a remote method, and so
+ * does every member of those methods: `stub.do.apply` is a remote call to a
+ * method named "apply", which the receiver does not implement. Code that
+ * forwards a call to a stub has to use Reflect.apply.
+ */
+export function rpcStub<TStub>(
+  methods: Record<string, (...args: never[]) => unknown>,
+): TStub {
+  const remote = (
+    name: string,
+    implementation?: (...args: never[]) => unknown,
+  ): unknown =>
+    new Proxy(
+      implementation ??
+        (() => {
+          throw new TypeError(
+            `The RPC receiver does not implement the method "${name}".`,
+          );
+        }),
+      {
+        get: (_target, prop) =>
+          typeof prop === 'string' ? remote(prop) : undefined,
+      },
+    );
+  return runtimeDouble(
+    new Proxy(
+      {},
+      {
+        get: (_target, prop) =>
+          typeof prop === 'string' ? remote(prop, methods[prop]) : undefined,
+      },
+    ),
+  );
+}
+
 /** A Vectorize index double: instrumentVectorize wraps the query methods. */
 export function vectorizeDouble(index: UnknownRecord): VectorizeIndex {
   return runtimeDouble(index);

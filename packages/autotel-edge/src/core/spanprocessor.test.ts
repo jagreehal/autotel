@@ -67,6 +67,33 @@ describe('SpanProcessorWithFlush', () => {
       expect(mockExporter.export).toHaveBeenCalledTimes(2);
     });
 
+    it('exports a trace once when two flushes of it overlap', async () => {
+      // A slow exporter: the first flush is still exporting when the second starts.
+      let finishExport!: () => void;
+      const slowExporter: SpanExporter = {
+        export: vi.fn((_spans, callback) => {
+          finishExport = () => callback({ code: 0 });
+        }),
+        shutdown: vi.fn(async () => {}),
+      };
+      const slow = new SpanProcessorWithFlush(slowExporter);
+      slow.onEnd(createMockSpan('trace-1', 'span-1'));
+
+      let firstDone = false;
+      let secondDone = false;
+      const first = slow.forceFlush('trace-1').then(() => (firstDone = true));
+      const second = slow.forceFlush('trace-1').then(() => (secondDone = true));
+      await Promise.resolve();
+
+      expect(slowExporter.export).toHaveBeenCalledTimes(1);
+      // The second flush waits for the export already in flight.
+      expect([firstDone, secondDone]).toEqual([false, false]);
+
+      finishExport();
+      await Promise.all([first, second]);
+      expect(slowExporter.export).toHaveBeenCalledTimes(1);
+    });
+
     it('should apply post-processor before export', async () => {
       const postProcessor = vi.fn((spans: ReadableSpan[]) => {
         // Add custom attribute to all spans

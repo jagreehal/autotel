@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { logs } from '@opentelemetry/api-logs';
 import { flush, shutdown } from './shutdown';
 import {
   init,
@@ -118,6 +119,34 @@ describe('shutdown module', () => {
       await flush();
 
       expect(mockForceFlush).toHaveBeenCalledOnce();
+    });
+
+    it('bounds a hanging log provider with the same flush timeout', async () => {
+      let finish: (() => void) | undefined;
+      const pending = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      const forceFlush = vi.fn(() => pending);
+      const provider = vi
+        .spyOn(logs, 'getLoggerProvider')
+        .mockReturnValue(sdkDouble({ forceFlush }));
+      init({
+        service: 'test-service',
+        sdkFactory: () => sdkDouble({ start: vi.fn(), shutdown: vi.fn() }),
+      });
+      vi.useFakeTimers();
+      try {
+        const flushed = expect(flush({ timeout: 100 })).rejects.toThrow(
+          'Flush timeout after 100ms',
+        );
+        await vi.advanceTimersByTimeAsync(100);
+        await flushed;
+        expect(forceFlush).toHaveBeenCalledOnce();
+      } finally {
+        finish?.();
+        provider.mockRestore();
+        vi.useRealTimers();
+      }
     });
 
     it('should handle flush timeout', async () => {

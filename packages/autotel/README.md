@@ -2736,7 +2736,7 @@ export const handler = async (event) => {
 The `flush()` function:
 
 - Flushes events from the queue
-- Force-flushes OpenTelemetry spans to exporters
+- Force-flushes OpenTelemetry spans and batched log records to exporters
 - Includes timeout protection (default: 2000ms)
 - Safe to call multiple times
 

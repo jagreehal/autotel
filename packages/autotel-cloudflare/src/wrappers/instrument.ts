@@ -25,7 +25,6 @@ import {
   SpanStatusCode,
   SpanKind,
 } from '@opentelemetry/api';
-import { resourceFromAttributes } from '@opentelemetry/resources';
 import type {
   ConfigurationOption,
   ResolvedEdgeConfig,
@@ -48,7 +47,6 @@ import {
   ensureGlobalContextManager,
   type Initialiser,
   type NativeTracer,
-  WorkerTracerProvider,
   WorkerTracer,
 } from 'autotel-edge';
 import { getNativeTracerFromCtx } from '../native/native-tracing';
@@ -58,13 +56,12 @@ import {
   wrap,
   type PromiseTracker,
 } from '../bindings/common';
-import { instrumentGlobalFetch } from '../global/fetch';
-import { instrumentGlobalCache } from '../global/cache';
 import type { WorkerEnv } from '../bindings/bindings';
 import { instrumentBindings } from '../bindings/bindings';
 import type { Attributes, Span, TextMapGetter } from '@opentelemetry/api';
 import { toException } from '../exception.js';
 import { workerTracer } from '../tracer.js';
+import { initProvider } from '../provider.js';
 import {
   applyTrap,
   asBoolean,
@@ -826,47 +823,7 @@ function createHandlerProxyWithConfig<T extends Trigger, E, R>(
   };
 }
 
-let providerInitialized = false;
 let coldStart = true;
-
-/**
- * Initialize the tracer provider
- */
-function initProvider(config: ResolvedEdgeConfig): void {
-  if (providerInitialized) return;
-
-  // Install global instrumentations
-  if (config.instrumentation.instrumentGlobalFetch) {
-    instrumentGlobalFetch();
-  }
-  if (config.instrumentation.instrumentGlobalCache) {
-    instrumentGlobalCache();
-  }
-
-  // Set up propagator
-  propagation.setGlobalPropagator(config.propagator);
-
-  // Create resource
-  const resource = resourceFromAttributes({
-    'service.name': config.service.name,
-    'service.version': config.service.version,
-    'service.namespace': config.service.namespace,
-    'cloud.provider': 'cloudflare',
-    'cloud.platform': 'cloudflare.workers',
-    'telemetry.sdk.name': 'autotel-edge',
-    'telemetry.sdk.language': 'js',
-  });
-
-  // Create and register provider
-  const provider = new WorkerTracerProvider(config.spanProcessors, resource);
-  provider.register();
-
-  // Set head sampler on tracer
-  const tracer = workerTracer('autotel-edge');
-  tracer.setHeadSampler(config.sampling.headSampler);
-
-  providerInitialized = true;
-}
 
 /**
  * Instrument a Cloudflare Workers handler

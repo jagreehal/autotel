@@ -101,6 +101,9 @@ Set on your config (default `'auto'`):
 | `'on'`   | Always prefer native; warns once and falls back to OTLP if absent. |
 | `'off'`  | Always use autotel's OTLP exporter (even on Workers).              |
 
+With `'off'`, `instrumentWorkflow` registers the OTLP provider itself and
+exports the run and step spans before `run()` resolves.
+
 ```ts
 export default wrapModule(
   { service: { name: 'my-worker' }, nativeTracing: 'auto' },

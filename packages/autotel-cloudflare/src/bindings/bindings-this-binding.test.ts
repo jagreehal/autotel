@@ -11,6 +11,7 @@ import {
   fetcherDouble,
   kvDouble,
   r2Double,
+  rpcStub,
   tracerDouble,
 } from '../testing/doubles.js';
 
@@ -322,6 +323,20 @@ describe('Bindings this-binding tests', () => {
       await expect(
         instrumented.fetch('https://example.com'),
       ).resolves.toBeInstanceOf(Response);
+    });
+
+    it('forwards RPC methods on a stub without reading bind off them', async () => {
+      // An RPC service binding is a stub: `stub.add.bind` names a remote method.
+      const stub = rpcStub<Fetcher>({
+        fetch: async () => new Response('ok'),
+        add: async (a: number, b: number) => a + b,
+      });
+      // SAFETY: `add` is a method of the bound Worker's RPC entrypoint.
+      const service = instrumentServiceBinding(stub, 'math') as unknown as {
+        add: (a: number, b: number) => Promise<number>;
+      };
+
+      await expect(service.add(2, 3)).resolves.toBe(5);
     });
 
     it('should bind non-fetch methods to the original target', () => {
