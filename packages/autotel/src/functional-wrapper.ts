@@ -2,6 +2,7 @@ import {
   SpanStatusCode,
   context,
   trace as otelTrace,
+  TraceFlags,
   type Attributes,
   type Counter,
   type Histogram,
@@ -457,7 +458,16 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
       metadata: {},
     };
     const sampler = resolveSampler();
-    const shouldSample = sampler.shouldSample(samplingContext);
+    const activeSpan = otelTrace.getActiveSpan();
+    const parent = options.startNewRoot ? undefined : activeSpan?.spanContext();
+    // A sampled parent in this process has decided for its trace, so the
+    // child is kept with it. The sampler still runs: AdaptiveSampler records
+    // its baseline here for the tail decision.
+    const parentSampled =
+      parent !== undefined &&
+      !parent.isRemote &&
+      (parent.traceFlags & TraceFlags.SAMPLED) !== 0;
+    const shouldSample = sampler.shouldSample(samplingContext) || parentSampled;
     const sampleRate = sampler.sampleRate?.(samplingContext);
     const needsTailSampling = sampler.needsTailSampling?.() ?? false;
 
@@ -473,7 +483,6 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
 
     const startTime = performance.now();
     // A span with a remote parent (an incoming traceparent) is this process's root.
-    const activeSpan = otelTrace.getActiveSpan();
     const isRootSpan =
       options.startNewRoot ||
       activeSpan === undefined ||

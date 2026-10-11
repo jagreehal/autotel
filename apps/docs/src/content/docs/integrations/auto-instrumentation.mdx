@@ -26,7 +26,18 @@ tsx --import ./instrumentation.ts src/index.ts
 
 ## Available Instrumentations
 
-Pass short names to `autoInstrumentations`. The array is the full list: only the instrumentations named load. Include `'http'` for per-request server spans, or use `true` for everything.
+Pass short names to `autoInstrumentations`. The array is an allowlist: only the instrumentations you name load. Add `'http'` for per-request server spans and the canonical log lines built on them, or pass `true` for every instrumentation.
+
+The object form switches instrumentations off instead. `{ http: { enabled: false } }` loads everything except http:
+
+```typescript
+init({
+  service: 'my-app',
+  autoInstrumentations: { http: { enabled: false } },
+});
+```
+
+`init()` warns when a listed name loads nothing: a typo, or a library such as `'fastify'` that `@opentelemetry/auto-instrumentations-node` does not provide. The `autotel init` CLI writes the list for you: every logger and library it detects, plus `'http'`.
 
 | Short Name             | Instruments        |
 | ---------------------- | ------------------ |

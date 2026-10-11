@@ -32,6 +32,9 @@ node app.js
 - `-p, --port <port>`: Port (default: 4319)
 - `-H, --host <host>`: Host (default: 127.0.0.1)
 - `-t, --title <title>`: Dashboard title
+- `--model <spec>`: AI assistant model (env: `AI_MODEL`), see [AI assistant](#ai-assistant)
+- `--base-url <url>`: Endpoint for the model (env: `AI_BASE_URL`)
+- `--ai-api-key <key>`: API key, overriding the provider's own variable (env: `AI_API_KEY`)
 
 ## In-Process Usage
 
@@ -39,16 +42,52 @@ Wire `StreamingSpanProcessor` directly to your app:
 
 ```typescript
 import { init, trace } from 'autotel';
-import { renderTerminal, StreamingSpanProcessor } from 'autotel-terminal';
+import {
+  createTerminalSpanStream,
+  renderTerminal,
+  StreamingSpanProcessor,
+} from 'autotel-terminal';
 
-const stream = renderTerminal({ title: 'my-app' });
+const processor = new StreamingSpanProcessor(null);
 
 init({
   service: 'my-app',
-  spanProcessors: [new StreamingSpanProcessor(stream)],
+  spanProcessors: [processor],
 });
 
+const stream = createTerminalSpanStream(processor);
+renderTerminal({ title: 'my-app' }, stream);
+
 // Spans appear in the terminal as they complete
+```
+
+## AI assistant
+
+Press `a` in the dashboard to ask questions about your telemetry. You pick the
+model, and its provider reads its own key from the environment:
+
+| `--model`                                                     | Provider                | Key                                          | Install                     |
+| ------------------------------------------------------------- | ----------------------- | -------------------------------------------- | --------------------------- |
+| `openai/gpt-5` (or `gateway:openai/gpt-5`)                    | Vercel AI Gateway       | `AI_GATEWAY_API_KEY`, or a Vercel OIDC token | nothing extra               |
+| `openai:gpt-5`                                                | OpenAI                  | `OPENAI_API_KEY`                             | `@ai-sdk/openai`            |
+| `openai-compatible:qwen3 --base-url http://localhost:1234/v1` | Any OpenAI-style server | `AI_API_KEY` if it needs one                 | `@ai-sdk/openai-compatible` |
+| `ollama:granite4`                                             | Local Ollama            | none                                         | `ai-sdk-ollama`             |
+
+```bash
+npx autotel-terminal --model ollama:granite4
+```
+
+The provider packages are optional peer dependencies, so install the one you
+use. A provider whose package is missing names the package to install. Name a
+model to use a remote provider. With no model set, the assistant starts on its
+own when a local Ollama answers (model `granite4`) and stays off otherwise.
+
+In process, pass any AI SDK model to `renderTerminal()`, or a spec string:
+
+```typescript
+import { anthropic } from '@ai-sdk/anthropic';
+
+renderTerminal({ ai: { model: anthropic('claude-sonnet-5-5') } }, stream);
 ```
 
 ## Dashboard Controls
@@ -60,6 +99,7 @@ init({
 | `↑/↓`   | Navigate traces/spans    |
 | `Enter` | Expand selected trace    |
 | `l`     | Toggle logs view         |
+| `a`     | Toggle the AI assistant  |
 | `?`     | Help overlay             |
 | `q`     | Quit                     |
 

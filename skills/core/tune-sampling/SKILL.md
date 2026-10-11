@@ -67,7 +67,7 @@ init({
 });
 ```
 
-Children of a sampled root are **all** kept (parent-based propagation is the default). So `server: 25` means 25 % of _user requests_, complete trace each.
+Children of a sampled root are **all** kept: a span under a parent in the same process keeps the parent's decision. So `server: 25` means 25 % of _user requests_, complete trace each. A span under a remote parent (an incoming `traceparent`) goes to this service's sampler.
 
 ### High-volume API (>1 k req/s)
 

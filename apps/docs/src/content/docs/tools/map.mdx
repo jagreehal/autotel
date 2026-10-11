@@ -230,9 +230,25 @@ repository access, so a private repo gates like a public one.
 
 ### GitHub Actions
 
+`--format github` writes
+[workflow annotations](https://docs.github.com/en/actions/reference/workflow-commands-for-github-actions)
+to stdout, so findings appear on the pull request diff. The report goes to
+stderr and the exit code stays the same.
+
 ```yaml
-- run: npx autotel map --baseline git:origin/${{ github.base_ref }} --json
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0 # --baseline reads origin/<base> through git show
+- run: npx autotel map --format github --baseline git:origin/${{ github.base_ref }} --no-write
 ```
+
+With `--baseline`, each regression becomes an error: the checks this pull
+request broke, and nothing already on the map. Without one, the "Fix these
+first" list becomes warnings, worst entry point first. `--limit` caps the list
+(default 10, the number GitHub keeps per step). The first line carries the
+score, as an error when `--min-score` or the baseline failed the run, and
+counts the findings `--limit` left out. Paths resolve against
+`GITHUB_WORKSPACE`, so a package inside a monorepo annotates the right file.
 
 ## For agents
 
@@ -288,16 +304,18 @@ one.
 
 ## Options
 
-| Flag                   | What it does                                             |
-| ---------------------- | -------------------------------------------------------- |
-| `--all`                | Every entry point as a check matrix                      |
-| `--framework <name>`   | Override framework detection                             |
-| `--min-score <n>`      | Exit 1 below this score                                  |
-| `--baseline [source]`  | Compare against a committed map (path or `git:<ref>`)    |
-| `--no-write`           | Skip writing `autotel.map.json`                          |
-| `--json`               | Machine-readable output                                  |
-| `--output-file <path>` | Persist the JSON payload                                 |
-| `--workspace-root`     | Scan from the workspace root instead of the package root |
+| Flag                   | What it does                                                    |
+| ---------------------- | --------------------------------------------------------------- |
+| `--all`                | Every entry point as a check matrix                             |
+| `--framework <name>`   | Override framework detection                                    |
+| `--min-score <n>`      | Exit 1 below this score                                         |
+| `--baseline [source]`  | Compare against a committed map (path or `git:<ref>`)           |
+| `--no-write`           | Skip writing `autotel.map.json`                                 |
+| `--json`               | Machine-readable output (same as `--format json`)               |
+| `--format <name>`      | `human` (default), `json`, or `github` for workflow annotations |
+| `--limit <n>`          | Most annotations `--format github` emits (default 10)           |
+| `--output-file <path>` | Persist the JSON payload                                        |
+| `--workspace-root`     | Scan from the workspace root instead of the package root        |
 
 ## What it cannot see
 

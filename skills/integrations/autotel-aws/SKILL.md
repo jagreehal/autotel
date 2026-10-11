@@ -1,7 +1,7 @@
 ---
 name: autotel-aws
 description: >
-  Use this skill when instrumenting AWS with OpenTelemetry — Lambda handlers, SDK v3 clients, S3, DynamoDB, SQS, SNS, Kinesis, Step Functions, and X-Ray, built on autotel.
+  Use this skill when instrumenting AWS with OpenTelemetry — Lambda handlers, durable functions, SDK v3 clients, S3, DynamoDB, SQS, SNS, Kinesis, Step Functions, and X-Ray, built on autotel.
 ---
 
 # autotel-aws
@@ -11,6 +11,7 @@ Vendor-agnostic OpenTelemetry instrumentation for AWS. Works with any OTLP backe
 - Lambda handler wrapping with automatic cold-start detection, trigger-type detection, and distributed trace context extraction
 - AWS SDK v3 auto-instrumentation (per-client, pre-built, or global)
 - Service-specific semantic helpers following OTel semantic conventions: S3, DynamoDB, SQS, SNS, Kinesis, Step Functions
+- Lambda durable functions: additions to AWS's OpenTelemetry plugin (`autotel-aws/durable`)
 - X-Ray compatibility layer (propagator, ID generator)
 - AWS resource detectors (EC2, ECS, EKS)
 
@@ -165,6 +166,30 @@ Auto-sets: `db.system.name` ('dynamodb'), `db.operation.name`, `db.namespace`, `
 
 **SQS / SNS / Kinesis / Step Functions / EventBridge**. Follow the same `traceXxx({ operation, ... })` pattern via their respective subpaths (`autotel-aws/sqs`, `autotel-aws/sns`, etc.).
 
+### Lambda durable functions
+
+AWS's `@aws/durable-execution-sdk-js-otel` plugin emits the durable spans (workflow, invocation, operation, attempt). Register it with autotel's two additions:
+
+```typescript
+import { init } from 'autotel';
+import { withDurableExecution } from '@aws/durable-execution-sdk-js';
+import { ExecutionOtelPlugin } from '@aws/durable-execution-sdk-js-otel';
+import { autotelContextExtractor, durableFlush } from 'autotel-aws/durable';
+
+init({ service: 'orders' });
+
+export const handler = withDurableExecution(workflow, {
+  plugins: [
+    new ExecutionOtelPlugin({ contextExtractor: autotelContextExtractor }),
+    durableFlush(),
+  ],
+});
+```
+
+- `durableFlush()` flushes autotel at the end of each invocation, before Lambda freezes the environment.
+- `autotelContextExtractor` keeps the trace from Lambda's X-Ray header and lets autotel's sampler decide. It also puts an execution started by `ctx.invoke(name, fn, withInvokeTraceContext(payload))` in the caller's trace.
+- `durableExecutionContext(event)` gives a consumer of `Durable Execution Status Change` events the execution's trace (needs `lambda:GetDurableExecution`).
+
 ### X-Ray compatibility
 
 ```typescript
@@ -239,6 +264,14 @@ export const handler = wrapHandler(async (event) => { ... });
 ### MEDIUM: Enabling captureResponse on large payloads
 
 `captureResponse: true` serialises the full response to a span attribute. Payloads over 4 096 bytes are replaced with `lambda.response.truncated = true` and `lambda.response.size`, but the serialisation still happens. Avoid on high-throughput or large-payload handlers.
+
+### HIGH: Registering AWS's durable plugin without durableFlush()
+
+Under `init()`, AWS's plugin sees the global provider proxy and cannot flush it, so a frozen Lambda environment holds the spans. List `durableFlush()` after the plugin.
+
+### MEDIUM: Using AWS's default extractor without active tracing
+
+Lambda marks durable executions `Sampled=0` unless X-Ray active tracing is on, and AWS's default extractor follows that flag. Pass `contextExtractor: autotelContextExtractor` so autotel's sampler decides.
 
 ### MEDIUM: Using global autoInstrumentAWS() in tests
 

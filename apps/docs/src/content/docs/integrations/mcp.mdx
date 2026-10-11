@@ -416,7 +416,7 @@ don't need Jaeger, Tempo, or Grafana.
 - **Backend-agnostic.** Built-in OTLP collector accepts data from any
   OTel-instrumented app.
 - **All three signals.** Traces, metrics, and logs with cross-signal correlation.
-- **Agent-optimised.** 41 tools designed for progressive investigation:
+- **Agent-optimised.** 50 tools designed for progressive investigation:
   discover → diagnose → correlate → root-cause.
 - **Zero infrastructure.** In-memory by default; set `AUTOTEL_PERSIST` to a
   libsql file path for persistence.
@@ -463,6 +463,56 @@ Once installed, ask the agent things like _"What slowed down checkout in the
 last hour?"_ or _"Show traces with errors for `service.name=api`"_. The agent
 will discover services, query traces, correlate logs, and return a written
 investigation.
+
+### Analysis tools
+
+These tools answer "what changed and where is the time going" in one call each:
+
+| Tool              | Returns                                                                                                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aggregate_spans` | Count, error rate and avg/p50/p95/p99/max latency, grouped by service, operation, version or any span attribute, with optional time buckets. On Datadog it runs server-side over every span. |
+| `aggregate_logs`  | Log counts by service, severity or any attribute, plus the most frequent message patterns (ids and numbers masked).                                                                          |
+| `what_changed`    | Every service whose `service.version` changed in the window, when it changed, and its error rate and p95 before and after. It reads versions from spans, so you need no deploy events.       |
+| `find_root_cause` | The error's origin span, or the span with the most self time (time not spent waiting on child spans), plus the top five spans by self time.                                                  |
+
+Every tool rejects an argument it does not take and names it. A result that
+stops at its `limit` carries a `hint` on how to fetch the rest. Traces carry a
+`url` into the backend's own UI where it has one: Datadog, Jaeger, SigNoz, or
+Tempo through Grafana.
+
+### Choose which tools load
+
+Load only the tool groups you need, so the client spends less context on tool
+descriptions:
+
+```bash
+AUTOTEL_TOOLSETS=core,llm npx autotel-mcp     # default: all
+AUTOTEL_OMIT_TOOLS=service_map npx autotel-mcp
+```
+
+| Toolset     | Tools                                                  |
+| ----------- | ------------------------------------------------------ |
+| `core`      | Everything for investigating traces, metrics and logs  |
+| `llm`       | LLM analytics and `agent_usage`                        |
+| `collector` | Collector config validation, explanation and templates |
+| `semconv`   | Semantic-convention reference                          |
+| `estimate`  | `estimate_telemetry_cost`                              |
+
+`AUTOTEL_OMIT_TOOLS` takes a comma-separated list of tool names to leave out of
+whichever toolsets you load.
+
+### Traces in the chat
+
+`get_trace` comes with an interactive waterfall. Clients that render MCP Apps
+(Claude, ChatGPT, VS Code) draw the trace inline in the chat: span timings,
+kinds and failures, the same waterfall as autotel-devtools. Click a span and
+the model receives its name, timing, status and key attributes, so your next
+question is about that span. Other clients get the JSON as before.
+
+Claude Desktop, Claude Code and VS Code run `autotel-mcp` locally, so the
+built-in collector works as is. Claude.ai and ChatGPT connect to remote servers
+only: run `--transport http` on a public HTTPS address, with `--allowed-hosts`
+naming it.
 
 ### Run alongside autotel-devtools
 
@@ -523,15 +573,57 @@ dashboard), or give each tool a separate port and export from your app to both.
 | `auto`       | Probes Tempo, Jaeger, Prometheus and Loki, then reads from whatever answers (falls back to `fixture`) | the base URLs above                                  |
 | `fixture`    | A JSON file, for demos and tests                                                                      | `AUTOTEL_FIXTURE_PATH` (`./fixtures/telemetry.json`) |
 | `logfire`    | Pydantic Logfire query API (traces only)                                                              | `LOGFIRE_BASE_URL`, `LOGFIRE_READ_TOKEN`             |
-| `datadog`    | Datadog APM v2 APIs (traces only)                                                                     | `DD_SITE`, `DD_API_KEY`, `DD_APP_KEY`                |
+| `datadog`    | Datadog APM, Logs and Metrics APIs (traces, logs and metrics)                                         | `DD_SITE`, `DD_API_KEY`, `DD_APP_KEY`                |
 | `signoz`     | SigNoz Query Builder v5 API (traces only)                                                             | `SIGNOZ_BASE_URL`, optional `SIGNOZ_API_KEY`         |
 | `cloudflare` | Cloudflare SQL API: `logs.traces` and `logs.workersLogs` (traces and logs)                            | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`      |
 
 Hosted-vendor credentials belong in `env`, never command arguments. Logfire
-requires a read-scope token and its regional query host; Datadog requires both
-an API key and an application key. These three backends return an explicit
-`unsupported` capability for metrics and logs. Cloudflare needs a token with
-Account Analytics Read and reports metrics as `unsupported`.
+requires a read-scope token and its regional query host. Logfire and SigNoz
+return an explicit `unsupported` capability for metrics and logs. Cloudflare
+needs a token with Account Analytics Read and reports metrics as `unsupported`.
+
+### Datadog
+
+The `datadog` backend reads traces, logs and metrics. Logs sent over OTLP keep
+their trace id, so `correlate` returns a trace with its logs, and
+`list_services` adds every service with spans in the last day to the APM
+catalog, so services that send OTLP spans appear too.
+
+Datadog needs an API key and an application key. Scope the application key
+with `apm_read`, `logs_read_data`, `metrics_read`
+and `timeseries_query`:
+
+```bash
+DD_API_KEY=... \
+DD_APP_KEY=... \
+DD_SITE=datadoghq.eu \
+AUTOTEL_BACKEND=datadog npx autotel-mcp
+```
+
+`DD_SITE` defaults to `datadoghq.com`.
+
+### Grafana Cloud
+
+Grafana Cloud serves Tempo, Loki and Prometheus behind basic auth, so use the
+`stack` backend with credentials. Each signal has its own URL and user id
+(listed on the Stack details page in grafana.com), and one access policy token
+with the `traces:read`, `logs:read` and `metrics:read` scopes reads all three:
+
+```bash
+GRAFANA_CLOUD_TOKEN=glc_... \
+TEMPO_BASE_URL=https://tempo-prod-XX-prod-REGION.grafana.net/tempo \
+TEMPO_USERNAME=123456 \
+LOKI_BASE_URL=https://logs-prod-XXX.grafana.net \
+LOKI_USERNAME=123457 \
+PROMETHEUS_BASE_URL=https://prometheus-prod-XX-prod-REGION.grafana.net/api/prom \
+PROMETHEUS_USERNAME=123458 \
+GRAFANA_URL=https://YOUR-STACK.grafana.net \
+AUTOTEL_BACKEND=stack npx autotel-mcp
+```
+
+`GRAFANA_URL` is optional and turns trace results into links into your Grafana
+stack. `backend_health` runs a real query on each signal, so a token without
+read scope fails the health check.
 
 ### Read from a local LGTM stack
 
