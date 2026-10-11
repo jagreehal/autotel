@@ -1,6 +1,6 @@
 ---
 title: AWS
-description: OpenTelemetry instrumentation for AWS Lambda, SDK v3, SQS, SNS, Kinesis, Step Functions, and EventBridge.
+description: OpenTelemetry instrumentation for AWS Lambda, durable functions, SDK v3, SQS, SNS, Kinesis, Step Functions, and EventBridge.
 ---
 
 `autotel-aws` provides ergonomic, vendor-agnostic OpenTelemetry instrumentation for AWS services.
@@ -81,6 +81,76 @@ const consumer = new SQSConsumer(sqs, {
     console.log('Received:', message.body);
   },
 });
+```
+
+## Durable Functions
+
+AWS's OpenTelemetry plugin, `@aws/durable-execution-sdk-js-otel`, traces durable executions: a workflow span, an invocation span per Lambda invocation, and operation and attempt spans in one trace. `autotel-aws/durable` adds what the plugin needs when autotel owns the tracer provider:
+
+```typescript
+import { init } from 'autotel';
+import { withDurableExecution } from '@aws/durable-execution-sdk-js';
+import { ExecutionOtelPlugin } from '@aws/durable-execution-sdk-js-otel';
+import { autotelContextExtractor, durableFlush } from 'autotel-aws/durable';
+
+init({ service: 'orders' });
+
+export const handler = withDurableExecution(
+  async (event, ctx) => {
+    const reserved = await ctx.step('reserve-inventory', () => reserve(event));
+    await ctx.wait({ seconds: 300 });
+    return ctx.step('charge', () => charge(reserved));
+  },
+  {
+    plugins: [
+      new ExecutionOtelPlugin({ contextExtractor: autotelContextExtractor }),
+      durableFlush(),
+    ],
+  },
+);
+```
+
+- `durableFlush()` flushes autotel at the end of each invocation, before Lambda freezes the environment.
+- `autotelContextExtractor` keeps the trace and parent from Lambda's X-Ray header and lets autotel's sampler decide. Lambda sends `Sampled=0` unless X-Ray active tracing is on.
+
+Spans you create inside a step nest under its attempt span. `InvocationOtelPlugin` works the same way.
+
+### Chained invokes
+
+Wrap the `ctx.invoke()` payload, and a durable target using `autotelContextExtractor` joins the caller's trace:
+
+```typescript
+import { withInvokeTraceContext } from 'autotel-aws/durable';
+
+await ctx.invoke(
+  'validate-customer',
+  'arn:aws:lambda:eu-north-1:123456789012:function:customer-service:1',
+  withInvokeTraceContext({ customerId }),
+);
+```
+
+A plain Lambda target joins with `wrapHandler(fn, { extractTraceContext: (e) => e._traceContext })`.
+
+### Status-change consumers
+
+`durableExecutionContext(event)` gives a consumer of `Durable Execution Status Change` events the execution's trace. Give the consumer's role `lambda:GetDurableExecution`.
+
+```typescript
+import { context } from '@opentelemetry/api';
+import { wrapHandler } from 'autotel-aws/lambda';
+import {
+  durableExecutionContext,
+  isDurableExecutionStatusChange,
+} from 'autotel-aws/durable';
+
+const traced = wrapHandler(async (event) => notify(event.detail));
+
+export const handler = async (event, lambdaContext) =>
+  isDurableExecutionStatusChange(event)
+    ? context.with(await durableExecutionContext(event), () =>
+        traced(event, lambdaContext),
+      )
+    : traced(event, lambdaContext);
 ```
 
 ## CloudWatch native OTLP
@@ -297,6 +367,7 @@ expect(result.statusCode).toBe(200);
 - `autotel-aws/kinesis`: Kinesis producer/consumer
 - `autotel-aws/step-functions`: Step Functions
 - `autotel-aws/eventbridge`: EventBridge publisher
+- `autotel-aws/durable`: Durable functions additions to AWS's OpenTelemetry plugin
 - `autotel-aws/xray`: X-Ray compatibility
 - `autotel-aws/cloudwatch`: SigV4-signed OTLP exporters for CloudWatch's native endpoints
 - `autotel-aws/attributes`: Attribute builders for hand-rolled instrumentation

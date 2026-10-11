@@ -70,6 +70,7 @@ The package splits into focused subpath exports, so you import only what you use
 | `autotel-genai/streaming` | streaming performance: `createStreamTimer()`, `recordStreamTiming()` (TTFC, throughput, inter-chunk distribution)                                                                                                        |
 | `autotel-genai/observer`  | `autotelTelemetry()` for `registerTelemetry()`, `subscribeAiTelemetry()` for the `ai:telemetry` channel, plus `createGenAiObserver()`, `createLangChainObserver()`, `createMastraObserver()`, and `observeAiSdkResult()` |
 | `autotel-genai/ai-sdk`    | legacy Vercel AI SDK `ai.*` to `gen_ai.*` mapping plus cost, and `autotelEnrich()` for `@ai-sdk/otel`                                                                                                                    |
+| `autotel-genai/signals`   | experimental: `defineSignal()`, `createSignals()` ask an evaluation model questions about finished requests                                                                                                              |
 | `autotel-genai/agent`     | agent identity, delegation, policy, audit, privacy, non-repudiation                                                                                                                                                      |
 | `autotel-genai/semconv`   | `GEN_AI_*` keys, `GEN_AI_OPERATION`, `GEN_AI_PROVIDER`, `genAiSpanName()`                                                                                                                                                |
 
@@ -1033,6 +1034,62 @@ export const generateWithQualityCheck = withTracing({
     },
 );
 ```
+
+### Signals on finished requests (experimental)
+
+`autotel-genai/signals` asks your AI SDK evaluation model questions about
+finished requests: yes/no, pick-one (`choice`) or rubric (`score`). Each answer
+lands as `signals.<name>.*` attributes, such as `signals.fault.value =
+'upstream'` and `signals.fault.confidence = 0.93`, so you can group by it and
+alert on it. You bring the model: autotel picks no provider and reads no key.
+
+```typescript
+import { init } from 'autotel';
+import { createSignals, defineSignal } from 'autotel-genai/signals';
+
+const fault = defineSignal({
+  name: 'fault',
+  when: (e) => (e.status ?? 0) >= 500, // no model call when false
+  ask: 'Who is responsible for this failure?',
+  choice: {
+    client: 'Bad input, expired session, client mistake',
+    app: 'Our own code or configuration',
+    upstream: 'A third-party dependency failed',
+  },
+});
+
+const silentFailure = defineSignal({
+  name: 'silent_failure',
+  when: (e) => e.status === 200 && e.name === 'POST /api/checkout',
+  ask: 'Returned 200, but the customer did not get what they came for',
+  keep: (v) => v.value && v.confidence > 0.8, // retain through tail sampling
+});
+
+init({
+  service: 'shop',
+  spanEnrichers: [
+    createSignals({
+      model: evaluationModel, // any AI SDK evaluation model
+      signals: [fault, silentFailure],
+      budget: { perMinute: 600 },
+    }),
+  ],
+});
+```
+
+- **Register it in `spanEnrichers`** so answers still pending at exit drain
+  before the exporters shut down.
+- **Where answers land:** signals judge request spans (no parent, or a remote
+  one). Fresh answers go on a `signals {request}` child span in the same trace.
+  Answers served from `cacheKey` go on the request span itself.
+- **`keep`:** a cached answer marks the request span kept before tail sampling
+  reads it. A fresh answer arrives later, so the signals span carries the
+  dropped request's attributes as `signals.event.*`.
+- **Built-in limits:** `budget.perMinute` (default 600), `budget.cooldownMs`
+  after a failed call (default 30s), `timeoutMs` (default 2s), `cacheSize`
+  (default 1000) and `redact` (default: the `default` redaction preset). Over
+  budget or past the timeout, requests pass through unjudged. Use `state` to
+  send only the fields a question needs.
 
 ## Semantic Conventions
 

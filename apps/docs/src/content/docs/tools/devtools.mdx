@@ -100,6 +100,10 @@ const checkout = withTracing({})((ctx) => async (req, res) => {
 
 Call `close()` on shutdown to release the port and WebSocket clients.
 
+When the port is busy, `createDevtools` walks forward to the next free port, up
+to `maxPortTries` ports (default `20`). Pass `maxPortTries: 1` to bind `port` or
+fail: `ready` then rejects.
+
 ## Errors and source peek
 
 The **Errors** tab groups identical failures and renders each group's stack as a
@@ -152,6 +156,14 @@ OpenLLMetry.
 Per span you get the model, provider, parameters, token usage (with the cached
 and reasoning share called out), estimated cost, and the full conversation
 transcript. Messages, tool calls and their results.
+
+Tool calls show their arguments and results. An MCP tool result displays its
+`structuredContent`, or its text parts parsed as JSON, in place of the raw
+`CallToolResult` envelope. When both the MCP client span and the MCP server span
+for one call arrive, the tab folds them into one row.
+
+Selection follows trace and span ids and serialises into the URL hash, so a
+link such as `#tab=genai&trace=<traceId>&span=<spanId>` opens on that span.
 
 On top of the per-span detail, three things make a multi-span run readable at a
 glance:
@@ -406,6 +418,16 @@ the agent read the same traces. The
 [Run alongside autotel-devtools](/autotel/integrations/mcp/#run-alongside-autotel-devtools)
 recipe has the full setup and the traces-only caveat.
 
+### Trace waterfall in the chat
+
+`autotel-devtools/mcp-app/trace` exports the devtools trace waterfall as a
+standalone MCP App view: a browser script
+that runs in the host's sandboxed iframe and draws the result of a `get_trace`
+tool call. `autotel-mcp` bundles it and links `get_trace` to
+`ui://autotel/trace-view.html`, so clients that render MCP Apps (Claude,
+ChatGPT, VS Code) draw the trace inline, and a span you click reaches the model
+as context. Import the subpath when you serve the view from your own MCP server.
+
 ## Use with a local stack
 
 The [LGTM stack](/autotel/local-stacks/) binds 4318 for OTLP HTTP, the same
@@ -433,14 +455,26 @@ Both ship as local OTLP receivers. Pick by surface:
   browser needed. Best when you live in the terminal or are running over
   SSH.
 
-To skip the standalone process entirely, enable devtools directly from
-`init()`:
+To point autotel at devtools, enable it from `init()`:
 
 ```typescript
 init({ service: 'my-app', devtools: true });
 ```
 
-This wires the exporter automatically. No separate CLI process required.
+This wires the exporter to a receiver at `http://127.0.0.1:4318`. To run the
+receiver inside your app as well, set `embedded`:
+
+```typescript
+init({
+  service: 'my-app',
+  devtools: { embedded: true, port: 4318 },
+});
+```
+
+Embedded mode binds the configured port and nothing else, so the exporters and
+the server always agree on it. When the port is taken, `init()` warns and keeps
+sending to that port. Embedded mode needs a fixed `devtools.port`: `port: 0`
+throws.
 
 ## License
 

@@ -87,3 +87,5 @@ import {
   assertTraceSucceeded,
 } from 'autotel-vitest';
 ```
+
+`createTraceCollector()` registers the W3C trace-context and baggage propagator, so `propagation.inject` and `propagation.extract` work in tests without `init()`. A propagator your test already set stays in place.

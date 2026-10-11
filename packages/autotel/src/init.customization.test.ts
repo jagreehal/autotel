@@ -582,8 +582,9 @@ describe('init() customization', () => {
     const options = sdkInstances.at(-1)!.options;
     // SAFETY: a Sampler names itself through toString(), which is what init()
     // is being checked to have configured.
-    expect((options.sampler as { toString(): string }).toString()).toBe(
-      'AutotelSamplerAdapter',
+    // Wrapped so children follow their parent: ParentBased{root=...}.
+    expect((options.sampler as { toString(): string }).toString()).toContain(
+      'root=AutotelSamplerAdapter',
     );
   });
 

@@ -11,6 +11,7 @@ import {
   type SpanProcessor,
   SimpleSpanProcessor,
   ConsoleSpanExporter,
+  ParentBasedSampler,
   SamplingDecision,
   type Sampler as OtelSampler,
   type SamplingResult,
@@ -184,6 +185,19 @@ function toOtelSampler(sampler: Sampler): OtelSampler {
       return `AutotelSamplerAdapter`;
     },
   };
+}
+
+/**
+ * A span below another span in this process keeps its parent's decision, so a
+ * trace stays whole. A root, or a span under a remote parent, asks Autotel's
+ * sampler: this service decides for itself what it keeps.
+ */
+function followLocalParent(root: OtelSampler): OtelSampler {
+  return new ParentBasedSampler({
+    root,
+    remoteParentSampled: root,
+    remoteParentNotSampled: root,
+  });
 }
 
 // Internal state
@@ -860,8 +874,9 @@ export function init(cfg: AutotelConfig): void {
     mergedConfig.sampler = autotelSampler;
   }
   const sampler: OtelSampler = autotelSampler
-    ? toOtelSampler(autotelSampler)
-    : (envConfig.otelSampler ?? toOtelSampler(samplingPresets.production()));
+    ? followLocalParent(toOtelSampler(autotelSampler))
+    : (envConfig.otelSampler ??
+      followLocalParent(toOtelSampler(samplingPresets.production())));
 
   const sdkOptions: AutotelSdkOptions = {
     resource,

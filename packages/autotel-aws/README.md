@@ -14,6 +14,7 @@ OpenTelemetry instrumentation for AWS services - ergonomic, vendor-agnostic obse
 - **Kinesis Producer/Consumer Classes** - Stream processing with context propagation
 - **Step Functions Executor/Worker** - State machine orchestration with distributed tracing
 - **EventBridge Publisher** - Event-driven architecture tracing
+- **Lambda Durable Functions** - One trace per durable execution, across every invocation and replay
 - **X-Ray Compatibility** - Annotation/metadata helpers for X-Ray users
 - **Middy Middleware** - Full span lifecycle management for Middy users
 - **Lambda Layer** - Pre-built layer for easy deployment
@@ -329,6 +330,72 @@ export const handler = wrapHandler(async (event) => {
 
   return { statusCode: 200 };
 });
+```
+
+## Lambda Durable Functions
+
+AWS's [OpenTelemetry plugins](https://docs.aws.amazon.com/durable-execution/) (`@aws/durable-execution-sdk-js-otel`) trace durable executions: a workflow span, an invocation span per Lambda invocation, and operation and attempt spans, all in one trace. `autotel-aws/durable` adds what they need when autotel owns the tracer provider:
+
+```typescript
+import { init } from 'autotel';
+import { withDurableExecution } from '@aws/durable-execution-sdk-js';
+import { ExecutionOtelPlugin } from '@aws/durable-execution-sdk-js-otel';
+import { autotelContextExtractor, durableFlush } from 'autotel-aws/durable';
+
+init({ service: 'orders' });
+
+export const handler = withDurableExecution(
+  async (event, ctx) => {
+    const reserved = await ctx.step('reserve-inventory', () => reserve(event));
+    await ctx.wait({ seconds: 300 });
+    return ctx.step('charge', () => charge(reserved));
+  },
+  {
+    plugins: [
+      new ExecutionOtelPlugin({ contextExtractor: autotelContextExtractor }),
+      durableFlush(),
+    ],
+  },
+);
+```
+
+- **`durableFlush()`** flushes autotel at the end of each invocation, before Lambda freezes the environment. AWS's plugin flushes a provider it holds; under `init()` it holds the global proxy, so autotel flushes its own.
+- **`autotelContextExtractor`** keeps the trace and parent from Lambda's X-Ray header and lets autotel's sampler decide. Lambda sends `Sampled=0` unless X-Ray active tracing is on.
+
+Spans you create inside a step (`span()`, `trace()`, instrumented clients) nest under its attempt span. `InvocationOtelPlugin` works the same way.
+
+**Chained invokes.** An execution started by `ctx.invoke()` has its own trace. Wrap the payload, and with `autotelContextExtractor` on the target, it joins the caller's trace:
+
+```typescript
+import { withInvokeTraceContext } from 'autotel-aws/durable';
+
+await ctx.invoke(
+  'validate-customer',
+  'arn:aws:lambda:eu-north-1:123456789012:function:customer-service:1',
+  withInvokeTraceContext({ customerId }),
+);
+```
+
+A plain Lambda target joins it with `wrapHandler(fn, { extractTraceContext: (e) => e._traceContext })`. The field is the one Step Functions uses, so `stripTraceContext` from `autotel-aws/step-functions` removes it.
+
+**Status-change consumers.** The `Durable Execution Status Change` event names the execution but not its trace. `durableExecutionContext(event)` reads the trace Lambda stored with it (`lambda:GetDurableExecution` on the consumer's role), so the consumer's spans join the execution's:
+
+```typescript
+import { context } from '@opentelemetry/api';
+import { wrapHandler } from 'autotel-aws/lambda';
+import {
+  durableExecutionContext,
+  isDurableExecutionStatusChange,
+} from 'autotel-aws/durable';
+
+const traced = wrapHandler(async (event) => notify(event.detail));
+
+export const handler = async (event, lambdaContext) =>
+  isDurableExecutionStatusChange(event)
+    ? context.with(await durableExecutionContext(event), () =>
+        traced(event, lambdaContext),
+      )
+    : traced(event, lambdaContext);
 ```
 
 ## Middy Middleware
@@ -678,6 +745,7 @@ DD_API_KEY=YOUR_API_KEY
 | `autotel-aws/kinesis`        | Kinesis helpers + Producer/Consumer              |
 | `autotel-aws/step-functions` | Step Functions Executor/Worker + context helpers |
 | `autotel-aws/eventbridge`    | EventBridge Publisher + context helpers          |
+| `autotel-aws/durable`        | Additions to AWS's durable functions OTel plugin |
 | `autotel-aws/xray`           | X-Ray annotation/metadata helpers                |
 | `autotel-aws/testing`        | Test utilities for Lambda                        |
 | `autotel-aws/attributes`     | Semantic attribute builders                      |
