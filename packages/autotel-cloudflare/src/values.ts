@@ -68,6 +68,20 @@ export function asFunction(value: unknown): UnknownFunction | undefined {
   return value as UnknownFunction;
 }
 
+/**
+ * A method as a plain function that calls it on `target`.
+ *
+ * Uses Reflect.apply, which works on RPC stubs such as a Workflow's `step`
+ * or an RPC service binding. On a stub every member read names a remote
+ * method, including `bind` and `apply`.
+ */
+export function boundMethod(
+  method: UnknownFunction,
+  target: object,
+): UnknownFunction {
+  return (...args) => Reflect.apply(method, target, args);
+}
+
 /** One field of a value, when the value is an object at all. */
 export function readProperty(source: unknown, key: string): unknown {
   return asRecord(source)?.[key];

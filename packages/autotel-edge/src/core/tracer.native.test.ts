@@ -5,7 +5,9 @@ import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { WorkerTracer } from './tracer';
 import { WorkerTracerProvider } from './provider';
 import {
+  setDefaultNativeTracer,
   withNativeTracer,
+  withoutNativeTracer,
   type NativeSpanHandle,
   type NativeTracer,
 } from './native-bridge';
@@ -104,6 +106,37 @@ describe('WorkerTracer under a native tracer', () => {
       expect(tracer.startSpan('b').isRecording()).toBe(false);
     });
     expect(spans.map((s) => s.name)).toEqual(['a']);
+  });
+
+  it('keeps a span on OTLP when the context it is given opts out of native', () => {
+    // The platform installs a default native tracer for the isolate; a caller
+    // in OTLP mode opts out through the context it passes, not the active one.
+    const { spans, tracer: native } = fakeRuntime();
+    setDefaultNativeTracer(native);
+    try {
+      const otlp = processor();
+      const tracer = new WorkerTracer([otlp], resourceFromAttributes({}));
+      tracer.setHeadSampler({ shouldSample: () => ({ decision: 2 }) });
+
+      const span = tracer.startSpan('run', {}, withoutNativeTracer());
+      const nested = tracer.startActiveSpan(
+        'run',
+        {},
+        withoutNativeTracer(),
+        (active) => {
+          active.end();
+          return active;
+        },
+      );
+      span.end();
+
+      expect(spans).toEqual([]);
+      expect(otlp.onEnd).toHaveBeenCalledTimes(2);
+      expect(trace.isSpanContextValid(span.spanContext())).toBe(true);
+      expect(trace.isSpanContextValid(nested.spanContext())).toBe(true);
+    } finally {
+      setDefaultNativeTracer(null);
+    }
   });
 
   it('returns a non-recording span before any OTLP pipeline is configured', () => {

@@ -107,7 +107,8 @@ export class WorkerTracer implements Tracer {
     context = api_context.active(),
   ): Span {
     // Under a platform tracer, OpenTelemetry API spans join the native waterfall.
-    const native = getActiveNativeTracer();
+    // The context passed in decides, so a caller can opt one span out.
+    const native = getActiveNativeTracer(context);
     if (native) {
       return startNativeSpan(native, name, options);
     }
@@ -212,7 +213,7 @@ export class WorkerTracer implements Tracer {
       args.length > 2 ? (args[1] as Context) : api_context.active();
     const fn = args.at(-1) as F;
 
-    const native = getActiveNativeTracer();
+    const native = getActiveNativeTracer(parentContext);
     if (native) {
       return startActiveNativeSpan(native, name, options, fn);
     }

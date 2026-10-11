@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrumentWorkflow } from './workflows';
 import { getWorkflowLogger } from '../execution-logger';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
-import { tracerDouble, spanDouble } from '../testing/doubles.js';
+import { tracerDouble, spanDouble, rpcStub } from '../testing/doubles.js';
 
 describe('Workflow Instrumentation', () => {
   let mockTracer: any;
@@ -29,6 +29,8 @@ describe('Workflow Instrumentation', () => {
     };
 
     mockTracer = {
+      // initProvider() sets the head sampler when a Workflow is constructed.
+      setHeadSampler: vi.fn(),
       startActiveSpan: vi.fn((_name, options, context, fn) => {
         if (typeof options === 'function') return options(mockSpan);
         if (typeof context === 'function') return context(mockSpan);
@@ -508,6 +510,73 @@ describe('Workflow Instrumentation', () => {
 
       // Should not throw — this.value should be accessible
       await expect(instance.run(event, step)).resolves.not.toThrow();
+    });
+  });
+
+  describe('step as an RPC stub', () => {
+    // In workerd, run() receives `step` as an RPC stub: reading `apply`,
+    // `bind` or `call` off one of its methods names a remote method.
+    class StubbedWorkflow {
+      constructor(
+        public ctx: any,
+        public env: any,
+      ) {}
+      async run(_event: any, step: any) {
+        const user = await step.do('load user', async () => 'ada');
+        await step.do('charge', { retries: { limit: 1 } }, async () => 'paid');
+        await step.sleep('cool off', '1 second');
+        await step.sleepUntil('wake', new Date(0));
+        const approval = await step.waitForEvent('approve', {
+          type: 'approval',
+        });
+        return { user, approval };
+      }
+    }
+
+    const stubbedStep = () =>
+      rpcStub({
+        do: async (...args: never[]) =>
+          (args.at(-1) as unknown as () => Promise<unknown>)(),
+        sleep: async () => {},
+        sleepUntil: async () => {},
+        waitForEvent: async () => ({ payload: { approved: true } }),
+      });
+
+    const event = {
+      payload: {},
+      timestamp: new Date(),
+      instanceId: 'wf-rpc',
+    };
+
+    it('runs every step method without reading apply, bind or call off the stub', async () => {
+      const Instrumented = instrumentWorkflow(StubbedWorkflow, 'rpc', {
+        service: { name: 'test' },
+      });
+
+      await expect(
+        new Instrumented({}, {}).run(event, stubbedStep()),
+      ).resolves.toEqual({
+        user: 'ada',
+        approval: { payload: { approved: true } },
+      });
+    });
+
+    it('still records a span for each step, sleep and sleepUntil', async () => {
+      const Instrumented = instrumentWorkflow(StubbedWorkflow, 'rpc', {
+        service: { name: 'test' },
+      });
+
+      await new Instrumented({}, {}).run(event, stubbedStep());
+
+      expect(
+        mockTracer.startActiveSpan.mock.calls.map((call: any[]) => call[0]),
+      ).toEqual([
+        'Workflow rpc: run',
+        'Workflow rpc: load user',
+        'Workflow rpc: charge',
+        'Workflow rpc: sleep cool off',
+        'Workflow rpc: sleepUntil wake',
+      ]);
     });
   });
 });

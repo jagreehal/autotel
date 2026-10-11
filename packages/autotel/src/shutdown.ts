@@ -2,6 +2,7 @@
  * Graceful shutdown with flush and cleanup
  */
 
+import { logs } from '@opentelemetry/api-logs';
 import { getSdk, getLogger, getConfig, _closeEmbeddedDevtools } from './init';
 import { getEventQueue, resetEventQueue } from './track';
 import { resetEvents } from './event';
@@ -68,7 +69,7 @@ function isUnreachableEndpointError(cause: unknown, depth = 0): boolean {
 /**
  * Flush all pending telemetry
  *
- * Flushes both events events and OpenTelemetry spans to their destinations.
+ * Flushes queued events, OpenTelemetry spans, and log records to their destinations.
  * Includes timeout protection to prevent hanging in serverless environments.
  *
  * Safe to call multiple times.
@@ -107,18 +108,20 @@ export async function flush(options?: {
       await (forShutdown ? eventsQueue.shutdown() : eventsQueue.flush());
     }
 
-    // Flush OpenTelemetry spans
-    // This ensures spans are exported immediately, critical for serverless.
-    // NodeSDK.getTracerProvider() returns undefined on sdk-node 0.220+, so
-    // resolve a force-flushable provider from the global registry too.
-    try {
-      const tracerProvider = getForceFlushableProvider(getSdk());
-      if (tracerProvider) {
-        await tracerProvider.forceFlush();
-      }
-    } catch {
-      // Ignore errors when accessing tracer provider (may not be available in test mocks)
-    }
+    // Flush spans and logs independently, so one signal's export error
+    // leaves the other flushed. The shared timeout bounds both.
+    await Promise.allSettled([
+      Promise.resolve().then(() =>
+        getForceFlushableProvider(getSdk())?.forceFlush(),
+      ),
+      Promise.resolve().then(() => {
+        // Read at flush time to include providers registered by sdkFactory.
+        // Before registration the no-op provider has no forceFlush.
+        const provider = logs.getLoggerProvider();
+        const forceFlush = readProperty(provider, 'forceFlush');
+        if (isFunction(forceFlush)) return forceFlush.call(provider);
+      }),
+    ]);
   };
 
   // Add timeout protection to prevent hanging

@@ -18,6 +18,8 @@ export class SpanProcessorWithFlush implements SpanProcessor {
   private exporter: SpanExporter | undefined;
   private postProcessor?: PostProcessorFn;
   private spans: Map<string, ReadableSpan[]> = new Map();
+  /** Exports in flight, by trace, for flushes that arrive while one runs. */
+  private exporting: Map<string, Promise<void>> = new Map();
 
   constructor(
     exporter: SpanExporter | undefined,
@@ -42,24 +44,32 @@ export class SpanProcessorWithFlush implements SpanProcessor {
   }
 
   /**
-   * Force flush spans for a specific trace
+   * Export a trace's buffered spans, or every trace's when no ID is given.
+   * Resolves once those spans, and any export of the same trace already in
+   * flight, have reached the exporter.
    */
   async forceFlush(traceId?: string): Promise<void> {
-    if (traceId) {
-      const spans = this.spans.get(traceId);
-      if (spans && spans.length > 0) {
-        await this.exportSpans(spans);
-        this.spans.delete(traceId);
-      }
-    } else {
-      // Flush all traces
-      const promises: Promise<void>[] = [];
-      for (const [id, spans] of this.spans.entries()) {
-        promises.push(this.exportSpans(spans));
-        this.spans.delete(id);
-      }
-      await Promise.all(promises);
+    if (traceId) return this.flushTrace(traceId);
+    const ids = new Set([...this.spans.keys(), ...this.exporting.keys()]);
+    await Promise.all([...ids].map((id) => this.flushTrace(id)));
+  }
+
+  private flushTrace(traceId: string): Promise<void> {
+    const spans = this.spans.get(traceId);
+    if (spans && spans.length > 0) {
+      // Take the spans before exporting, so an overlapping flush of the same
+      // trace cannot export them a second time.
+      this.spans.delete(traceId);
+      const previous = this.exporting.get(traceId) ?? Promise.resolve();
+      const exported = previous.then(() => this.exportSpans(spans));
+      this.exporting.set(traceId, exported);
+      void exported.finally(() => {
+        if (this.exporting.get(traceId) === exported) {
+          this.exporting.delete(traceId);
+        }
+      });
     }
+    return this.exporting.get(traceId) ?? Promise.resolve();
   }
 
   async shutdown(): Promise<void> {

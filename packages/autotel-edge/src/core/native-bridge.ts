@@ -180,13 +180,15 @@ export function withoutNativeTracer(
 }
 
 /**
- * Read the native tracer from the active context, falling back to the default
- * one. Returns `null` when running without a native tracer (other edge
- * runtimes, native tracing disabled, OTLP mode) — callers then use OTel.
+ * Read the native tracer from a context (the active one by default), falling
+ * back to the default one. Returns `null` without a native tracer (other edge
+ * runtimes, native tracing disabled, OTLP mode), and callers then use OTel.
  */
-export function getActiveNativeTracer(): NativeTracer | null {
+export function getActiveNativeTracer(
+  context: Context = api_context.active(),
+): NativeTracer | null {
   // SAFETY: this key is written only by withNativeTracer/withoutNativeTracer.
-  const value = api_context.active().getValue(NATIVE_TRACER_KEY) as
+  const value = context.getValue(NATIVE_TRACER_KEY) as
     NativeTracer | typeof NATIVE_DISABLED | undefined;
   if (value === NATIVE_DISABLED) {
     return null;

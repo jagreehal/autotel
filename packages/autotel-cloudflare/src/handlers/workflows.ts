@@ -18,6 +18,7 @@ import type { ConfigurationOption, WorkflowTrigger } from 'autotel-edge';
 import {
   createInitialiser,
   setConfig,
+  WorkerTracer,
   withoutNativeTracer,
   type NativeTracer,
 } from 'autotel-edge';
@@ -25,7 +26,8 @@ import { platformNativeTracer } from '../native/native-tracing';
 import { wrap } from '../bindings/common';
 import { toException } from '../exception.js';
 import { workerTracer } from '../tracer.js';
-import { asFunction, member, trapArgs } from '../values.js';
+import { initProvider } from '../provider.js';
+import { asFunction, boundMethod, member, trapArgs } from '../values.js';
 
 type WorkflowRunFn = (
   event: Readonly<WorkflowEvent<unknown>>,
@@ -46,151 +48,94 @@ function isColdStart(workflowClass: object): boolean {
 }
 
 /**
- * Proxy the step object to instrument step.do(), step.sleep(), and step.sleepUntil() calls
+ * Instrument a Workflow step: a span around each do(), sleep() and
+ * sleepUntil(). In workerd `step` is an RPC stub, so every call goes through
+ * boundMethod rather than the stub's own apply or bind.
  */
 function instrumentWorkflowStep(
   step: WorkflowStep,
   workflowName: string,
 ): WorkflowStep {
-  const stepHandler: ProxyHandler<WorkflowStep> = {
+  const traced =
+    (
+      call: (...args: unknown[]) => unknown,
+      describe: (args: unknown[]) => {
+        name: string;
+        attributes: Record<string, string>;
+      },
+    ) =>
+    (...args: unknown[]) => {
+      const { name, attributes } = describe(args);
+      return workerTracer('autotel-edge').startActiveSpan(
+        `Workflow ${workflowName}: ${name}`,
+        {
+          kind: SpanKind.INTERNAL,
+          attributes: { ...attributes, 'workflow.name': workflowName },
+        },
+        async (span) => {
+          try {
+            const result = await call(...args);
+            span.setStatus({ code: SpanStatusCode.OK });
+            return result;
+          } catch (error) {
+            span.recordException(toException(error));
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: error instanceof Error ? error.message : String(error),
+            });
+            throw error;
+          } finally {
+            span.end();
+          }
+        },
+      );
+    };
+
+  return wrap(step, {
     get(target, prop) {
       const value = member(target, prop);
       const method = asFunction(value);
+      if (!method) return value;
+      const call = boundMethod(method, target);
 
-      // Instrument step.do() to create spans for each workflow step
-      if (prop === 'do' && method) {
-        return new Proxy(method, {
-          apply: (fnTarget, thisArg, args) => {
-            const [stepName] = trapArgs<[string, ...unknown[]]>(args);
-
-            const tracer = workerTracer('autotel-edge');
-
-            return tracer.startActiveSpan(
-              `Workflow ${workflowName}: ${stepName}`,
-              {
-                kind: SpanKind.INTERNAL,
-                attributes: {
-                  'workflow.step.name': stepName,
-                  'workflow.name': workflowName,
-                },
-              },
-              async (span) => {
-                try {
-                  const result = await fnTarget.apply(thisArg, args);
-                  span.setStatus({ code: SpanStatusCode.OK });
-                  return result;
-                } catch (error) {
-                  span.recordException(toException(error));
-                  span.setStatus({
-                    code: SpanStatusCode.ERROR,
-                    message:
-                      error instanceof Error ? error.message : String(error),
-                  });
-                  throw error;
-                } finally {
-                  span.end();
-                }
-              },
-            );
-          },
+      if (prop === 'do') {
+        return traced(call, (args) => {
+          const [stepName] = trapArgs<[string, ...unknown[]]>(args);
+          return {
+            name: stepName,
+            attributes: { 'workflow.step.name': stepName },
+          };
         });
       }
-
-      // Instrument step.sleep() to track workflow delays
-      if (prop === 'sleep' && method) {
-        return new Proxy(method, {
-          apply: (fnTarget, thisArg, args) => {
-            const [sleepName, duration] =
-              trapArgs<[string, string | number]>(args);
-
-            const tracer = workerTracer('autotel-edge');
-
-            return tracer.startActiveSpan(
-              `Workflow ${workflowName}: sleep ${sleepName}`,
-              {
-                kind: SpanKind.INTERNAL,
-                attributes: {
-                  'workflow.sleep.name': sleepName,
-                  'workflow.sleep.duration': String(duration),
-                  'workflow.name': workflowName,
-                },
-              },
-              async (span) => {
-                try {
-                  const result = await fnTarget.apply(thisArg, args);
-                  span.setStatus({ code: SpanStatusCode.OK });
-                  return result;
-                } catch (error) {
-                  span.recordException(toException(error));
-                  span.setStatus({
-                    code: SpanStatusCode.ERROR,
-                    message:
-                      error instanceof Error ? error.message : String(error),
-                  });
-                  throw error;
-                } finally {
-                  span.end();
-                }
-              },
-            );
-          },
+      if (prop === 'sleep') {
+        return traced(call, (args) => {
+          const [sleepName, duration] =
+            trapArgs<[string, string | number]>(args);
+          return {
+            name: `sleep ${sleepName}`,
+            attributes: {
+              'workflow.sleep.name': sleepName,
+              'workflow.sleep.duration': String(duration),
+            },
+          };
         });
       }
-
-      if (prop === 'sleepUntil' && method) {
-        return new Proxy(method, {
-          apply: (fnTarget, thisArg, args) => {
-            const [sleepName, timestamp] =
-              trapArgs<[string, Date | number]>(args);
-
-            const tracer = workerTracer('autotel-edge');
-            const wakeAt =
-              timestamp instanceof Date
-                ? timestamp.toISOString()
-                : new Date(timestamp).toISOString();
-
-            return tracer.startActiveSpan(
-              `Workflow ${workflowName}: sleepUntil ${sleepName}`,
-              {
-                kind: SpanKind.INTERNAL,
-                attributes: {
-                  'workflow.sleep.name': sleepName,
-                  'workflow.sleep.until': wakeAt,
-                  'workflow.name': workflowName,
-                },
-              },
-              async (span) => {
-                try {
-                  const result = await fnTarget.apply(thisArg, args);
-                  span.setStatus({ code: SpanStatusCode.OK });
-                  return result;
-                } catch (error) {
-                  span.recordException(toException(error));
-                  span.setStatus({
-                    code: SpanStatusCode.ERROR,
-                    message:
-                      error instanceof Error ? error.message : String(error),
-                  });
-                  throw error;
-                } finally {
-                  span.end();
-                }
-              },
-            );
-          },
+      if (prop === 'sleepUntil') {
+        return traced(call, (args) => {
+          const [sleepName, timestamp] =
+            trapArgs<[string, Date | number]>(args);
+          return {
+            name: `sleepUntil ${sleepName}`,
+            attributes: {
+              'workflow.sleep.name': sleepName,
+              'workflow.sleep.until': new Date(timestamp).toISOString(),
+            },
+          };
         });
       }
-
-      // Pass through other step methods
-      if (method !== undefined) {
-        return method.bind(target);
-      }
-
-      return value;
+      return call;
     },
-  };
-
-  return wrap(step, stepHandler);
+  });
 }
 
 /**
@@ -239,6 +184,18 @@ function instrumentWorkflowRun(
           throw error;
         } finally {
           span.end();
+          // Nothing waits on the span processor's own flush once run()
+          // returns, so export the trace before handing back the result.
+          if (tracer instanceof WorkerTracer) {
+            await tracer
+              .forceFlush(span.spanContext().traceId)
+              .catch((error: unknown) =>
+                console.error(
+                  '[autotel-cloudflare] Failed to export spans:',
+                  error,
+                ),
+              );
+          }
         }
       },
     );
@@ -396,7 +353,9 @@ export function instrumentWorkflow<C extends new (...args: any[]) => any>(
         );
       }
 
-      // Instrument the instance
+      // OTLP mode: a Workflow can run in an isolate where no Worker handler
+      // has registered the provider yet.
+      initProvider(workflowConfig);
       return instrumentWorkflowInstance(
         workflowInstance,
         workflowName,

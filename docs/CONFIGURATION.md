@@ -187,7 +187,7 @@ Pass an object instead of a preset name for custom key and value patterns. See `
 
 ## Event Delivery Timing
 
-Events via `track()` are batched and delivered asynchronously. The default flush interval is 10 seconds with a batch size of 100 events. Use `flush()` before process exit or in serverless environments to ensure events aren't lost.
+Events via `track()` are batched and delivered asynchronously. The default flush interval is 10 seconds with a batch size of 100 events. Call `flush()` before process exit or at the end of a serverless invocation. It sends queued events, spans and batched log records.
 
 ### Flushing Events
 
