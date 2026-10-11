@@ -1,5 +1,11 @@
 # autotel-cloudflare
 
+## 18.2.3
+
+### Patch Changes
+
+- autotel-genai@0.16.1
+
 ## 18.2.2
 
 ### Patch Changes

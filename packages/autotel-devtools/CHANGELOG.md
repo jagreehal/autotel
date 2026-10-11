@@ -1,5 +1,12 @@
 # autotel-devtools
 
+## 31.4.1
+
+### Patch Changes
+
+- Updated dependencies [77093ad]
+  - autotel@8.2.0
+
 ## 31.4.0
 
 ### Minor Changes
