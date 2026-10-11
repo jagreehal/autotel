@@ -181,6 +181,17 @@ init({
 
 Useful for platforms like GCP Cloud Run or AWS Lambda where stdout is managed externally.
 
+## Startup Warnings
+
+`init()` checks your setup and warns when:
+
+- an ESM app starts without `--import autotel/register`, so packages loaded with `import` stay uninstrumented
+- a logger it instruments (pino, winston, bunyan) loaded before `init()`, so its records get no trace context
+- a name in the `autoInstrumentations` array loads nothing
+- `@opentelemetry/auto-instrumentations-node` is missing
+
+With no `logger`, these warnings go to the console, and `silent: true` suppresses them. With a `logger`, they go to its `warn` method. To decide ESM, `init()` reads the entry file's extension first (`.mjs`/`.mts` or `.cjs`/`.cts`), then the `type` in your `package.json`, so a `.cjs` entry in a `"type": "module"` package counts as CommonJS.
+
 ## spanEnrichers
 
 Span processors that decorate spans on the way out. Unlike `spanProcessors`,
@@ -205,6 +216,21 @@ That ordering is deliberate: they decorate the real span, and
 [Attribute Redaction](#attribute-redaction) downstream then sees the attributes
 they added rather than missing an enricher that copied a sensitive value into a
 new key.
+
+On flush and shutdown, the enrichers drain before the exporters flush, so a span
+an enricher ends at exit still reaches the exporter. If you build your own SDK,
+`EnrichedSpanProcessor` from `autotel` gives you the same order:
+
+```typescript
+import { EnrichedSpanProcessor } from 'autotel';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { langfuseCompatibility } from 'autotel-langfuse';
+
+const processor = new EnrichedSpanProcessor(
+  [langfuseCompatibility()], // enrichers, drained first
+  [new BatchSpanProcessor(exporter)], // exporters, flushed after
+);
+```
 
 ## Attribute Redaction
 
@@ -241,6 +267,10 @@ init({
 ```
 
 **Built-in patterns:** `email`, `phone`, `creditCard`, `ipv4`, `jwt`, `bearer`, `iban`
+
+Key patterns match the full attribute key and its last dot segment, so the
+presets' anchored key patterns redact `user.password` and `http.request.header.authorization`. Custom `keyPatterns` see the last
+segment too. A string array under a matching key has each element replaced.
 
 For redaction driven by portable rule files rather than presets, see
 [Telemetry Policies](/autotel/policies/).

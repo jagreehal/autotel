@@ -52,6 +52,29 @@ export const processOrder = withTracing({})((ctx) => async (order: Order) => {
 - Gracefully handles circular references (→ `<circular-reference>`)
 - Customizable prefix (default: `'metadata'`)
 
+### Errors in attributes
+
+An `Error` passed to `ctx.setAttribute()`, `ctx.setAttributes()` or request logger fields records its `name`, `message`, `stack`, scalar fields such as `code`, and its `cause` chain:
+
+```typescript
+ctx.setAttributes({ error: err });
+// error.name, error.message, error.stack, error.code, error.cause.message, ...
+```
+
+autotel skips the `config`, `request`, `response`, `headers` and `options` fields, where HTTP clients keep credentials.
+
+## withTracing Return Types
+
+`withTracing()` types the wrapper from the handler the factory returns:
+
+| Handler returns              | Wrapper type                   |
+| ---------------------------- | ------------------------------ |
+| A promise or other awaitable | `(...args) => Promise<T>`      |
+| A plain value (sync)         | `(...args) => T`               |
+| Either, depending on input   | `(...args) => T \| Promise<T>` |
+
+A sync handler stays sync, so you call it without `await`.
+
 ## Isolated Tracer Provider
 
 For library authors who want to use Autotel without interfering with the application's global OTel setup:
