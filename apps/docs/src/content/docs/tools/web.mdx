@@ -166,6 +166,8 @@ never enough to answer a support ticket. Hashing keeps all of a tenth of the
 visits, across spans, events and logs alike. Raising the rate mid-incident only
 ever adds sessions; the ones you were already watching stay in the set.
 
+In lean mode `sampleRate` also sets the sampled flag on the `traceparent` the page sends, with or without an `endpoint`. Set it to your API's head-sampling ratio and a parent-based server sampler keeps the sessions the browser keeps.
+
 ## Remote config
 
 The sampling rate that was fine last week is drowning the collector; a browser
@@ -245,9 +247,12 @@ the id directly:
 ```typescript
 import { init } from 'autotel-web';
 import { posthogSessionId } from 'autotel-posthog';
+import posthog from 'posthog-js';
 
-init({ service: 'web', session: { id: posthogSessionId } });
+init({ service: 'web', session: { id: () => posthogSessionId(posthog) } });
 ```
+
+Pass the instance you import. Only the loader snippet sets `window.posthog`.
 
 See [PostHog](/autotel/integrations/posthog/).
 

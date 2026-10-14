@@ -193,7 +193,13 @@ export function getSessionAttributes(): Record<string, string> | undefined {
   // locally minted id below covers the gap.
   // A provider owns its own lifecycle, so no start/end is announced for it:
   // claiming a session began the moment we first asked would be a guess.
-  const provided = idProvider?.();
+  // A provider that throws counts as one still starting up.
+  let provided: string | undefined;
+  try {
+    provided = idProvider?.();
+  } catch {
+    provided = undefined;
+  }
   if (provided !== undefined && provided.length > 0) {
     return { [SESSION.ID]: provided };
   }

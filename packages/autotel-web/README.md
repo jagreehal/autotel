@@ -210,6 +210,8 @@ initFull({ service: 'web', endpoint, sampleRate: 0.1 });
 Monotonic in the rate, so raising it mid-incident only adds sessions — the ones
 you were already watching stay in the set.
 
+In lean mode `sampleRate` also sets the sampled flag on the `traceparent` the page sends, with or without an `endpoint`. Set it to your API's head-sampling ratio and a parent-based server sampler keeps the sessions the browser keeps.
+
 ## Capture settings without a release
 
 ```ts

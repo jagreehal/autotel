@@ -282,3 +282,31 @@ describe('environments', () => {
     expect(sentTraceparent()).toMatch(TRACEPARENT);
   });
 });
+
+describe('sampled flag', () => {
+  it('is set by default', async () => {
+    init({ service: 'web' });
+    await patchedFetch()(`${PAGE_ORIGIN}/api`);
+    expect(sentTraceparent()).toMatch(/-01$/);
+  });
+
+  it('does not block the request when the session provider throws', async () => {
+    init({
+      service: 'web',
+      sampleRate: 0.5,
+      session: {
+        id: () => {
+          throw new Error('posthog not ready');
+        },
+      },
+    });
+    await patchedFetch()(`${PAGE_ORIGIN}/api`);
+    expect(sentTraceparent()).toMatch(TRACEPARENT);
+  });
+
+  it('is cleared for a session outside sampleRate, with no exporter configured', async () => {
+    init({ service: 'web', sampleRate: 0 });
+    await patchedFetch()(`${PAGE_ORIGIN}/api`);
+    expect(sentTraceparent()).toMatch(/-00$/);
+  });
+});

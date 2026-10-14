@@ -8,6 +8,7 @@
  */
 
 import { createTraceparent, parseTraceparent } from './traceparent';
+import { sampled } from './span-exporter';
 
 /**
  * Minimal trace context (browser-side)
@@ -172,7 +173,7 @@ export function getActiveContext(): TraceContext | undefined {
  * ```
  */
 export function getTraceparent(): string {
-  return createTraceparent();
+  return createTraceparent(undefined, undefined, sampled());
 }
 
 /**

@@ -9,8 +9,9 @@
  * ```ts
  * import { init } from 'autotel-web';
  * import { posthogSessionId } from 'autotel-posthog';
+ * import posthog from 'posthog-js';
  *
- * init({ service: 'web', session: { id: posthogSessionId } });
+ * init({ service: 'web', session: { id: () => posthogSessionId(posthog) } });
  * ```
  *
  * Returns `undefined` when PostHog is absent or not yet initialized, which is

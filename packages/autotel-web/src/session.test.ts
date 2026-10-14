@@ -89,6 +89,16 @@ describe('an external session id provider', () => {
     expect(id).not.toBe('from-posthog');
   });
 
+  it('mints its own when the provider throws', () => {
+    configureSession({
+      id: () => {
+        throw new Error('posthog not ready');
+      },
+    });
+
+    expect(getSessionAttributes()?.['session.id']).toBeDefined();
+  });
+
   it('does not store a provider id as if it were ours', () => {
     // The provider owns the lifecycle. Persisting its id would let a stale
     // value outlive the session it came from.

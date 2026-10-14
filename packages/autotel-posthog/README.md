@@ -204,9 +204,12 @@ The minimal `autotel-web` build writes spans straight to OTLP and has no process
 ```ts
 import { init } from 'autotel-web';
 import { posthogSessionId } from 'autotel-posthog';
+import posthog from 'posthog-js';
 
-init({ service: 'web', session: { id: posthogSessionId } });
+init({ service: 'web', session: { id: () => posthogSessionId(posthog) } });
 ```
+
+Pass the instance you import. Only the loader snippet sets `window.posthog`.
 
 ## Three states, one of which answers questions
 
