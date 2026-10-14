@@ -352,6 +352,10 @@ pnpm start:rag          # RAG pipeline
 
 **`example-posthog`** - `joinPostHog` on a checkout that fails. The browser span carries a replay URL, the PostHog event carries `$trace_id`, and the server span carries `session.id` from W3C baggage. See [example-posthog/README.md](./example-posthog/README.md).
 
+#### React SPA with a separate Express API
+
+**`example-web-react-express`** - Lean `autotel-web` in a Vite + React + axios app calling an Express 4 API on another origin, with helmet, hand-rolled CORS and parent-based head sampling. `node smoke.mjs` checks propagation, CORS, sampling and the PostHog session join in headless Chromium. See [example-web-react-express/README.md](./example-web-react-express/README.md).
+
 ## Verifying in Grafana
 
 1. **Open Grafana Cloud** (or your Grafana instance)

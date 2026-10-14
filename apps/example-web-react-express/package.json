@@ -1,0 +1,35 @@
+{
+  "name": "@jagreehal/example-web-react-express",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "autotel-web in a Vite + React + axios SPA calling a separate-origin Express 4 API with helmet and a hand-rolled CORS middleware",
+  "scripts": {
+    "api": "node --require ./server/telemetry.cjs server/index.cjs",
+    "web": "vite --port 5173 --strictPort",
+    "type-check": "tsc --noEmit",
+    "smoke": "node smoke.mjs"
+  },
+  "dependencies": {
+    "@opentelemetry/instrumentation-express": "0.70.0",
+    "@opentelemetry/instrumentation-http": "0.222.0",
+    "autotel": "workspace:*",
+    "autotel-posthog": "workspace:*",
+    "autotel-web": "workspace:*",
+    "posthog-js": "1.434.17",
+    "axios": "1.19.0",
+    "express": "4.22.2",
+    "helmet": "5.1.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router-dom": "7.18.2"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "4.7.0",
+    "playwright": "1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "7.3.6"
+  }
+}

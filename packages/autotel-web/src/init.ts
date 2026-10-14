@@ -19,6 +19,8 @@ import {
   recordSpan,
   flushSpans,
   isConfigured,
+  sampled,
+  setSampleRate,
   resetForTesting as resetExporter,
 } from './span-exporter';
 import { configureSession, endSessionOnUnload } from './session';
@@ -204,7 +206,8 @@ export interface AutotelWebConfig {
    *
    * ```ts
    * import { posthogSessionId } from 'autotel-posthog';
-   * init({ service: 'web', session: { id: posthogSessionId } });
+   * import posthog from 'posthog-js';
+   * init({ service: 'web', session: { id: () => posthogSessionId(posthog) } });
    * ```
    *
    * @default { timeoutMs: 1_800_000 }
@@ -216,6 +219,10 @@ export interface AutotelWebConfig {
    * spans, logs and events alike, since a visit whose events survive but whose
    * spans do not is unreadable either way. With `session: false` there is no
    * key to be consistent about and the draw is per record.
+   *
+   * Also sets the sampled flag on the `traceparent` this page sends, with or
+   * without an `endpoint`, so a parent-based server sampler keeps the same
+   * sessions.
    */
   sampleRate?: number;
 
@@ -305,6 +312,9 @@ export function init(userConfig: AutotelWebConfig): void {
   if (config.baggage?.initial) {
     setBaggageInternal(config.baggage.initial, config.debug ?? false);
   }
+
+  // Set with or without an exporter: the `traceparent` sampled flag carries it.
+  if (config.sampleRate != null) setSampleRate(config.sampleRate);
 
   // Capture unpatched fetch for the exporter before we patch it
   if (config.endpoint !== undefined) {
@@ -555,7 +565,7 @@ function patchFetch(): void {
     // only the join with that server's own spans is lost.
     let traceparent: string | undefined;
     if (!headers.has('traceparent')) {
-      traceparent = createTraceparent();
+      traceparent = createTraceparent(undefined, undefined, sampled());
       if (shouldSendHeaders(url)) {
         headers.set('traceparent', traceparent);
         if (config?.debug) {
@@ -762,7 +772,11 @@ function patchXMLHttpRequest(): void {
         }
       } else {
         try {
-          const traceparent = createTraceparent();
+          const traceparent = createTraceparent(
+            undefined,
+            undefined,
+            sampled(),
+          );
           // originalXHRSetRequestHeader is always defined here because patchXMLHttpRequest() sets it before patching
           originalXHRSetRequestHeader!.call(this, 'traceparent', traceparent);
           xhrHasTraceparent.add(this);

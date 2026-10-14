@@ -135,6 +135,9 @@ rather than a nice-to-have.
   setting silently inert. Test this _through_ `init`/`initFull`: a test that
   calls `configureExporter` by hand cannot see an entry point that forgets to
   pass the rate.
+- **Lean `traceparent` carries the sampling decision.** Its flag is `01` only
+  for a session inside `sampleRate`, with or without an exporter, so a
+  parent-based server sampler keeps the sessions the browser keeps.
 - **Ambient enrichment loses to explicit attributes.** The exporter stamps
   `session.id` on every record, so it must be spread _before_ the caller's own
   attributes. Spread after, it overwrote the id on `session.end` with the

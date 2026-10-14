@@ -171,9 +171,12 @@ The minimal `autotel-web` build writes straight to OTLP and has no processor pip
 ```typescript
 import { init } from 'autotel-web';
 import { posthogSessionId } from 'autotel-posthog';
+import posthog from 'posthog-js';
 
-init({ service: 'web', session: { id: posthogSessionId } });
+init({ service: 'web', session: { id: () => posthogSessionId(posthog) } });
 ```
+
+Pass the instance you import. Only the loader snippet sets `window.posthog`.
 
 ## When nothing shows up
 

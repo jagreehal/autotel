@@ -41,10 +41,11 @@ export function generateSpanId(): string {
  * - version: 00 (W3C Trace Context spec)
  * - traceId: 128-bit hex (32 chars)
  * - spanId: 64-bit hex (16 chars)
- * - flags: 01 (sampled)
+ * - flags: 01 (sampled) or 00 (not sampled)
  *
  * @param traceId - Optional existing trace ID (for continuing traces)
  * @param parentSpanId - Optional parent span ID (unused in browser, included for API compat)
+ * @param sampled - Sampled flag. A parent-based server sampler follows it.
  * @returns W3C traceparent header value
  *
  * @example
@@ -56,10 +57,11 @@ export function generateSpanId(): string {
 export function createTraceparent(
   traceId?: string,
   _parentSpanId?: string,
+  sampled = true,
 ): string {
   const tid = traceId ?? generateTraceId();
   const sid = generateSpanId();
-  const flags = '01'; // sampled=1
+  const flags = sampled ? '01' : '00';
 
   return `00-${tid}-${sid}-${flags}`;
 }

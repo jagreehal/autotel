@@ -20,6 +20,8 @@ vi.mock('./span-exporter', () => ({
   recordEvent: vi.fn(),
   flushSpans: vi.fn(),
   isConfigured: vi.fn(() => true),
+  sampled: vi.fn(() => true),
+  setSampleRate: vi.fn(),
   resetForTesting: vi.fn(),
 }));
 

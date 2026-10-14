@@ -89,7 +89,7 @@ let blockedFailures = 0;
 let detachOnline: (() => void) | undefined;
 
 /**
- * Jittered exponential backoff. Jitter matters more than the curve: without it
+ * Jittered exponential backoff. Jitter matters more than the growth rate: without it
  * every tab that failed on the same collector blip retries in the same
  * millisecond and produces a second one.
  */
@@ -140,10 +140,18 @@ function samplingKey(): string {
   return pageKey;
 }
 
-function sampled(): boolean {
+export function sampled(): boolean {
   if (sampleRate >= 1) return true;
   if (sampleRate <= 0) return false;
   return sampleByKey(samplingKey(), sampleRate);
+}
+
+/**
+ * Session sample rate for lean mode without an exporter, where it drives the
+ * `traceparent` sampled flag.
+ */
+export function setSampleRate(rate: number): void {
+  sampleRate = rate;
 }
 
 export function configureExporter(

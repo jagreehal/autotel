@@ -276,6 +276,8 @@ Random per-span sampling keeps a tenth of _every_ session and leaves none of
 them reconstructable — never suggest replacing this with `Math.random()`.
 Monotonic in the rate: raising it mid-incident only adds sessions.
 
+In lean mode `sampleRate` also sets the sampled flag on the `traceparent` the page sends, with or without an `endpoint`. Set it to your API's head-sampling ratio and a parent-based server sampler keeps the sessions the browser keeps.
+
 ### Remote capture config
 
 ```typescript
