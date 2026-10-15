@@ -77,14 +77,14 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/instrumentation": "^0.222.0",
+    "@opentelemetry/instrumentation": "^0.223.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "@google-cloud/bigquery": ">=8.3.1",
-    "@opentelemetry/instrumentation-amqplib": ">=0.69.0",
-    "@opentelemetry/instrumentation-kafkajs": ">=0.31.0"
+    "@google-cloud/bigquery": ">=9.2.0",
+    "@opentelemetry/instrumentation-amqplib": ">=0.70.0",
+    "@opentelemetry/instrumentation-kafkajs": ">=0.32.0"
   },
   "peerDependenciesMeta": {
     "@google-cloud/bigquery": {
@@ -99,12 +99,12 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@google-cloud/bigquery": "^9.1.0",
-    "@opentelemetry/core": "^2.11.0",
-    "@types/node": "^26.6.3",
-    "tsdown": "^0.23.0",
+    "@google-cloud/bigquery": "^9.2.0",
+    "@opentelemetry/core": "^2.12.0",
+    "@types/node": "^26.6.5",
+    "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.4"
   },
   "repository": {
     "type": "git",

@@ -36,14 +36,14 @@
   },
   "devDependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/instrumentation-mongodb": "^0.75.0",
-    "@opentelemetry/sdk-trace-node": "^2.11.0",
-    "@types/node": "^26.6.3",
+    "@opentelemetry/instrumentation-mongodb": "^0.76.0",
+    "@opentelemetry/sdk-trace-node": "^2.12.0",
+    "@types/node": "^26.6.5",
     "autotel": "workspace:*",
-    "mongodb": "^7.6.0",
-    "tsdown": "^0.23.0",
+    "mongodb": "^7.7.0",
+    "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.4"
   },
   "keywords": [
     "opentelemetry",

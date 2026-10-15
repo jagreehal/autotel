@@ -13,11 +13,11 @@
     "@faker-js/faker": "^10.6.0",
     "autotel": "workspace:*",
     "autotel-mongoose": "workspace:*",
-    "dotenv": "^18.0.4",
-    "mongoose": "^9.10.2"
+    "dotenv": "^18.0.7",
+    "mongoose": "^9.11.1"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

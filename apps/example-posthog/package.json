@@ -14,14 +14,14 @@
     "autotel": "workspace:*",
     "autotel-posthog": "workspace:*",
     "autotel-web": "workspace:*",
-    "dotenv": "^18.0.4",
+    "dotenv": "^18.0.7",
     "esbuild": "^0.28.2",
-    "posthog-js": "1.434.17"
+    "posthog-js": "1.438.8"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "playwright": "1.63.0"
+    "playwright": "1.64.0"
   }
 }

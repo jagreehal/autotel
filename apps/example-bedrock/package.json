@@ -9,19 +9,19 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "5.0.97",
-    "@aws-sdk/credential-providers": "^3.1141.0",
+    "@ai-sdk/amazon-bedrock": "5.0.114",
+    "@aws-sdk/credential-providers": "^3.1149.0",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/sdk-trace-base": "^2.11.0",
-    "ai": "7.0.118",
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
+    "ai": "7.0.138",
     "autotel": "workspace:*",
     "autotel-aws": "workspace:*",
     "autotel-bedrock": "workspace:*",
     "autotel-genai": "workspace:*",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

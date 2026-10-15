@@ -26,8 +26,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@inquirer/prompts": "^8.7.2",
-    "@opentelemetry/otlp-transformer": "^0.222.0",
+    "@inquirer/prompts": "^8.7.3",
+    "@opentelemetry/otlp-transformer": "^0.223.0",
     "autotel-mcp": "workspace:*",
     "chalk": "^6.0.1",
     "commander": "^15.0.0",
@@ -38,13 +38,13 @@
     "yaml": "^2.9.1"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "@types/semver": "^7.8.0",
     "autotel-telemetry": "workspace:*",
-    "tsdown": "^0.23.0",
+    "tsdown": "^0.23.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.4"
   },
   "engines": {
     "node": ">=22.0.0"

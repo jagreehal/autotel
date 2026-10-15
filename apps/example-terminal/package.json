@@ -10,10 +10,10 @@
   "dependencies": {
     "autotel": "workspace:*",
     "autotel-terminal": "workspace:*",
-    "dotenv": "^18.0.4"
+    "dotenv": "^18.0.7"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
