@@ -87,10 +87,110 @@ async function scenario(name, { apiEnv = {}, webEnv = {} }) {
         JSON.parse(localStorage.getItem('ph_phc_example_posthog') ?? '{}')
           .$sesid?.[1],
     );
+    const serverSpans = [...api.log.matchAll(/^server-span (.+)$/gm)]
+      .map((m) => JSON.parse(m[1]))
+      .filter((span) => span.kind === 1); // SERVER
+    return { sent, outputs, serverSpans, pageErrors, otlp, phSession };
+  } finally {
+    await browser?.close();
+    api?.kill();
+    web?.kill();
+    await sleep(500);
+  }
+}
+
+// OTLP/JSON attribute list → plain object.
+const attrs = (list = []) =>
+  Object.fromEntries(
+    list.map(({ key, value }) => [
+      key,
+      // OTLP/JSON carries 64-bit ints as strings.
+      'intValue' in value ? Number(value.intValue) : Object.values(value)[0],
+    ]),
+  );
+
+/**
+ * The acceptance test: full mode with default capture, one slow interaction
+ * and one backend failure. Returns what reached the collector and the API.
+ */
+async function acceptance() {
+  console.log('\n# full mode: slow interaction + backend failure');
+  let api, web, browser;
+  try {
+    api = await start(
+      'node',
+      ['--require', './server/telemetry.cjs', 'server/index.cjs'],
+      {},
+      'API listening',
+    );
+    web = await start(
+      'node_modules/.bin/vite',
+      ['--port', '5173', '--strictPort'],
+      {},
+      'Local:',
+    );
+    browser = await chromium.launch();
+    const page = await browser.newPage();
+    const pageErrors = [];
+    page.on('pageerror', (e) => pageErrors.push(e.message));
+    // Stand-in collector: keeps every OTLP payload, beacons included.
+    const payloads = { traces: [], logs: [] };
+    await page.route('http://localhost:4318/**', (route) => {
+      const req = route.request();
+      if (req.method() === 'POST') {
+        const signal = new URL(req.url()).pathname.split('/').pop();
+        payloads[signal]?.push(JSON.parse(req.postData() ?? '{}'));
+      }
+      return route.fulfill({
+        status: 200,
+        headers: {
+          'access-control-allow-origin': '*',
+          'access-control-allow-headers': '*',
+        },
+        body: '{}',
+      });
+    });
+    await page.goto('http://localhost:5173/full.html', {
+      waitUntil: 'networkidle',
+    });
+    await page.click('#checkout');
+    await page.waitForFunction(
+      () => document.querySelector('#out').textContent === 'cart rendered',
+    );
+    await page.click('#pay');
+    await page.waitForFunction(() =>
+      document.querySelector('#out').textContent.startsWith('pay '),
+    );
+    // The user leaves: INP is final once the page is hidden.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', {
+        value: 'hidden',
+        configurable: true,
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await sleep(3000);
+    const events = payloads.logs.flatMap((p) =>
+      (p.resourceLogs ?? []).flatMap((r) =>
+        r.scopeLogs.flatMap((s) =>
+          s.logRecords.map((l) => ({
+            name: l.eventName,
+            ...attrs(l.attributes),
+          })),
+        ),
+      ),
+    );
+    const spans = payloads.traces.flatMap((p) =>
+      (p.resourceSpans ?? []).flatMap((r) =>
+        r.scopeSpans.flatMap((s) =>
+          s.spans.map((sp) => ({ ...sp, attributes: attrs(sp.attributes) })),
+        ),
+      ),
+    );
     const serverSpans = [...api.log.matchAll(/^server-span (.+)$/gm)].map((m) =>
       JSON.parse(m[1]),
     );
-    return { sent, outputs, serverSpans, pageErrors, otlp, phSession };
+    return { events, spans, serverSpans, pageErrors };
   } finally {
     await browser?.close();
     api?.kill();
@@ -202,6 +302,60 @@ try {
     Boolean(r.phSession) && spanSessions.includes(r.phSession),
     'browser span carries the PostHog session.id',
     `${r.phSession} in [${spanSessions}]`,
+  );
+
+  // 7. Acceptance: someone who has never seen the SDK finds both causes.
+  const a = await acceptance();
+  check(a.pageErrors.length === 0, 'no page errors', a.pageErrors.join('; '));
+
+  // Slow interaction: filter browser.web_vital to poor INP, read the culprit.
+  const inp = a.events.find(
+    (e) =>
+      e.name === 'browser.web_vital' && e['browser.web_vital.name'] === 'inp',
+  );
+  check(
+    inp?.['browser.web_vital.rating'] === 'poor',
+    'slow click reported as poor INP',
+    `${inp?.['browser.web_vital.value']}ms`,
+  );
+  check(
+    inp?.['browser.web_vital.target'] === '#checkout',
+    'INP names the element',
+    inp?.['browser.web_vital.target'],
+  );
+  check(
+    inp?.['browser.web_vital.longest_script.function'] === 'renderCart' &&
+      inp?.['browser.web_vital.longest_script.subpart'] ===
+        'processing-duration',
+    'INP names the handler and the phase it blocked',
+    `${inp?.['browser.web_vital.longest_script.function']} in ${inp?.['browser.web_vital.longest_script.subpart']} (${inp?.['browser.web_vital.longest_script.invoker']})`,
+  );
+  check(
+    typeof inp?.['browser.web_vital.navigation_id'] === 'number',
+    'INP carries its navigation id',
+  );
+
+  // Backend failure: failed browser span → its trace → the server's error.
+  const failed = a.spans.find(
+    (sp) => sp.attributes['http.response.status_code'] === 500,
+  );
+  check(Boolean(failed), 'browser fetch span records the 500', failed?.name);
+  const trace = a.serverSpans.filter((sp) => sp.traceId === failed?.traceId);
+  const server = trace.find((sp) => sp.kind === 1);
+  check(
+    server?.parentSpanId === failed?.spanId,
+    "server span is the browser span's child",
+    server?.name,
+  );
+  check(
+    server?.status === 2 && server.httpStatus === 500,
+    'server span marked as error',
+    JSON.stringify(server),
+  );
+  check(
+    trace.some((sp) => sp.exceptions.includes('card processor timeout')),
+    'server trace carries the exception message',
+    JSON.stringify(trace.map((sp) => [sp.name, sp.exceptions])),
   );
 } finally {
   console.log(failures.length ? `\n${failures.length} failed` : '\nall passed');

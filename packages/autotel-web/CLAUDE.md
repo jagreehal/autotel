@@ -36,6 +36,13 @@ rather than a nice-to-have.
   the last two, repeat reports under `reportAllChanges` cannot be deduplicated
   or differenced) and `app.jank` (period and threshold in seconds;
   `frame_count` is omitted because a long-task entry does not report frames).
+- `src/web-vitals.ts` attribution: loaded from `web-vitals/attribution`. The
+  culprit element (LCP element, largest shift, INP target) shares one `target`
+  key; phase durations are in ms like `value`; INP adds `longest_script.*` from
+  long-animation-frame. Every URL is http(s) only, query and fragment stripped,
+  redacted, then capped at 1024 characters, in that order: capping first can
+  split a value the redactor would have matched. Selectors, function names and
+  invokers go through the redactor too.
 - `src/session.ts`: `session.id` / `session.previous_id`, plus optional
   `session.start` / `session.end`. A session another SDK owns (`id` provider)
   emits no lifecycle events — claiming it began when we first asked is a guess.
