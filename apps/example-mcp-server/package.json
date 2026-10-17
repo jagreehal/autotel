@@ -10,14 +10,14 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "^2.1.0",
-    "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "@modelcontextprotocol/server": "^2.3.1",
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
     "autotel": "workspace:*",
     "autotel-mcp-instrumentation": "workspace:*",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

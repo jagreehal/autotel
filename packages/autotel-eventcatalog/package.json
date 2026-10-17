@@ -66,15 +66,15 @@
     "autotel-subscribers": "*"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "autotel-subscribers": "workspace:*",
-    "playwright": "^1.63.0",
+    "playwright": "^1.64.0",
     "rimraf": "^6.1.3",
-    "tsdown": "^0.23.0",
+    "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.4"
   },
   "dependencies": {
-    "@eventcatalog/sdk": "^2.29.1"
+    "@eventcatalog/sdk": "^2.29.2"
   }
 }

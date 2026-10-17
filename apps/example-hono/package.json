@@ -11,16 +11,16 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.1",
+    "@hono/node-server": "^2.1.4",
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*",
     "autotel-devtools": "workspace:*",
     "autotel-hono": "workspace:*",
-    "dotenv": "^18.0.4",
-    "hono": "^4.13.10"
+    "dotenv": "^18.0.7",
+    "hono": "^4.13.13"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "autotel-cli": "workspace:*",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"

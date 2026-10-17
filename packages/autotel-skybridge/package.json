@@ -44,22 +44,22 @@
   },
   "peerDependencies": {
     "autotel": "*",
-    "skybridge": ">=2.0.0"
+    "skybridge": ">=2.0.3"
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": "^2.1.0",
+    "@modelcontextprotocol/client": "^2.3.1",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/context-async-hooks": "^2.11.0",
-    "@opentelemetry/core": "^2.11.0",
-    "@opentelemetry/sdk-trace-base": "^2.11.0",
-    "@opentelemetry/sdk-trace-node": "^2.11.0",
-    "@types/node": "^26.6.3",
+    "@opentelemetry/context-async-hooks": "^2.12.0",
+    "@opentelemetry/core": "^2.12.0",
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
+    "@opentelemetry/sdk-trace-node": "^2.12.0",
+    "@types/node": "^26.6.5",
     "autotel": "workspace:*",
-    "skybridge": "^2.0.1",
-    "tsdown": "^0.23.0",
+    "skybridge": "^2.0.3",
+    "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.2",
-    "zod": "^4.2.0"
+    "vitest": "^5.0.4",
+    "zod": "^4.6.7"
   },
   "repository": {
     "type": "git",

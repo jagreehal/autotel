@@ -17,10 +17,10 @@
     "@pact-foundation/pact": "^17.1.4",
     "autotel": "workspace:*",
     "autotel-pact": "workspace:*",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },

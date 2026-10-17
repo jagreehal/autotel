@@ -12,12 +12,12 @@
   },
   "dependencies": {
     "autotel": "workspace:*",
-    "dotenv": "^18.0.4",
-    "pino": "^10.3.1",
+    "dotenv": "^18.0.7",
+    "pino": "^10.4.0",
     "autotel-backends": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
