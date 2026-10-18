@@ -1,5 +1,15 @@
 # autotel-mongoose
 
+## 31.0.1
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+  - autotel-db@0.1.1
+  - autotel-mongodb@0.1.1
+
 ## 31.0.0
 
 ### Major Changes

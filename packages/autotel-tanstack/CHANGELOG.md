@@ -1,5 +1,15 @@
 # autotel-tanstack
 
+## 2.0.6
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+  - autotel-adapters@2.0.29
+  - autotel-edge@6.1.2
+
 ## 2.0.5
 
 ### Patch Changes

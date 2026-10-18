@@ -1,5 +1,14 @@
 # autotel-cloudflare
 
+## 18.2.5
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel-edge@6.1.2
+  - autotel-genai@0.16.3
+
 ## 18.2.4
 
 ### Patch Changes

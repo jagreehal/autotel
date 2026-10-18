@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.14
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+
 ## 0.5.13
 
 ### Patch Changes

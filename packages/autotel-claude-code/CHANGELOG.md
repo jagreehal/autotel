@@ -1,5 +1,11 @@
 # autotel-claude-code
 
+## 0.1.2
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+
 ## 0.1.1
 
 ### Patch Changes

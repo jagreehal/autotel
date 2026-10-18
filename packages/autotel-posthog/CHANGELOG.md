@@ -1,5 +1,16 @@
 # autotel-posthog
 
+## 13.0.9
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+- Updated dependencies [168bb99]
+  - autotel@8.2.2
+  - autotel-subscribers@59.0.7
+  - autotel-web@2.4.0
+
 ## 13.0.8
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # autotel-vitest
 
+## 0.4.71
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+
 ## 0.4.70
 
 ### Patch Changes

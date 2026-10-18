@@ -1,5 +1,13 @@
 # autotel-audit
 
+## 1.2.6
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+
 ## 1.2.5
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # autotel
 
+## 8.2.2
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+
 ## 8.2.1
 
 ### Patch Changes

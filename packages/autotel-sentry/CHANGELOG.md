@@ -1,5 +1,11 @@
 # autotel-sentry
 
+## 0.7.2
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+
 ## 0.7.1
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # autotel-adapters
 
+## 2.0.29
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+  - autotel-edge@6.1.2
+
 ## 2.0.28
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # Changelog
 
+## 30.0.2
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel-subscribers@59.0.7
+
 ## 30.0.1
 
 ### Patch Changes
