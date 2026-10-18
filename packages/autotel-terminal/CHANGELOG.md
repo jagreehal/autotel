@@ -1,5 +1,13 @@
 # autotel-terminal
 
+## 47.1.3
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+
 ## 47.1.2
 
 ### Patch Changes

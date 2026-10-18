@@ -1,5 +1,13 @@
 # autotel-cli
 
+## 0.21.1
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel-mcp@0.13.1
+
 ## 0.21.0
 
 ### Minor Changes

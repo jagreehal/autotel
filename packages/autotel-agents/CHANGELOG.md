@@ -1,5 +1,11 @@
 # autotel-agents
 
+## 0.8.1
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+
 ## 0.8.0
 
 ### Minor Changes

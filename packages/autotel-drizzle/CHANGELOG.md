@@ -1,5 +1,14 @@
 # autotel-drizzle
 
+## 0.3.6
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+  - autotel-db@0.1.1
+
 ## 0.3.5
 
 ### Patch Changes

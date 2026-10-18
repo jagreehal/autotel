@@ -1,6 +1,6 @@
 {
   "name": "autotel-skybridge",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "OpenTelemetry for Skybridge MCP Apps, powered by autotel",
   "license": "Apache-2.0",
   "type": "module",

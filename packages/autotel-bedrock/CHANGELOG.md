@@ -1,5 +1,13 @@
 # autotel-bedrock
 
+## 2.0.2
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel-genai@0.16.3
+
 ## 2.0.1
 
 ### Patch Changes

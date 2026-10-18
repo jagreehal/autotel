@@ -1,5 +1,13 @@
 # autotel-mcp
 
+## 59.3.1
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+
 ## 59.3.0
 
 ### Minor Changes

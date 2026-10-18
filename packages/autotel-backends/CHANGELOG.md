@@ -1,5 +1,13 @@
 # autotel-backends
 
+## 2.14.11
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+
 ## 2.14.10
 
 ### Patch Changes

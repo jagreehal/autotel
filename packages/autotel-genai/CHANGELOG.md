@@ -1,5 +1,14 @@
 # autotel-genai
 
+## 0.16.3
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+  - autotel-audit@1.2.6
+
 ## 0.16.2
 
 ### Patch Changes

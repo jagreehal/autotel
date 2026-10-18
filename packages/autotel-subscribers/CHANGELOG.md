@@ -1,5 +1,13 @@
 # autotel-subscribers
 
+## 59.0.7
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+
 ## 59.0.6
 
 ### Patch Changes

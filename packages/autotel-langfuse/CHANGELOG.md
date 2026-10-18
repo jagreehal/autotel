@@ -1,5 +1,11 @@
 # autotel-langfuse
 
+## 0.3.2
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+
 ## 0.3.1
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # autotel-aws
 
+## 1.4.2
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+  - autotel@8.2.2
+
 ## 1.4.1
 
 ### Patch Changes

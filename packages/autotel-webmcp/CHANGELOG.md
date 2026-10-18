@@ -1,5 +1,14 @@
 # autotel-webmcp
 
+## 5.0.1
+
+### Patch Changes
+
+- eab108d: Update dependencies to their latest releases.
+- Updated dependencies [eab108d]
+- Updated dependencies [168bb99]
+  - autotel-web@2.4.0
+
 ## 5.0.0
 
 ### Patch Changes
