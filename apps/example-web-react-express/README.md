@@ -25,6 +25,20 @@ reaches the server:
 | API samples 1% parent-based, browser default      | The API keeps each request the browser marks sampled                   |
 | Same, browser `sampleRate`                        | Unsampled sessions send `-00` and the API drops them                   |
 | posthog-js on the page                            | Browser spans carry PostHog's `session.id`                             |
+| `initFull()`, slow click + API that throws        | Both causes are findable from exported telemetry alone (below)         |
+
+### Acceptance: find a slow interaction and a backend failure
+
+`full.html` calls `initFull()` with only `service`, `endpoint` and
+`propagateTo`. One button blocks the main thread in `renderCart`, the other
+POSTs to `/payments`, which throws. From the exported telemetry:
+
+- `browser.web_vital` where `name = inp`, `rating = poor` gives
+  `target = #checkout`, `longest_script.function = renderCart`, and
+  `longest_script.subpart = processing-duration`.
+- The browser fetch span with `http.response.status_code = 500` shares its
+  trace with `POST /payments`, whose `request handler` span carries the
+  exception `card processor timeout`.
 
 ## Turning propagation on
 

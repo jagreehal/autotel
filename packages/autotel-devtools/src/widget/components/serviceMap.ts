@@ -244,15 +244,30 @@ export function buildServiceMap(traces: TraceData[]): BuildServiceMapResult {
         }
       }
 
-      // SERVER spans that indicate incoming requests — use early continues
-      // to avoid deep nesting.
-      if (span.kind !== 'SERVER' || !span.parentSpanId) continue;
+      // A span whose parent belongs to another service is an incoming call,
+      // whatever kinds the two carry: services that forward trace context by
+      // hand mark nothing CLIENT or SERVER and still cross a boundary. A CLIENT
+      // parent was counted above, from the caller's side.
+      if (!span.parentSpanId) continue;
       const parentSpan = spanMap.get(span.parentSpanId);
-      if (!parentSpan || parentSpan.kind !== 'CLIENT') continue;
+      if (!parentSpan) continue;
       const sourceService = getServiceFromSpan(parentSpan, trace.service);
       if (sourceService === serviceName) continue;
       const connId = `${sourceService}->${serviceName}`;
-      if (connectionMap.has(connId)) continue;
+      const existing = connectionMap.get(connId);
+      if (existing && parentSpan.kind === 'CLIENT') continue;
+      if (existing) {
+        existing.requestCount++;
+        if (span.status.code === 'ERROR') existing.errorCount++;
+        existing.avgLatency =
+          (existing.avgLatency * (existing.requestCount - 1) + span.duration) /
+          existing.requestCount;
+        existing.latencies.push(span.duration);
+        const sortedLatencies = [...existing.latencies].sort((a, b) => a - b);
+        existing.p50Latency = percentile(sortedLatencies, 50);
+        existing.p99Latency = percentile(sortedLatencies, 99);
+        continue;
+      }
 
       connectionMap.set(connId, {
         id: connId,

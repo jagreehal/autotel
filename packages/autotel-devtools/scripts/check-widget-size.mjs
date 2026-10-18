@@ -13,7 +13,9 @@ const budgets = [
   // already over); with them 502,780 / 147,200.
   // +2 KB raw / +1 KB gzip for #361-#366 (genai signals, MCP Apps waterfall
   // sharing widget code): 505,072 / 147,818 measured.
-  { file: 'widget.global.js', raw: 506_000, gzip: 149_000 },
+  // +6 KB raw / +1 KB gzip for #380 (trace logs under the waterfall,
+  // histogram merge, service map edges): 509,944 / 149,173 measured.
+  { file: 'widget.global.js', raw: 512_000, gzip: 150_000 },
   // +15 KB raw for the Issues automations UI (destinations, triggers, runs),
   // which only the full viewer carries: 698,127 → 708,754 bytes measured.
   // +20 KB raw / +5 KB gzip for the Queries tab (statements grouped by hash,
@@ -25,7 +27,8 @@ const budgets = [
   // +2 KB raw / +1 KB gzip for explain guidance per instrumentation (setup,
   // the manual driver path, or "no plan capture"): 742,281 / 220,295.
   // +2 KB raw / +1 KB gzip for #361-#366: 746,169 / 221,550 measured.
-  { file: 'fullpage.global.js', raw: 747_000, gzip: 222_000 },
+  // +8 KB raw / +2 KB gzip for #380: 752,676 / 223,407 measured.
+  { file: 'fullpage.global.js', raw: 755_000, gzip: 224_000 },
 ];
 
 let failed = false;

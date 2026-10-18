@@ -86,14 +86,14 @@ export const loadUser = withTracing({ name: 'user.load' })(
 
 ## Views in the UI
 
-- **Traces**: waterfall + flame graph, search with 300 ms debounce
+- **Traces**: waterfall + flame graph with the trace's logs listed under it (click a line to select its span), search with 300 ms debounce; `q=` in a shared URL fills the search
 - **Agents**: coding-agent sessions (Claude Code, opencode, Codex) folded by `autotel-agents`, with cost split by model, effort, skill, sub-agent and prompt. `npx autotel-devtools claude` starts the receiver and launches Claude Code wired to it, spans included — its `claude_code.interaction` → `llm_request` / `tool` hierarchy lands in **Traces**
 - **GenAI**: LLM calls with tokens, cost and streaming timing
 - **Flow**: request flow across services
 - **Resources**: derived from ingested telemetry
 - **Queries**: database statements grouped by `db.statement.hash` (from `autotel-db`), per database: count, total, p95, rows examined against returned, the plan with its stages, an index suggestion, and "Repeated ×N" when one trace runs a statement more than once. Each plan names the run it came from; spans without a plan say whether explain is off, failed, or has nothing to plan. The waterfall marks FULL SCAN and ×N on database rows. Full-page viewer only
-- **Service map**: visualises call graph
-- **Metrics**: per-metric time series
+- **Service map**: visualises call graph, including calls between services that carry no CLIENT/SERVER kinds
+- **Metrics**: per-metric time series; histograms sum every series (click a legend row to isolate one) and count each observation once in Percentiles and Heatmap
 - **Logs**: severity/resource filtering
 - **Errors**: aggregated and grouped by fingerprint
 - **Security**: security events and detected signal chains

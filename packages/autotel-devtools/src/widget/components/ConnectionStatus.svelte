@@ -98,7 +98,7 @@
 </script>
 
 <div
-  class={cn('flex items-center gap-1.5', !compact && 'px-3 py-2')}
+  class={cn('flex items-center gap-1.5', !compact && 'flex-wrap px-3 py-2')}
   role="status"
   aria-label={`OTLP receiver: ${meta.label}`}
   title={`OTLP receiver: ${meta.label}${rate > 0 ? ` · ${rate}/s` : ''}`}

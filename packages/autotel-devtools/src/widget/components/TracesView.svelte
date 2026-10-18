@@ -204,6 +204,14 @@
     }
   });
 
+  // A query from outside the bar: the URL, which the page applies after this
+  // component has mounted, or Back. Typing sets both sides, so this only fires
+  // when they disagree.
+  $effect(() => {
+    const fromUrl = traceQuerySignal.value;
+    if (traceQuery.text.value !== fromUrl) traceQuery.setText(fromUrl);
+  });
+
   // New traces arriving over the live stream: while live this refreshes the
   // list, while frozen it only increments the pill's count.
   let lastSeenCount = $state(0);

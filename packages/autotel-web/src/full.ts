@@ -243,9 +243,11 @@ export interface AutotelWebFullConfig {
   captureWebVitals?: boolean;
 
   /**
-   * Options for Web Vitals. reportAllChanges: pass through to web-vitals (default false for stability).
+   * Options for Web Vitals, passed through to web-vitals. reportAllChanges
+   * (default false for stability); reportSoftNavs reports vitals per SPA route
+   * change where the browser supports soft navigations (default false).
    */
-  webVitals?: { reportAllChanges?: boolean };
+  webVitals?: { reportAllChanges?: boolean; reportSoftNavs?: boolean };
 
   /**
    * Capture long tasks (main thread blocking >= 50ms) as `app.jank` events.
@@ -586,7 +588,9 @@ export function initFull(config: AutotelWebFullConfig): void {
   if (config.captureWebVitals !== false) {
     setupWebVitals({
       reportAllChanges: config.webVitals?.reportAllChanges ?? false,
+      reportSoftNavs: config.webVitals?.reportSoftNavs ?? false,
       debug: config.debug ?? false,
+      ...(stringRedactor && { redactor: stringRedactor }),
     });
   }
 

@@ -210,6 +210,121 @@ export function quantileFromPoint(
   return bars[bars.length - 1]?.to;
 }
 
+/**
+ * A histogram metric's distribution per export, every series added together.
+ *
+ * A **cumulative** point holds everything its series has seen since it
+ * started, so plotting points side by side counts each observation once per
+ * export, and taking the newest point of the newest series shows one series
+ * and calls it the metric. Each cumulative point is differenced against the
+ * one before it first; a drop in count is a reset, and the point after it is
+ * already the change. Delta points are the change as they arrive.
+ *
+ * A series' first cumulative point has nothing inside the window to difference
+ * against, so it is a baseline, as in `toRate`. It counts in full only when the
+ * series started inside the window (`startTimestamp >= windowStart`) or no
+ * window was chosen, because then everything it holds happened in range.
+ *
+ * Series are then summed per timestamp, which is how an SDK stamps every
+ * series it collects in one pass. Points whose bounds differ from the first
+ * are dropped, for the reason `heatmapCells` gives.
+ *
+ * Explicit-bucket histograms only: exponential points pass through unmerged.
+ */
+export function histogramIntervals(
+  series: Array<{ points: MetricPoint[]; temporality?: MetricTemporality }>,
+  windowStart?: number,
+): MetricPoint[] {
+  const byTimestamp = new Map<number, MetricPoint>();
+  const passThrough: MetricPoint[] = [];
+  let bounds: number[] | undefined;
+
+  for (const { points, temporality } of series) {
+    let previous: MetricPoint | undefined;
+    for (const point of points) {
+      if (!point.bucketCounts || !point.explicitBounds) {
+        passThrough.push(point);
+        continue;
+      }
+      bounds ??= point.explicitBounds;
+      const sameLayout =
+        point.explicitBounds.length === bounds.length &&
+        point.explicitBounds.every((bound, i) => bound === bounds?.[i]);
+      const baseline =
+        temporality === 'cumulative' &&
+        !previous &&
+        windowStart !== undefined &&
+        (point.startTimestamp === undefined ||
+          point.startTimestamp < windowStart);
+      if (baseline) {
+        previous = point;
+        continue;
+      }
+      const reset =
+        previous?.count !== undefined &&
+        point.count !== undefined &&
+        point.count < previous.count;
+      const counts =
+        temporality === 'cumulative' && previous?.bucketCounts && !reset
+          ? point.bucketCounts.map(
+              (n, i) => n - (previous?.bucketCounts?.[i] ?? 0),
+            )
+          : point.bucketCounts;
+      const count =
+        temporality === 'cumulative' && previous && !reset
+          ? (point.count ?? 0) - (previous.count ?? 0)
+          : (point.count ?? 0);
+      const sum =
+        temporality === 'cumulative' && previous && !reset
+          ? (point.sum ?? 0) - (previous.sum ?? 0)
+          : (point.sum ?? 0);
+      previous = point;
+      if (!sameLayout) continue;
+
+      const merged = byTimestamp.get(point.timestamp);
+      byTimestamp.set(point.timestamp, {
+        timestamp: point.timestamp,
+        attributes: {},
+        explicitBounds: bounds,
+        bucketCounts: merged?.bucketCounts
+          ? merged.bucketCounts.map((n, i) => n + counts[i])
+          : counts,
+        count: (merged?.count ?? 0) + count,
+        sum: (merged?.sum ?? 0) + sum,
+      });
+    }
+  }
+
+  return [...byTimestamp.values(), ...passThrough].sort(
+    (a, b) => a.timestamp - b.timestamp,
+  );
+}
+
+/** Every interval added into one distribution: what the metric saw in total. */
+export function totalDistribution(
+  intervals: MetricPoint[],
+): MetricPoint | undefined {
+  const bucketed = intervals.filter((p) => p.bucketCounts && p.explicitBounds);
+  // Nothing to add up: an exponential histogram keeps its newest point.
+  if (bucketed.length === 0) return intervals[intervals.length - 1];
+
+  const bucketCounts = bucketed[0].bucketCounts?.map(() => 0) ?? [];
+  let count = 0;
+  let sum = 0;
+  for (const point of bucketed) {
+    point.bucketCounts?.forEach((n, i) => (bucketCounts[i] += n));
+    count += point.count ?? 0;
+    sum += point.sum ?? 0;
+  }
+
+  return {
+    ...bucketed[bucketed.length - 1],
+    bucketCounts,
+    count,
+    sum,
+  };
+}
+
 export type AggregateKind = 'sum' | 'avg' | 'min' | 'max' | 'last' | 'count';
 
 /**
