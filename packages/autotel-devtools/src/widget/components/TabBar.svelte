@@ -15,7 +15,7 @@
   class={cn(
     'flex gap-1 p-1',
     orientation === 'vertical'
-      ? 'flex-col w-48 border-r border-line'
+      ? 'flex-col'
       : 'border-b border-line overflow-x-auto',
   )}
 >

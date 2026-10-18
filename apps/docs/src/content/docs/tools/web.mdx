@@ -60,14 +60,14 @@ record — not a zero-duration span. A span named `browser.web_vital` is invisib
 to every log and event dashboard and is noise in trace search, so these go to
 the log pipeline instead:
 
-| Event                           | What it says                                              |
-| ------------------------------- | --------------------------------------------------------- |
-| `browser.web_vital`             | One per metric — `lcp`, `inp`, `cls`, `fcp`, `ttfb`       |
-| `app.widget.click`              | A click on a selector you named                           |
-| `app.widget.click.frustration`  | A dead click or a rage click                              |
-| `app.jank`                      | A long task, period and threshold in **seconds**          |
-| `browser.page_engagement`       | Scroll depth, content depth, and how long the view lasted |
-| `session.start` / `session.end` | Session lifecycle, opt-in                                 |
+| Event                           | What it says                                                 |
+| ------------------------------- | ------------------------------------------------------------ |
+| `browser.web_vital`             | One per metric, with the element, phase and script behind it |
+| `app.widget.click`              | A click on a selector you named                              |
+| `app.widget.click.frustration`  | A dead click or a rage click                                 |
+| `app.jank`                      | A long task, period and threshold in **seconds**             |
+| `browser.page_engagement`       | Scroll depth, content depth, and how long the view lasted    |
+| `session.start` / `session.end` | Session lifecycle, opt-in                                    |
 
 Names come from the OpenTelemetry browser and `app.*` conventions, so a
 dashboard built on them covers web and mobile without knowing which it is

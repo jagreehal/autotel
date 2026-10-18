@@ -25,6 +25,8 @@ import {
   aggregatePoints,
   niceTicks,
   downsample,
+  histogramIntervals,
+  totalDistribution,
 } from '../aggregate';
 import type { MetricPoint } from '../../../server/metric-streams';
 
@@ -252,5 +254,89 @@ describe('downsample', () => {
 
     const reduced = downsample(points, 50);
     expect(Math.max(...reduced.map((p) => p.value ?? 0))).toBe(9999);
+  });
+});
+
+describe('histogramIntervals: several cumulative series', () => {
+  // Three branches exported twice, the second export after nothing changed:
+  // what a short script that records 200 withdrawals and then shuts down sends.
+  const bounds = [75, 100];
+  const branch = (counts: number[], timestamp: number): MetricPoint => ({
+    timestamp,
+    attributes: {},
+    explicitBounds: bounds,
+    bucketCounts: counts,
+    count: counts.reduce((sum, n) => sum + n, 0),
+    sum: 0,
+  });
+  const series = [
+    [58, 22, 0],
+    [49, 23, 8],
+    [24, 8, 8],
+  ].map((counts) => ({
+    temporality: 'cumulative' as const,
+    points: [branch(counts, 1000), branch(counts, 2000)],
+  }));
+
+  it('adds the series together rather than showing the newest one', () => {
+    const total = totalDistribution(histogramIntervals(series));
+    expect(total?.count).toBe(200);
+    expect(total?.bucketCounts).toEqual([131, 53, 16]);
+  });
+
+  it('counts an observation once, not once per export', () => {
+    const intervals = histogramIntervals(series);
+    expect(intervals.map((p) => p.count)).toEqual([200, 0]);
+  });
+
+  it('treats a drop in count as a reset', () => {
+    const intervals = histogramIntervals([
+      {
+        temporality: 'cumulative',
+        points: [branch([5, 5, 0], 1000), branch([1, 0, 0], 2000)],
+      },
+    ]);
+    expect(intervals.map((p) => p.count)).toEqual([10, 1]);
+  });
+
+  it('uses the first in-window cumulative point as a baseline', () => {
+    // 1,000 observations before the window, 10 inside it.
+    const intervals = histogramIntervals(
+      [
+        {
+          temporality: 'cumulative',
+          points: [
+            { ...branch([600, 400, 0], 1000), startTimestamp: 0 },
+            { ...branch([605, 405, 0], 2000), startTimestamp: 0 },
+          ],
+        },
+      ],
+      500,
+    );
+    expect(totalDistribution(intervals)?.count).toBe(10);
+    expect(totalDistribution(intervals)?.bucketCounts).toEqual([5, 5, 0]);
+  });
+
+  it('counts the first point in full when the series started in the window', () => {
+    const intervals = histogramIntervals(
+      [
+        {
+          temporality: 'cumulative',
+          points: [{ ...branch([3, 1, 0], 1000), startTimestamp: 600 }],
+        },
+      ],
+      500,
+    );
+    expect(totalDistribution(intervals)?.count).toBe(4);
+  });
+
+  it('adds delta points as they arrive', () => {
+    const intervals = histogramIntervals([
+      {
+        temporality: 'delta',
+        points: [branch([1, 0, 0], 1000), branch([1, 0, 0], 2000)],
+      },
+    ]);
+    expect(totalDistribution(intervals)?.count).toBe(2);
   });
 });

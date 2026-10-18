@@ -45,7 +45,9 @@
   import { serviceColor } from '../utils/serviceColor';
   import {
     aggregatePoints,
+    histogramIntervals,
     toRate,
+    totalDistribution,
     type AggregateKind,
   } from '../charts/aggregate';
   import { cn } from '../utils/cn';
@@ -60,6 +62,8 @@
   let catalogue = $state<MetricCatalogEntry[]>([]);
   let selectedName = $state<string | null>(null);
   let series = $state<MetricSeries[]>([]);
+  /** Start of the window `series` was fetched for; null when unbounded. */
+  let seriesWindowStart = $state<number | null>(null);
   let failure = $state<string | null>(null);
   let loading = $state(false);
   let filter = $state('');
@@ -104,6 +108,7 @@
     loading = false;
     if (result.status === 'ok') {
       series = result.data;
+      seriesWindowStart = resolved.start;
       failure = null;
     } else {
       failure = result.message;
@@ -187,9 +192,30 @@
     })),
   );
 
-  /** Every point of the selected metric, for the distribution charts. */
+  /**
+   * The selected metric's distribution per export, for the distribution
+   * charts: the isolated series if any, otherwise every series added together.
+   */
   const distributionPoints = $derived(
-    series.flatMap((s) => s.points).sort((a, b) => a.timestamp - b.timestamp),
+    histogramIntervals(
+      isolated.size > 0
+        ? series.filter((s) => isolated.has(s.seriesId))
+        : series,
+      seriesWindowStart ?? undefined,
+    ),
+  );
+
+  const distributionTotal = $derived(totalDistribution(distributionPoints));
+
+  /** Resource attributes every series shares say nothing about any one of them. */
+  const sharedResource = $derived(
+    new Set(
+      Object.entries(series[0]?.resource ?? {})
+        .filter(([key, value]) =>
+          series.every((s) => s.resource?.[key] === value),
+        )
+        .map(([key]) => key),
+    ),
   );
 
   const visibleCatalogue = $derived(catalogue);
@@ -200,20 +226,24 @@
       id: s.seriesId,
       color: serviceColor(s.seriesId).stroke,
       label: seriesLabel(s),
-      // Sum for counters, last value for gauges — a gauge's total is meaningless.
-      // A gauge's total is meaningless, so it ignores the chosen statistic and
-      // always reports its latest level.
-      value: aggregatePoints(
-        rate ? toRate(s.points, s.temporality) : s.points,
-        s.kind === 'gauge' ? 'last' : aggregate,
-      ),
+      // A histogram has no value to sum, so its row says how many
+      // observations it holds. A gauge's total is meaningless, so it ignores
+      // the chosen statistic and always reports its latest level.
+      value: isHistogram
+        ? totalDistribution(
+            histogramIntervals([s], seriesWindowStart ?? undefined),
+          )?.count
+        : aggregatePoints(
+            rate ? toRate(s.points, s.temporality) : s.points,
+            s.kind === 'gauge' ? 'last' : aggregate,
+          ),
     })),
   );
 
   function seriesLabel(item: (typeof series)[number]): string {
     const pointAttributes = Object.entries(item.attributes);
     const resourceAttributes = Object.entries(item.resource ?? {}).filter(
-      ([key]) => key !== 'service.name',
+      ([key]) => key !== 'service.name' && !sharedResource.has(key),
     );
     return (
       [...pointAttributes, ...resourceAttributes]
@@ -224,6 +254,7 @@
 
   function formatValue(value: number | undefined, unit?: string): string {
     if (value === undefined) return '—';
+    if (isHistogram) return value.toLocaleString();
     const rounded = Math.round(value * 100) / 100;
     const text = rounded.toLocaleString(undefined, {
       maximumFractionDigits: 2,
@@ -380,13 +411,10 @@
               points={distributionPoints}
               unit={selected.unit}
             />
-          {:else if isHistogram}
-            <!-- A histogram's time series is its bucket distribution at the
-                 latest point; the shape over time lives in the other modes. -->
-            <HistogramChart
-              point={distributionPoints[distributionPoints.length - 1]}
-              unit={selected.unit}
-            />
+          {:else if isHistogram && distributionTotal}
+            <!-- A histogram's time series is its whole distribution in the
+                 window; the shape over time lives in the other modes. -->
+            <HistogramChart point={distributionTotal} unit={selected.unit} />
           {:else}
             <TimeSeriesChart
               series={plotted}

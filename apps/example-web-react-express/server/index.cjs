@@ -45,6 +45,10 @@ app.post('/clients', (req, res) => {
   res.status(201).json({ id: 'c2', ...req.body });
 });
 
+app.post('/payments', () => {
+  throw new Error('card processor timeout');
+});
+
 const port = Number(process.env.PORT ?? 8081);
 app.listen(port, () =>
   console.log(`API listening on http://localhost:${port}`),

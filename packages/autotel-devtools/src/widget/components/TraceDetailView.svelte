@@ -21,6 +21,7 @@
   import WaterfallView from './WaterfallView.svelte';
   import FlameGraphView from './FlameGraphView.svelte';
   import SpanDetailPanel from './SpanDetailPanel.svelte';
+  import TraceLogs from './TraceLogs.svelte';
   import ResizeHandle from './ResizablePanel.svelte';
   import { useResizable } from './resizable.svelte';
   import SpanRow from './SpanRow.svelte';
@@ -363,4 +364,10 @@
       </div>
     {/if}
   </div>
+
+  <TraceLogs
+    {trace}
+    selectedSpanId={selectedSpan?.spanId}
+    onSpanSelect={(spanId) => (selectedSpanIdSignal.value = spanId)}
+  />
 </div>

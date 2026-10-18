@@ -204,7 +204,13 @@ zero-duration span: it is invisible to every event dashboard, and in lean mode
 (no tracer provider) it produces nothing at all.
 
 `browser.web_vital` carries `name` lower-cased (`lcp`, not `LCP`) plus `value`,
-`delta` and `id`. `app.jank.period` and `app.jank.threshold` are in **seconds** —
+`delta` and `id`. Attribution says why a vital is slow: `target` (the LCP
+element, largest shift or INP target), phase durations in ms
+(`resource_load_delay`, `input_delay`, `processing_duration`, …), `load_state`,
+`navigation_type`, and for INP the script responsible
+(`longest_script.function`, `.url`, `.invoker`, `.subpart`). To find a slow
+interaction, filter `name = inp`, `rating = poor` and group by `target` or
+`longest_script.function`. `attributeRedactor` applies to selectors and URLs. `app.jank.period` and `app.jank.threshold` are in **seconds**:
 the browser's 50ms long-task threshold is `0.05`.
 
 ### Frustration signals (dead and rage clicks)
@@ -314,6 +320,7 @@ initFull({
   },
   webVitals: {
     reportAllChanges: false, // default false for stability
+    reportSoftNavs: false, // vitals per SPA route change, where supported
   },
   captureFrustration: true, // dead + rage clicks
   captureEngagement: true, // scroll / content depth

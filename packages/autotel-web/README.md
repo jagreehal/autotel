@@ -88,22 +88,22 @@ app.get('/api/users', async (req, res) => {
 
 ### 3. View Distributed Trace
 
-Open your observability platform (Honeycomb, Datadog, Jaeger, etc.) and see the complete trace from browser → backend → database!
+Open your observability platform (Grafana, Datadog, Jaeger, etc.) and see the complete trace from browser → backend → database!
 
 ## Canonical names
 
 Every signal here is emitted under the name OpenTelemetry owns, so a dashboard
 built on the browser conventions works without knowing autotel exists.
 
-| signal         | name                                                                      |
-| -------------- | ------------------------------------------------------------------------- |
-| a click        | `app.widget.click` + `app.widget.name` / `app.widget.id` / `app.screen.*` |
-| a web vital    | `browser.web_vital` (one event per metric)                                |
-| a long task    | `app.jank` + `app.jank.threshold`                                         |
-| a session      | `session.id` / `session.previous_id`, `session.start` / `session.end`     |
-| the browser    | `browser.language`, `.platform`, `.mobile`, `.brands` (resource)          |
-| an automation  | `user_agent.synthetic.type` = `test` (resource)                           |
-| a feature flag | `feature_flag.*` + the `feature_flag.evaluation` event                    |
+| signal         | name                                                                                                  |
+| -------------- | ----------------------------------------------------------------------------------------------------- |
+| a click        | `app.widget.click` + `app.widget.name` / `app.widget.id` / `app.screen.*`                             |
+| a web vital    | `browser.web_vital` (one event per metric, with `target`, phase durations and INP `longest_script.*`) |
+| a long task    | `app.jank` + `app.jank.threshold`                                                                     |
+| a session      | `session.id` / `session.previous_id`, `session.start` / `session.end`                                 |
+| the browser    | `browser.language`, `.platform`, `.mobile`, `.brands` (resource)                                      |
+| an automation  | `user_agent.synthetic.type` = `test` (resource)                                                       |
+| a feature flag | `feature_flag.*` + the `feature_flag.evaluation` event                                                |
 
 `src/semconv.ts` is the source of truth and is pinned by a test — a typo in one
 of these strings is invisible at runtime and silently empties a panel.
@@ -421,7 +421,7 @@ initFull({
   captureNetworkTiming: true, // http.client.network_timing events (semantic-conventions#3385)
   captureErrors: true, // unhandled errors → span.recordException (default: true)
   captureWebVitals: true, // LCP, INP, CLS, FCP, TTFB → browser.web_vital events (default: true)
-  webVitals: { reportAllChanges: false }, // pass through to web-vitals (default: false)
+  webVitals: { reportAllChanges: false, reportSoftNavs: false }, // pass through to web-vitals (default: false); reportSoftNavs reports per SPA route change
   captureLongTasks: false, // app.jank events (main thread >= 50ms); opt-in, can be noisy
   copyHttpSpanAttributesToEvent: false,
   userInteraction: {
@@ -794,7 +794,7 @@ interface AutotelWebFullConfig {
   captureNetworkTiming?: boolean; // http.client.network_timing events (default true)
   captureErrors?: boolean; // unhandled errors → span.recordException (default true)
   captureWebVitals?: boolean; // LCP, INP, CLS, FCP, TTFB → browser.web_vital events (default true)
-  webVitals?: { reportAllChanges?: boolean }; // pass through to web-vitals (default false)
+  webVitals?: { reportAllChanges?: boolean; reportSoftNavs?: boolean }; // pass through to web-vitals (default false)
   captureLongTasks?: boolean; // app.jank events (main thread >= 50ms); opt-in (default false)
   copyHttpSpanAttributesToEvent?: boolean;
   userInteraction?: { enabled: boolean; selectors?: string[] };

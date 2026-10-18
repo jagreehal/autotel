@@ -6,18 +6,23 @@ const {
   ExpressInstrumentation,
 } = require('@opentelemetry/instrumentation-express');
 
-// Prints one line per server span so smoke.mjs can compare trace ids with the
-// browser's traceparent. In a real app this is your OTLP exporter.
+// Prints one line per span so smoke.mjs can compare trace ids with the
+// browser's traceparent and read status and exceptions. In a real app this is your OTLP exporter.
 const printServerSpans = {
   onStart() {},
   onEnd(span) {
-    if (span.kind !== 1) return; // SERVER
     const ctx = span.spanContext();
     console.log(
       `server-span ${JSON.stringify({
         name: span.name,
+        kind: span.kind,
         traceId: ctx.traceId,
         parentSpanId: span.parentSpanContext?.spanId,
+        status: span.status.code,
+        httpStatus: span.attributes['http.response.status_code'],
+        exceptions: span.events
+          .filter((e) => e.name === 'exception')
+          .map((e) => e.attributes['exception.message']),
       })}`,
     );
   },

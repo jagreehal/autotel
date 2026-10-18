@@ -3,8 +3,8 @@
  *
  * Everything this package observes — clicks, web vitals, jank, sessions — has a
  * name the specification already owns. Emitting the same signal under a
- * homegrown one costs nothing to write and everything to use: a Grafana or
- * Honeycomb dashboard built on the browser conventions finds an empty panel,
+ * homegrown one costs nothing to write and everything to use: a dashboard
+ * built on the browser conventions finds an empty panel,
  * and the person reading it concludes the thing never happened.
  *
  * So this file is the single source of truth for those strings, in the same
@@ -105,6 +105,67 @@ export const AUTOTEL_WEB = {
   WEB_VITAL_ID: 'browser.web_vital.id',
   /** `good` / `needs-improvement` / `poor`, as `web-vitals` reports it. */
   WEB_VITAL_RATING: 'browser.web_vital.rating',
+  // Attribution: the value says a vital is slow, these say why. Durations are
+  // in milliseconds, the unit `browser.web_vital.value` already uses.
+  /** `navigate`, `reload`, `back-forward-cache`, `soft-navigation`, … */
+  WEB_VITAL_NAVIGATION_TYPE: 'browser.web_vital.navigation_type',
+  /** Selector of the element responsible: LCP element, largest shift, INP target. */
+  WEB_VITAL_TARGET: 'browser.web_vital.target',
+  /** Document state when it happened: `loading`, `dom-interactive`, `complete`, … */
+  WEB_VITAL_LOAD_STATE: 'browser.web_vital.load_state',
+  /** LCP image or resource, query and fragment stripped. */
+  WEB_VITAL_RESOURCE_URL: 'browser.web_vital.resource_url',
+  /** INP interaction kind: `pointer` or `keyboard`. */
+  WEB_VITAL_INTERACTION_TYPE: 'browser.web_vital.interaction_type',
+  WEB_VITAL_TIME_TO_FIRST_BYTE: 'browser.web_vital.time_to_first_byte',
+  WEB_VITAL_RESOURCE_LOAD_DELAY: 'browser.web_vital.resource_load_delay',
+  WEB_VITAL_RESOURCE_LOAD_DURATION: 'browser.web_vital.resource_load_duration',
+  WEB_VITAL_ELEMENT_RENDER_DELAY: 'browser.web_vital.element_render_delay',
+  WEB_VITAL_INPUT_DELAY: 'browser.web_vital.input_delay',
+  WEB_VITAL_PROCESSING_DURATION: 'browser.web_vital.processing_duration',
+  WEB_VITAL_PRESENTATION_DELAY: 'browser.web_vital.presentation_delay',
+  WEB_VITAL_FIRST_BYTE_TO_FCP: 'browser.web_vital.first_byte_to_fcp',
+  WEB_VITAL_WAITING_DURATION: 'browser.web_vital.waiting_duration',
+  WEB_VITAL_CACHE_DURATION: 'browser.web_vital.cache_duration',
+  WEB_VITAL_DNS_DURATION: 'browser.web_vital.dns_duration',
+  WEB_VITAL_CONNECTION_DURATION: 'browser.web_vital.connection_duration',
+  WEB_VITAL_REQUEST_DURATION: 'browser.web_vital.request_duration',
+  /**
+   * Navigation within the document: `0` for the page load, then one per soft
+   * navigation (route change) where the browser reports them. With
+   * `session.id` and `navigation_url` it groups one view's LCP, CLS and INP.
+   */
+  WEB_VITAL_NAVIGATION_ID: 'browser.web_vital.navigation_id',
+  /** That navigation's URL, query and fragment stripped. */
+  WEB_VITAL_NAVIGATION_URL: 'browser.web_vital.navigation_url',
+  /** Soft navigations: the interaction that triggered this one. */
+  WEB_VITAL_NAVIGATION_INTERACTION_ID:
+    'browser.web_vital.navigation_interaction_id',
+  WEB_VITAL_TOTAL_SCRIPT_DURATION: 'browser.web_vital.total_script_duration',
+  WEB_VITAL_TOTAL_STYLE_AND_LAYOUT_DURATION:
+    'browser.web_vital.total_style_and_layout_duration',
+  WEB_VITAL_TOTAL_PAINT_DURATION: 'browser.web_vital.total_paint_duration',
+  WEB_VITAL_TOTAL_UNATTRIBUTED_DURATION:
+    'browser.web_vital.total_unattributed_duration',
+  /** INP: the script that ran longest inside the interaction, from long-animation-frame. */
+  WEB_VITAL_LONGEST_SCRIPT_URL: 'browser.web_vital.longest_script.url',
+  WEB_VITAL_LONGEST_SCRIPT_FUNCTION:
+    'browser.web_vital.longest_script.function',
+  /** What invoked it, e.g. `BUTTON#buy.onclick` or `Response.json.then`. */
+  WEB_VITAL_LONGEST_SCRIPT_INVOKER: 'browser.web_vital.longest_script.invoker',
+  /** `event-listener`, `user-callback`, `resolve-promise`, `classic-script`, … */
+  WEB_VITAL_LONGEST_SCRIPT_INVOKER_TYPE:
+    'browser.web_vital.longest_script.invoker_type',
+  /** Which INP phase it ran in: `input-delay`, `processing-duration`, `presentation-delay`. */
+  WEB_VITAL_LONGEST_SCRIPT_SUBPART: 'browser.web_vital.longest_script.subpart',
+  /** Its time inside the interaction, in ms. */
+  WEB_VITAL_LONGEST_SCRIPT_DURATION:
+    'browser.web_vital.longest_script.duration',
+  /** Forced style and layout inside it (layout thrashing), in ms. */
+  WEB_VITAL_LONGEST_SCRIPT_FORCED_STYLE_AND_LAYOUT_DURATION:
+    'browser.web_vital.longest_script.forced_style_and_layout_duration',
+  /** CLS: the single largest shift's score, unitless. */
+  WEB_VITAL_LARGEST_SHIFT_VALUE: 'browser.web_vital.largest_shift_value',
   /** Element tag name for a click, when a widget name is not enough. */
   WIDGET_TAG: 'app.widget.tag',
   /**

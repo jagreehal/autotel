@@ -93,7 +93,7 @@
 </script>
 
 <div bind:this={rootEl} class="flex h-screen w-screen bg-surface text-fg">
-  <div class="hidden md:flex flex-col border-r border-line">
+  <div class="hidden md:flex flex-col w-48 shrink-0 border-r border-line">
     <TabBar orientation="vertical" />
     <div class="mt-auto p-2 border-t border-line flex flex-col gap-1">
       <ConnectionStatus />
