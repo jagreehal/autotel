@@ -1,5 +1,13 @@
 # autotel-cloudflare
 
+## 18.2.6
+
+### Patch Changes
+
+- Updated dependencies [dfea242]
+  - autotel-edge@6.1.3
+  - autotel-genai@0.16.4
+
 ## 18.2.5
 
 ### Patch Changes

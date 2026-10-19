@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 47.1.4
+
+### Patch Changes
+
+- Updated dependencies [dfea242]
+  - autotel@8.3.0
+
 ## 47.1.3
 
 ### Patch Changes

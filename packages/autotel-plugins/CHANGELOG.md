@@ -1,5 +1,12 @@
 # autotel-plugins
 
+## 0.21.14
+
+### Patch Changes
+
+- Updated dependencies [dfea242]
+  - autotel@8.3.0
+
 ## 0.21.13
 
 ### Patch Changes
