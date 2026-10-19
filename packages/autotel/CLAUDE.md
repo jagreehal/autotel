@@ -21,7 +21,7 @@ You are working on the core Node.js package that provides OpenTelemetry instrume
   - `init()` sets up global OpenTelemetry SDK (service name, exporters, resource detection)
   - `getConfig()` provides runtime configuration for sampling, rate limiting, circuit breakers
 - **Production Hardening**: Built-in rate limiters, circuit breakers, and PII redaction
-- **Adaptive Sampling**: Defaults to 10% baseline sampling, 100% for errors/slow operations (tail sampling)
+- **Sampling**: Off unless configured. `sampling: 'production'` keeps 10% of traces plus every error and slow trace, decided per whole trace (tail sampling, auto-instrumented spans included)
 - **Events Integration**: Unified API to send product events to any platform via adapters
 - **Event emission guidance**: For new observability events, prefer correlated log-based events over new direct span-event API usage.
 

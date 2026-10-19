@@ -2,23 +2,23 @@
 
 `createStructuredError` produces an `Error` carrying enough context to be:
 
-- **Recorded onto the active span** (`exception.type`, `exception.message`, `exception.stacktrace`, `span.status = ERROR`).
-- **Returned to clients safely** (`internal` is stripped by `parseError`).
+- **Recorded onto a span** when it is thrown through `trace()` / an adapter (ERROR status + exception event), or recorded explicitly with `recordStructuredError(ctx, err)` / `getRequestLogger().error(err)`, which also add `error.why` / `error.fix` / `error.code` / `error.status` / `error.details.*`. Creating the error records nothing by itself.
+- **Returned to clients safely** (`parseError` never includes `internal` or `cause`).
 - **Self-documenting** (`why` explains the cause, `fix` tells the caller what to do, `link` points at runbook docs).
 
 ## Field reference
 
-| Field      | Audience    | Purpose                                                    |
-| ---------- | ----------- | ---------------------------------------------------------- |
-| `message`  | Both        | Short, stable summary                                      |
-| `status`   | Both        | HTTP status (drives client behaviour and span status code) |
-| `why`      | Both        | Human-readable cause (`"Card declined by issuer"`)         |
-| `fix`      | Client      | Remediation hint (`"Use a different payment method"`)      |
-| `link`     | Client      | URL to docs / runbook                                      |
-| `code`     | Both        | Machine-readable code (`"PAYMENT_DECLINED"`)               |
-| `cause`    | Server only | The underlying error                                       |
-| `internal` | Server only | Diagnostic metadata (`{ correlationId, resourceId }`)      |
-| `details`  | Both        | Structured payload (e.g. validation errors per field)      |
+| Field      | Audience    | Purpose                                               |
+| ---------- | ----------- | ----------------------------------------------------- |
+| `message`  | Both        | Short, stable summary                                 |
+| `status`   | Both        | HTTP status (`parseError` defaults to 500 without it) |
+| `why`      | Both        | Human-readable cause (`"Card declined by issuer"`)    |
+| `fix`      | Client      | Remediation hint (`"Use a different payment method"`) |
+| `link`     | Client      | URL to docs / runbook                                 |
+| `code`     | Both        | Machine-readable code (`"PAYMENT_DECLINED"`)          |
+| `cause`    | Server only | The underlying error                                  |
+| `internal` | Server only | Diagnostic metadata (`{ correlationId, resourceId }`) |
+| `details`  | Both        | Structured payload (e.g. validation errors per field) |
 
 ## Templates
 
@@ -83,11 +83,11 @@ throw createStructuredError({
 ```typescript
 import { parseError } from 'autotel';
 
-app.onError((error, c) => {
-  // span.status is already ERROR with exception fields recorded
-  const parsed = parseError(error);
-  // `internal` and `cause` are stripped here — never leak them to clients
-  return c.json(parsed, parsed.status);
+app.onError((error) => {
+  // if it was thrown through trace() / an adapter, the span is already ERROR
+  // `raw` is the original error: drop it. `internal` and `cause` are never in `body`.
+  const { raw: _raw, ...body } = parseError(error);
+  return Response.json(body, { status: body.status });
 });
 ```
 
@@ -98,5 +98,5 @@ app.onError((error, c) => {
 | `throw new Error('something went wrong')`                    | `createStructuredError({ message, status, why, fix })`                                 |
 | Putting support IDs in `message` (`"Failed for user 42"`)    | Use `internal: { userId: 42 }`                                                         |
 | Returning `details: { error: stack }` to clients             | Stack traces stay in `cause` / span; never serialise them out                          |
-| `console.error(e); throw e`                                  | Just throw: autotel's span will pick up the exception                                  |
+| `console.error(e); throw e`                                  | Just throw: inside `trace()` / an adapter the span records it                          |
 | Two callers throwing different shapes for the same condition | Centralise: `function declined(reason: string) { throw createStructuredError({ … }) }` |

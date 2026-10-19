@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
+import { AdaptiveSampler } from './sampling';
 import {
   AUTOTEL_SAMPLING_TAIL_KEEP,
   AUTOTEL_SAMPLING_TAIL_EVALUATED,
@@ -12,7 +13,11 @@ import type {
   SpanProcessor,
   ReadableSpan,
 } from '@opentelemetry/sdk-trace-base';
-import type { Context, Attributes } from '@opentelemetry/api';
+import {
+  SpanStatusCode,
+  type Context,
+  type Attributes,
+} from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/sdk-trace-base';
 
 // Mock span processor
@@ -46,20 +51,58 @@ class MockSpanProcessor implements SpanProcessor {
   }
 }
 
-// Create mock ReadableSpan
-function createMockSpan(attributes: Attributes): ReadableSpan {
+// Create mock ReadableSpan. Each span is its own trace's local root unless a
+// trace id and local parent are given.
+let nextId = 0;
+function createMockSpan(
+  attributes: Attributes,
+  options: {
+    traceId?: string;
+    parentSpanId?: string;
+    remoteParent?: boolean;
+    error?: boolean;
+    durationMs?: number;
+  } = {},
+): ReadableSpan {
+  const spanId = `span${++nextId}`;
+  const traceId = options.traceId ?? `trace${nextId}`;
   return {
     attributes,
     name: 'test-span',
-    spanContext: () => ({
-      traceId: 'trace123',
-      spanId: 'span123',
-      traceFlags: 1,
-    }),
-  } as ReadableSpan;
+    spanContext: () => ({ traceId, spanId, traceFlags: 1 }),
+    parentSpanContext: options.parentSpanId
+      ? {
+          traceId,
+          spanId: options.parentSpanId,
+          traceFlags: 1,
+          isRemote: options.remoteParent ?? false,
+        }
+      : undefined,
+    status: {
+      code: options.error ? SpanStatusCode.ERROR : SpanStatusCode.UNSET,
+    },
+    duration: [0, (options.durationMs ?? 10) * 1e6],
+    links: [],
+  } as unknown as ReadableSpan;
 }
 
 describe('TailSamplingSpanProcessor', () => {
+  it('forwards spans as they end when nothing needs the whole trace', () => {
+    const processor = new TailSamplingSpanProcessor(new MockSpanProcessor());
+    const inner = (
+      processor as unknown as { wrappedProcessor: MockSpanProcessor }
+    ).wrappedProcessor;
+    const root = createMockSpan({}, { traceId: 'live' });
+    const work = createMockSpan(
+      {},
+      { traceId: 'live', parentSpanId: root.spanContext().spanId },
+    );
+    processor.onStart(root as unknown as Span, {} as Context);
+    processor.onStart(work as unknown as Span, {} as Context);
+    processor.onEnd(work);
+    expect(inner.endedSpans).toEqual([work]);
+  });
+
   let mockProcessor: MockSpanProcessor;
   let tailSamplingProcessor: TailSamplingSpanProcessor;
 
@@ -70,7 +113,7 @@ describe('TailSamplingSpanProcessor', () => {
 
   describe('Span forwarding', () => {
     it('should forward span to wrapped processor on onStart', () => {
-      const mockSpan = {} as Span;
+      const mockSpan = createMockSpan({}) as unknown as Span;
       const mockContext = {} as Context;
 
       tailSamplingProcessor.onStart(mockSpan, mockContext);
@@ -225,6 +268,249 @@ describe('TailSamplingSpanProcessor', () => {
       expect(mockProcessor.endedSpans).toHaveLength(2);
       expect(mockProcessor.endedSpans[0]).toBe(slowSpan);
       expect(mockProcessor.endedSpans[1]).toBe(errorSpan);
+    });
+  });
+
+  describe('Trace-level decisions', () => {
+    // A tail sampler that keeps every trace nothing else decided, so these
+    // tests see the processor's own rules.
+    beforeEach(() => {
+      tailSamplingProcessor = new TailSamplingSpanProcessor(mockProcessor, {
+        sampler: new AdaptiveSampler({ baselineSampleRate: 1 }),
+      });
+    });
+
+    const child = (
+      traceId: string,
+      attributes: Attributes = {},
+      error = false,
+    ) => createMockSpan(attributes, { traceId, parentSpanId: 'root', error });
+
+    it('buffers children until the local root ends, then exports the trace', () => {
+      const c = child('t1');
+      tailSamplingProcessor.onEnd(c);
+      expect(mockProcessor.endedSpans).toHaveLength(0);
+
+      const root = createMockSpan({}, { traceId: 't1' });
+      tailSamplingProcessor.onEnd(root);
+      expect(mockProcessor.endedSpans).toEqual([c, root]);
+    });
+
+    it('drops the children of a root a wrapper dropped (no orphans)', () => {
+      tailSamplingProcessor.onEnd(child('t2'));
+      tailSamplingProcessor.onEnd(
+        createMockSpan(
+          {
+            [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+            [AUTOTEL_SAMPLING_TAIL_KEEP]: false,
+          },
+          { traceId: 't2' },
+        ),
+      );
+      tailSamplingProcessor.onEnd(child('t2')); // ends after the root
+      expect(mockProcessor.endedSpans).toHaveLength(0);
+    });
+
+    it('keeps the whole trace when any span was kept (forceKeep in a child)', () => {
+      tailSamplingProcessor.onEnd(
+        child('t3', {
+          [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+          [AUTOTEL_SAMPLING_TAIL_KEEP]: true,
+        }),
+      );
+      tailSamplingProcessor.onEnd(
+        createMockSpan(
+          {
+            [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+            [AUTOTEL_SAMPLING_TAIL_KEEP]: false,
+          },
+          { traceId: 't3' },
+        ),
+      );
+      expect(mockProcessor.endedSpans).toHaveLength(2);
+    });
+
+    it('treats a span with a remote parent as the local root', () => {
+      tailSamplingProcessor.onEnd(
+        createMockSpan({}, { parentSpanId: 'upstream', remoteParent: true }),
+      );
+      expect(mockProcessor.endedSpans).toHaveLength(1);
+    });
+
+    it('samples auto-instrumented roots with the sampler', () => {
+      const processor = new TailSamplingSpanProcessor(mockProcessor, {
+        sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
+      });
+
+      processor.onEnd(child('ok'));
+      processor.onEnd(createMockSpan({}, { traceId: 'ok' }));
+      expect(mockProcessor.endedSpans).toHaveLength(0);
+
+      processor.onEnd(child('failed', {}, true));
+      processor.onEnd(createMockSpan({}, { traceId: 'failed' }));
+      expect(mockProcessor.endedSpans).toHaveLength(2);
+
+      processor.onEnd(
+        createMockSpan({}, { traceId: 'slow', durationMs: 1500 }),
+      );
+      expect(mockProcessor.endedSpans).toHaveLength(3);
+    });
+
+    it('applies the baseline rate to auto-instrumented roots', () => {
+      const processor = new TailSamplingSpanProcessor(mockProcessor, {
+        sampler: new AdaptiveSampler({ baselineSampleRate: 0.1 }),
+      });
+      for (let i = 0; i < 2000; i++) processor.onEnd(createMockSpan({}));
+      const kept = mockProcessor.endedSpans.length;
+      expect(kept).toBeGreaterThan(120);
+      expect(kept).toBeLessThan(280);
+    });
+
+    it('keeps an error a wrapped root swallowed when the sampler keeps errors', () => {
+      const processor = new TailSamplingSpanProcessor(mockProcessor, {
+        sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
+      });
+      processor.onEnd(child('swallowed', {}, true));
+      processor.onEnd(
+        createMockSpan(
+          {
+            [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+            [AUTOTEL_SAMPLING_TAIL_KEEP]: false,
+          },
+          { traceId: 'swallowed' },
+        ),
+      );
+      expect(mockProcessor.endedSpans).toHaveLength(2);
+    });
+
+    it('exports the oldest trace as it stands when the span buffer is full', () => {
+      const processor = new TailSamplingSpanProcessor(mockProcessor, {
+        sampler: new AdaptiveSampler({ baselineSampleRate: 1 }),
+        maxBufferedSpans: 1,
+      });
+      const first = child('p1');
+      processor.onEnd(first);
+      processor.onEnd(child('p2'));
+      expect(mockProcessor.endedSpans).toEqual([first]);
+      // Later spans of the evicted trace follow it out.
+      processor.onEnd(createMockSpan({}, { traceId: 'p1' }));
+      expect(mockProcessor.endedSpans).toHaveLength(2);
+    });
+
+    // onStart only needs the span's context.
+    const start = (processor: TailSamplingSpanProcessor, span: ReadableSpan) =>
+      processor.onStart(span as unknown as Span, {} as Context);
+
+    it('waits for children still running when the root ends', () => {
+      const processor = new TailSamplingSpanProcessor(mockProcessor, {
+        sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
+      });
+      const root = createMockSpan({}, { traceId: 'w' });
+      const late = child('w', {}, true);
+      start(processor, root);
+      start(processor, late);
+
+      processor.onEnd(root);
+      expect(mockProcessor.endedSpans).toHaveLength(0);
+      // The child fails after the root returned; that error keeps the trace.
+      processor.onEnd(late);
+      expect(mockProcessor.endedSpans).toEqual([root, late]);
+    });
+
+    it('honours forceKeep() in a child that ends after the root', () => {
+      const processor = new TailSamplingSpanProcessor(mockProcessor, {
+        sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
+      });
+      const root = createMockSpan({}, { traceId: 'fk' });
+      const kept = child('fk', {
+        [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+        [AUTOTEL_SAMPLING_TAIL_KEEP]: true,
+      });
+      start(processor, root);
+      start(processor, kept);
+      processor.onEnd(root);
+      processor.onEnd(kept);
+      expect(mockProcessor.endedSpans).toHaveLength(2);
+    });
+
+    it('keeps a trace with running children pending through a flush', async () => {
+      const processor = new TailSamplingSpanProcessor(mockProcessor, {
+        sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
+      });
+      const root = createMockSpan({}, { traceId: 'flush' });
+      const late = child('flush', {}, true);
+      start(processor, root);
+      start(processor, late);
+      processor.onEnd(root);
+
+      await processor.forceFlush();
+      expect(mockProcessor.endedSpans).toHaveLength(0);
+      processor.onEnd(late);
+      expect(mockProcessor.endedSpans).toEqual([root, late]);
+    });
+
+    it('decides everything on shutdown', async () => {
+      const processor = new TailSamplingSpanProcessor(mockProcessor, {
+        sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
+      });
+      // Clean root, child never ends: decided on what it has, dropped.
+      const root = createMockSpan({}, { traceId: 'down' });
+      start(processor, root);
+      start(processor, child('down'));
+      processor.onEnd(root);
+      // Root never ends: the finished child is exported.
+      const orphan = child('rootless');
+      start(processor, orphan);
+      processor.onEnd(orphan);
+
+      await processor.shutdown();
+      expect(mockProcessor.endedSpans).toEqual([orphan]);
+    });
+
+    it('decides on timeout: on what it has once the root ended, fail-open before', () => {
+      const processor = new TailSamplingSpanProcessor(mockProcessor, {
+        sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
+        traceTimeoutMs: 1000,
+      });
+      // Root ended, a child never does: decided on the clean root, dropped.
+      const root = createMockSpan({}, { traceId: 'stuck' });
+      start(processor, root);
+      start(processor, child('stuck'));
+      processor.onEnd(root);
+      // Root never ends: its finished child is exported as it stands.
+      const orphan = child('open');
+      start(processor, createMockSpan({}, { traceId: 'open' }));
+      start(processor, orphan);
+      processor.onEnd(orphan);
+
+      processor.sweep(Date.now() + 1001);
+      expect(mockProcessor.endedSpans).toEqual([orphan]);
+      void processor.shutdown();
+    });
+
+    it('re-parents a child that ends after its filtered parent and the decision', () => {
+      const processor = new TailSamplingSpanProcessor(mockProcessor);
+      processor.enableFiltering();
+      const root = createMockSpan({}, { traceId: 'f' });
+      const middle = createMockSpan(
+        {},
+        { traceId: 'f', parentSpanId: root.spanContext().spanId },
+      );
+      const leaf = createMockSpan(
+        {},
+        { traceId: 'f', parentSpanId: middle.spanContext().spanId },
+      );
+      processor.markFiltered(middle.spanContext().spanId);
+      processor.onEnd(middle);
+      processor.onEnd(root);
+      processor.onEnd(leaf);
+
+      expect(
+        mockProcessor.endedSpans.map((s) => s.spanContext().spanId),
+      ).toEqual([root.spanContext().spanId, leaf.spanContext().spanId]);
+      expect(mockProcessor.endedSpans[1]?.parentSpanContext?.spanId).toBe(
+        root.spanContext().spanId,
+      );
     });
   });
 });

@@ -1,12 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type {
+  PushMetricExporter,
+  ResourceMetrics,
+} from '@opentelemetry/sdk-metrics';
 import type { LogRecordProcessor, SdkLogRecord } from '@opentelemetry/sdk-logs';
 import {
   clearPolicies,
   getPolicies,
   MAX_MATCH_LENGTH,
+  applyMetricPolicies,
   PolicyLogRecordProcessor,
+  PolicyMetricExporter,
   policySpanFilter,
   setPolicies,
   unsupportedReason,
@@ -100,9 +106,12 @@ describe('policy validation', () => {
       'exactly one match operator',
     ],
     [
-      'metric target',
-      { id: 'p', metric: { match: [], keep: false } },
-      'metric targets',
+      'metric keep that is not a boolean',
+      {
+        id: 'p',
+        metric: { match: [{ metric_field: 'name', exact: 'x' }] },
+      } as unknown as Policy,
+      'metric keep must be true or false',
     ],
     [
       'consistent-probability sampling mode',
@@ -139,7 +148,7 @@ describe('policy validation', () => {
         enabled: false,
         log: { match: [{ log_field: 'body', exists: true }] },
       },
-      { id: 'bad', metric: {} },
+      { id: 'bad', metric: { match: [], keep: false } },
     ]);
     expect(getPolicies().map((policy) => policy.id)).toEqual(['ok']);
   });
@@ -398,5 +407,104 @@ describe('log policies', () => {
     });
     processor.onEmit(frozen);
     expect(emitted).toHaveLength(1);
+  });
+});
+
+describe('metric policies', () => {
+  // DataPointType.SUM is 3; a literal keeps the SDK enum out of the test.
+  const batch = (): ResourceMetrics =>
+    ({
+      resource: { attributes: { 'service.name': 'api' } },
+      scopeMetrics: [
+        {
+          scope: { name: 'app' },
+          metrics: [
+            {
+              descriptor: {
+                name: 'http.server.requests',
+                description: '',
+                unit: '1',
+              },
+              dataPointType: 3,
+              dataPoints: [
+                { attributes: { 'http.route': '/health' }, value: 5 },
+                { attributes: { 'http.route': '/orders' }, value: 2 },
+              ],
+            },
+            {
+              descriptor: {
+                name: 'debug.cache.size',
+                description: '',
+                unit: 'By',
+              },
+              dataPointType: 3,
+              dataPoints: [{ attributes: {}, value: 1 }],
+            },
+          ],
+        },
+      ],
+    }) as unknown as ResourceMetrics;
+
+  const names = (metrics: ResourceMetrics) =>
+    metrics.scopeMetrics.flatMap((scope) =>
+      scope.metrics.map((metric) => [
+        metric.descriptor.name,
+        metric.dataPoints.length,
+      ]),
+    );
+
+  it('drops whole metrics by name and single data points by attribute', () => {
+    setPolicies([
+      {
+        id: 'drop-debug-metrics',
+        metric: {
+          match: [{ metric_field: 'name', starts_with: 'debug.' }],
+          keep: false,
+        },
+      },
+      {
+        id: 'drop-health-points',
+        metric: {
+          match: [{ datapoint_attribute: 'http.route', exact: '/health' }],
+          keep: false,
+        },
+      },
+    ]);
+    expect(names(applyMetricPolicies(batch()))).toEqual([
+      ['http.server.requests', 1],
+    ]);
+  });
+
+  it('matches on metric type and keeps everything when nothing matches', () => {
+    setPolicies([
+      {
+        id: 'drop-gauges',
+        metric: {
+          match: [{ metric_type: 'gauge', exact: 'gauge' }],
+          keep: false,
+        },
+      },
+    ]);
+    expect(names(applyMetricPolicies(batch()))).toEqual([
+      ['http.server.requests', 2],
+      ['debug.cache.size', 1],
+    ]);
+  });
+
+  it('exports through the wrapped exporter with policies applied', () => {
+    setPolicies([
+      {
+        id: 'drop-all-sums',
+        metric: { match: [{ metric_type: 'sum', exact: 'sum' }], keep: false },
+      },
+    ]);
+    const exported: ResourceMetrics[] = [];
+    const inner = {
+      export: (metrics: ResourceMetrics) => exported.push(metrics),
+      forceFlush: async () => {},
+      shutdown: async () => {},
+    } as unknown as PushMetricExporter;
+    new PolicyMetricExporter(inner).export(batch(), () => {});
+    expect(exported[0]?.scopeMetrics).toEqual([]);
   });
 });

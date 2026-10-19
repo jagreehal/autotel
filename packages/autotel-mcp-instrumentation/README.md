@@ -264,7 +264,10 @@ import { instrumentMcpTransport } from 'autotel-mcp-instrumentation/client';
 
 const mcp = await createMCPClient({
   transport: instrumentMcpTransport(
-    new Experimental_StdioMCPTransport({ command: 'node', args: ['server.js'] }),
+    new Experimental_StdioMCPTransport({
+      command: 'node',
+      args: ['server.js'],
+    }),
   ),
 });
 ```

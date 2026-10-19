@@ -27,6 +27,10 @@ import type {
 } from '@opentelemetry/sdk-trace-base';
 import type { Context } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/sdk-trace-base';
+import {
+  findTailSamplingProcessors,
+  type TailSamplingSpanProcessor,
+} from './tail-sampling-processor';
 
 /**
  * Predicate function for filtering spans
@@ -64,11 +68,16 @@ export interface FilteringSpanProcessorOptions {
  *
  * onStart() passes through unchanged to ensure child spans can still be created.
  *
+ * When the wrapped chain ends in a TailSamplingSpanProcessor, a rejected span
+ * is handed to it marked instead of dropped here, so it can drop the span
+ * without orphaning its children (see TailSamplingSpanProcessor).
+ *
  * Error handling: If the filter predicate throws, the span is forwarded (fail-open).
  */
 export class FilteringSpanProcessor implements SpanProcessor {
   private readonly wrappedProcessor: SpanProcessor;
   private readonly predicate: SpanFilterPredicate;
+  private readonly tailProcessors: TailSamplingSpanProcessor[];
 
   constructor(
     wrappedProcessor: SpanProcessor,
@@ -76,6 +85,8 @@ export class FilteringSpanProcessor implements SpanProcessor {
   ) {
     this.wrappedProcessor = wrappedProcessor;
     this.predicate = options.filter;
+    this.tailProcessors = findTailSamplingProcessors(wrappedProcessor);
+    for (const tail of this.tailProcessors) tail.enableFiltering();
   }
 
   /**
@@ -93,8 +104,12 @@ export class FilteringSpanProcessor implements SpanProcessor {
     try {
       if (this.predicate(span)) {
         this.wrappedProcessor.onEnd(span);
+      } else if (this.tailProcessors.length > 0) {
+        const { spanId } = span.spanContext();
+        for (const tail of this.tailProcessors) tail.markFiltered(spanId);
+        this.wrappedProcessor.onEnd(span);
       }
-      // If filter returns false, span is silently dropped
+      // Otherwise the span is silently dropped
     } catch {
       // If filter throws, forward the span (fail-open behavior)
       this.wrappedProcessor.onEnd(span);

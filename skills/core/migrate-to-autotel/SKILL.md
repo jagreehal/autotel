@@ -67,24 +67,25 @@ import { init } from 'autotel';
 
 init({
   service: 'my-app',
-  endpoint: process.env.OTEL_ENDPOINT!,
+  endpoint: process.env.OTEL_ENDPOINT!, // base URL: autotel appends /v1/traces
+  autoInstrumentations: ['http', 'undici'], // what NodeSDK users usually had
 });
 ```
 
-`init()` builds the same provider + exporter, plus turns on the global fetch instrumentation, sets up the W3C propagator, and primes the redactor.
+`init()` builds the provider and an OTLP HTTP/JSON exporter, and sets up the W3C trace-context and baggage propagators. It turns on **no** auto-instrumentation by default: list the libraries in `autoInstrumentations` (needs `@opentelemetry/auto-instrumentations-node` installed), or pass your existing `instrumentations: [...]`. If your old `url` ended in `/v1/traces`, drop the suffix. With no `endpoint` (or `OTEL_EXPORTER_OTLP_ENDPOINT`) nothing is exported.
 
 ### What you gain immediately
 
-- `useLogger().set({ … })` flattens onto the active span: no more `span.setAttribute('user.id', id)` boilerplate.
-- `attributeRedactor: 'default'`: PII masking for free in production.
+- `getRequestLogger().set({ … })` flattens onto the active span: no more `span.setAttribute('user.id', id)` boilerplate.
+- PII redaction (`attributeRedactor: 'default'`) switches on by itself when `environment` (default `NODE_ENV`) is `production`.
 - `destinations: [...]` for straightforward OTLP multi-backend fan-out.
-- Cloudflare Workers + Edge support out of the box (`defineWorkerFetch`).
+- The same API on Cloudflare Workers and edge runtimes via `autotel-cloudflare` / `autotel-edge`.
 
 ### What stays the same
 
-- Your propagator (`W3CTraceContextPropagator` is the default).
-- Your exporters: pass them via `spanProcessors` if you want to keep custom ones.
-- Your resource attributes.
+- Your propagator (W3C trace context + baggage are the default).
+- Your exporters: pass them via `spanExporters` (autotel batches them) or `spanProcessors` (full control).
+- Your resource attributes (`resourceAttributes` or `resource`).
 
 ## From Sentry performance tracing
 
@@ -95,30 +96,27 @@ Sentry's tracing is OTel-compatible since v7+, but their span shapes have non-st
 If you want the dashboards to stay in Sentry, autotel can export OTLP to Sentry's OTLP intake:
 
 ```typescript
+import * as Sentry from '@sentry/node';
 import { init } from 'autotel';
-import { SentrySpanExporter } from 'autotel-sentry';
+import { sentryOtlpConfig } from 'autotel-sentry';
 
-init({
-  service: 'my-app',
-  spanProcessors: [
-    new BatchSpanProcessor(
-      new SentrySpanExporter({ dsn: process.env.SENTRY_DSN! }),
-    ),
-  ],
-});
+const sentry = sentryOtlpConfig(process.env.SENTRY_DSN!);
+
+// Keep Sentry for errors, but let autotel own OpenTelemetry
+Sentry.init({ dsn: sentry.dsn, skipOpenTelemetrySetup: true });
+
+init({ service: 'my-app', endpoint: sentry.endpoint, headers: sentry.headers });
 ```
 
 ### Step 2: Replace Sentry-specific helpers
 
-`trace.run()` in these mappings needs autotel 7.0 or later. On 6.x use `span(name, fn)` for the immediate form.
-
-| Sentry                                                     | autotel                                               |
-| ---------------------------------------------------------- | ----------------------------------------------------- |
-| `Sentry.startSpan({ op: 'fn', name: 'process' }, () => …)` | `trace.run('process', (ctx) => …)`                    |
-| `Sentry.captureException(err)`                             | `createStructuredError({ … })` (auto-records on span) |
-| `Sentry.setUser({ id })`                                   | `getRequestLogger().set({ user: { id } })`            |
-| `Sentry.setContext('cart', { … })`                         | `getRequestLogger().set({ cart: { … } })`             |
-| reusable named transaction function                        | `trace(name, fn)` or `instrument({ key: name, fn })`  |
+| Sentry                                                     | autotel                                                              |
+| ---------------------------------------------------------- | -------------------------------------------------------------------- |
+| `Sentry.startSpan({ op: 'fn', name: 'process' }, () => …)` | `trace.run('process', (ctx) => …)`                                   |
+| `Sentry.captureException(err)`                             | `getRequestLogger().error(err)` or `recordStructuredError(ctx, err)` |
+| `Sentry.setUser({ id })`                                   | `getRequestLogger().set({ user: { id } })`                           |
+| `Sentry.setContext('cart', { … })`                         | `getRequestLogger().set({ cart: { … } })`                            |
+| reusable named transaction function                        | `trace(name, fn)` or `instrument({ key: name, fn })`                 |
 
 ### Step 3: Decide on errors-only vs full tracing
 
@@ -141,7 +139,9 @@ init({
 });
 ```
 
-If one destination needs a non-OTLP exporter or custom filtering, drop to `composeSpanProcessors`.
+If one destination needs a non-OTLP exporter or custom filtering, drop to `spanProcessors: [...]` (an array; each processor gets every span).
+
+A `createStructuredError()` does nothing to the span by itself. Thrown out of a `trace()` body it marks the span as an error and records the exception; the `error.why` / `error.fix` / `error.status` attributes are added only by `recordStructuredError(ctx, err)` or `getRequestLogger().error(err)`.
 
 ## From Datadog APM
 
@@ -155,33 +155,36 @@ Datadog APM uses its own format and proprietary tracer. The migration path is OT
 
 ```typescript
 import { init } from 'autotel';
+import { createDatadogConfig } from 'autotel-backends';
 
-init({
-  service: 'my-app',
-  endpoint: 'https://trace.agent.datadoghq.com/api/v0.4/traces',
-  headers: { 'dd-api-key': process.env.DD_API_KEY! },
-});
+init(
+  createDatadogConfig({
+    service: 'my-app',
+    apiKey: process.env.DATADOG_API_KEY!,
+    site: 'datadoghq.com', // default; 'datadoghq.eu', 'us3.datadoghq.com', …
+  }),
+);
 ```
 
-For the EU site use `datadoghq.eu`; for US3 / US5 see Datadog's region matrix.
+That is the same as `endpoint: 'https://otlp.datadoghq.com'` with header `dd-api-key`. Pass `useAgent: true` to send to a local Datadog Agent instead.
 
 ### Step 3: Map Datadog span tags
 
-Datadog uses `service`, `resource`, `operation`. OTel uses `service.name`, `http.route`, span name. autotel handles the conversion automatically when exporting via `dd-api-key`. If you have custom Datadog tags in dashboards, rename them in code:
+Datadog uses `service`, `resource`, `operation`. OTel uses `service.name`, `http.route`, span name. Datadog's OTLP intake maps the standard OTel attributes; autotel does not rewrite your own tags. If you have custom Datadog tags in dashboards, rename them in code:
 
-| Datadog tag | OTel attribute              |
-| ----------- | --------------------------- |
-| `env`       | `deployment.environment`    |
-| `version`   | `service.version`           |
-| `pod_name`  | `k8s.pod.name`              |
-| `host.name` | (resource attr) `host.name` |
+| Datadog tag | OTel attribute                                                      |
+| ----------- | ------------------------------------------------------------------- |
+| `env`       | `deployment.environment.name` (autotel sets it from `environment`)  |
+| `version`   | `service.version` (autotel sets it from `version` / `package.json`) |
+| `pod_name`  | `k8s.pod.name`                                                      |
+| `host.name` | (resource attr) `host.name`, set by autotel from `DD_HOSTNAME` / OS |
 
 ### Step 4: Replace `dd-trace`-specific APIs
 
 | `dd-trace`                             | autotel                                                                     |
 | -------------------------------------- | --------------------------------------------------------------------------- |
 | `tracer.trace('op', { resource }, fn)` | `trace.run('op', (ctx) => fn())` (set `http.route` with `ctx.setAttribute`) |
-| `tracer.scope().active()`              | `getActiveSpan()` from `@opentelemetry/api`                                 |
+| `tracer.scope().active()`              | `getActiveSpan()` from `autotel`                                            |
 | `tracer.wrap('op', fn)`                | `trace('op', fn)` or `instrument({ key: 'op', fn })`                        |
 
 ## From New Relic Node agent
@@ -197,21 +200,21 @@ Drop it from `start` script and `NODE_OPTIONS`.
 ```typescript
 init({
   service: 'my-app',
-  endpoint: 'https://otlp.nr-data.net/v1/traces',
+  endpoint: 'https://otlp.nr-data.net', // autotel appends /v1/traces
   headers: { 'api-key': process.env.NEW_RELIC_LICENSE_KEY! },
 });
 ```
 
-For EU: `https://otlp.eu01.nr-data.net/v1/traces`.
+For EU: `https://otlp.eu01.nr-data.net`.
 
 ### Step 3: Replace agent APIs
 
-| `newrelic`                                | autotel                             |
-| ----------------------------------------- | ----------------------------------- |
-| `newrelic.startSegment('name', true, fn)` | `trace.run(name, (ctx) => fn())`    |
-| `newrelic.addCustomAttribute(key, value)` | `useLogger().set({ [key]: value })` |
-| `newrelic.noticeError(err)`               | `createStructuredError({ … })`      |
-| `newrelic.recordMetric(name, value)`      | OTel meter API                      |
+| `newrelic`                                | autotel                                                |
+| ----------------------------------------- | ------------------------------------------------------ |
+| `newrelic.startSegment('name', true, fn)` | `trace.run(name, (ctx) => fn())`                       |
+| `newrelic.addCustomAttribute(key, value)` | `getRequestLogger().set({ [key]: value })`             |
+| `newrelic.noticeError(err)`               | `getRequestLogger().error(err)`                        |
+| `newrelic.recordMetric(name, value)`      | `createCounter()` / `createHistogram()` from `autotel` |
 
 ## From Honeycomb Beelines
 
@@ -225,11 +228,11 @@ init({
 });
 ```
 
-| Beeline                                 | autotel                                                                     |
-| --------------------------------------- | --------------------------------------------------------------------------- |
-| `beeline.withTrace(meta, fn)`           | `trace(meta.task, (ctx) => fn())`                                           |
-| `beeline.customContext.add(key, value)` | `useLogger().set({ [key]: value })`                                         |
-| `beeline.flush()`                       | `await provider.forceFlush()` (autotel does this on shutdown automatically) |
+| Beeline                                 | autotel                                                                            |
+| --------------------------------------- | ---------------------------------------------------------------------------------- |
+| `beeline.withTrace(meta, fn)`           | `trace.run(meta.task, (ctx) => fn())`                                              |
+| `beeline.customContext.add(key, value)` | `getRequestLogger().set({ [key]: value })`                                         |
+| `beeline.flush()`                       | `await flush()` from `autotel` (`flushOnExit`, on by default, covers a clean exit) |
 
 ## From OpenTracing / OpenCensus
 
@@ -242,21 +245,21 @@ For libraries you don't control that still use OpenTracing, the OTel project shi
 If you're starting from `console.log` everywhere:
 
 1. Add `init({ service: 'my-app', debug: 'pretty' })` so spans are visible locally.
-2. Replace `console.log` in handlers with `useLogger().set({ … })`.
+2. Replace `console.log` in handlers with `getRequestLogger().set({ … })` (inside `trace()` or framework middleware).
 3. Wrap throw sites with `createStructuredError({ message, status, why, fix })`.
-4. Add a real OTLP exporter when you're ready to ship to a backend.
+4. Add an `endpoint` when you're ready to ship to a backend; until then nothing is exported.
 
 See [`review-otel-patterns`](../review-otel-patterns/SKILL.md) for the framework setup steps.
 
 ## Verifying the cutover
 
-| Check                       | How                                                                                          |
-| --------------------------- | -------------------------------------------------------------------------------------------- |
-| **Span volume matches**     | Compare `count(spans)` per route over 24h; should be within ±5 %                             |
-| **p99 latency unchanged**   | Histograms on both backends                                                                  |
-| **Error rate unchanged**    | `count(spans where status=error)`                                                            |
-| **Trace correlation works** | Pick 10 random `traceId`s; confirm cross-service spans resolve                               |
-| **Bundle size acceptable**  | `pnpm bundle-size`: moving from heavy agents (New Relic, Datadog) often _shrinks_ the bundle |
+| Check                       | How                                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Span volume matches**     | Compare `count(spans)` per route over 24h; should be within ±5 %                                                         |
+| **p99 latency unchanged**   | Histograms on both backends                                                                                              |
+| **Error rate unchanged**    | `count(spans where status=error)`                                                                                        |
+| **Trace correlation works** | Pick 10 random `traceId`s; confirm cross-service spans resolve                                                           |
+| **Bundle size acceptable**  | Compare bundle / install size before and after: moving from heavy agents (New Relic, Datadog) often _shrinks_ the bundle |
 
 ## Anti-patterns
 

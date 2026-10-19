@@ -74,7 +74,7 @@ setAuditAttributes({
 forceKeepAuditEvent();
 ```
 
-`withAudit` marks the span with `autotel.audit = true` and sets the tail-sampling keep flags via `forceKeepAuditEvent`, so audit events are never dropped. The rest of this guide builds the same model from raw spans when you need full control over the schema, signing, and the pipeline split. If you use the package, filter on `autotel.audit` (not `audit`) in Step 3.
+`withAudit` creates no span of its own: it tags the active one, so call it inside `trace()` or framework middleware (with no trace context it runs `fn` untagged; see `onMissingContext`). It marks the span with `autotel.audit = true` and sets the tail-sampling keep flags via `forceKeepAuditEvent`, so audit events are never dropped. The rest of this guide builds the same model from raw spans when you need full control over the schema, signing, and the pipeline split. If you use the package, filter on `autotel.audit` (not `audit`) in Step 3.
 
 ## The audit span discipline
 
@@ -148,6 +148,8 @@ export function audit(payload: AuditPayload): void {
 A frequent compliance failure is "we logged what users did but not what we **stopped** them doing." Wrap the authorization decision so both branches go through `audit()`:
 
 ```typescript
+import { createStructuredError } from 'autotel';
+
 export async function withAuthz<T>(
   payload: Omit<AuditPayload, 'outcome'>,
   decide: () => Promise<{ allow: boolean; reason?: string }>,
@@ -182,46 +184,51 @@ How a span flows once you split the pipeline:
 audit(payload)
   └─ span.attributes['audit'] = true   (or autotel.audit via the package)
        │
-       ├─► FilteringSpanProcessor include: audit === true  ─► auditExporter ─► append-only store
+       ├─► FilteringSpanProcessor filter: audit === true  ─► auditExporter ─► append-only store
        │
-       └─► FilteringSpanProcessor exclude: audit === true  ─► opsExporter  (PII-redacted dashboards)
+       └─► FilteringSpanProcessor filter: audit !== true  ─► opsExporter  (PII-redacted dashboards)
 ```
 
 ```typescript
-import {
-  composeSpanProcessors,
-  composeSubscribers,
-  defineConfig,
-} from 'autotel-edge';
-import { BatchSpanProcessor, FilteringSpanProcessor } from 'autotel/processors';
+import { init, FilteringSpanProcessor } from 'autotel';
+import { BatchSpanProcessor } from 'autotel/processors';
+import { TailSamplingSpanProcessor } from 'autotel/tail-sampling-processor';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+const isAudit = (span: { attributes: Record<string, unknown> }) =>
+  span.attributes['audit'] === true ||
+  span.attributes['autotel.audit'] === true;
 
 const auditExporter = new BatchSpanProcessor(
-  new OTLPHttpJsonExporter({
-    url: process.env.AUDIT_OTLP!,
+  new OTLPTraceExporter({
+    url: `${process.env.AUDIT_OTLP!}/v1/traces`,
     headers: { authorization: `Bearer ${process.env.AUDIT_TOKEN!}` },
   }),
 );
 const opsExporter = new BatchSpanProcessor(
-  new OTLPHttpJsonExporter({ url: process.env.OPS_OTLP! }),
+  new OTLPTraceExporter({ url: `${process.env.OPS_OTLP!}/v1/traces` }),
 );
 
-// Only audit spans reach the audit pipeline.
-const auditOnly = new FilteringSpanProcessor({
-  include: (span) => span.attributes['audit'] === true,
-  next: auditExporter,
+// Only audit spans reach the audit pipeline. No tail sampling on this branch.
+const auditOnly = new FilteringSpanProcessor(auditExporter, {
+  filter: isAudit,
 });
 
 // Conversely, ops never sees audit spans (avoid leaking PII to dashboards).
-const opsOnly = new FilteringSpanProcessor({
-  exclude: (span) => span.attributes['audit'] === true,
-  next: opsExporter,
-});
+// Custom spanProcessors skip autotel's tail sampling, so add it back for ops.
+const opsOnly = new FilteringSpanProcessor(
+  new TailSamplingSpanProcessor(opsExporter),
+  { filter: (span) => !isAudit(span) },
+);
 
-export const otelConfig = defineConfig({
-  service: { name: 'app' },
-  spanProcessors: composeSpanProcessors([auditOnly, opsOnly]),
+init({
+  service: 'app',
+  sampling: 'production',
+  spanProcessors: [auditOnly, opsOnly],
 });
 ```
+
+`@opentelemetry/exporter-trace-otlp-http` is already a dependency of `autotel`; add it to your app's `package.json` to import it directly. On `autotel-edge` / `autotel-cloudflare`, pass the same two processors as `spanProcessors` in the edge config (`composeSpanProcessors` from `autotel-edge` merges them into one).
 
 ## Step 4: Tamper detection
 
@@ -261,15 +268,20 @@ For multi-tenant or extra-strict (HIPAA), use Ed25519 with per-environment keys 
 | Secret values            | ❌             | Use `audit.action=secret.read` + `audit.resource.id=sec_abc`, never the secret itself |
 | Authorization headers    | ❌             | Token names ok (`bearer.*`), values never                                             |
 
-`attributeRedactor` defaults are too aggressive for audit (you may need `enduser.id` literal, not masked). Disable redaction selectively:
+`attributeRedactor` defaults are too aggressive for audit (you may need `enduser.id` literal, not masked). `init()` wraps **every** span processor in the redactor, and turns `'default'` redaction on by itself when `environment` is `production`. Switch the global one off and redact only the ops branch:
 
 ```typescript
-spanProcessors: composeSpanProcessors([
-  // No redactor on the audit branch — keys are already conservative
-  auditOnly,
-  // Strict redactor on ops
-  new AttributeRedactingProcessor(opsOnly, { redactor: 'strict' }),
-]);
+import { init, AttributeRedactingProcessor } from 'autotel';
+
+init({
+  service: 'app',
+  attributeRedactor: false, // no global redaction; the audit branch keeps literal ids
+  spanProcessors: [
+    auditOnly,
+    // Strict redactor on ops
+    new AttributeRedactingProcessor(opsOnly, { redactor: 'strict' }),
+  ],
+});
 ```
 
 ## Step 6: Retention
@@ -436,18 +448,18 @@ To query the trail (denials, per-actor history, tamper detection) across Honeyco
 
 ## Anti-patterns
 
-| Anti-pattern                                   | Fix                                                            |
-| ---------------------------------------------- | -------------------------------------------------------------- |
-| Audit logs in `console.log` / unstructured     | Use `audit()` so every event has the same shape                |
-| Same backend for audit and ops                 | Separate processors, separate retention                        |
-| Audit subject to sampling                      | `FilteringSpanProcessor` with `include: span.attributes.audit` |
-| Logging only successes                         | Always log denials too                                         |
-| Putting secrets / payloads in audit attributes | Reference by id only (`audit.evidence.id`)                     |
-| No tamper detection                            | HMAC signature on critical environments                        |
-| Custom retention in code                       | Express via storage-layer lifecycle policy                     |
-| Audit on every read of harmless data           | Audit _meaningful_ events; not every list call                 |
-| Audit row tied to a specific framework         | The `audit()` function is framework-agnostic                   |
-| `enduser.id` = email                           | Use the internal id; emails go in a separate identity table    |
+| Anti-pattern                                   | Fix                                                          |
+| ---------------------------------------------- | ------------------------------------------------------------ |
+| Audit logs in `console.log` / unstructured     | Use `audit()` so every event has the same shape              |
+| Same backend for audit and ops                 | Separate processors, separate retention                      |
+| Audit subject to sampling                      | Own `FilteringSpanProcessor` branch, `forceKeepAuditEvent()` |
+| Logging only successes                         | Always log denials too                                       |
+| Putting secrets / payloads in audit attributes | Reference by id only (`audit.evidence.id`)                   |
+| No tamper detection                            | HMAC signature on critical environments                      |
+| Custom retention in code                       | Express via storage-layer lifecycle policy                   |
+| Audit on every read of harmless data           | Audit _meaningful_ events; not every list call               |
+| Audit row tied to a specific framework         | The `audit()` function is framework-agnostic                 |
+| `enduser.id` = email                           | Use the internal id; emails go in a separate identity table  |
 
 ## Glossary
 

@@ -14,7 +14,7 @@ Instrumentation plugins for libraries that have no official OTel support or wher
 | Kafka    | `autotel-plugins/kafka`    | Official `@opentelemetry/instrumentation-kafkajs` only traces produce/consume; this adds processing spans, batch lineage, and correlation IDs |
 | RabbitMQ | `autotel-plugins/rabbitmq` | Composition layer on top of `@opentelemetry/instrumentation-amqplib`: adds consume/publish spans, ack tracking, batch lineage                 |
 
-All three are also re-exported from the root `autotel-plugins` entry point.
+All three are also re-exported from the root `autotel-plugins` entry point. RabbitMQ helpers whose names clash with Kafka's are renamed there (`injectRabbitMQTraceHeaders`, `extractRabbitMQBatchLineage`, `normalizeRabbitMQHeaders`, ...); on the `/rabbitmq` subpath they keep the plain names.
 
 ## Setup
 
@@ -35,7 +35,7 @@ pnpm add autotel-plugins @opentelemetry/instrumentation-amqplib
 
 ### BigQuery: `instrumentBigQuery`
 
-Wraps a `BigQuery` instance to create spans for `query()`, `createQueryJob()`, dataset operations, and table operations. No official OTel plugin exists for BigQuery so this is the only tracing path.
+Patches the BigQuery client to create spans for `query()`, `createQueryJob()`, `createQueryStream()`, `createJob()`, job results, and table `insert`/`getRows`/load/copy/extract jobs. Dataset and table create/delete are traced only with `instrumentAdminOps: true`. No official OTel plugin exists for BigQuery so this is the only tracing path.
 
 ```ts
 import { BigQuery } from '@google-cloud/bigquery';
@@ -44,8 +44,9 @@ import { instrumentBigQuery } from 'autotel-plugins/bigquery';
 
 const bq = new BigQuery({ projectId: 'my-project' });
 instrumentBigQuery(bq, {
-  captureQueryText: true, // record SQL in span attributes (default: false)
-  captureJobLocation: true, // record job location attribute (default: true)
+  captureQueryText: 'sanitized', // 'never' | 'summary' (default) | 'sanitized' | 'raw'
+  includeQueryHash: true, // default: true
+  instrumentAdminOps: false, // dataset/table create/delete (default: false)
 });
 
 // All subsequent calls create spans automatically
@@ -83,11 +84,11 @@ await consumer.run({
 
 **`contextMode` values:**
 
-| Mode      | Behaviour                                                                                                          |
-| --------- | ------------------------------------------------------------------------------------------------------------------ |
-| `inherit` | Continues the producer trace (parent = extracted context). If a different active span exists, links to it instead. |
-| `link`    | Always starts a fresh span; links to the extracted trace. Good for async fan-out.                                  |
-| `none`    | Starts a fresh span with no links. Use when trace propagation is disabled via feature flag.                        |
+| Mode      | Behaviour                                                                                                                                                         |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inherit` | Default. No active span: parent = extracted producer context. Active span exists: parent = active span, link to the extracted context if it is a different trace. |
+| `link`    | Parent = current context (active span or root); always links to the extracted context. Good for async fan-out.                                                    |
+| `none`    | Parent = current context; no links to the extracted context. Use when trace propagation is disabled via feature flag.                                             |
 
 Feature flag pattern:
 
@@ -104,10 +105,7 @@ await withProducerSpan(
   { name: 'order.publish', topic: 'orders', messageKey: orderId },
   async (span) => {
     // Inject headers inside the PRODUCER span so consumers can extract the context
-    const headers = injectTraceHeaders(
-      {},
-      { includeCorrelationIdHeader: true },
-    );
+    const headers = injectTraceHeaders({}); // adds the correlation ID header by default
     await producer.send({
       topic: 'orders',
       messages: [{ key: orderId, value: JSON.stringify(order), headers }],
@@ -128,7 +126,7 @@ await consumer.run({
     {
       name: 'orders.batch',
       consumerGroup: 'processor',
-      perMessageSpans: 'all', // 'all' | 'errors-only' | 'none'
+      perMessageSpans: 'all', // 'all' | 'errors' | 'none' (default: 'none')
     },
     async ({ batch, resolveOffset }) => {
       for (const message of batch.messages) {
@@ -219,13 +217,13 @@ channel.consume('orders', async (msg) => {
 });
 ```
 
+Pass `deferSpanEnd: true` with `ackTimeoutMs` to get `(span, { ack, nack, reject })` controls and end the span when the message is settled.
+
 Publisher:
 
 ```ts
-import {
-  withPublishSpan,
-  injectRabbitMQTraceHeaders,
-} from 'autotel-plugins/rabbitmq';
+import { withPublishSpan, injectTraceHeaders } from 'autotel-plugins/rabbitmq';
+// root equivalent: import { withPublishSpan, injectRabbitMQTraceHeaders } from 'autotel-plugins';
 
 await withPublishSpan(
   {
@@ -235,10 +233,7 @@ await withPublishSpan(
     correlationId: orderId,
   },
   async (span) => {
-    const headers = injectRabbitMQTraceHeaders(
-      {},
-      { includeCorrelationIdHeader: true },
-    );
+    const headers = injectTraceHeaders({}, { correlationId: orderId });
     channel.publish('orders', 'order.created', content, { headers });
   },
 );
@@ -249,11 +244,9 @@ await withPublishSpan(
 All plugins export semantic attribute name constants. Use these instead of string literals:
 
 ```ts
-import {
-  SEMATTRS_MESSAGING_KAFKA_CONSUMER_GROUP,
-  SEMATTRS_GCP_BIGQUERY_JOB_ID,
-} from 'autotel-plugins/kafka';
-// or import from 'autotel-plugins' (re-exported from root)
+import { SEMATTRS_MESSAGING_KAFKA_CONSUMER_GROUP } from 'autotel-plugins/kafka';
+// BigQuery and DB constants are only on the root entry:
+import { SEMATTRS_GCP_BIGQUERY_JOB_ID } from 'autotel-plugins';
 ```
 
 ## Common Mistakes
@@ -282,7 +275,7 @@ await withProducerSpan({ name: 'order.publish', topic: 'orders' }, async () => {
 
 ### HIGH: Using `contextMode: 'inherit'` on batch fan-in spans
 
-Batch fan-in (many messages → one output) should use `'none'` (or `'link'`). Using `'inherit'` picks a single arbitrary message's trace as the parent, silently losing all other upstream spans.
+Batch fan-in (many messages → one output) should use `'none'` (or `'link'`) plus `extractBatchLineage` links. Using `'inherit'` with one message's headers parents the span to that single trace and drops every other upstream trace.
 
 Wrong:
 
@@ -317,4 +310,4 @@ import { withProcessingSpan } from 'autotel-plugins';
 
 ## Version
 
-Targets autotel-plugins v0.19.4. Optional peer dependencies: `@google-cloud/bigquery >=8.1.1`, `@opentelemetry/instrumentation-kafkajs >=0.22.0`, `@opentelemetry/instrumentation-amqplib >=0.60.0`.
+Targets autotel-plugins v0.21.13. Optional peer dependencies: `@google-cloud/bigquery >=9.2.0`, `@opentelemetry/instrumentation-kafkajs >=0.32.0`, `@opentelemetry/instrumentation-amqplib >=0.70.0`.

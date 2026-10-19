@@ -34,19 +34,59 @@ npm install autotel-edge
 
 ## Quick start
 
-```typescript
-import { trace, span, instrument, withTracing, init } from 'autotel-edge';
+There is no `init()`. Parse a config once per isolate, register a
+`WorkerTracerProvider`, and give its tracer the parsed head sampler. `trace()`
+and `span()` then use the global tracer.
 
-init({
+```typescript
+import { resourceFromAttributes } from '@opentelemetry/resources'; // add as a direct dependency
+import { parseConfig, WorkerTracerProvider, trace } from 'autotel-edge';
+
+const config = parseConfig({
   service: { name: 'my-edge-function' },
   exporter: {
     url: process.env.OTEL_ENDPOINT ?? 'http://localhost:4318/v1/traces',
   },
 });
 
+const provider = new WorkerTracerProvider(
+  config.spanProcessors,
+  resourceFromAttributes({ 'service.name': config.service.name }),
+);
+provider.register(); // also installs the AsyncLocalStorage context manager
+// Applies sampling.headSampler; without it every trace is head-sampled.
+provider.getTracer('autotel-edge').setHeadSampler(config.sampling.headSampler);
+
 export const handler = trace(async (request: Request) => {
   return new Response('Hello World');
 });
+```
+
+Without `exporter` or `spanProcessors`, `parseConfig` warns once and spans are
+dropped. A trace is exported when its local root span ends; for a trace that
+continues a remote parent, call
+`await provider.getTracer('autotel-edge').forceFlush(traceId)` (e.g. inside
+`waitUntil`).
+
+Later examples show only the object passed to `parseConfig()`, or call this
+helper that wraps the provider lines above:
+
+```typescript
+// tracing.ts
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import { WorkerTracerProvider, type parseConfig } from 'autotel-edge';
+
+export function setupTracing(config: ReturnType<typeof parseConfig>) {
+  const provider = new WorkerTracerProvider(
+    config.spanProcessors,
+    resourceFromAttributes({ 'service.name': config.service.name }),
+  );
+  provider.register();
+  provider
+    .getTracer('autotel-edge')
+    .setHeadSampler(config.sampling.headSampler);
+  return provider;
+}
 ```
 
 ## Core API
@@ -104,12 +144,13 @@ const rows = await span(
 );
 ```
 
-### `init(config)`
+### `parseConfig(config)`
 
-Configure the SDK once, at module load:
+Parse the config once, at module load, then register the provider as in the
+quick start:
 
 ```typescript
-init({
+const config = parseConfig({
   service: {
     name: 'my-edge-function',
     version: '1.0.0',
@@ -123,21 +164,27 @@ init({
 });
 ```
 
-`init()` accepts a function that closes over the runtime environment too:
+`createInitialiser()` accepts a function that closes over the runtime
+environment:
 
 ```typescript
-init((env) => ({
+import { createInitialiser } from 'autotel-edge';
+
+const initialise = createInitialiser((env) => ({
   service: { name: env.SERVICE_NAME },
   exporter: { url: env.OTEL_ENDPOINT },
 }));
+const config = initialise(env, trigger); // same shape as parseConfig()'s result
 ```
 
 ## Fetch route controls
 
-Filter which paths are traced and map URL patterns to per-route service names:
+Filter which paths are traced and map URL patterns to per-route service names.
+Handler wrappers (such as autotel-cloudflare's) read these; plain `trace()` does
+not. To apply them yourself, use the [route matching helpers](#route-matching-helpers).
 
 ```typescript
-init({
+parseConfig({
   service: { name: 'edge-app' },
   exporter: { url: 'https://otlp.example.com/v1/traces' },
   handlers: {
@@ -163,8 +210,9 @@ and slow requests while sampling everything else at any rate.
 ```typescript
 import { SamplingPresets } from 'autotel-edge/sampling';
 
-init({
+parseConfig({
   service: { name: 'my-app' },
+  exporter: { url: 'https://otlp.example.com/v1/traces' },
   sampling: { tailSampler: SamplingPresets.production() },
 });
 ```
@@ -211,7 +259,8 @@ request, then emit once. Supports `fork()` for background work that should keep
 its own snapshot:
 
 ```typescript
-import { getExecutionLogger, trace, span, withTracing } from 'autotel-edge';
+import { trace } from 'autotel-edge';
+import { getExecutionLogger } from 'autotel-edge/logger';
 
 export const handler = trace(async (request) => {
   const log = getExecutionLogger();
@@ -233,13 +282,19 @@ export const handler = trace(async (request) => {
 Track product events with the active trace ID attached automatically:
 
 ```typescript
-import { publishEvent } from 'autotel-edge/events';
+import { createEdgeSubscribers } from 'autotel-edge/events';
 
-await publishEvent({
-  name: 'order.completed',
-  userId: '123',
-  properties: { orderId: 'abc', amount: 99.99 },
+const events = createEdgeSubscribers({
+  service: 'my-edge-function',
+  transport: async (event) => {
+    await fetch('https://analytics.example.com/events', {
+      method: 'POST',
+      body: JSON.stringify(event),
+    });
+  },
 });
+
+events.trackEvent('order.completed', { orderId: 'abc', amount: 99.99 });
 ```
 
 ## Runtime notes
@@ -248,12 +303,15 @@ await publishEvent({
 
 ```typescript
 // app/api/route.ts (or middleware.ts)
-import { trace, span, withTracing, init } from 'autotel-edge';
+import { trace, parseConfig } from 'autotel-edge';
+import { setupTracing } from './tracing';
 
-init({
-  service: { name: 'vercel-edge' },
-  exporter: { url: process.env.OTEL_ENDPOINT! },
-});
+setupTracing(
+  parseConfig({
+    service: { name: 'vercel-edge' },
+    exporter: { url: process.env.OTEL_ENDPOINT! },
+  }),
+);
 
 export const runtime = 'edge';
 
@@ -266,12 +324,15 @@ export const GET = trace(async (request: Request) => {
 
 ```typescript
 // netlify/edge-functions/hello.ts
-import { trace, span, withTracing, init } from 'autotel-edge';
+import { trace, parseConfig } from 'autotel-edge';
+import { setupTracing } from './tracing.ts';
 
-init({
-  service: { name: 'netlify-edge' },
-  exporter: { url: Deno.env.get('OTEL_ENDPOINT')! },
-});
+setupTracing(
+  parseConfig({
+    service: { name: 'netlify-edge' },
+    exporter: { url: Deno.env.get('OTEL_ENDPOINT')! },
+  }),
+);
 
 export default trace(async (request: Request) => {
   return new Response('Hello from the edge');
@@ -281,24 +342,34 @@ export default trace(async (request: Request) => {
 ### Deno Deploy
 
 ```typescript
-import { trace, span, withTracing, init } from 'https://esm.sh/autotel-edge';
+import { trace, parseConfig } from 'https://esm.sh/autotel-edge';
+import { setupTracing } from './tracing.ts';
 
-init({
-  service: { name: 'deno-deploy' },
-  exporter: { url: Deno.env.get('OTEL_ENDPOINT')! },
-});
+setupTracing(
+  parseConfig({
+    service: { name: 'deno-deploy' },
+    exporter: { url: Deno.env.get('OTEL_ENDPOINT')! },
+  }),
+);
 
 Deno.serve(trace(async (request) => new Response('OK')));
 ```
 
 ## Testing
 
-```typescript
-import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing';
+`autotel-edge/testing` has no runtime helpers yet. Pass an in-memory exporter
+to `parseConfig()`, register the provider as in the quick start, and read the
+finished spans back:
 
-const collector = createTraceCollector();
+```typescript
+import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
+import { parseConfig } from 'autotel-edge';
+
+const exporter = new InMemorySpanExporter();
+setupTracing(parseConfig({ service: { name: 'test' }, exporter }));
+
 await myFunction();
-assertTraceCreated(collector, 'myFunction');
+expect(exporter.getFinishedSpans().map((s) => s.name)).toContain('myFunction');
 ```
 
 ## Constraints
@@ -351,13 +422,13 @@ cascade into the others.
 
 ## Entry points
 
-| Import                  | Contents                                                                                                                                                  |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `autotel-edge`          | Core + toolkit: `trace`, `span`, `init`, `definePlugin`, `createPluginRunner`, `shouldInstrumentPath`, `getServiceForPath`, `runMiddlewareFinishPipeline` |
-| `autotel-edge/sampling` | Presets and custom samplers                                                                                                                               |
-| `autotel-edge/events`   | `publishEvent`, subscribers                                                                                                                               |
-| `autotel-edge/logger`   | `createEdgeLogger`, execution logger                                                                                                                      |
-| `autotel-edge/testing`  | Trace collectors and assertions                                                                                                                           |
+| Import                  | Contents                                                                                                                                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autotel-edge`          | Core + toolkit: `trace`, `span`, `parseConfig`, `WorkerTracerProvider`, `definePlugin`, `createPluginRunner`, `shouldInstrumentPath`, `getServiceForPath`, `runMiddlewareFinishPipeline` |
+| `autotel-edge/sampling` | Presets and custom samplers                                                                                                                                                              |
+| `autotel-edge/events`   | `createEdgeSubscribers`, `getEdgeSubscribers`                                                                                                                                            |
+| `autotel-edge/logger`   | `createEdgeLogger`, execution logger                                                                                                                                                     |
+| `autotel-edge/testing`  | Types only (no runtime helpers yet)                                                                                                                                                      |
 
 ## Vendor packages
 

@@ -8,12 +8,20 @@
  *
  * @example Quick Start
  * ```typescript
- * import { trace, init } from 'autotel-edge'
+ * import { resourceFromAttributes } from '@opentelemetry/resources'
+ * import { parseConfig, WorkerTracerProvider, trace } from 'autotel-edge'
  *
- * init({
+ * // Parse a config and register a provider once per isolate
+ * const config = parseConfig({
  *   service: { name: 'my-edge-function' },
  *   exporter: { url: process.env.OTEL_ENDPOINT }
  * })
+ * const provider = new WorkerTracerProvider(
+ *   config.spanProcessors,
+ *   resourceFromAttributes({ 'service.name': config.service.name })
+ * )
+ * provider.register()
+ * provider.getTracer('autotel-edge').setHeadSampler(config.sampling.headSampler)
  *
  * export const handler = trace(async (request: Request) => {
  *   return new Response('Hello World')

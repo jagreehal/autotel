@@ -1,0 +1,350 @@
+---
+title: Keeping Costs Down
+description: Sample whole traces, filter noise, and drop metrics and logs you never query. Defaults, overrides and examples.
+---
+
+Your backend bills for what you send it: spans, metric series and log records.
+Autotel gives you four controls, and you can combine them:
+
+| Control                              | What it drops                                  | Set it with             |
+| ------------------------------------ | ---------------------------------------------- | ----------------------- |
+| [Sampling](#sampling)                | Whole traces you have no reason to keep        | `sampling` or `sampler` |
+| [Span filtering](#filtering-spans)   | Noise spans such as health checks and file I/O | `spanFilter`            |
+| [Instrumentation choice](#emit-less) | Spans you never wanted created                 | `autoInstrumentations`  |
+| [Telemetry policies](#policies)      | Spans, logs and metrics by rule, from JSON     | `policies`              |
+
+Start with sampling. It cuts the most volume and keeps the traces you debug from.
+
+## Sampling
+
+### Defaults
+
+With no `sampling` and no `sampler`, autotel keeps every trace. Choose a preset
+for production:
+
+| Preset          | Keeps                                                                 |
+| --------------- | --------------------------------------------------------------------- |
+| `'development'` | Every trace                                                           |
+| `'production'`  | 10% of traces, plus every trace with an error and every root over 1 s |
+| `'errors-only'` | Every trace with an error, nothing else                               |
+| `'off'`         | Nothing                                                               |
+
+```typescript
+import { init } from 'autotel';
+
+init({
+  service: 'checkout-api',
+  endpoint: process.env.OTLP_ENDPOINT,
+  sampling: 'production',
+});
+```
+
+### How autotel decides
+
+Autotel samples whole traces. It holds each trace in memory until the local
+root span and every span started under it have ended, then keeps or drops all
+of them together. Your `trace()` functions and the auto-instrumented HTTP,
+database and queue spans follow the same decision, so you never get a parent
+without its children.
+
+The `production` and `errors-only` presets keep a trace when:
+
+- any span in it ended with ERROR status, including a child that fails after
+  its root returned
+- the root ran longer than the slow threshold (1 s by default)
+- any span called `forceKeep()`, or the request carries `autotel.debug` baggage
+- the trace falls inside the baseline rate
+
+The baseline hashes the trace ID. Nested spans agree, and every service on the
+same rate keeps the same traces.
+
+Two limits bound the memory autotel spends waiting:
+
+| Option             | Default | When a trace reaches it                                                                        |
+| ------------------ | ------- | ---------------------------------------------------------------------------------------------- |
+| `traceTimeoutMs`   | 30 s    | Autotel decides on the spans it has. If the root has not ended, it exports them as they stand. |
+| `maxBufferedSpans` | 20,000  | Autotel exports the oldest waiting trace as it stands.                                         |
+
+`flush()` exports decided traces and leaves a trace with running children
+waiting. `shutdown()` decides everything.
+
+### Tune the preset
+
+Pass the same option names `AdaptiveSampler` takes:
+
+```typescript
+import { init, samplingPresets } from 'autotel';
+
+init({
+  service: 'checkout-api',
+  sampler: samplingPresets.production({
+    baselineSampleRate: 0.02, // 2% of clean, fast traces
+    slowThresholdMs: 500,
+  }),
+});
+```
+
+| Option               | Default (`production`) |
+| -------------------- | ---------------------- |
+| `baselineSampleRate` | `0.1`                  |
+| `slowThresholdMs`    | `1000`                 |
+| `alwaysSampleErrors` | `true`                 |
+| `alwaysSampleSlow`   | `true`                 |
+
+`sampler` wins over `sampling` when you pass both.
+
+### Override without code
+
+From `autotel.yaml`:
+
+```yaml
+sampling:
+  preset: production
+```
+
+Or with custom numbers:
+
+```yaml
+sampling:
+  type: adaptive # or always_on, always_off, ratio
+  baseline_rate: 0.02
+  always_sample_errors: true
+  always_sample_slow: true
+  slow_threshold_ms: 500
+```
+
+The standard `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` variables set
+the head sampler when your code passes neither `sampling` nor `sampler`:
+
+```bash
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.05
+```
+
+A head sampler decides when the root span starts, so it cannot keep errors or
+slow requests it has already dropped. Use a preset when those matter.
+
+### Give one function its own rate
+
+`trace()`, `withTracing()` and `instrument()` take their own `sampler`:
+
+```typescript
+import { trace, RandomSampler } from 'autotel';
+
+export const syncInventory = trace(
+  { name: 'inventory.sync', sampler: new RandomSampler(0.01) },
+  async () => {
+    // runs every second; keep 1%
+  },
+);
+```
+
+[Choosing a Sampler](/autotel/advanced/#choosing-a-sampler) covers
+`DeterministicSampler`, `KeyTargetRateSampler`, `UserIdSampler` and writing
+your own.
+
+### Keep the traces that matter
+
+Call `forceKeep()` inside a span to keep its whole trace, whatever the sampler
+says:
+
+```typescript
+import { trace, forceKeep } from 'autotel';
+
+export const refund = trace('payment.refund', async (order) => {
+  forceKeep(); // audit-relevant: always keep
+  return payments.refund(order);
+});
+```
+
+To capture one request in full, send W3C baggage with it:
+
+```
+baggage: autotel.debug=1
+```
+
+:::caution
+Anyone who can reach your service can send this header. On public endpoints,
+strip `autotel.debug` from inbound baggage at your gateway and set it there for
+the requests you choose.
+:::
+
+### Your own span processors
+
+`init()` wraps the exporters it builds in `TailSamplingSpanProcessor`. When you
+pass `spanProcessors`, wrap the exporting one yourself. `init()` hands it the
+configured sampler:
+
+```typescript
+import { init } from 'autotel';
+import { BatchSpanProcessor } from 'autotel/processors';
+import { TailSamplingSpanProcessor } from 'autotel/tail-sampling-processor';
+
+init({
+  service: 'checkout-api',
+  sampling: 'production',
+  spanProcessors: [
+    new TailSamplingSpanProcessor(new BatchSpanProcessor(exporter), {
+      traceTimeoutMs: 10_000,
+      maxBufferedSpans: 50_000,
+    }),
+  ],
+});
+```
+
+A processor you leave unwrapped exports every span. Use that for an audit
+branch that must keep everything.
+
+### Count what you dropped
+
+`RandomSampler`, `DeterministicSampler` and `KeyTargetRateSampler` write
+`autotel.sampling.rate` on each kept span as "1 in N". Multiply by it to
+estimate true request counts, or count requests in a Collector before
+anything drops. See
+[Recording the Sample Rate](/autotel/advanced/#recording-the-sample-rate).
+
+## Filtering spans
+
+`spanFilter` receives each finished span. Return `false` to drop it:
+
+```typescript
+init({
+  service: 'checkout-api',
+  sampling: 'production',
+  spanFilter: (span) =>
+    !['/health', '/healthz', '/ready'].some((p) => span.name.includes(p)) &&
+    span.instrumentationScope.name !== '@opentelemetry/instrumentation-dns',
+});
+```
+
+The filter sees the name, attributes, status, kind, duration and
+instrumentation scope, before redaction runs. It applies to every exporter
+`init()` builds and respects the shape of the trace:
+
+- Filter a request's root span (`GET /health`) and autotel drops the whole
+  trace, including the database ping under it.
+- Filter a span in the middle (`fs.read`) and autotel attaches its children to
+  the nearest kept ancestor.
+
+Drop very short spans:
+
+```typescript
+spanFilter: (span) => {
+  const [seconds, nanos] = span.duration;
+  return seconds > 0 || nanos >= 1_000_000; // keep spans of 1 ms or more
+},
+```
+
+If the filter throws, autotel keeps the span.
+
+## Emit less
+
+List the instrumentations you want, and autotel loads only those:
+
+```typescript
+init({
+  service: 'checkout-api',
+  autoInstrumentations: ['http', 'express', 'pg'],
+});
+```
+
+Or load everything and switch off the noisy ones:
+
+```typescript
+init({
+  service: 'checkout-api',
+  autoInstrumentations: {
+    fs: { enabled: false },
+    dns: { enabled: false },
+  },
+});
+```
+
+Backends that bill per series also charge for every distinct span name.
+`spanNameNormalizer: 'rest-api'` turns `/users/123` into `/users/:id`.
+
+## Policies
+
+[Telemetry policies](/autotel/policies/) express the same decisions as JSON
+rules you can change without a deploy. Point `init()` at a file or directory
+and autotel reloads it on change:
+
+```typescript
+init({ service: 'checkout-api', policies: './policies' });
+```
+
+Drop health checks:
+
+```json
+{
+  "id": "drop-health-checks",
+  "trace": {
+    "match": [{ "trace_field": "name", "contains": "/health" }],
+    "keep": { "percentage": 0 }
+  }
+}
+```
+
+Drop debug logs:
+
+```json
+{
+  "id": "drop-debug-logs",
+  "log": {
+    "match": [{ "log_field": "severity_text", "regex": "^(DEBUG|TRACE)$" }],
+    "keep": "none"
+  }
+}
+```
+
+Drop a metric you never chart, or the data points for one route:
+
+```json
+[
+  {
+    "id": "drop-debug-metrics",
+    "metric": {
+      "match": [{ "metric_field": "name", "starts_with": "debug." }],
+      "keep": false
+    }
+  },
+  {
+    "id": "drop-health-datapoints",
+    "metric": {
+      "match": [{ "datapoint_attribute": "http.route", "exact": "/health" }],
+      "keep": false
+    }
+  }
+]
+```
+
+Trace policies run through `spanFilter`, so they respect trace shape too.
+
+## Metrics
+
+Metric cost grows with series: one per combination of metric name and
+attribute values. Keep attribute values bounded (route templates, status
+classes, never user IDs) and drop what you do not chart with a metric policy.
+
+`OTEL_METRIC_EXPORT_INTERVAL` sets how often autotel exports, in milliseconds.
+A longer interval sends fewer data points:
+
+```bash
+OTEL_METRIC_EXPORT_INTERVAL=60000
+```
+
+## With a Collector
+
+If a Collector runs `tail_sampling` across your services, give it every span:
+set `sampling: 'development'` and keep `spanFilter` for noise. Sampling in both
+places multiplies the rates. [Collector](/autotel/collector/) shows the setup.
+
+## Checklist
+
+1. `sampling: 'production'`, then lower `baselineSampleRate` until volume fits
+   your budget.
+2. `spanFilter` for health checks, readiness probes and file and DNS spans.
+3. `autoInstrumentations` listing only the libraries you use.
+4. `spanNameNormalizer` on services with IDs in their routes.
+5. Metric and log policies for series and levels nobody reads.
+6. `forceKeep()` on payments, refunds and anything audit-relevant.

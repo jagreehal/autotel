@@ -268,6 +268,11 @@ export interface AutotelConfig {
    * Allows you to use any backend: Jaeger, Zipkin, Datadog, New Relic, etc.
    * If not provided, defaults to OTLP with tail sampling
    *
+   * These replace the pipeline and are not wrapped in
+   * `TailSamplingSpanProcessor`, so a branch can keep every span. With a tail
+   * sampler (`sampling: 'production'`), wrap the exporting processor yourself;
+   * `init()` warns once when no processor is wrapped.
+   *
    * @example Multiple processors
    * ```typescript
    * import { JaegerExporter } from '@opentelemetry/exporter-jaeger'
@@ -507,8 +512,8 @@ export interface AutotelConfig {
    * create a BatchLogRecordProcessor with an OTLPLogExporter - no manual
    * imports needed. Works alongside logRecordProcessors (additive).
    *
-   * Requires @opentelemetry/sdk-logs and @opentelemetry/exporter-logs-otlp-http
-   * (or -grpc) as peer dependencies.
+   * OTLP over HTTP works with autotel's own dependencies. The gRPC and
+   * protobuf log exporters are optional peers to install.
    *
    * Can be overridden with AUTOTEL_LOGS=on|off env var.
    *
@@ -530,11 +535,14 @@ export interface AutotelConfig {
    * Sampling preset shorthand — resolves to a pre-configured sampler.
    * If both `sampler` and `sampling` are provided, `sampler` takes precedence.
    *
-   * @default 'production' (10% baseline + always-on for errors/slow)
+   * Default: none. With neither `sampling` nor `sampler`, wrapped functions
+   * keep every span. Set `'production'` (10% baseline, plus every error and
+   * slow call) explicitly in production.
    *
-   * **Footgun for one-shot scripts:** the default samples ~90% of spans away,
-   * which means a fixture-capture script that emits a single normal span
-   * almost always sees zero output. For local debugging and capture use:
+   * **Footgun for one-shot scripts:** `'production'` samples ~90% of fast,
+   * successful spans away, so a fixture-capture script that emits a single
+   * normal span almost always sees zero output. For local debugging and
+   * capture use:
    *
    * ```typescript
    * init({
@@ -822,6 +830,11 @@ export interface AutotelConfig {
    * - `span.duration` - Span duration as `[seconds, nanoseconds]`
    *
    * Return `true` to keep the span, `false` to drop it.
+   *
+   * Behind a TailSamplingSpanProcessor (every exporter `init()` builds) a
+   * filtered local root drops its whole trace, and the children of any other
+   * filtered span are re-parented to its nearest kept ancestor. Behind a plain
+   * processor it drops one span at a time.
    *
    * @example Filter out Next.js instrumentation spans
    * ```typescript

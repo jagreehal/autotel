@@ -53,7 +53,9 @@ const event = new Event('onboarding', {
 event.trackEvent('step.completed', { step: 2 });
 ```
 
-**Validation and config:** See `getEventsConfig()`, `getValidationConfig()` from init; event names and attributes can be validated.
+**Validation and config:** pass `events: { … }` and `validation: { … }` to `init()`; event names and attributes can be validated there.
+
+`Event` is exported from both `autotel` and `autotel/event`.
 
 ## Common Mistakes
 
@@ -81,4 +83,4 @@ Source: packages/autotel/src/event.ts
 
 ## Version
 
-Targets autotel v2.23.x.
+Matches autotel 8.x. Verify package exports when working against an older installed version.

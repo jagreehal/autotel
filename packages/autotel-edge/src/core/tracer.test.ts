@@ -124,3 +124,38 @@ describe('WorkerTracer', () => {
     });
   });
 });
+
+describe('WorkerTracer default head sampler', () => {
+  const processor = (): SpanProcessor => ({
+    onStart: vi.fn(),
+    onEnd: vi.fn(),
+    shutdown: vi.fn(async () => {}),
+    forceFlush: vi.fn(async () => {}),
+  });
+
+  it('records spans for a pipeline built without setHeadSampler', () => {
+    const tracer = new WorkerTracer([processor()], resourceFromAttributes({}));
+
+    expect(tracer.startSpan('work').isRecording()).toBe(true);
+  });
+
+  it('stays non-recording for native routing, which passes no processors', () => {
+    const tracer = new WorkerTracer([], resourceFromAttributes({}));
+
+    expect(tracer.startSpan('work').isRecording()).toBe(false);
+  });
+
+  it('keeps a sampler set before the pipeline is swapped in', () => {
+    const tracer = new WorkerTracer([], resourceFromAttributes({}));
+    const never = {
+      shouldSample: () => ({ decision: SamplingDecision.NOT_RECORD }),
+      toString: () => 'never',
+    };
+
+    tracer.setHeadSampler(never);
+    tracer.configure([processor()], resourceFromAttributes({}));
+
+    // The head decision clears the sampled flag; the tail sampler decides later.
+    expect(tracer.startSpan('work').spanContext().traceFlags & 1).toBe(0);
+  });
+});

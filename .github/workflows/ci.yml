@@ -35,6 +35,11 @@ jobs:
       - name: Check new packages are bootstrapped on npm
         run: node scripts/check-publishable.mjs
 
+      - name: Check skill imports resolve to real exports
+        run: |
+          node scripts/check-skill-imports.mjs --self-test
+          pnpm check:skills
+
       - name: Build packages
         run: pnpm build
         env:

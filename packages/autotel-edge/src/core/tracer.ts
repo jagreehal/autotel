@@ -20,10 +20,16 @@ import { sanitizeAttributes } from '@opentelemetry/core';
 import type { Resource } from '@opentelemetry/resources';
 import {
   type SpanProcessor,
+  AlwaysOnSampler,
+  ParentBasedSampler,
   RandomIdGenerator,
   type ReadableSpan,
   SamplingDecision,
 } from '@opentelemetry/sdk-trace-base';
+
+// parseConfig's default, for a pipeline built without setHeadSampler.
+const defaultHeadSampler = () =>
+  new ParentBasedSampler({ root: new AlwaysOnSampler() });
 
 import { SpanImpl } from './span';
 import type { TraceFlushableSpanProcessor } from '../types';
@@ -63,15 +69,19 @@ export class WorkerTracer implements Tracer {
   constructor(spanProcessors: SpanProcessor[], resource: Resource) {
     this.spanProcessors = spanProcessors as TraceFlushableSpanProcessor[];
     this.resource = resource;
+    if (spanProcessors.length > 0) this.headSampler = defaultHeadSampler();
   }
 
   /**
    * Swap in the OTLP pipeline. The global provider can only be registered once
    * per isolate, so a later registration reconfigures the tracer already there.
+   * A pipeline records from the start; only native routing, which passes no
+   * processors, stays non-recording until a sampler is set.
    */
   configure(spanProcessors: SpanProcessor[], resource: Resource): void {
     this.spanProcessors = spanProcessors as TraceFlushableSpanProcessor[];
     this.resource = resource;
+    if (spanProcessors.length > 0) this.headSampler ??= defaultHeadSampler();
   }
 
   /**

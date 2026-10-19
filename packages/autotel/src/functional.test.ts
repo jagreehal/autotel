@@ -436,6 +436,25 @@ describe('Functional API', () => {
         expect(spans[0]!.name).toBe('processDocuments');
       });
 
+      // Called directly, with no test helper between the call site and trace().
+      it('infers the const name when trace(fn) is called directly', async () => {
+        const collector = createTraceCollector();
+
+        const getUser = trace(async (id: string) => id);
+        await getUser('1');
+
+        expect(collector.getSpans()[0]!.name).toBe('getUser');
+      });
+
+      it('infers the const name when a withTracing() factory is called directly', async () => {
+        const collector = createTraceCollector();
+
+        const getOrder = withTracing()((_ctx) => async (id: string) => id);
+        await getOrder('1');
+
+        expect(collector.getSpans()[0]!.name).toBe('getOrder');
+      });
+
       it('preserves sync return type for factory functions', () => {
         const collector = createTraceCollector();
 

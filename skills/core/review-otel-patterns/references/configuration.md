@@ -3,25 +3,27 @@
 Everything that goes into `init()` and the attribute pipeline in front of the
 exporter.
 
-## Configuration options
+## Configuration options (Node `init()` from `autotel`)
 
-All options work with `init()`, framework adapters, and `wrapModule` / `defineWorkerFetch`:
+| Option                 | Type                                                                     | Default                                              | Description                                                                       |
+| ---------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `service`              | `string`                                                                 | **required** (`OTEL_SERVICE_NAME` fills it from env) | `service.name` resource attribute                                                 |
+| `endpoint`             | `string` (base URL)                                                      | `OTEL_EXPORTER_OTLP_ENDPOINT`, else no export        | Single OTLP destination; `/v1/traces` etc. is appended for you                    |
+| `headers`              | `Record<string, string> \| string`                                       | `OTEL_EXPORTER_OTLP_HEADERS`                         | Auth headers for `endpoint`                                                       |
+| `protocol`             | `'http' \| 'http/protobuf' \| 'grpc'`                                    | `'http'` (JSON body)                                 | protobuf / gRPC need their exporter packages installed                            |
+| `destinations`         | `Array<{ endpoint, headers?, protocol?, signals? }>`                     | —                                                    | Declarative OTLP fan-out to multiple backends                                     |
+| `spanProcessors`       | `SpanProcessor[]`                                                        | —                                                    | Replaces the built-in OTLP processors entirely                                    |
+| `sampling`             | `'development' \| 'errors-only' \| 'production' \| 'off'`                | `'production'` (10% + errors + slow > 1s)            | Sampling preset                                                                   |
+| `sampler`              | `Sampler`                                                                | —                                                    | Custom sampler; wins over `sampling`                                              |
+| `attributeRedactor`    | `'default' \| 'strict' \| 'pci-dss' \| AttributeRedactorConfig \| false` | `'default'` when environment is `production`         | PII redaction before export                                                       |
+| `spanFilter`           | `(span: ReadableSpan) => boolean`                                        | —                                                    | Return `false` to drop a span (health checks, noise)                              |
+| `spanNameNormalizer`   | `'rest-api' \| 'graphql' \| 'minimal' \| (name) => string`               | —                                                    | Bound span-name cardinality                                                       |
+| `baggage`              | `boolean \| string`                                                      | off                                                  | Copy baggage onto spans (`true` → `baggage.*`, string → custom prefix)            |
+| `autoInstrumentations` | `boolean \| string[] \| Record<string, { enabled? }>`                    | off                                                  | `@opentelemetry/auto-instrumentations-node` (peer dep), e.g. `['http', 'undici']` |
+| `environment`          | `string`                                                                 | `NODE_ENV`, else `'development'`                     | `deployment.environment.name`; drives auto-redaction                              |
+| `debug`                | `boolean \| 'pretty'`                                                    | —                                                    | Print spans locally                                                               |
 
-| Option                                  | Type                                                            | Default           | Description                                                     |
-| --------------------------------------- | --------------------------------------------------------------- | ----------------- | --------------------------------------------------------------- |
-| `service` / `service.name`              | `string`                                                        | `'app'`           | Service name in `service.name` resource attribute               |
-| `endpoint`                              | `string`                                                        | —                 | Single OTLP destination shorthand                               |
-| `destinations`                          | `Array<{ endpoint, headers?, protocol?, signals? }>`            | —                 | Declarative OTLP fan-out to multiple backends                   |
-| `spanProcessors`                        | `SpanProcessor[]`                                               | —                 | Use **instead of** `exporter` for full control                  |
-| `sampling.rates`                        | `{ server?: number, client?: number, internal?: number }`       | `100%`            | Head sampling per span kind (0–100%)                            |
-| `sampling.tail`                         | `TailSampleFn`                                                  | —                 | Keep traces matching predicate (e.g. errors, slow)              |
-| `attributeRedactor`                     | `'default' \| 'strict' \| 'pci-dss' \| AttributeRedactorConfig` | —                 | PII redaction; on by default in production                      |
-| `instrumentation.disabled`              | `boolean`                                                       | `false`           | Hard-off switch (ideal for local dev)                           |
-| `instrumentation.instrumentGlobalFetch` | `boolean`                                                       | `true`            | Patch `globalThis.fetch` for outbound HTTP spans                |
-| `subscribers`                           | `EdgeSubscriber[]`                                              | —                 | In-process side effects (metrics, audit, AI cost)               |
-| `postProcessor`                         | `PostProcessorFn`                                               | —                 | Mutate spans before export (redact, drop, tag)                  |
-| `propagator`                            | `TextMapPropagator`                                             | W3C trace-context | Override propagation format                                     |
-| `dataSafety`                            | `DataSafetyConfig`                                              | —                 | Per-attribute safety (`captureDbStatement: 'obfuscated'`, etc.) |
+Edge runtimes (`wrapModule` / `defineWorkerFetch` / `instrument` from `autotel-cloudflare`, typed with `defineConfig` from `autotel-edge`) take a different config: `service: { name }`, `exporter: { url, headers }` (the **full** URL, e.g. `.../v1/traces`), `sampling: { headSampler, tailSampler }`, `instrumentation: { instrumentGlobalFetch }` (default `true`), `postProcessor`, `subscribers`, `propagator`, `dataSafety`. There is no `attributeRedactor` on edge. See [processor-pipeline.md](processor-pipeline.md).
 
 ## Built-in enrichers
 
@@ -69,38 +71,40 @@ const enrichTier = defineEnricher<
 
 ## Backends (multi-vendor OTLP)
 
-Switch backends with **no code changes**. Autotel speaks OTLP HTTP/JSON and HTTP/protobuf out of the box.
+Switch backends with **no code changes**. Autotel speaks OTLP HTTP/JSON by default; HTTP/protobuf and gRPC with their exporter packages installed. `endpoint` is a **base URL**: autotel appends `/v1/traces`, `/v1/metrics`, `/v1/logs`.
 
-| Backend                          | Endpoint                                                   | Headers                               |
-| -------------------------------- | ---------------------------------------------------------- | ------------------------------------- |
-| Honeycomb                        | `https://api.honeycomb.io/v1/traces`                       | `{ 'x-honeycomb-team': '<key>' }`     |
-| Grafana Cloud                    | `https://otlp-gateway-<region>.grafana.net/otlp/v1/traces` | `{ authorization: 'Basic <b64>' }`    |
-| Datadog (OTLP intake)            | `https://trace.agent.datadoghq.com/api/v0.4/traces`        | `{ 'dd-api-key': '<key>' }`           |
-| Sentry                           | `<dsn>/api/<id>/envelope/` (use `autotel-sentry`)          | `{ 'x-sentry-auth': '…' }`            |
-| Axiom                            | `https://api.axiom.co/v1/traces`                           | `{ authorization: 'Bearer <token>' }` |
-| HyperDX                          | `https://in-otel.hyperdx.io/v1/traces`                     | `{ authorization: '<key>' }`          |
-| New Relic                        | `https://otlp.nr-data.net/v1/traces`                       | `{ 'api-key': '<key>' }`              |
-| Local Jaeger / Tempo / Collector | `http://localhost:4318/v1/traces`                          | —                                     |
+| Backend                          | `endpoint`                                               | Headers                                                          |
+| -------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
+| Honeycomb                        | `https://api.honeycomb.io`                               | `{ 'x-honeycomb-team': '<key>' }`                                |
+| Grafana Cloud                    | `https://otlp-gateway-<region>.grafana.net/otlp`         | `{ authorization: 'Basic <b64>' }`                               |
+| Datadog (agentless OTLP)         | `https://otlp.<site>` (e.g. `otlp.datadoghq.com`)        | `{ 'dd-api-key': '<key>' }` (or `createDatadogConfig`)           |
+| Sentry                           | `sentryOtlpConfig(dsn).endpoint` (`autotel-sentry`)      | `sentryOtlpConfig(dsn).headers`                                  |
+| Axiom                            | `https://api.axiom.co`                                   | `{ authorization: 'Bearer <token>', 'x-axiom-dataset': '<ds>' }` |
+| HyperDX                          | `https://in-otel.hyperdx.io`                             | `{ authorization: '<key>' }`                                     |
+| New Relic                        | `https://otlp.nr-data.net` (EU: `otlp.eu01.nr-data.net`) | `{ 'api-key': '<license key>' }`, `protocol: 'http/protobuf'`    |
+| Local Jaeger / Tempo / Collector | `http://localhost:4318`                                  | —                                                                |
 
-Use `init({ endpoint, headers })` for one backend. For multiple OTLP backends, prefer `init({ destinations: [...] })`. Drop to `composeSpanProcessors([batchA, batchB])` only when you need custom processor-level control.
+New Relic recommends OTLP protobuf, which needs `@opentelemetry/exporter-trace-otlp-proto` installed.
 
-Ready-made presets with the auth headers already wired: `skills/integrations/autotel-backends/SKILL.md`.
+Use `init({ endpoint, headers })` for one backend. For multiple OTLP backends, use `init({ destinations: [...] })`. Drop to `spanProcessors` only when you need custom processor-level control (it replaces the built-in processors).
+
+Ready-made presets with the auth headers already wired (`createHoneycombConfig`, `createDatadogConfig`, `createGrafanaConfig`, … from `autotel-backends/<vendor>`): `skills/integrations/autotel-backends/SKILL.md`.
 
 ## Auto-redaction (PII protection)
 
-Built-in masking scrubs sensitive data from span attributes **before** export. **On by default in production**, off in development. Smart partial masking preserves debug signal:
+Built-in masking scrubs sensitive data from span attributes **before** export. When `attributeRedactor` is unset, `init()` applies `'default'` if the resolved environment is `production` (`environment` option, else `NODE_ENV`, else `'development'`), and nothing otherwise. `AUTOTEL_REDACT_PII` (`off` / `default` / `strict` / `pci-dss`) overrides that; `attributeRedactor: false` disables it. Smart partial masking preserves debug signal:
 
-| Pattern      | Example input         | Masked output                                |
-| ------------ | --------------------- | -------------------------------------------- |
-| `creditCard` | `4111-1111-1111-1111` | `****1111` (PCI-DSS compliant)               |
-| `email`      | `alice@example.com`   | `a***@***.com`                               |
-| `ipv4`       | `192.168.1.100`       | `***.***.***.100`                            |
-| `phone`      | `+33 6 12 34 56 78`   | `+33******78` (requires `+cc` or `(parens)`) |
-| `jwt`        | `eyJhbGciOi…`         | `eyJ***.***`                                 |
-| `bearer`     | `Bearer sk_live_abc…` | `Bearer ***`                                 |
-| `iban`       | `FR76 3000 6000 …189` | `FR76****189`                                |
+| Pattern      | Example input         | Masked output                  |
+| ------------ | --------------------- | ------------------------------ |
+| `creditCard` | `4111-1111-1111-1111` | `****1111` (PCI-DSS compliant) |
+| `email`      | `alice@example.com`   | `a***@***.com`                 |
+| `ipv4`       | `192.168.1.100`       | `***.***.***.100`              |
+| `phone`      | `+33 6 12 34 56 78`   | `+33******78`                  |
+| `jwt`        | `eyJhbGciOi…`         | `eyJ***.***`                   |
+| `bearer`     | `Bearer sk_live_abc…` | `Bearer ***`                   |
+| `iban`       | `FR76 3000 6000 …189` | `FR76****189`                  |
 
-Three presets ship out of the box: `'default'` (PII-grade), `'strict'` (adds JWT / Bearer / IBAN, redacts more keys), `'pci-dss'` (cards only, PCI focus).
+Three presets ship out of the box: `'default'` (all built-in masks plus sensitive keys like `password` / `token` / `authorization`), `'strict'` (adds `bearer` / `jwt` key patterns and API keys in values), `'pci-dss'` (cards only, plus `card` / `cvv` / `pan` / `expir` keys).
 
 ```typescript
 init({
@@ -112,7 +116,7 @@ init({
 Custom config:
 
 ```typescript
-import { builtinPatterns, type AttributeRedactorConfig } from 'autotel';
+import { init, type AttributeRedactorConfig } from 'autotel';
 
 const config: AttributeRedactorConfig = {
   keyPatterns: [/password/i, /^x-internal-/i],
@@ -121,9 +125,9 @@ const config: AttributeRedactorConfig = {
     { name: 'customerId', pattern: /CUST-\d{8}/g, replacement: 'CUST-***' },
   ],
 };
-init({ attributeRedactor: config });
+init({ service: 'my-app', attributeRedactor: config });
 ```
 
 Each key pattern is tested against the full key and its last dot segment, so `/^x-internal-/i` also matches `http.request.header.x-internal-id`. String arrays under a matching key have each element replaced.
 
-For free-text fields outside the span pipeline (logs, error messages, frontend payloads), use `createStringRedactor('default')`. Same masks, returns a `(s: string) => string`.
+For free-text fields outside the span pipeline (logs, error messages, frontend payloads), use `createStringRedactor('default')` from `autotel`. It applies the preset's value patterns and returns a `(s: string) => string`.

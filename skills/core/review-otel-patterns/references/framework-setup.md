@@ -4,6 +4,10 @@ Where `init()` goes and how request context reaches a handler, per framework.
 For deeper per-framework material see `skills/core/autotel-frameworks/SKILL.md`
 and `skills/integrations/autotel-adapters/SKILL.md`.
 
+Inside any active span, `getRequestLogger()` from `autotel` returns the request
+logger. Adapter subpaths (`autotel-adapters/<framework>`) also export their own
+`useLogger()`; use that one in adapter-wrapped handlers.
+
 ## Install
 
 ```bash
@@ -15,14 +19,17 @@ Framework-specific helpers alongside core:
 ```bash
 npm install autotel-cloudflare    # Workers + Durable Objects + Workflows
 npm install autotel-edge          # Vendor-agnostic edge runtime base
-npm install autotel-hono          # Hono middleware
+npm install autotel-hono          # Hono middleware (otel())
 npm install autotel-tanstack      # TanStack Start
-npm install autotel-adapters      # Next.js / Nitro / Hono / Cloudflare adapter toolkit
-npm install autotel-vitest        # Span assertions in tests
-npm install autotel-playwright    # Browser → server trace propagation
-npm install autotel-drizzle       # Drizzle ORM auto-instrumentation
-npm install autotel-mongoose      # Mongoose auto-instrumentation
-npm install autotel-sentry        # Sentry exporter via OTLP
+npm install autotel-nuxt          # Nuxt module
+npm install autotel-aws           # Lambda + AWS SDK
+npm install autotel-adapters      # Next.js / Nitro / Express / Fastify / NestJS / SvelteKit / Elysia
+npm install autotel-web           # Browser → server trace propagation
+npm install autotel-vitest        # A span per test
+npm install autotel-playwright    # Span per Playwright test + traceparent on API requests
+npm install autotel-drizzle       # Drizzle ORM instrumentation
+npm install autotel-mongoose      # Mongoose instrumentation
+npm install autotel-sentry        # Sentry OTLP endpoint + headers from a DSN
 ```
 
 ## Next.js (App Router)
@@ -37,8 +44,7 @@ export function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     init({
       service: 'my-app',
-      endpoint: process.env.OTLP_ENDPOINT!,
-      sampling: { rates: { server: 25, client: 5 } },
+      endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT, // base URL
       attributeRedactor: 'default',
     });
   }
@@ -49,39 +55,36 @@ Step 2: Wrap route handlers:
 
 ```typescript
 // app/api/checkout/route.ts
-import { withAutotel } from 'autotel-adapters';
+import { withAutotel, useLogger } from 'autotel-adapters/next';
 
 export const POST = withAutotel(async (request: Request) => {
-  const log = useLogger();
+  const log = useLogger(request);
   log.set({ user: { id: 'usr_123', plan: 'enterprise' } });
   log.set({ cart: { items: 3, total: 14_999 } });
   return Response.json({ ok: true });
 });
 ```
 
-Step 3: Tag Server Actions the same way (`withAutotel`).
+Step 3: Server Actions take the same wrapper: `withAutotel(action, { spanName: 'action.checkout' })`.
 
-Step 4: Browser to server trace propagation: drop in `<TraceProvider />` from `autotel-web` so the W3C `traceparent` header is forwarded automatically.
+Step 4: Browser to server trace propagation: call `init({ service: 'my-frontend' })` from `autotel-web` once in client code; it patches `fetch` / XHR to send the W3C `traceparent` header.
 
-## Nuxt + Nitro v3
+## Nuxt + Nitro
+
+Nuxt: add the module, configure with `OTEL_SERVICE_NAME` / `OTEL_EXPORTER_OTLP_ENDPOINT`:
 
 ```typescript
-// nitro.config.ts
-import { defineConfig } from 'nitro';
-import autotel from 'autotel-adapters/nitro';
-
-export default defineConfig({
-  modules: [
-    autotel({ service: 'my-api', sampling: { rates: { server: 25 } } }),
-  ],
-});
+// nuxt.config.ts
+export default defineNuxtConfig({ modules: ['autotel-nuxt'] });
 ```
 
-```typescript
-// routes/api/checkout.post.ts
-import { useLogger } from 'autotel-adapters/nitro';
+Plain Nitro: call `init()` once in a Nitro plugin. Either way, wrap handlers:
 
-export default defineEventHandler(async (event) => {
+```typescript
+// server/api/checkout.post.ts
+import { withAutotelEventHandler, useLogger } from 'autotel-adapters/nitro'; // Nuxt: 'autotel-nuxt/runtime/nitro'
+
+export default withAutotelEventHandler(async (event) => {
   const log = useLogger(event);
   log.set({ action: 'checkout', user: { id: event.context.user?.id } });
   return { ok: true };
@@ -91,42 +94,52 @@ export default defineEventHandler(async (event) => {
 ## TanStack Start
 
 ```typescript
-// nitro.config.ts
-import autotel from 'autotel-adapters/nitro';
-export default defineConfig({
-  modules: [autotel({ service: 'my-app' })],
-});
+// src/instrumentation.ts
+import { init } from 'autotel';
+init({ service: 'my-app', endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT });
 ```
 
 ```typescript
-// src/routes/__root.tsx
-import { createMiddleware } from '@tanstack/react-start';
-import { autotelMiddleware } from 'autotel-tanstack';
+// src/start.ts
+import { createStart, createMiddleware } from '@tanstack/react-start';
+import { createTracingServerHandler } from 'autotel-tanstack/middleware';
+import './instrumentation';
 
-export const Route = createRootRoute({
-  server: { middleware: [createMiddleware().server(autotelMiddleware())] },
-});
+const requestTracing = createMiddleware().server(
+  createTracingServerHandler({ excludePaths: ['/health'] }),
+);
+
+export const startInstance = createStart(() => ({
+  requestMiddleware: [requestTracing],
+}));
 ```
+
+`tracingMiddleware()` / `createTracingMiddleware()` from the same subpath are the non-`createMiddleware` forms.
 
 ## Hono
 
 ```typescript
 import { Hono } from 'hono';
-import { autotelMiddleware, useLogger } from 'autotel-adapters/hono';
+import { init, getRequestLogger } from 'autotel';
+import { otel } from 'autotel-hono';
+
+init({ service: 'my-api' });
 
 const app = new Hono();
-app.use('*', autotelMiddleware());
+app.use('*', otel()); // register before routes
 
 app.get('/api/users', (c) => {
-  const log = useLogger();
+  const log = getRequestLogger();
   log.set({ users: { count: 42 } });
   return c.json({ users: [] });
 });
 ```
 
-## Express / Fastify / Elysia / NestJS
+`otel()` already opens the request span: don't also wrap routes in an adapter `withAutotel`, or you get duplicate spans.
 
-The `autotel-adapters` toolkit ships a uniform shape for these: `withAutotel` middleware + `useLogger()` from anywhere in the call stack. See per-framework docs in `skills/integrations/autotel-adapters/SKILL.md`.
+## Express / Fastify / Elysia / NestJS / SvelteKit
+
+Each has an `autotel-adapters` subpath with its own `useLogger()`: `withAutotel` (`/express`, `/fastify`), `withAutotelHandler` (`/elysia`), `AutotelInterceptor` (`/nestjs`), `autotelHandle()` (`/sveltekit`, in `hooks.server.ts`). Call `init()` once at startup first. See `skills/integrations/autotel-adapters/SKILL.md`.
 
 ## Cloudflare Workers (with auto `waitUntil`)
 
@@ -136,9 +149,15 @@ The `autotel-adapters` toolkit ships a uniform shape for these: `withAutotel` mi
 import { defineWorkerFetch } from 'autotel-cloudflare';
 
 export default defineWorkerFetch(
-  { service: { name: 'edge-api' } },
+  {
+    service: { name: 'edge-api' },
+    exporter: {
+      url: 'https://api.honeycomb.io/v1/traces',
+      headers: { 'x-honeycomb-team': '<key>' },
+    },
+  },
   async (request, env, ctx, log) => {
-    log.set({ route: '/health', user: { id: env.userId } });
+    log.set({ route: '/health' });
     return new Response('ok');
   },
 );
@@ -149,25 +168,37 @@ For broader use cases (`scheduled`, `queue`, `email` handlers, Durable Objects, 
 ## AWS Lambda
 
 ```typescript
-import { withLambda } from 'autotel-aws';
+import { init, getRequestLogger } from 'autotel';
+import { wrapHandler } from 'autotel-aws/lambda';
 
-export const handler = withLambda(async (event) => {
-  const log = useLogger();
+init({
+  service: 'my-lambda',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+});
+
+export const handler = wrapHandler(async (event) => {
+  const log = getRequestLogger();
   log.set({ event: { source: event.source } });
   return { statusCode: 200 };
 });
 ```
 
+`traceLambda` is the alternative wrapper; `import 'autotel-aws/lambda/auto'` is zero-config from env vars.
+
 ## Standalone Node / scripts
 
 ```typescript
-import { init, trace } from 'autotel';
+import { init, trace, getRequestLogger } from 'autotel';
 
-init({ service: 'my-worker', endpoint: process.env.OTLP_ENDPOINT! });
+init({
+  service: 'my-worker',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+});
 
-const processJob = trace(async (job: Job) => {
-  // span auto-named after the function
-  const log = useLogger();
+const processJob = trace('processJob', async (job: Job) => {
+  const log = getRequestLogger();
   log.set({ job: { id: job.id, source: job.source } });
 });
 ```
+
+A one-shot script that emits a handful of spans should not set `sampling: 'production'`, which keeps only ~10% of normal traces. Leave it unset or use `'development'`.

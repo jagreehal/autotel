@@ -77,23 +77,30 @@ interface InstrumentDrizzleConfig {
   peerName?: string; // Sets net.peer.name
   peerPort?: number; // Sets net.peer.port
   explain?: 'plan' | 'analyze' | false; // Postgres query plan on each span (default: false)
+  semconv?: 'legacy' | 'stable' | 'dup'; // Attribute names (default: from OTEL_SEMCONV_STABILITY_OPT_IN, else 'legacy')
+  spanNaming?: 'drizzle' | 'semconv'; // 'drizzle.select' vs 'SELECT comments' (default: 'drizzle')
+  traceTransactions?: boolean; // Span around each db.transaction() callback (default: true)
+  tracerProvider?: TracerProvider; // Default: the global provider
 }
 ```
 
 ### Span attributes set on every span
 
-| Attribute       | Source                                                           |
-| --------------- | ---------------------------------------------------------------- |
-| `db.system`     | `config.dbSystem` (default: `'postgresql'`)                      |
-| `db.operation`  | SQL keyword extracted from query text (e.g., `SELECT`, `INSERT`) |
-| `db.name`       | `config.dbName` (if set)                                         |
-| `db.statement`  | Truncated SQL text (if `captureQueryText: true`)                 |
-| `net.peer.name` | `config.peerName` (if set)                                       |
-| `net.peer.port` | `config.peerPort` (if set)                                       |
+Legacy names shown; `semconv: 'stable'` emits the stable name instead, `'dup'` emits both.
 
-Span names follow the pattern `drizzle.<operation>` (e.g., `drizzle.select`, `drizzle.insert`) or `drizzle.query` when the operation cannot be determined.
+| Attribute (legacy / stable)          | Source                                                           |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| `db.system` / `db.system.name`       | `config.dbSystem` (default: `'postgresql'`)                      |
+| `db.operation` / `db.operation.name` | SQL keyword extracted from query text (e.g., `SELECT`, `INSERT`) |
+| `db.name` / `db.namespace`           | `config.dbName` (if set)                                         |
+| `db.statement` / `db.query.text`     | Sanitised, truncated SQL text (if `captureQueryText: true`)      |
+| `db.collection.name`                 | First table the statement touches (if parsed)                    |
+| `net.peer.name`                      | `config.peerName` (if set)                                       |
+| `net.peer.port`                      | `config.peerPort` (if set)                                       |
 
-Every span also carries `db.statement.hash`, present when text capture is off, so repeated statements group.
+Span names follow the pattern `drizzle.<operation>` (e.g., `drizzle.select`, `drizzle.insert`) or `drizzle.query` when the operation cannot be determined. With `spanNaming: 'semconv'` they become `{operation} {table}`, e.g. `SELECT comments`.
+
+Every query span also carries `db.statement.hash`, even when text capture is off, so repeated statements group.
 
 ### Query plans (Postgres)
 
@@ -127,23 +134,11 @@ SQL text may contain user-supplied values. Disable capture or truncate aggressiv
 
 - Session `query()` and `execute()` methods
 - Prepared queries (`prepareQuery`): all execution methods: `all`, `execute`, `get`, `run`, `values`
-- Transactions: the callback receives an already-instrumented transaction object, spans carry `db.transaction: true`
+- Transactions: a `drizzle.transaction` span wraps the callback (unless `traceTransactions: false`); statements inside it carry `db.transaction: true`
 
 ### Idempotency
 
 Both functions are idempotent. Calling them more than once on the same instance is safe; the `__autotelDrizzleInstrumented` flag prevents double-wrapping.
-
-### Using semantic convention exports
-
-The package re-exports OTel semconv constants for use in custom instrumentation:
-
-```typescript
-import {
-  SEMATTRS_DB_SYSTEM,
-  SEMATTRS_DB_STATEMENT,
-  SEMATTRS_DB_OPERATION,
-} from 'autotel-drizzle';
-```
 
 ## Common Mistakes
 
@@ -197,4 +192,4 @@ SQL statements built by Drizzle may embed user-supplied values (e.g., email addr
 
 ## Version
 
-Targets autotel-drizzle v0.0.3 with drizzle-orm >= 0.45.1 (peer dep). Requires autotel as a dependency.
+Targets autotel-drizzle v0.3.6 with drizzle-orm >= 0.45.4 (peer dep). Requires autotel as a dependency.

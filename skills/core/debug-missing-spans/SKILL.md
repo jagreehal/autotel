@@ -2,11 +2,11 @@
 name: debug-missing-spans
 description: >
   Troubleshoot when expected OpenTelemetry spans don't reach the backend.
-  Walks the chain top-to-bottom — code → SDK init → processor → exporter →
-  network → backend ingest — with concrete tests at each step. Covers head
-  sampling, ctx.waitUntil drops on Cloudflare, init-order races, runtime
-  detection failures, propagation breaks, exporter auth errors, and
-  silent ratelimits.
+  Walks the chain top-to-bottom — code → SDK init → sampler → processor →
+  exporter → network → backend ingest — with concrete tests at each step.
+  Covers a missing endpoint, sampling drops, ctx.waitUntil drops on
+  Cloudflare, init-order races, propagation breaks, exporter auth errors,
+  and silent ratelimits.
 ---
 
 # Debug missing spans
@@ -14,10 +14,30 @@ description: >
 When a span you expect isn't in the backend, the cause is somewhere in this chain:
 
 ```
-code → SDK init → head sampler → processor → exporter → network → backend ingest → backend index
+code → SDK init → sampler → processor → exporter → network → backend ingest → backend index
 ```
 
 This skill walks each link in order with a quick check you can run. Don't skip steps. The cause is rarely where you'd guess.
+
+## Check these two first
+
+1. **No endpoint, no export.** Node `init()` has no default endpoint and no
+   localhost fallback. Without `endpoint`, `destinations`, `spanExporters`,
+   `spanProcessors` or `OTEL_EXPORTER_OTLP_ENDPOINT`, no exporter is built and
+   every span is silently discarded. Set one:
+
+   ```typescript
+   init({ service: 'my-app', endpoint: 'http://localhost:4318' });
+   ```
+
+   `endpoint` is the base URL; autotel appends `/v1/traces`, `/v1/metrics`
+   and `/v1/logs`.
+
+2. **Sampling.** With `sampling: 'production'` (or
+   `samplingPresets.production()`), about 90 % of fast, successful spans from
+   `trace()` / `withTracing()` / `instrument()` are dropped on export, and each
+   wrapped span decides on its own. Reproduce with `sampling: 'development'`.
+   See [`tune-sampling`](../tune-sampling/SKILL.md).
 
 ## Step 0: Reproduce locally with the pretty exporter
 
@@ -27,55 +47,53 @@ Before chasing remote backends, confirm the span exists at all:
 init({
   service: 'my-app',
   debug: 'pretty', // hierarchical colourised output to stdout
+  sampling: 'development', // keep everything while reproducing
 });
 ```
 
-If you see the span in stdout, the SDK + sampler are fine. Skip to "exporter / network". If you don't, keep reading.
+If you see the span in stdout, the code and sampler are fine. Skip to "exporter / network". If you don't, keep reading.
 
 ## Step 1: Is the SDK actually initialised?
 
-Common failure: `init()` runs after the first request because of import-order.
+Common failure: `init()` runs after the code you expect to trace, or after the
+library you expect auto-instrumented was imported.
 
 ```typescript
-import { trace } from '@opentelemetry/api';
+import { isInitialized } from 'autotel';
 
-const tracer = trace.getTracer('autotel-debug');
-console.log(
-  '[autotel-debug] tracer is no-op:',
-  tracer.constructor.name === 'NoopTracer',
-);
+console.log('[autotel-debug] initialised:', isInitialized());
 ```
 
-If `true`, `init()` ran too late. Move it to the very top of the entry file (or to `instrumentation.ts` for Next.js).
+If `false`, `init()` has not run. Move it to the very top of the entry file (or to `instrumentation.ts` for Next.js). Wrapping a function with `trace()` at module load is fine; calling it before `init()` is not.
 
-## Step 2: Head sampler
+Auto-instrumented spans (HTTP, pg, pino, …) need three things: the library
+listed in `autoInstrumentations` (it is off by default), the
+`@opentelemetry/auto-instrumentations-node` package installed, and `init()`
+running before the library is imported. Under ESM, start node with
+`--import autotel/register`. `init()` prints a console warning for a missing
+loader hook or a logger loaded too early.
 
-Print the effective head rate:
+## Step 2: Sampler
 
-```typescript
-import { getActiveConfig } from 'autotel-edge';
-console.log('[autotel-debug] sampling:', getActiveConfig()?.sampling);
-```
+- `sampling: 'production'` / `'errors-only'` drop fast, successful wrapped
+  spans; `'off'` drops all of them.
+- A `sampler` passed to a single `trace()` / `withTracing()` / `instrument()`
+  overrides the one from `init()`.
+- With neither `sampling` nor `sampler`, `OTEL_TRACES_SAMPLER` /
+  `OTEL_TRACES_SAMPLER_ARG` from the environment set the SDK head sampler.
 
-Common gotchas:
+To keep one request whatever the sampler says, call `forceKeep()` in its span,
+or send `baggage: autotel.debug=1` (read where incoming context is extracted).
 
-- `sampling.rates: { server: 5 }`: 5 % means 95 % of spans never start.
-- Inheriting `OTEL_TRACES_SAMPLER_ARG=0.01` from the environment via the OTel default sampler.
-- Your test happens to hit the unsampled branch: instrument with `sampling: { rates: { server: 100 } }` while reproducing.
-
-To force sampling for one request, send a `traceparent` with the sampled flag set:
-
-```
-traceparent: 00-<traceid>-<spanid>-01
-```
-
-(`-01` at the end = sampled.) autotel's parent-based sampler will respect it.
+Edge (`autotel-edge` / `autotel-cloudflare`): check `sampling.headSampler`
+(a `{ ratio }` stops spans being recorded) and `sampling.tailSampler`.
+`getActiveConfig()` from `autotel-edge` returns the resolved edge config.
 
 ## Step 3: Cloudflare Workers: `ctx.waitUntil`
 
 The single biggest cause of missing spans on the edge: **the response returned before the exporter flushed**.
 
-If you're using `addEventListener('fetch', …)` or a hand-rolled `fetch` in a module worker without wiring `ctx.waitUntil(…)` to the export call, async drains drop silently.
+If you're using `addEventListener('fetch', …)` or a hand-rolled `fetch` in a module worker without wiring `ctx.waitUntil(…)` to the export call, async drains drop silently. `autotel-edge` also warns once when the config has no `exporter` and no `spanProcessors`.
 
 Fix. Switch to `defineWorkerFetch` or `wrapModule`, both of which wire `waitUntil` automatically:
 
@@ -83,7 +101,10 @@ Fix. Switch to `defineWorkerFetch` or `wrapModule`, both of which wire `waitUnti
 import { defineWorkerFetch } from 'autotel-cloudflare';
 
 export default defineWorkerFetch(
-  { service: { name: 'edge' } },
+  {
+    service: { name: 'edge' },
+    exporter: { url: 'https://otlp.example.com/v1/traces' },
+  },
   async (request, env, ctx, log) => {
     // log.set / spans here all flush via ctx.waitUntil before response returns
     return new Response('ok');
@@ -93,37 +114,26 @@ export default defineWorkerFetch(
 
 ## Step 4: Processor pipeline
 
-Print what's wired:
+Read the `init()` call, not the provider internals. Common issues:
 
-```typescript
-import { trace } from '@opentelemetry/api';
-const provider = trace.getTracerProvider();
-console.log('[autotel-debug] provider:', provider.constructor.name);
-console.log(
-  '[autotel-debug] processors:',
-  (provider as any)._registeredSpanProcessors?.map(
-    (p: any) => p.constructor.name,
-  ),
-);
-```
+- **`spanFilter` returns `false` for your span.** It wraps every processor.
+- **A `FilteringSpanProcessor` you added drops it.** Its `filter` must return `true` to keep.
+- **`TailSamplingSpanProcessor` dropped it** (fast, successful, not force-kept).
+- **`spanProcessors: []`** is an explicit off switch: nothing is exported.
+- **Edge only: a `postProcessor` / `composePostProcessors` step returns `[]` for your span.**
 
-Common issues:
-
-- **A `FilteringSpanProcessor` excludes your span.** Check the `include` / `exclude` predicates.
-- **A `TailSamplingProcessor` dropped the trace** (no error, no slow root, no debug header).
-- **A `composePostProcessors` step returns `[]` for your span.**
-
-To bisect, temporarily strip post-processors:
+To bisect, temporarily strip everything:
 
 ```typescript
 init({
   service: 'my-app',
-  endpoint: process.env.OTLP_ENDPOINT!,
-  // no postProcessor, no tail sampler, no filter
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  sampling: 'development',
+  // no spanFilter, no spanProcessors, no policies
 });
 ```
 
-If the span shows up now, add back the processors one at a time.
+If the span shows up now, add back the pieces one at a time.
 
 ## Step 5: Exporter
 
@@ -134,30 +144,28 @@ import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
 ```
 
-Look for:
+Look for export failures with an HTTP status, e.g. `401`.
 
-```
-@opentelemetry/api: ... OTLPExporter: failed to send 4 traces, status: 401, error: ...
-```
+The default protocol is OTLP over HTTP with a JSON body. `protocol: 'http/protobuf'` or `'grpc'` needs the matching `@opentelemetry/exporter-*-otlp-proto` / `-grpc` packages installed in the app.
 
 Common exporter errors:
 
-| Status        | Meaning                   | Fix                                                         |
-| ------------- | ------------------------- | ----------------------------------------------------------- |
-| `401`         | Bad / missing auth header | Check `OTLP_HEADERS` / vendor token name                    |
-| `403`         | Token has no write scope  | Issue a token with the right scope                          |
-| `404`         | Wrong endpoint URL        | Check region (`api.honeycomb.io` vs `api.eu1.honeycomb.io`) |
-| `413`         | Batch too big             | Lower `BatchSpanProcessor` `maxExportBatchSize`             |
-| `429`         | Rate-limited              | Reduce head/tail rates; honour `retry-after`                |
-| `502/503/504` | Upstream unhealthy        | Often transient; add retries; check backend status          |
-| Network error | DNS / firewall            | `curl -v <url>` from the same network                       |
+| Status        | Meaning                   | Fix                                                                    |
+| ------------- | ------------------------- | ---------------------------------------------------------------------- |
+| `401`         | Bad / missing auth header | Check `headers` / `OTEL_EXPORTER_OTLP_HEADERS` / vendor token name     |
+| `403`         | Token has no write scope  | Issue a token with the right scope                                     |
+| `404`         | Wrong endpoint URL        | Base URL only (no `/v1/traces`); check region (`api.eu1.honeycomb.io`) |
+| `413`         | Batch too big             | Lower `BatchSpanProcessor` `maxExportBatchSize`                        |
+| `429`         | Rate-limited              | Lower the sampling baseline; honour `retry-after`                      |
+| `502/503/504` | Upstream unhealthy        | Often transient; add retries; check backend status                     |
+| Network error | DNS / firewall            | `curl -v <url>` from the same network                                  |
 
 ## Step 6: Network / TLS
 
 For self-hosted Collectors:
 
 ```bash
-curl -v -X POST $OTLP_ENDPOINT \
+curl -v -X POST $OTEL_EXPORTER_OTLP_ENDPOINT/v1/traces \
   -H 'content-type: application/json' \
   -H "$AUTH_HEADER" \
   -d '{"resourceSpans":[]}'
@@ -165,7 +173,7 @@ curl -v -X POST $OTLP_ENDPOINT \
 
 Should return `200`. If it doesn't, the problem is between you and the Collector. Not autotel.
 
-For Cloudflare Workers, run `wrangler tail` and look for `OTLPExporter` errors.
+For Cloudflare Workers, run `wrangler tail` and look for exporter errors.
 
 ## Step 7: Backend ingest: silent rejection
 
@@ -203,11 +211,12 @@ Don't conclude the span is missing until you've waited > 2× the expected lag.
 ## Step-by-step checklist
 
 ```
-[ ] Span shows in `debug: 'pretty'` stdout
-[ ] `tracer.constructor.name !== 'NoopTracer'` (SDK initialised)
-[ ] Head rate is high enough to allow the request
+[ ] An endpoint is configured (endpoint / destinations / OTEL_EXPORTER_OTLP_ENDPOINT)
+[ ] Span shows in `debug: 'pretty'` stdout with sampling: 'development'
+[ ] isInitialized() is true before the traced code runs
+[ ] Sampling preset / sampler allows the request
 [ ] Workers handler uses defineWorkerFetch / wrapModule
-[ ] No post-processor / tail sampler / filter strips it
+[ ] No spanFilter / FilteringSpanProcessor / tail sampler strips it
 [ ] Exporter logs no 4xx/5xx
 [ ] Curl to OTLP endpoint returns 200
 [ ] Backend has the right service.name / dataset / project
@@ -218,7 +227,8 @@ Don't conclude the span is missing until you've waited > 2× the expected lag.
 
 Some spans land, some don't:
 
-- **Trace context broken between services**: outbound HTTP calls aren't propagating `traceparent`. Confirm autotel's global fetch instrumentation is on (`instrumentation.instrumentGlobalFetch: true`, default).
+- **Sampling decided per span (Node).** Under `'production'` each wrapped span rolls its own baseline, so a kept parent can lose fast children. Use `forceKeep()` or `autotel.debug` baggage while debugging.
+- **Trace context broken between services**: outbound calls aren't propagating `traceparent`. Node has no outbound HTTP instrumentation unless you enable it: `autoInstrumentations: ['http', 'undici']` (`undici` covers global `fetch`). On Workers, global fetch is instrumented by default (`instrumentation.instrumentGlobalFetch`).
 - **Async boundary loses context**: a `setTimeout` / queue callback ran outside the AsyncLocalStorage scope. Wrap with `trace()` or use `context.with()`.
 - **Cross-runtime call**: Node service → Workers → browser; verify `traceparent` arrives at each leg via response headers / network panel.
 
@@ -238,12 +248,15 @@ There should be exactly one resolved version. If there are two, dedup via `pnpm.
 
 ## Anti-patterns to fix as you debug
 
-| Anti-pattern                                              | Why it loses spans                                                 |
-| --------------------------------------------------------- | ------------------------------------------------------------------ |
-| `init()` after the first import that uses tracing         | Spans before `init()` are no-ops                                   |
-| `addEventListener('fetch', …)` on Workers                 | Pre-module-worker style; no `ctx.waitUntil` to wire                |
-| Single `OTLP_ENDPOINT` env var with `?` chars URL-encoded | Auth gets parsed as part of the path                               |
-| Importing both `@sentry/tracing` and `autotel`            | Double-instrumentation eats spans                                  |
-| `process.exit(0)` immediately after the work              | The exporter never flushed; call `await provider.shutdown()` first |
+| Anti-pattern                                              | Why it loses spans                                                  |
+| --------------------------------------------------------- | ------------------------------------------------------------------- |
+| No `endpoint` and no `OTEL_EXPORTER_OTLP_ENDPOINT`        | No exporter is built; spans go nowhere                              |
+| Calling traced code before `init()`                       | Spans before `init()` are no-ops                                    |
+| `addEventListener('fetch', …)` on Workers                 | Pre-module-worker style; no `ctx.waitUntil` to wire                 |
+| Single `OTLP_ENDPOINT` env var with `?` chars URL-encoded | Auth gets parsed as part of the path                                |
+| Importing both `@sentry/tracing` and `autotel`            | Double-instrumentation eats spans                                   |
+| `process.exit(0)` immediately after the work              | The exporter never flushed; `await shutdown()` from `autotel` first |
+
+`flushOnExit` (default `true`) flushes on `beforeExit`, which covers a script that ends on its own but not `process.exit()` or a signal. Call `await flush()` or `await shutdown()` yourself, or opt into `processHandlers: true` for SIGTERM/SIGINT and fatal errors.
 
 If spans reach one backend but not another in a fan-out setup, bisect with `destinations`: keep one destination at a time, then re-add the others until the failing backend is isolated.

@@ -12,6 +12,16 @@ npx skills add jagreehal/autotel --skill autotel-tanstack
 
 Skills no longer ship inside the package tarballs, so `npm install autotel` does not add them. Pick the ones you want with the command above.
 
+## Start here
+
+To bring a service up to production standard, or start a new one there, install
+`production-observability`. It defines what done means, works through an
+existing codebase in order, and links to the skill for each step:
+
+```bash
+npx skills add jagreehal/autotel --skill production-observability
+```
+
 ## Versions
 
 These skills describe the current API. Where a skill names something newer than the version you have installed, it says so at that point. The one that bites most often: `trace.run()` arrived in autotel 7.0, and on 6.x the immediate form is `span(name, fn)`.
@@ -25,22 +35,23 @@ These skills describe the current API. Where a skill names something newer than 
 
 ## core
 
-| Skill                                                                  | What it covers                                                                                                                                                    |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`analyze-traces`](core/analyze-traces/SKILL.md)                       | Analyze OpenTelemetry traces and structured logs from a running autotel service to debug errors, investigate latency, follow requests across services, and surfa… |
-| [`autotel-core`](core/autotel-core/SKILL.md)                           | When to use trace vs span vs request logger vs events in Autotel. Init once at startup, package exports (autotel, autotel/event, autotel/testing). Use for setup… |
-| [`autotel-events`](core/autotel-events/SKILL.md)                       | track(), Event API, subscribers (e.g. PostHog). Configure subscribers in init(); use track() or Event for product/analytics events.                               |
-| [`autotel-frameworks`](core/autotel-frameworks/SKILL.md)               | Hono, Fastify, TanStack Start, Cloudflare Workers, NestJS, SvelteKit, Elysia, Nuxt. Middleware and init; getRequestLogger() in handlers. Load when adding Autote… |
-| [`autotel-instrumentation`](core/autotel-instrumentation/SKILL.md)     | trace(), span(), instrument(), init(). Factory vs direct pattern, name inference. Sync init; use node-require for optional deps. Load when wrapping handlers or … |
-| [`autotel-request-logging`](core/autotel-request-logging/SKILL.md)     | getRequestLogger(), set(), info/warn/error, emitNow(). One snapshot per request; requires active span. Use when adding request-scoped context or replacing scatt… |
-| [`autotel-structured-errors`](core/autotel-structured-errors/SKILL.md) | createStructuredError, parseError, recordStructuredError. API errors with message, why, fix, link; client parsing for UI. Use in API routes and client catch blo… |
-| [`build-audit-trails`](core/build-audit-trails/SKILL.md)               | Build or review tamper-aware audit trails on top of OpenTelemetry spans using autotel and the autotel-audit package (`withAudit`, `setAuditAttributes`, `forceKe… |
-| [`debug-missing-spans`](core/debug-missing-spans/SKILL.md)             | Troubleshoot when expected OpenTelemetry spans don't reach the backend. Walks the chain top-to-bottom — code → SDK init → processor → exporter → network → backe… |
-| [`design-alertable-metrics`](core/design-alertable-metrics/SKILL.md)   | Design metrics an alarm can be written against — the label that isolates one failing dependency, metric names as a contract, cardinality, SLO burn-rate alerts,…  |
-| [`find-observability-gaps`](core/find-observability-gaps/SKILL.md)     | Score the observability of every entry point with `autotel map`, then close the gaps it reports: which handlers are dark, which money/auth paths lack an audit…   |
-| [`migrate-to-autotel`](core/migrate-to-autotel/SKILL.md)               | Migrate an existing observability setup to autotel. Handles raw @opentelemetry/sdk-node, Sentry tracer (`@sentry/node`), Datadog APM (`dd-trace`), New Relic age… |
-| [`review-otel-patterns`](core/review-otel-patterns/SKILL.md)           | Review TypeScript/JavaScript code for OpenTelemetry instrumentation patterns and guide adoption of autotel. Covers Next.js, Nuxt, Nitro, TanStack Start, SvelteK… |
-| [`tune-sampling`](core/tune-sampling/SKILL.md)                         | Choose a sampling strategy for an autotel-instrumented service. Covers head sampling (per-span-kind rates, parent-based, ratio), tail sampling (keep errors, slo… |
+| Skill                                                                  | What it covers                                                                                                                                                                           |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`analyze-traces`](core/analyze-traces/SKILL.md)                       | Analyze OpenTelemetry traces and structured logs from a running autotel service to debug errors, investigate latency, follow requests across services, and surfa…                        |
+| [`autotel-core`](core/autotel-core/SKILL.md)                           | When to use trace vs span vs request logger vs events in Autotel. Init once at startup, package exports (autotel, autotel/event, autotel/testing). Use for setup…                        |
+| [`autotel-events`](core/autotel-events/SKILL.md)                       | track(), Event API, subscribers (e.g. PostHog). Configure subscribers in init(); use track() or Event for product/analytics events.                                                      |
+| [`autotel-frameworks`](core/autotel-frameworks/SKILL.md)               | Hono, Fastify, TanStack Start, Cloudflare Workers, NestJS, SvelteKit, Elysia, Nuxt. Middleware and init; getRequestLogger() in handlers. Load when adding Autote…                        |
+| [`autotel-instrumentation`](core/autotel-instrumentation/SKILL.md)     | trace(), span(), instrument(), init(). Factory vs direct pattern, name inference. Sync init; use node-require for optional deps. Load when wrapping handlers or …                        |
+| [`autotel-request-logging`](core/autotel-request-logging/SKILL.md)     | getRequestLogger(), set(), info/warn/error, emitNow(). One snapshot per request; requires active span. Use when adding request-scoped context or replacing scatt…                        |
+| [`autotel-structured-errors`](core/autotel-structured-errors/SKILL.md) | createStructuredError, parseError, recordStructuredError. API errors with message, why, fix, link; client parsing for UI. Use in API routes and client catch blo…                        |
+| [`build-audit-trails`](core/build-audit-trails/SKILL.md)               | Build or review tamper-aware audit trails on top of OpenTelemetry spans using autotel and the autotel-audit package (`withAudit`, `setAuditAttributes`, `forceKe…                        |
+| [`debug-missing-spans`](core/debug-missing-spans/SKILL.md)             | Troubleshoot when expected OpenTelemetry spans don't reach the backend. Walks the chain top-to-bottom — code → SDK init → processor → exporter → network → backe…                        |
+| [`design-alertable-metrics`](core/design-alertable-metrics/SKILL.md)   | Design metrics an alarm can be written against — the label that isolates one failing dependency, metric names as a contract, cardinality, SLO burn-rate alerts,…                         |
+| [`find-observability-gaps`](core/find-observability-gaps/SKILL.md)     | Score the observability of every entry point with `autotel map`, then close the gaps it reports: which handlers are dark, which money/auth paths lack an audit…                          |
+| [`migrate-to-autotel`](core/migrate-to-autotel/SKILL.md)               | Migrate an existing observability setup to autotel. Handles raw @opentelemetry/sdk-node, Sentry tracer (`@sentry/node`), Datadog APM (`dd-trace`), New Relic age…                        |
+| [`production-observability`](core/production-observability/SKILL.md)   | Take a service to production-grade observability, in an existing codebase or a new one: the standard as a checklist, the order to work in, and the CI ratchet that holds every PR to it. |
+| [`review-otel-patterns`](core/review-otel-patterns/SKILL.md)           | Review TypeScript/JavaScript code for OpenTelemetry instrumentation patterns and guide adoption of autotel. Covers Next.js, Nuxt, Nitro, TanStack Start, SvelteK…                        |
+| [`tune-sampling`](core/tune-sampling/SKILL.md)                         | Choose a sampling strategy for an autotel-instrumented service. Covers head sampling (per-span-kind rates, parent-based, ratio), tail sampling (keep errors, slo…                        |
 
 ## frameworks
 

@@ -11,6 +11,7 @@ export default new Map([
 ["src/content/docs/contracts/message-contract.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fcontracts%2Fmessage-contract.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/contracts/pact.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fcontracts%2Fpact.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/contracts/schema.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fcontracts%2Fschema.mdx&astroContentModuleFlag=true")],
+["src/content/docs/costs.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fcosts.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/development.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fdevelopment.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/frameworks/adapters.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fframeworks%2Fadapters.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/frameworks/cloudflare.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fframeworks%2Fcloudflare.mdx&astroContentModuleFlag=true")],

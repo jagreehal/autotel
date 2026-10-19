@@ -102,7 +102,22 @@ The fixture is `auto: true`, so every test gets a parent span automatically.
 
 ## Optional: Reporter (runner-side spans)
 
-Use the reporter when you also want runner-process spans for test/suite timing:
+Use the reporter when you also want runner-process spans for test/suite timing.
+The reporter runs in the Vitest **main process**, so the `init()` in
+`setupFiles` (which runs in workers) does not reach it. Give it its own `init()`
+in a `globalSetup` file:
+
+```ts
+// globalSetup.ts (main process: tracer provider for the reporter)
+import { init, shutdown } from 'autotel';
+
+export default function setup() {
+  init({ service: 'unit-tests-runner', endpoint: 'http://localhost:4318' });
+  return async () => {
+    await shutdown(); // flush reporter spans before the process exits
+  };
+}
+```
 
 ```ts
 // vitest.config.ts
@@ -110,16 +125,23 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    setupFiles: ['./vitest.setup.ts'],
+    setupFiles: ['./vitest.setup.ts'], // workers: fixture spans
+    globalSetup: './globalSetup.ts', // main process: reporter spans
     reporters: ['default', 'autotel-vitest/reporter'],
   },
 });
 ```
 
+Without the `globalSetup` init, the reporter's `getTracer()` gets a no-op
+tracer and its spans go nowhere; the fixture's worker spans are unaffected.
+
 Reporter spans:
 
-- test span: `test:${name}`
-- suite span: `suite:${name}`
+- test span: `test:${name}` (attributes `test.name`, `test.fullName`, `test.file`)
+- suite span: `suite:${name}` (attributes `suite.name`, `suite.file`)
+
+Each is its own root span: reporter test spans are not children of suite spans,
+and they have a different trace ID from the fixture's worker-side test span.
 
 In browser mode, Vitest exposes a recorded Playwright trace to reporters as an
 annotation attachment; the reporter copies its path onto the test span as
@@ -156,6 +178,7 @@ test('traces user creation', async () => {
 - No spans exported: verify `init()` runs in a `setupFiles` entry, not `globalSetup`, and that it is passed a processor wrapping `otelTestCollector`.
 - No child spans under test span: ensure your test imports `test` from `autotel-vitest`, not `vitest`.
 - Reporter not running: ensure `reporters` includes `'autotel-vitest/reporter'`.
+- Reporter spans missing: the reporter needs `init()` in a `globalSetup` file (main process); `setupFiles` only configures workers.
 - `task.meta.otelSpans` empty: a span is only in the collector after it is exported, which is asynchronous. The fixture flushes before it drains; if you read spans inside the test body, `await flush()` first.
 
 ## API

@@ -40,7 +40,21 @@ app.post('/api/checkout', async (c) => {
 
 ### Fastify
 
-Use middleware or a wrapper that creates a span per request (see apps/example-fastify). Inside the route, wrap with `trace()` or ensure a span is active, then `getRequestLogger(ctx)` or `getRequestLogger()`.
+Wrap each route with `withAutotel()` from `autotel-adapters/fastify`: it opens a span, gives the request a logger, and emits one wide event when the handler settles. Read the logger with that adapter's `useLogger(request)` (see apps/example-fastify):
+
+```typescript
+import { withAutotel, useLogger } from 'autotel-adapters/fastify';
+
+fastify.get(
+  '/api/x',
+  withAutotel(async (request) => {
+    useLogger(request).set({ route: 'x' });
+    return { ok: true };
+  }),
+);
+```
+
+`autotel-adapters/express` has the same `withAutotel` / `useLogger` pair.
 
 ### TanStack Start
 
@@ -113,11 +127,13 @@ app.get('/api/x', (c) => {
 
 Middleware creates the span per request. Without it, getRequestLogger() has no active span and will throw.
 
-Source: packages/autotel-hono, docs/AGENT-GUIDE.md
+`otel()` from `autotel-hono` only creates the span (plus request metrics); you call `emitNow()`. The alternative, `autotelMiddleware()` from `autotel-adapters/hono`, also emits the wide event for you; read its logger with `useLogger(c)` from the same subpath, not `getRequestLogger()`, which would build a second logger whose fields miss that event. Pick one per app.
+
+Source: packages/autotel-hono/src/index.ts, packages/autotel-adapters/src/hono.ts
 
 ## Version
 
-Targets autotel v2.23.x.
+Matches autotel 8.x. Verify package exports when working against an older installed version.
 
 See also:
 

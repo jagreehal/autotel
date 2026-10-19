@@ -108,8 +108,8 @@ Two separate config systems serve different purposes:
 
 Implements deferred sampling decisions:
 
-- Spans are buffered in-memory during execution
-- Sampling decision made after span ends (can inspect attributes, status, duration)
+- Spans are buffered per trace until the local root and every span started under it have ended (bounded by `maxBufferedSpans` and `traceTimeoutMs`, fail-open), then kept or dropped together (no orphan children)
+- Kept when any span carries `autotel.sampling.tail.keep = true` (wrapper verdict or `forceKeep()`); otherwise the configured sampler decides from the whole trace (any ERROR span, root duration, trace-id hash), which covers auto-instrumented roots
 - Default `AdaptiveSampler`: 10% baseline, 100% errors, 100% slow requests
 - Custom samplers can implement `Sampler` interface
 
