@@ -69,7 +69,9 @@ jobs:
 
     services:
       mongodb:
-        image: mongo:8.0
+        # MongoDB 8.0 exits at startup on Linux 6.19+ (SERVER-121912), which
+        # ubuntu-latest now runs. 7.0 starts there.
+        image: mongo:7.0
         ports:
           - 27017:27017
         options: >-
