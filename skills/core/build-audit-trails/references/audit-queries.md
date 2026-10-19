@@ -1,6 +1,6 @@
 # Querying the audit trail
 
-Because audit events are OpenTelemetry spans, you query them with the same tools as the rest of your telemetry, no separate audit UI required. The attribute names below match the skill: `audit.action`, `audit.outcome`, `audit.resource.id`, `enduser.id`, `autotel.audit`, and `audit.signature.value`.
+Because audit events are OpenTelemetry spans, you query them with the same tools as the rest of your telemetry, no separate audit UI required. The attribute names below match the skill: `audit.action`, `audit.outcome`, `audit.resource.id`, `enduser.id`, `autotel.audit`, and `audit.signature.value`. `autotel.audit` is set by the `autotel-audit` helpers; the hand-rolled `audit()` helper sets `audit = true` instead, so swap the marker if that is what you use.
 
 Run these against the **audit backend** (the append-only one), not your ops backend.
 

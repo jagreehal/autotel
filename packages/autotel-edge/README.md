@@ -50,22 +50,45 @@ yarn add autotel-edge
 
 ### Basic Usage
 
-```typescript
-import { trace, init } from 'autotel-edge';
+There is no `init()`. Parse a config once per isolate, register a
+`WorkerTracerProvider`, and give its tracer the parsed head sampler. `trace()`
+and `span()` then use the global tracer.
 
-// Initialize once at startup
-init({
+```typescript
+import { resourceFromAttributes } from '@opentelemetry/resources'; // add as a direct dependency
+import { parseConfig, WorkerTracerProvider, trace } from 'autotel-edge';
+
+// Once at module scope, not per request
+const config = parseConfig({
   service: { name: 'my-edge-function' },
   exporter: {
     url: process.env.OTEL_ENDPOINT || 'http://localhost:4318/v1/traces',
   },
 });
 
+const provider = new WorkerTracerProvider(
+  config.spanProcessors,
+  resourceFromAttributes({ 'service.name': config.service.name }),
+);
+provider.register(); // also installs the AsyncLocalStorage context manager
+// Applies sampling.headSampler; without it every trace is head-sampled.
+provider.getTracer('autotel-edge').setHeadSampler(config.sampling.headSampler);
+
 // Zero-boilerplate function tracing
 export const handler = trace(async (request: Request) => {
   return new Response('Hello World');
 });
 ```
+
+Without `exporter` or `spanProcessors`, `parseConfig` warns once and spans are
+dropped. A trace is exported when its local root span ends; for a trace that
+continues a remote parent, call
+`await provider.getTracer('autotel-edge').forceFlush(traceId)` (e.g. inside
+`waitUntil`). On Cloudflare Workers, `autotel-cloudflare` does all of this for
+you.
+
+The examples below show only the object passed to `parseConfig()`; the provider
+setup stays the same.
 
 ### Factory Pattern (for context access)
 
@@ -90,21 +113,29 @@ export const processOrder = withTracing({ name: 'order.process' })(
 The package provides multiple entry points for optimal tree-shaking:
 
 ```typescript
-// Core API
-import { trace, span, withTracing, init } from 'autotel-edge';
+// Core API and setup
+import {
+  trace,
+  span,
+  withTracing,
+  parseConfig,
+  WorkerTracerProvider,
+} from 'autotel-edge';
 
-// Sampling strategies
-import { createAdaptiveSampler, SamplingPresets } from 'autotel-edge/sampling';
+// Tail sampling strategies
+import {
+  createAdaptiveTailSampler,
+  SamplingPresets,
+} from 'autotel-edge/sampling';
 
 // Events system
-import { createEdgeSubscribers, publishEvent } from 'autotel-edge/events';
+import { createEdgeSubscribers, getEdgeSubscribers } from 'autotel-edge/events';
 
 // Logger
-import { createEdgeLogger } from 'autotel-edge/logger';
-
-// Testing utilities
-import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing';
+import { createEdgeLogger, getExecutionLogger } from 'autotel-edge/logger';
 ```
+
+`autotel-edge/testing` currently exports types only; see [Testing](#testing).
 
 ## Sampling Strategies
 
@@ -113,7 +144,7 @@ import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing';
 ```typescript
 import { SamplingPresets } from 'autotel-edge/sampling';
 
-init({
+const config = parseConfig({
   service: { name: 'my-app' },
   exporter: { url: '...' },
   sampling: {
@@ -169,18 +200,20 @@ const customSampler = createCustomTailSampler((trace) => {
 Track product events with automatic trace correlation:
 
 ```typescript
-import { publishEvent } from 'autotel-edge/events';
+import { createEdgeSubscribers } from 'autotel-edge/events';
 
-// Track user events
-await publishEvent({
-  name: 'order.completed',
-  userId: '123',
-  properties: {
-    orderId: 'abc',
-    amount: 99.99,
+const events = createEdgeSubscribers({
+  service: 'my-edge-function',
+  transport: async (event) => {
+    await fetch('https://analytics.example.com/events', {
+      method: 'POST',
+      body: JSON.stringify(event),
+    });
   },
-  // Automatically includes current trace ID
 });
+
+// Includes the current trace and span IDs by default
+events.trackEvent('order.completed', { orderId: 'abc', amount: 99.99 });
 ```
 
 ## Logger
@@ -199,15 +232,19 @@ log.error('Request failed', { error });
 
 ## Testing
 
-```typescript
-import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing';
+`autotel-edge/testing` has no runtime helpers yet. Pass an in-memory exporter
+to `parseConfig()` and read the finished spans back:
 
-// In your tests
-const collector = createTraceCollector();
+```typescript
+import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
+
+const exporter = new InMemorySpanExporter();
+const config = parseConfig({ service: { name: 'test' }, exporter });
+// ...register the provider and set the head sampler as in Quick Start
 
 await myFunction();
 
-assertTraceCreated(collector, 'myFunction');
+expect(exporter.getFinishedSpans().map((s) => s.name)).toContain('myFunction');
 ```
 
 ## Supported Runtimes
@@ -224,7 +261,7 @@ assertTraceCreated(collector, 'myFunction');
 ### Service Configuration
 
 ```typescript
-init({
+parseConfig({
   service: {
     name: 'my-edge-function',
     version: '1.0.0',
@@ -236,7 +273,8 @@ init({
 ### Exporter Configuration
 
 ```typescript
-init({
+parseConfig({
+  service: { name: 'my-edge-function' },
   exporter: {
     url: 'https://api.honeycomb.io/v1/traces',
     headers: {
@@ -249,19 +287,23 @@ init({
 ### Dynamic Configuration
 
 ```typescript
-// Configuration can be a function
-init((env) => ({
+import { createInitialiser } from 'autotel-edge';
+
+// Configuration can be a function of the runtime env
+const initialise = createInitialiser((env) => ({
   service: { name: env.SERVICE_NAME },
   exporter: { url: env.OTEL_ENDPOINT },
 }));
+
+const config = initialise(env, trigger); // a parsed config, same as parseConfig()
 ```
 
 ### Fetch Route Controls
 
-Use fetch handler route controls to include/exclude paths and set per-route service names.
+Use fetch handler route controls to include/exclude paths and set per-route service names. Handler wrappers (such as `autotel-cloudflare`'s) read these; plain `trace()` does not. To apply them yourself, use `shouldInstrumentPath` and `getServiceForPath`.
 
 ```typescript
-init({
+parseConfig({
   service: { name: 'edge-app' },
   exporter: { url: 'https://otlp.example.com/v1/traces' },
   handlers: {
@@ -331,12 +373,14 @@ const result = await span(
 );
 ```
 
-#### `init(config)`
+#### `parseConfig(config)` / `WorkerTracerProvider`
 
-Initialize the OpenTelemetry SDK.
+`parseConfig()` validates an `EdgeConfig` and builds its span processors;
+`new WorkerTracerProvider(config.spanProcessors, resource).register()`
+installs the global tracer. See [Quick Start](#basic-usage).
 
 ```typescript
-init({
+const config = parseConfig({
   service: { name: 'my-app' },
   exporter: { url: '...' },
   sampling: { tailSampler: SamplingPresets.production() },

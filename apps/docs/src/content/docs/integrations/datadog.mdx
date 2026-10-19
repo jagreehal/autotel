@@ -1038,14 +1038,27 @@ services:
 **Challenge**: Edge runtime, no Node.js APIs
 **Solution**: Use `autotel-edge` (not regular `autotel`)
 
-```typescript
-import { init, trace, withTracing } from 'autotel-edge';
+On Cloudflare Workers use `autotel-cloudflare`, which wires the provider per
+request. Elsewhere, autotel-edge has no `init()`: parse a config and register a
+`WorkerTracerProvider` (see [Edge Runtimes](/autotel/frameworks/edge/)).
 
-init({
-  service: 'edge-api',
-  endpoint: 'https://otlp.datadoghq.com',
-  otlpHeaders: `dd-api-key=${DATADOG_API_KEY}`,
+```typescript
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import { parseConfig, WorkerTracerProvider, trace } from 'autotel-edge';
+
+const config = parseConfig({
+  service: { name: 'edge-api' },
+  exporter: {
+    url: 'https://otlp.datadoghq.com/v1/traces',
+    headers: { 'dd-api-key': DATADOG_API_KEY },
+  },
 });
+const provider = new WorkerTracerProvider(
+  config.spanProcessors,
+  resourceFromAttributes({ 'service.name': config.service.name }),
+);
+provider.register();
+provider.getTracer('autotel-edge').setHeadSampler(config.sampling.headSampler);
 
 export default {
   fetch: trace(async (request) => {
@@ -1361,12 +1374,9 @@ Traces will still correlate with logs if you use `createBuiltinLogger()` (it add
 
 ### Does this work with Cloudflare Workers / Vercel Edge?
 
-Use `autotel-edge` instead of `autotel`. Same API, optimized for edge runtimes.
-
-```typescript
-import { init, trace, withTracing } from 'autotel-edge';
-// ... rest is the same
-```
+Use `autotel-edge` (or `autotel-cloudflare` on Workers) instead of `autotel`.
+`trace()` and `span()` work the same, but setup differs: there is no `init()`.
+See [Cloudflare Workers / Vercel Edge](#cloudflare-workers--vercel-edge) above.
 
 ### How do I see infrastructure metrics?
 

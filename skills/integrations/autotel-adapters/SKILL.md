@@ -2,8 +2,9 @@
 name: autotel-adapters
 description: >
   Wires request-scoped logging and tracing into Next.js, Nitro, Cloudflare Workers,
-  Hono, and TanStack Start through autotel's uniform adapter shape: a withAutotel
-  handler wrapper plus useLogger() reachable anywhere in the call stack. Use this
+  Hono, TanStack Start, Express, Fastify, NestJS, SvelteKit, and Elysia through
+  autotel's uniform adapter shape: a handler wrapper (or middleware/interceptor/hook)
+  plus useLogger() reachable anywhere in the call stack. Use this
   skill when adding autotel to a framework handler or debugging a useLogger() call
   that returns no context. Do not use for the Hono otel() HTTP-metrics middleware —
   use skill autotel-hono — or for a framework with no packaged adapter, which skill
@@ -16,10 +17,10 @@ Framework-specific wrappers around autotel's core tracing primitives. Each adapt
 
 - A handler wrapper that opens a span and binds a request-scoped `RequestLogger`
 - A `useLogger()` function that retrieves the logger from within the handler
-- Direct re-exports of the utilities `parseError`, `createStructuredError`, and `createDrainPipeline`
+- Direct re-exports of the utilities `parseError`, `createStructuredError`, and `createDrainPipeline` (every framework subpath except `tanstack`)
 
 Options are passed per call site (e.g. `withAutotel(handler, options)`). There are no
-`create*Adapter` factories or `*Toolkit` bundles.
+`create*Adapter` factories. Building an adapter for another framework? `autotel-adapters/toolkit` exports the building blocks the packaged adapters use (`defineFrameworkIntegration`, `createLoggerStorage`, `createMiddlewareLogger`, ...).
 
 All adapters use `AsyncLocalStorage` (or a `WeakMap` for Cloudflare) internally so logger access is implicit. You never pass a logger through call chains manually.
 
@@ -33,7 +34,10 @@ pnpm add autotel-adapters autotel
 pnpm add next          # Next.js
 pnpm add nitropack h3  # Nitro
 pnpm add hono          # Hono
+pnpm add rxjs          # NestJS (AutotelInterceptor returns an Observable)
 ```
+
+Express, Fastify, SvelteKit, and Elysia have no peer dependency: the adapters type against structural `*Like` interfaces.
 
 ## Configuration / Core Patterns
 
@@ -102,7 +106,7 @@ export default {
 };
 ```
 
-Cloudflare stores the logger in a `WeakMap` keyed on the request object (no `AsyncLocalStorage` available in Workers). Auto-enrichment also reads `cf.country`, `cf.colo`, and `cf.city`. The `enrich` callback receives `(request, env, ctx)` for access to environment bindings.
+Cloudflare stores the logger in a `WeakMap` keyed on the request object (no `AsyncLocalStorage` available in Workers). Auto-enrichment also sets `cloudflare.country`, `cloudflare.colo`, and `cloudflare.city` from `request.cf`, and falls back to `cf-ray` for the request id. The `enrichRequest` option receives `(request, env, ctx)` for access to environment bindings; `spanName` can be a function of `(request, env)`.
 
 ### Hono
 
@@ -140,9 +144,88 @@ const log = useLogger({ pathname: '/api/data', method: 'GET' });
 log.info('handling request');
 ```
 
+### Express
+
+```typescript
+import { withAutotel, useLogger } from 'autotel-adapters/express';
+
+app.get(
+  '/users/:id',
+  withAutotel(async (req, res) => {
+    useLogger(req).info('loading user');
+    res.json({ ok: true });
+  }),
+);
+```
+
+Wraps one route handler `(req, res, next?)`. Default span name `express.<METHOD>`. Options: `spanName`, `enrichRequest`, `requestLoggerOptions`, `autoEmit`, plus route filtering.
+
+### Fastify
+
+```typescript
+import { withAutotel, useLogger } from 'autotel-adapters/fastify';
+
+fastify.get(
+  '/users/:id',
+  withAutotel(async (request, reply) => {
+    useLogger(request).info('loading user');
+    return { ok: true };
+  }),
+);
+```
+
+Same option shape as Express; default span name `fastify.<METHOD>`. Uses `request.id` as the request id when present.
+
+### NestJS
+
+```typescript
+// main.ts
+import { AutotelInterceptor } from 'autotel-adapters/nestjs';
+
+app.useGlobalInterceptors(new AutotelInterceptor());
+
+// any service called from a controller
+import { useLogger } from 'autotel-adapters/nestjs';
+useLogger().info('loading user');
+```
+
+`useLogger()` takes no argument and throws outside a request handled by the interceptor. Options go to the constructor: `new AutotelInterceptor({ enrichRequest })`.
+
+### SvelteKit
+
+```typescript
+// src/hooks.server.ts
+import { autotelHandle } from 'autotel-adapters/sveltekit';
+
+export const handle = autotelHandle();
+```
+
+Then `useLogger()` (no argument) from `autotel-adapters/sveltekit` in load functions, actions, and endpoints. The route is `event.route.id`.
+
+### Elysia
+
+```typescript
+import { Elysia } from 'elysia';
+import { withAutotelHandler, useLogger } from 'autotel-adapters/elysia';
+
+new Elysia().get(
+  '/',
+  withAutotelHandler(() => {
+    useLogger().info('hello elysia');
+    return { ok: true };
+  }),
+);
+```
+
+`autotel` is an alias of `withAutotelHandler`. `useLogger()` takes no argument.
+
+### Barrel exports
+
+`autotel-adapters` re-exports everything from `core` plus: `withAutotel` (Next), `withAutotelEventHandler`, `withAutotelFetch`, `withAutotelExpress`, `withAutotelFastify`, `autotelHandle`, `autotel` / `withAutotelHandler` (Elysia), `autotelMiddleware`, `useLoggerFromContext`, and these `useLogger` aliases: `useLogger` (Hono), `useSvelteKitLogger`, `useElysiaLogger`, `useTanstackLogger`. NestJS is subpath-only.
+
 ### Utilities
 
-Each subpath re-exports `parseError`, `createStructuredError`, and
+Each framework subpath except `tanstack` re-exports `parseError`, `createStructuredError`, and
 `createDrainPipeline` directly (they also live in `autotel`):
 
 | Export                         | Description                                               |
@@ -182,13 +265,13 @@ export const GET = withAutotel(async (request) => {
 });
 ```
 
-`useLogger` looks up an `AsyncLocalStorage` store populated by the handler wrapper. Calling it outside that wrapper throws.
+`useLogger` looks up an `AsyncLocalStorage` store populated by the handler wrapper. Calling it outside that wrapper throws (`No active trace context` for the request-arg adapters; `useLogger() was called outside of an autotel request context` for NestJS, SvelteKit, Elysia).
 
 ### HIGH: Importing from wrong subpath
 
 ```typescript
 // WRONG
-import { useLogger } from 'autotel-adapters'; // this is Hono's useLogger from the barrel, not Next's
+import { useLogger } from 'autotel-adapters'; // the barrel's useLogger is Hono's, not Next's
 ```
 
 ```typescript
@@ -197,20 +280,6 @@ import { autotelMiddleware, useLogger } from 'autotel-adapters/hono';
 import { useLogger } from 'autotel-adapters/next';
 import { withAutotelEventHandler } from 'autotel-adapters/nitro';
 ```
-
-### MEDIUM: Skipping the request argument in Next.js useLogger
-
-```typescript
-// WRONG: loses auto-enrichment (method, url, route, requestId)
-const log = useLogger();
-```
-
-```typescript
-// CORRECT: pass the request so auto-enrichment runs
-const log = useLogger(request);
-```
-
-The request argument is optional only when you are certain the `AsyncLocalStorage` store is already populated (i.e., called from code deeply nested inside a `withAutotel`-wrapped handler).
 
 ### MEDIUM: Not passing request to useLogger on Cloudflare
 
@@ -228,4 +297,4 @@ const log = useLogger(request); // retrieves from WeakMap
 
 ## Version
 
-Targets autotel-adapters v0.2.4. Peer frameworks: Next.js >=16.2.1, Hono >=4.12.9, Nitro/h3 ^2.0.0. See also: `autotel` (core), `autotel-backends` (vendor configs).
+Targets autotel-adapters v2.0.29. Dependencies: `autotel`, `autotel-edge`. Peers (install the ones you use): `next` >=16.4.0, `hono` >=4.13.13, `h3` ^2.0.2, `nitropack` ^2.13.4, `@tanstack/react-start` ^1.168.61, `@tanstack/solid-start` ^1.168.58, `rxjs` >=7.8.2. See also: `autotel` (core), `autotel-backends` (vendor configs).

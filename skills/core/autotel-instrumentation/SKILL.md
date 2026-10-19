@@ -1,12 +1,12 @@
 ---
 name: autotel-instrumentation
 description: >
-  trace(), span(), instrument(), init(). Factory vs direct pattern, name inference. Sync init; use node-require for optional deps. Load when wrapping handlers or functions with spans.
+  trace(), span(), instrument(), init(). Factory vs direct pattern, name inference, init order. Load when wrapping handlers or functions with spans.
 ---
 
 # Autotel: Instrumentation
 
-Wrap functions and handlers with `trace()`, `span()`, or `instrument()`. Call `init()` once at app startup. Keep init synchronous; use `safeRequire`/`requireModule` for optional dependencies.
+Wrap functions and handlers with `trace()`, `span()`, or `instrument()`. Call `init()` once at app startup. `init()` is synchronous; don't `await` anything before it.
 
 For new event emission, prefer correlated logs (OTel Logs API path) over adding new direct span-event calls.
 
@@ -85,9 +85,13 @@ const result = await span('db.query', async () => db.query(sql));
 ```typescript
 init({
   service: 'my-api',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT, // none = nothing exported
+  sampling: 'production',
   // see docs/CONFIGURATION.md for full options
 });
 ```
+
+Production options and defaults are listed in `autotel-core/SKILL.md` ("Production init").
 
 **Single backend vs multi-backend OTLP:**
 
@@ -116,45 +120,51 @@ init({
 
 ## Common Mistakes
 
-### HIGH Forget to call init() before using trace/span
+### HIGH Call traced code before init() runs
 
 Wrong:
 
 ```typescript
-import { trace } from 'autotel';
-export const fn = trace(async () => {});
+// server.ts
+import { handler } from './routes'; // routes import pg, express, pino…
+import { init } from 'autotel';
+init({ service: 'my-app', autoInstrumentations: ['http', 'pg'] });
 ```
 
 Correct:
 
 ```typescript
-import { init, trace } from 'autotel';
-init({ service: 'my-app' });
-export const fn = trace(async () => {});
+// instrumentation.ts, imported first (ESM: node --import autotel/register)
+import { init } from 'autotel';
+init({ service: 'my-app', autoInstrumentations: ['http', 'pg'] });
+
+// server.ts
+import './instrumentation';
+import { handler } from './routes';
 ```
 
-SDK must be initialized; trace() and span() rely on the global tracer.
+Wrapping with `trace()` at module load is fine: the wrapper reads the tracer and sampler per call. Calling a wrapped function before `init()` produces no-op spans, and libraries imported before `init()` are never auto-instrumented.
 
-Source: packages/autotel/CLAUDE.md
+Source: packages/autotel/src/functional-wrapper.ts, packages/autotel/src/auto-instrumentations.ts
 
 ### MEDIUM Wrong export path for submodules
 
 Wrong:
 
 ```typescript
-import { Event } from 'autotel'; // Event is on autotel/event
 import { createTraceCollector } from 'autotel'; // testing subpath
+import { DeterministicSampler } from 'autotel'; // sampling subpath
 ```
 
 Correct:
 
 ```typescript
-import { trace, init, getRequestLogger } from 'autotel';
-import { Event } from 'autotel/event';
+import { trace, init, getRequestLogger, Event } from 'autotel';
 import { createTraceCollector } from 'autotel/testing';
+import { DeterministicSampler } from 'autotel/sampling';
 ```
 
-Use the exact export paths from package.json (autotel/event, autotel/testing, autotel/attributes, etc.).
+`Event` is exported from both `autotel` and `autotel/event`. Use the exact export paths from package.json (autotel/event, autotel/testing, autotel/sampling, autotel/attributes, etc.).
 
 Source: packages/autotel/package.json exports
 

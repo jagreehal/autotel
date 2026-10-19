@@ -22,7 +22,7 @@
  * ```
  */
 
-import type { Link, Attributes } from '@opentelemetry/api';
+import type { Link, Attributes, Context } from '@opentelemetry/api';
 import { TraceFlags } from '@opentelemetry/api';
 import { type Logger } from './logger';
 import { asStringRecord, type UnknownRecord } from './values';
@@ -166,6 +166,11 @@ export interface SamplingContext {
   metadata?: UnknownRecord;
   /** Optional span links for links-based sampling */
   links?: Link[];
+  /**
+   * The trace being decided, when known. Samplers that hash it reach the same
+   * verdict for every span of a trace, in this process and in the next one.
+   */
+  traceId?: string;
 }
 
 /**
@@ -344,7 +349,11 @@ export class AdaptiveSampler implements Sampler {
    * @returns true if this operation should be kept (not discarded)
    */
   shouldKeepTrace(context: SamplingContext, result: OperationResult): boolean {
-    const baselineDecision = this.samplingDecisions.get(context.args) ?? false;
+    // Hash the trace id when there is one, so nested operations and the
+    // trace-level decision in TailSamplingSpanProcessor all agree.
+    const baselineDecision = context.traceId
+      ? hashUnitInterval(context.traceId) < this.baselineSampleRate
+      : (this.samplingDecisions.get(context.args) ?? false);
 
     // Always keep errors
     if (this.alwaysSampleErrors && !result.success) {
@@ -968,9 +977,11 @@ function isValidSpanContext(
 }
 
 /** True when the request in flight asked for full-fidelity capture. */
-export function debugCaptureRequested(): boolean {
+export function debugCaptureRequested(
+  context: Context = getActiveContextWithBaggage(),
+): boolean {
   const entry = propagation
-    .getBaggage(getActiveContextWithBaggage())
+    .getBaggage(context)
     ?.getEntry(AUTOTEL_DEBUG_BAGGAGE_KEY);
   return entry !== undefined && entry.value !== '' && entry.value !== '0';
 }

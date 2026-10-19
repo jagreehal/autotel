@@ -97,7 +97,17 @@ if (billing.PAYMENT_DECLINED.match(err)) retryWithDifferentCard();
 
 Builders return the same `StructuredError`, so `parseError()` still works. Codes default to `namespace.KEY`. A function `message` or `why` takes typed params enforced at every call site. `.match()` compares the catalog code, so renaming an entry breaks the compile instead of skipping the branch.
 
-**Record on current span:** Use `recordStructuredError(ctx, error)` or the request logger's `.error(error, fields)` so the span gets error attributes and status.
+**Record on current span:** `createStructuredError()` only builds the error; it touches no span. Thrown out of a `trace()` body, it sets the span's ERROR status and records the exception. The structured fields (`error.why`, `error.fix`, `error.link`, `error.code`, `error.status`) reach the span only through `recordStructuredError(ctx, error)` or the request logger's `.error(error, fields)`:
+
+```typescript
+import { recordStructuredError } from 'autotel';
+
+catch (err) {
+  const e = billing.PAYMENT_DECLINED({ cause: err });
+  recordStructuredError(ctx, e); // or getRequestLogger().error(e)
+  throw e;
+}
+```
 
 For new exception event flows, prefer request-logger/log-based correlation and keep span-event compatibility as an implementation detail (processors/export path), not a new app-level dependency.
 
@@ -157,6 +167,6 @@ Source: docs/AGENT-GUIDE.md
 
 ## Version
 
-Targets autotel v2.23.x.
+Matches autotel 8.x. Verify package exports when working against an older installed version.
 
 See also: autotel-request-logging/SKILL.md. Use .error() to record errors in the request snapshot.

@@ -52,6 +52,7 @@ export default defineConfig({
           items: [
             { label: 'Architecture', slug: 'architecture' },
             { label: 'Agent Guide', slug: 'agent-guide' },
+            { label: 'Keeping Costs Down', slug: 'costs' },
             { label: 'Telemetry Policies', slug: 'policies' },
             { label: 'Advanced', slug: 'advanced' },
           ],

@@ -11,9 +11,9 @@ interface NamedFunction {
 
 // Helper function that simulates trace() for testing
 function trace<TFn>(fn: TFn): TFn {
-  const varName = inferVariableNameFromCallStack();
-  // Attach the inferred name to the function for verification
-  named(fn).__inferredName = varName;
+  // Not `const x = inferVariableNameFromCallStack()`: like the real trace(),
+  // this helper's own line must not name a variable.
+  named(fn).__inferredName = inferVariableNameFromCallStack();
   return fn;
 }
 

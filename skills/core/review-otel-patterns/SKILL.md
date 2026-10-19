@@ -6,10 +6,10 @@ description: >
   Cloudflare Workers, AWS Lambda, edge runtimes, and standalone Node. Detects unstructured tracing,
   missing span attributes, manual exporter setup, broken context propagation, exposed PII, and ad-hoc
   error handling. Covers spans, metrics, logs, structured errors, the autotel processor pipeline
-  (tail-sampling, attribute redaction, span-name normalisation, filtering, baggage),
+  (sampling, attribute redaction, span-name normalisation, filtering, baggage),
   built-in enrichers (user agent, geo, request size) and custom `defineEnricher`,
   `defineWorkerFetch` for Cloudflare async drains, multi-vendor OTLP backends (Honeycomb, Datadog,
-  Grafana Cloud, Sentry, Axiom, HyperDX), `composeSpanProcessors` / `composeSubscribers` /
+  Grafana Cloud, Sentry, Axiom, HyperDX), edge `composeSpanProcessors` / `composeSubscribers` /
   `composePostProcessors` for pipelines, AI SDK observability with gen-ai semantic conventions, and
   end-to-end OTLP testing.
 ---
@@ -54,21 +54,21 @@ Load the one that matches the work in front of you. **Do not load them all.**
 
 The heart of the review. Each row is a grep-able smell with the replacement:
 
-| Anti-pattern                                        | Fix                                                                |
-| --------------------------------------------------- | ------------------------------------------------------------------ |
-| `console.log` in handlers                           | Use `useLogger()`: fields land on the active span                  |
-| Manual `tracer.startSpan` boilerplate               | `trace(fn)` / `trace(name, fn)`: auto-ended, auto-status           |
-| `try { … } catch (e) { console.error(e); throw e }` | Replace with `createStructuredError({ … })`                        |
-| `throw new Error('something went wrong')`           | `createStructuredError({ message, status, why, fix })`             |
-| Ad-hoc `span.setAttribute('user_id', id)`           | Use `useLogger().set({ user: { id } })`: flattens with stable keys |
-| Multiple exporters wired in parallel by hand        | `composeSpanProcessors([…])`                                       |
-| PII in attributes                                   | `attributeRedactor: 'default'` (on in prod by default)             |
-| Cloudflare Workers without `waitUntil`              | Use `defineWorkerFetch` / `wrapModule`                             |
-| High-cardinality span names (`/users/123`)          | `SpanNameNormalizingProcessor`                                     |
-| AI SDK token logs                                   | `withAiTelemetry()` + gen-ai semantic conventions                  |
-| Health checks blowing up trace volume               | `FilteringSpanProcessor`                                           |
-| No tests for instrumentation                        | `InMemorySpanExporter` + `autotel-vitest` matchers                 |
-| Manual context propagation in fetch                 | `instrumentation.instrumentGlobalFetch: true` (default)            |
+| Anti-pattern                                        | Fix                                                                                                                                                            |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `console.log` in handlers                           | `getRequestLogger()` from `autotel` (or the adapter's `useLogger()`): fields land on the active span                                                           |
+| Manual `tracer.startSpan` boilerplate               | `trace(fn)` / `trace(name, fn)`: auto-ended, auto-status                                                                                                       |
+| `try { … } catch (e) { console.error(e); throw e }` | Just throw through `trace()` / the adapter, or call `log.error(e)` once                                                                                        |
+| `throw new Error('something went wrong')`           | `createStructuredError({ message, status, why, fix })`                                                                                                         |
+| Ad-hoc `span.setAttribute('user_id', id)`           | `getRequestLogger().set({ user: { id } })`: flattens with stable keys                                                                                          |
+| Multiple exporters wired in parallel by hand        | `init({ destinations: [...] })`                                                                                                                                |
+| PII in attributes                                   | `attributeRedactor: 'default'` (applied automatically when the environment resolves to `production`)                                                           |
+| Cloudflare Workers without `waitUntil`              | Use `defineWorkerFetch` / `wrapModule`                                                                                                                         |
+| High-cardinality span names (`/users/123`)          | `init({ spanNameNormalizer: 'rest-api' })`                                                                                                                     |
+| AI SDK token logs                                   | `registerTelemetry(autotelTelemetry())` from `autotel-genai/observer` + gen-ai semantic conventions                                                            |
+| Health checks blowing up trace volume               | `init({ spanFilter })`                                                                                                                                         |
+| No tests for instrumentation                        | `createTraceCollector()` from `autotel/testing`, or the `autotel-vitest` fixture                                                                               |
+| Hand-written `traceparent` on outbound HTTP         | Node: `autoInstrumentations: ['http', 'undici']` (off unless set) or `injectTraceContext()` from `autotel/http`. Edge: `instrumentGlobalFetch` (on by default) |
 
 Metrics nobody can alert on are the same class of problem one layer down — a
 counter with no dimension to group by. Skill `design-alertable-metrics` covers
@@ -93,14 +93,14 @@ throw createStructuredError({
 });
 
 // at the HTTP boundary
-app.onError((error, c) => {
-  const parsed = parseError(error);
-  // `internal` is stripped from `parsed` — never returned to clients
-  return c.json(parsed, parsed.status);
+app.onError((error) => {
+  // `raw` is the original error: drop it. `internal` / `cause` are never in `body`.
+  const { raw: _raw, ...body } = parseError(error);
+  return Response.json(body, { status: body.status });
 });
 ```
 
-`createStructuredError` records the error onto the active span automatically (`exception.type`, `exception.message`, `exception.stacktrace`) and sets `span.status = ERROR`.
+`createStructuredError` only builds the error; it records nothing by itself. Thrown through `trace()`, the span gets `ERROR` status and an exception event. Thrown out of an `autotel-adapters` handler, or passed to `recordStructuredError(ctx, err)` or `getRequestLogger().error(err)`, the span also gets `error.why` / `error.fix` / `error.code` / `error.status` attributes.
 
 See [references/structured-errors.md](references/structured-errors.md) for templates.
 
@@ -113,9 +113,8 @@ Useful when the review turns into "why not just use the SDK directly":
 | Setup                 | Multi-page checklist, vendor-specific resource attrs | One `init()` call, sane defaults                      |
 | Cloudflare Workers    | DIY `waitUntil` (logs/spans drop silently if missed) | `defineWorkerFetch` auto-wires it                     |
 | PII redaction         | DIY span processor                                   | `attributeRedactor: 'default'` (smart masks built in) |
-| High-cardinality URLs | DIY span name munging                                | `SpanNameNormalizingProcessor`                        |
-| Multi-backend         | Hand-write a tee processor                           | `composeSpanProcessors([…])`                          |
+| High-cardinality URLs | DIY span name munging                                | `spanNameNormalizer: 'rest-api'`                      |
+| Multi-backend         | Hand-write a tee processor                           | `destinations: [...]`                                 |
 | Local debugging       | Manual `ConsoleSpanExporter` plumbing                | `init({ debug: 'pretty' })`                           |
 | AI SDK                | Custom attributes, vendor-specific dashboards        | OTel gen-ai semconv out of the box                    |
-| Bundle size           | Unbounded                                            | CI guard with `bundle-size-baseline.json`             |
-| Real-backend tests    | DIY                                                  | `pnpm test:e2e` ships a working OTLP smoke test       |
+| Real-backend tests    | DIY                                                  | autotel's own `test/e2e` OTLP smoke test to copy      |

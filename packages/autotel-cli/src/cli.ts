@@ -188,7 +188,7 @@ export function createProgram(): Command {
       const options: AddOptions = {
         cwd: opts.cwd ?? process.cwd(),
         dryRun: opts.dryRun ?? false,
-        noInstall: opts.noInstall ?? false,
+        noInstall: opts.install === false,
         printInstallCmd: opts.printInstallCmd ?? false,
         verbose: opts.verbose ?? false,
         quiet: opts.quiet ?? false,

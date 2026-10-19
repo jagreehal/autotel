@@ -519,14 +519,16 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
               if (
                 needsTailSampling &&
                 sampler.shouldKeepTrace &&
-                !isForceKept(span) &&
-                !debugCaptureRequested()
+                !isForceKept(span)
               ) {
-                shouldKeepSpan = sampler.shouldKeepTrace(samplingContext, {
-                  success,
-                  duration,
-                  error,
-                });
+                // A debug request is a verdict too: an unevaluated span leaves
+                // the trace to the processor, which would sample it out.
+                shouldKeepSpan =
+                  debugCaptureRequested() ||
+                  sampler.shouldKeepTrace(
+                    { ...samplingContext, traceId: span.spanContext().traceId },
+                    { success, duration, error },
+                  );
                 span.setAttribute(AUTOTEL_SAMPLING_TAIL_KEEP, shouldKeepSpan);
                 span.setAttribute(AUTOTEL_SAMPLING_TAIL_EVALUATED, true);
               }

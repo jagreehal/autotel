@@ -23,7 +23,7 @@ Event guidance: for new instrumentation, emit events as correlated logs (via req
 | Throw with why/fix/link               | `createStructuredError({ message, why?, fix?, link?, status? })`                                              | `autotel`                              |
 | Parse API errors (client)             | `parseError(err)` → `message`, `why`, `fix`, `link`                                                           | `autotel`                              |
 | Product/analytics events              | `track(name, attrs)` or `Event` from `autotel/event`                                                          | `autotel`, `autotel/event`             |
-| Init (once at startup)                | `init({ service, ... })`                                                                                      | `autotel` or `autotel/instrumentation` |
+| Init (once at startup)                | `init({ service, ... })`                                                                                      | `autotel`                              |
 | Same error thrown from many places    | `defineErrorCatalog(ns, entries)` → typed builders + `.match()`                                               | `autotel`                              |
 | Error budgets and burn-rate alerts    | `createSloTracker()`, `evaluateBurnRateAlert()`                                                               | `autotel/slo`                          |
 | Split a metric by feature flag        | `recordFeatureFlag(ctx, { key, value })`, `autotelOpenFeatureHook()`                                          | `autotel/feature-flags`                |
@@ -32,9 +32,36 @@ Event guidance: for new instrumentation, emit events as correlated logs (via req
 
 Request logger requires an active span. Wrap HTTP handlers with `trace()` or framework middleware that creates a span, then call `getRequestLogger()` inside.
 
-`processHandlers` is opt-in: importing `autotel` registers no process listeners. Pass `true` for the defaults (SIGTERM/SIGINT plus fatal errors, 2s shutdown timeout), or an object to override `signals`, `fatalErrors`, or `shutdownTimeoutMs`. Leave it off and call `shutdown()` from your own handler when the app already owns its lifecycle.
+`processHandlers` is opt-in: importing `autotel` registers no signal or crash listeners. Pass `true` for the defaults (SIGTERM/SIGINT plus fatal errors, 2s shutdown timeout), or an object to override `signals`, `fatalErrors`, or `shutdownTimeoutMs`. Leave it off and call `shutdown()` from your own handler when the app already owns its lifecycle. Separately, `flushOnExit` (default `true`) flushes on `beforeExit`, so a script that ends on its own keeps its telemetry; it does not fire on `process.exit()` or a signal.
 
 Backend config rule of thumb: use `endpoint` for one OTLP destination, `destinations` for explicit OTLP fan-out, and `spanProcessors` / `spanExporters` only when you need full manual control.
+
+## Production init
+
+```typescript
+import { init } from 'autotel';
+
+init({
+  service: 'checkout-api',
+  version: process.env.APP_VERSION,
+  environment: 'production',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY! },
+  sampling: 'production',
+  processHandlers: true,
+});
+```
+
+- **`service`**: required. `OTEL_SERVICE_NAME` fills it when the key is left out.
+- **`version`**: defaults to `version` in `package.json` in the working directory, else `'1.0.0'`.
+- **`environment`**: defaults to `NODE_ENV`, else `'development'`. Sets `deployment.environment.name` (and the legacy `deployment.environment`). `'production'` also switches on PII redaction (`attributeRedactor: 'default'`) unless you pass `attributeRedactor: false` or set `AUTOTEL_REDACT_PII=off`.
+- **`endpoint`**: the OTLP base URL; autotel appends `/v1/traces`, `/v1/metrics`, `/v1/logs`. Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT`. With neither (and no `destinations` / exporters / processors) **nothing is exported**: there is no localhost default.
+- **`headers`**: an object or a `'key=value,key2=value2'` string. Falls back to `OTEL_EXPORTER_OTLP_HEADERS`.
+- **`protocol`**: `'http'` (OTLP/HTTP with a JSON body, the default), `'http/protobuf'` or `'grpc'`. The last two need the matching `@opentelemetry/exporter-*-otlp-proto` / `-grpc` packages in your app. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL`.
+- **`sampling`**: set it. Without `sampling` or `sampler`, wrapped functions keep every span. See `tune-sampling`.
+- **`logs`**: off by default. `logs: true` (or `AUTOTEL_LOGS=on`) exports OTel log records to the same endpoint; the HTTP/JSON log exporter ships with autotel.
+- **Shutdown**: `await flush()` exports what is buffered (2s timeout by default); `await shutdown()` flushes and stops the SDK. Both come from `autotel`.
+- **`init()` throws** on an unknown `sampling` preset, an invalid `attributeRedactor` config, `devtools: { embedded: true, port: 0 }`, and an `sdkFactory` that returns nothing. Calling `init()` again warns and the last config wins; `lockLogger()` makes later calls no-ops.
 
 ## Setup
 
@@ -147,14 +174,17 @@ app.get('/api/x', () => {
 Correct:
 
 ```typescript
-app.use(autotelMiddleware()); // or wrap route with trace()
-app.get('/api/x', () => {
+import { otel } from 'autotel-hono';
+
+app.use('*', otel()); // or wrap the route with trace()
+app.get('/api/x', (c) => {
   const log = getRequestLogger();
   log.set({ route: 'x' });
+  return c.json({});
 });
 ```
 
-getRequestLogger() requires an active span. Register middleware that creates a span per request, or wrap the handler with `trace()`.
+getRequestLogger() throws without an active span (or `runWithRequestContext()`). Register middleware that creates a span per request, or wrap the handler with `trace()`. With `autotelMiddleware()` from `autotel-adapters/hono`, use that adapter's `useLogger(c)` instead: it is the logger the middleware emits for you.
 
 Source: packages/autotel/src/request-logger.ts
 
@@ -182,28 +212,9 @@ import pino from 'pino';
 export const logger = pino();
 ```
 
-The instrumentation patches pino as it loads, so create the logger in its own module after `init()`. `init({ logger })` only receives autotel's own diagnostics. The `autoInstrumentations` array is an allowlist: list `'http'` for request spans. Winston also needs `@opentelemetry/winston-transport` for OTLP export.
+The instrumentation patches pino as it loads, so create the logger in its own module after `init()`. `init({ logger })` only receives autotel's own diagnostics. The `autoInstrumentations` array is an allowlist: list `'http'` for request spans. It needs `@opentelemetry/auto-instrumentations-node` installed. Winston also needs `@opentelemetry/winston-transport` for OTLP export.
 
 Source: packages/autotel/src/auto-instrumentations.ts
-
-### HIGH Use await import() for init-time optional deps
-
-Wrong:
-
-```typescript
-const pkg = await import('optional-dep');
-```
-
-Correct:
-
-```typescript
-import { safeRequire } from 'autotel';
-const pkg = safeRequire('optional-dep');
-```
-
-init() must stay synchronous. Use node-require helpers for optional dependencies.
-
-Source: packages/autotel/CLAUDE.md
 
 ### MEDIUM Assume trace(fn) has no ambient context
 

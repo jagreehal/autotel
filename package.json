@@ -22,12 +22,13 @@
     "bundle-size:update": "node scripts/check-bundle-size.mjs --update",
     "check-exports-map": "node scripts/check-exports-map.mjs",
     "check-semconv-drift": "node scripts/check-semconv-drift.mjs",
+    "check:skills": "node scripts/check-skill-imports.mjs",
     "clean": "turbo clean",
     "type-check": "turbo type-check",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install --lockfile-only",
     "release": "pnpm build && changeset publish",
-    "quality": "turbo run build && turbo run build-storybook && turbo run lint && pnpm run format:check && turbo run type-check && turbo run test && turbo run test:integration && pnpm run check-exports-map && pnpm run check-semconv-drift",
+    "quality": "turbo run build && turbo run build-storybook && turbo run lint && pnpm run format:check && turbo run type-check && turbo run test && turbo run test:integration && pnpm run check-exports-map && pnpm run check-semconv-drift && pnpm run check:skills",
     "format:check": "prettier --check ."
   },
   "devDependencies": {

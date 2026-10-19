@@ -12,31 +12,43 @@ description: >
 
 # autotel-cli
 
-CLI for autotel: interactive setup wizard, diagnostics, incremental feature addition, and a codemod to adopt tracing on existing code. Targets Node.js 18+.
+CLI for autotel: detection-driven setup, diagnostics, incremental feature addition, an observability score, and a codemod to adopt tracing on existing code. The npm package is `autotel-cli`; the binary it installs is `autotel`. Requires Node.js >= 22.
 
 ## Setup
 
 ```bash
-# No install needed
+# No install needed (package name)
 npx autotel-cli <command>
 
 # Pin it in the project instead of installing globally, so every run and every
 # machine gets the same version
 pnpm add -D autotel-cli
+pnpm exec autotel <command>   # after install the binary is `autotel`
 ```
+
+Examples below use `npx autotel-cli`; once installed, `autotel <command>` is the same thing.
 
 ## Commands
 
 ### `autotel init`
 
-Interactive wizard that writes an instrumentation file and installs dependencies.
+Detects your dependencies (loggers, libraries, backend hints), builds a plan, asks you to confirm it, then writes an instrumentation file and installs packages.
 
 ```bash
-# Interactive (prompts for backend, plugins, etc.)
+# Detect, preview the plan, confirm
 npx autotel-cli init
 
-# Non-interactive: accept all defaults (local backend, all auto-instrumentations)
+# Accept the detected plan without the confirmation prompt
 npx autotel-cli init --yes
+
+# Agents / CI: never prompt (fails instead), JSON result envelope
+npx autotel-cli init --no-interactive --json
+
+# Print the detected plan and write nothing
+npx autotel-cli init --detect-only
+
+# Apply a pre-built InitPlan JSON file (or `--input -` for stdin)
+npx autotel-cli init --plan ./autotel-plan.json
 
 # Use a named quick preset
 npx autotel-cli init --preset node-datadog-pino
@@ -45,29 +57,37 @@ npx autotel-cli init --preset node-datadog-pino
 npx autotel-cli init --dry-run
 ```
 
-**Quick presets:** `node-datadog-pino`, `node-datadog-agent`, `node-honeycomb`, `node-otlp`
+**Quick presets:** `node-datadog-pino`, `node-datadog-agent`, `node-honeycomb`, `node-otlp`, `node-google-cloud`
 
 **Key options:**
 
-| Option                | Effect                                                     |
-| --------------------- | ---------------------------------------------------------- |
-| `--yes / -y`          | Non-interactive, accept defaults                           |
-| `--preset <name>`     | Use a quick preset                                         |
-| `--dry-run`           | Print what would be done, no writes or installs            |
-| `--no-install`        | Generate files only, skip package installation             |
-| `--print-install-cmd` | Output the install command instead of running it           |
-| `--force`             | Overwrite existing config (backs up the old file first)    |
-| `--workspace-root`    | Install at monorepo workspace root instead of package root |
+| Option                | Effect                                                                         |
+| --------------------- | ------------------------------------------------------------------------------ |
+| `--yes / -y`          | Accept the detected plan without prompting                                     |
+| `--no-interactive`    | Never prompt; fail if input would be required                                  |
+| `--json`              | Emit a machine-readable JSON envelope (with `--dry-run`: plan only, no writes) |
+| `--detect-only`       | Run detection, print the plan, write nothing                                   |
+| `--plan <path>`       | Apply a pre-built InitPlan JSON file                                           |
+| `--input <path>`      | Read InitPlan JSON from a file or stdin (`-`)                                  |
+| `--no-detect`         | Skip detection (then `--plan`, `--input` or `--preset` is required)            |
+| `--scan-env`          | Allow reading `.env` / `.env.local` keys for backend detection                 |
+| `--preset <name>`     | Use a quick preset                                                             |
+| `--dry-run`           | Print what would be done, no writes or installs                                |
+| `--no-install`        | Generate files only, skip package installation                                 |
+| `--print-install-cmd` | Output the install command instead of running it                               |
+| `--force`             | Overwrite existing config (backs up the old file first)                        |
+| `--workspace-root`    | Install at monorepo workspace root instead of package root                     |
 
 Generated files:
 
-- `src/instrumentation.mts` (or `.mjs`): the instrumentation entry point with section markers
+- `src/instrumentation.mts` (`.mjs` in a JS project; at the package root if there is no `src/`): the instrumentation entry point with section markers
 - `.env.example`: env var template based on selected presets (written only if file does not exist)
 
 After init, start your app with `--import`:
 
 ```bash
-# Node.js ESM
+# Node.js ESM (loading a .mts file directly needs Node 22.18+ type stripping;
+# otherwise use tsx or compile it)
 node --import ./src/instrumentation.mts dist/index.js
 
 # With tsx (development)
@@ -86,6 +106,7 @@ npx autotel-cli doctor --json      # Machine-readable JSON
 npx autotel-cli doctor --fix       # Auto-fix resolvable issues
 npx autotel-cli doctor --list-checks  # Show all available check names
 npx autotel-cli doctor --env-file .env.production  # Check a specific env file
+npx autotel-cli doctor --capture   # Which capture surfaces this project can observe
 ```
 
 Exit codes: `0` = all passed, `1` = warnings, `2` = errors.
@@ -123,7 +144,7 @@ npx autotel-cli add --list
 # List backends only
 npx autotel-cli add backend --list
 
-# Add Datadog backend
+# Add Datadog backend (direct OTLP; use datadog-agent for a local agent)
 npx autotel-cli add backend datadog
 
 # Add a PostHog event subscriber
@@ -138,14 +159,16 @@ npx autotel-cli add backend datadog --help
 
 **Preset types:**
 
-| Type         | Examples                                  |
-| ------------ | ----------------------------------------- |
-| `backend`    | `datadog`, `honeycomb`, `otlp`, `local`   |
-| `subscriber` | `posthog`, `mixpanel`, `segment`, `slack` |
-| `plugin`     | `mongoose`, `drizzle`                     |
-| `platform`   | AWS Lambda, Cloudflare Workers            |
+| Type         | Examples                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `backend`    | `datadog`, `datadog-agent`, `honeycomb`, `google-cloud`, `otlp-http`, `otlp-grpc`, `local`                         |
+| `subscriber` | `posthog`, `mixpanel`, `amplitude`, `segment`, `slack`, `webhook`                                                  |
+| `plugin`     | `mongoose`, `drizzle`, `hono`, `nestjs`, `elysia`, `sveltekit`, `nuxt`, `tanstack`, `mcp`, `sentry`, `posthog-web` |
+| `platform`   | `aws-lambda`, `cloudflare`, `edge`                                                                                 |
 
-**Key options:** `--dry-run`, `--no-install`, `--force`, `--json` (for `--list`).
+There is no plain `otlp` slug: use `otlp-http` or `otlp-grpc`. Run `add <type> --list` for the current set.
+
+**Key options:** `--dry-run`, `--print-install-cmd`, `--force`, `--yes`, `--workspace-root`, `--json` (for `--list`).
 
 `add` is idempotent: if the package is already installed and the instrumentation file already contains the feature, it exits cleanly with `[OK]`.
 
@@ -182,7 +205,7 @@ npx autotel-cli codemod trace "src/**/*.ts" --print-files
 
 **What gets wrapped:** function declarations, arrow/function expressions in `const`/`let`/`var`, class and static methods, object method shorthand, named default export functions.
 
-**Never wrapped:** generator functions, getters/setters, constructors, `super` usage in body, anonymous default exports, `.d.ts` files, `node_modules/`, files that already use `require('autotel')`.
+**Never wrapped:** generator functions, getters/setters, constructors, methods that use `super`, anonymous default exports, functions already wrapped in `trace()`, `.d.ts` files, `node_modules/`.
 
 ## Configuration Patterns
 
@@ -231,8 +254,12 @@ import { init } from 'autotel';
 import { createDatadogConfig } from 'autotel-backends/datadog';
 
 init({
+  autoInstrumentations: ['http', 'pino'],
   // --- AUTOTEL:BACKEND_CONFIG ---
-  ...createDatadogConfig({ apiKey: process.env.DATADOG_API_KEY }),
+  ...createDatadogConfig({
+    apiKey: process.env.DATADOG_API_KEY,
+    site: process.env.DATADOG_SITE,
+  }),
   // --- AUTOTEL:SUBSCRIBERS_CONFIG ---
   subscribers: [],
 });
@@ -254,7 +281,7 @@ node dist/index.js
 node --import ./src/instrumentation.mts dist/index.js
 ```
 
-The instrumentation file must be loaded before any other module. The `--import` flag (Node.js 18.19+) is the correct mechanism. `require` or a top-level import inside app code is too late.
+The instrumentation file must be loaded before any other module. The `--import` flag is the correct mechanism. `require` or a top-level import inside app code is too late.
 
 ### HIGH: Running `autotel add` before `autotel init`
 
@@ -289,4 +316,4 @@ npx autotel-cli codemod trace "src/**/*.ts"
 
 ## Version
 
-Targets autotel-cli v0.8.2. Node.js >= 18.0.0 required (18.19+ for `--import` flag support).
+Targets autotel-cli v0.21.1. Node.js >= 22.0.0 required.

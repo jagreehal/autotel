@@ -1,8 +1,85 @@
 # Processor pipeline cookbook
 
-Composable building blocks for the autotel pipeline. Each helper is small enough to reason about in isolation and isolates errors so a single bad processor cannot break the others.
+Composable building blocks for the autotel pipeline. Node and edge runtimes
+build the pipeline differently: in Node, `init()` options cover almost every
+case; on edge, you compose processors, post-processors and subscribers into the
+`wrapModule` / `defineWorkerFetch` config.
 
-## Primitives
+## Node: prefer `init()` options
+
+Each option wraps the built-in processors for you, in the right order (filter
+sees original attributes, redaction runs last before export):
+
+| You want…                           | `init()` option                                                   |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| Several OTLP backends               | `destinations: [{ endpoint, headers, signals? }, …]`              |
+| Keep errors + slow + a sampled %    | `sampling: 'production'`, set explicitly (unset keeps all)        |
+| Drop health checks / noise          | `spanFilter: (span) => boolean` (return `false` to drop)          |
+| Bound URL cardinality               | `spanNameNormalizer: 'rest-api' \| 'graphql' \| 'minimal' \| fn`  |
+| Lift baggage onto every span        | `baggage: true` (→ `baggage.*`) or a prefix string                |
+| Mask PII                            | `attributeRedactor: 'default' \| 'strict' \| 'pci-dss' \| config` |
+| Hierarchical console output locally | `debug: 'pretty'`                                                 |
+
+```typescript
+import { init } from 'autotel';
+
+init({
+  service: 'checkout',
+  destinations: [
+    {
+      endpoint: 'https://api.honeycomb.io',
+      headers: { 'x-honeycomb-team': process.env.HONEYCOMB_KEY! },
+    },
+    {
+      endpoint: process.env.GRAFANA_OTLP_URL!, // https://otlp-gateway-<region>.grafana.net/otlp
+      headers: { authorization: `Basic ${process.env.GRAFANA_AUTH!}` },
+      signals: ['traces'],
+    },
+  ],
+  spanFilter: (span) => !/^GET \/(healthz|ready)$/.test(span.name),
+  spanNameNormalizer: 'rest-api', // GET /users/123 → GET /users/:id
+  baggage: true,
+  attributeRedactor: 'strict',
+});
+```
+
+Tune the sampler with `sampler: samplingPresets.production({ baselineSampleRate: 0.05 })` (`samplingPresets` from `autotel`).
+
+### Manual processors (Node)
+
+Only when you pass your own `spanProcessors` (which replaces the built-in OTLP
+processors). The wrappers come from `autotel`; `SimpleSpanProcessor` /
+`BatchSpanProcessor` from `autotel/processors`:
+
+| Processor                      | Constructor                                                   |
+| ------------------------------ | ------------------------------------------------------------- |
+| `FilteringSpanProcessor`       | `new FilteringSpanProcessor(wrapped, { filter })`             |
+| `SpanNameNormalizingProcessor` | `new SpanNameNormalizingProcessor(wrapped, { normalizer })`   |
+| `AttributeRedactingProcessor`  | `new AttributeRedactingProcessor(wrapped, { redactor })`      |
+| `BaggageSpanProcessor`         | `new BaggageSpanProcessor({ prefix })` (default `'baggage.'`) |
+| `PrettyConsoleExporter`        | exporter, from `autotel/exporters`                            |
+
+```typescript
+import { init, FilteringSpanProcessor } from 'autotel';
+import { BatchSpanProcessor } from 'autotel/processors';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+init({
+  service: 'checkout',
+  spanProcessors: [
+    new FilteringSpanProcessor(
+      new BatchSpanProcessor(
+        new OTLPTraceExporter({ url: 'http://localhost:4318/v1/traces' }),
+      ),
+      { filter: (span) => !span.name.includes('/health') },
+    ),
+  ],
+});
+```
+
+## Edge: composition primitives
+
+All from `autotel-edge` (re-exported by `autotel-cloudflare`):
 
 | Helper                       | Type              | Purpose                                                      |
 | ---------------------------- | ----------------- | ------------------------------------------------------------ |
@@ -11,39 +88,55 @@ Composable building blocks for the autotel pipeline. Each helper is small enough
 | `composePostProcessors([…])` | `PostProcessorFn` | Chain post-processors (each sees the output of the previous) |
 | `composeSubscribers([…])`    | `EdgeSubscriber`  | Fire in-process side effects in order                        |
 
-All from `autotel-edge`.
+`postProcessor` and `sampling.tailSampler` run inside the built-in processor
+that `exporter` creates. If you pass `spanProcessors` instead, they are not applied.
 
-## Processors
-
-| Processor                      | Purpose                                                     |
-| ------------------------------ | ----------------------------------------------------------- |
-| `AttributeRedactingProcessor`  | PII masking with smart partial output                       |
-| `TailSamplingProcessor`        | Keep errors + slow + sampled-by-rate                        |
-| `FilteringSpanProcessor`       | Drop spans matching predicate (health checks, etc.)         |
-| `SpanNameNormalizingProcessor` | Normalise `/users/123` → `/users/{id}` to bound cardinality |
-| `BaggageSpanProcessor`         | Lift baggage entries onto every span                        |
-| `PrettyConsoleExporter`        | Hierarchical colourised output for local dev                |
-
-Compose them at build time with `composeSpanProcessors([...])`. Each recipe
-below builds on one of these.
-
-## Multi-backend export
+## Edge: tail sampling (errors + slow + 10% otherwise)
 
 ```typescript
-import { BatchSpanProcessor } from 'autotel/processors';
-import { OTLPHttpJsonExporter } from 'autotel/exporters';
-import { composeSpanProcessors, defineConfig } from 'autotel-edge';
+import { defineConfig } from 'autotel-edge';
+import {
+  combineTailSamplers,
+  createErrorOnlyTailSampler,
+  createSlowOnlyTailSampler,
+  createRandomTailSampler,
+} from 'autotel-edge/sampling';
+
+export const config = defineConfig({
+  service: { name: 'checkout' },
+  exporter: {
+    url: 'https://api.honeycomb.io/v1/traces',
+    headers: { 'x-honeycomb-team': '<key>' },
+  },
+  sampling: {
+    tailSampler: combineTailSamplers(
+      createErrorOnlyTailSampler(),
+      createSlowOnlyTailSampler(1000), // ms
+      createRandomTailSampler(0.1),
+    ),
+  },
+});
+```
+
+## Edge: multi-backend export
+
+```typescript
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import {
+  OTLPExporter,
+  composeSpanProcessors,
+  defineConfig,
+} from 'autotel-edge';
 
 const honeycomb = new BatchSpanProcessor(
-  new OTLPHttpJsonExporter({
-    url: 'https://api.honeycomb.io/v1/traces',
+  new OTLPExporter({
+    url: 'https://api.honeycomb.io/v1/traces', // edge exporter URLs are used as-is
     headers: { 'x-honeycomb-team': process.env.HONEYCOMB_KEY! },
   }),
 );
-
 const grafana = new BatchSpanProcessor(
-  new OTLPHttpJsonExporter({
-    url: process.env.GRAFANA_OTLP_URL!,
+  new OTLPExporter({
+    url: `${process.env.GRAFANA_OTLP_URL!}/v1/traces`,
     headers: { authorization: `Basic ${process.env.GRAFANA_AUTH!}` },
   }),
 );
@@ -54,166 +147,69 @@ export const config = defineConfig({
 });
 ```
 
-## Tail sampling: keep errors + slow + 10% otherwise
+## Edge: subscribers for in-process side effects
+
+Subscribers receive the events you emit with `getEdgeSubscribers(ctx)` from
+`autotel-edge/events` (`trackEvent`, `trackOutcome`, `trackFunnelStep`,
+`trackValue`). They are not span hooks.
 
 ```typescript
-import { TailSamplingProcessor } from 'autotel/processors';
-import { composeSpanProcessors } from 'autotel-edge';
-
-const tail = new TailSamplingProcessor({
-  keep: (trace) => {
-    if (trace.localRootSpan.status?.code === SpanStatusCode.ERROR) return true;
-    if (trace.localRootSpan.duration[0] > 1) return true; // > 1s
-    return Math.random() < 0.1;
-  },
-});
-
-spanProcessors: composeSpanProcessors([new BatchSpanProcessor(otlp), tail]);
-```
-
-## Drop noisy spans before they reach the batcher
-
-```typescript
-import { FilteringSpanProcessor } from 'autotel/processors';
-
-const dropHealth = new FilteringSpanProcessor({
-  exclude: (span) => /^GET \/(healthz|ready)$/.test(span.name),
-});
-
-spanProcessors: composeSpanProcessors([
-  dropHealth,
-  new BatchSpanProcessor(otlp),
-]);
-```
-
-## Bound URL cardinality
-
-```typescript
-import { SpanNameNormalizingProcessor } from 'autotel/processors';
-
-const normalise = new SpanNameNormalizingProcessor({
-  // Replace UUIDs and 24-char hex ids with placeholders
-  replacements: [
-    {
-      match: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,
-      with: ':id',
-    },
-    { match: /[0-9a-f]{24}/g, with: ':id' },
-  ],
-});
-```
-
-Now `GET /users/123e4567-e89b-12d3-a456-426614174000/orders` becomes `GET /users/:id/orders` in your traces. Fewer unique span names, dramatically faster queries.
-
-## Lift baggage onto every span
-
-```typescript
-import { BaggageSpanProcessor } from 'autotel/processors';
-
-// Anything placed in baggage upstream becomes an attribute on every child span
-const baggage = new BaggageSpanProcessor({ keys: ['tenant', 'feature_flags'] });
-spanProcessors: composeSpanProcessors([baggage, new BatchSpanProcessor(otlp)]);
-```
-
-## Subscribers for in-process side effects
-
-Subscribers run synchronously in the parent context. Ideal for metrics, audit, and cost calculation that you want recorded **before** the span goes to the batcher.
-
-```typescript
-import type { EdgeSubscriber } from 'autotel-edge';
-import { composeSubscribers } from 'autotel-edge';
+import { composeSubscribers, type EdgeSubscriber } from 'autotel-edge';
 
 const metricsSubscriber: EdgeSubscriber = (event) => {
-  if (
-    event.kind === 'span.end' &&
-    event.span.attributes['http.response.status_code'] >= 500
-  ) {
-    metrics.errorCounter.add(1, { route: event.span.name });
+  if (event.type === 'outcome' && event.outcome === 'failure') {
+    metrics.errorCounter.add(1, { operation: event.operation });
   }
 };
 
-const auditSubscriber: EdgeSubscriber = (event) => {
-  if (event.kind === 'span.end' && event.span.name.startsWith('admin.')) {
-    audit.write({
-      kind: event.span.name,
-      actor: event.span.attributes['user.id'],
-    });
+const auditSubscriber: EdgeSubscriber = async (event) => {
+  if (event.type === 'event' && event.event.startsWith('admin.')) {
+    await audit.write({ kind: event.event, actor: event.attributes['user.id'] });
   }
 };
 
-subscribers: [composeSubscribers([metricsSubscriber, auditSubscriber])];
+// in the config:
+subscribers: [composeSubscribers([metricsSubscriber, auditSubscriber])],
 ```
 
-## Post-processors for last-mile rewrites
+## Edge: post-processors for last-mile rewrites
 
-Post-processors mutate the array of spans **after** sampling, just before export. Use for redacting stack traces, dropping fields, or annotating with deployment info.
+Post-processors take the finished spans of a trace and return the spans to
+export. Use for redacting stack traces, dropping spans, or annotating with
+deployment info.
 
 ```typescript
-import type { PostProcessorFn } from 'autotel-edge';
-import { composePostProcessors } from 'autotel-edge';
+import { composePostProcessors, type PostProcessorFn } from 'autotel-edge';
 import { createStringRedactor } from 'autotel';
 
 const redactStacks = createStringRedactor('strict');
 
-const cleanStacks: PostProcessorFn = (spans) =>
-  spans.map((s) => {
-    if (typeof s.attributes['exception.stacktrace'] === 'string') {
-      s.attributes['exception.stacktrace'] = redactStacks(
-        s.attributes['exception.stacktrace'],
-      );
-    }
-    return s;
-  });
+const cleanStacks: PostProcessorFn = (spans) => {
+  for (const s of spans) {
+    const stack = s.attributes['exception.stacktrace'];
+    if (typeof stack === 'string') s.attributes['exception.stacktrace'] = redactStacks(stack);
+  }
+  return spans;
+};
 
-const tagDeploy: PostProcessorFn = (spans) =>
-  spans.map((s) => ({
-    ...s,
-    attributes: { ...s.attributes, 'deploy.id': process.env.RELEASE! },
-  }));
+const tagDeploy: PostProcessorFn = (spans) => {
+  for (const s of spans) s.attributes['deploy.id'] = RELEASE_ID;
+  return spans;
+};
 
-postProcessor: composePostProcessors([cleanStacks, tagDeploy]);
-```
-
-## Putting it all together
-
-```typescript
-import {
-  defineConfig,
-  composeSpanProcessors,
-  composeSubscribers,
-  composePostProcessors,
-} from 'autotel-edge';
-
-export const otelConfig = defineConfig({
-  service: { name: 'checkout' },
-  attributeRedactor: 'strict',
-
-  spanProcessors: composeSpanProcessors([
-    dropHealth, // 1. drop spans we never want
-    normaliseUrls, // 2. bound cardinality
-    new BatchSpanProcessor(honeycomb),
-    new BatchSpanProcessor(grafana),
-    tailSampler, // 3. keep errors + slow + 10%
-  ]),
-
-  subscribers: [
-    composeSubscribers([metricsSubscriber, auditSubscriber, aiCostSubscriber]),
-  ],
-
-  postProcessor: composePostProcessors([cleanStacks, tagDeploy]),
-});
+// in the config (requires `exporter`, not `spanProcessors`):
+postProcessor: composePostProcessors([cleanStacks, tagDeploy]),
 ```
 
 ## Error isolation
 
-Every compose helper catches errors per item and logs to `console.error` with the helper name. A single bad processor cannot break the others. Important when one of your subscribers is a third-party integration (Datadog, PagerDuty, …) that can rate-limit or 502.
+Every edge compose helper catches errors per item and logs to `console.error` with the helper name. A single bad processor cannot break the others. Important when one of your subscribers is a third-party integration (Datadog, PagerDuty, …) that can rate-limit or 502.
 
-## Choosing between subscribers and post-processors
+## Choosing the tool
 
-| You want…                                 | Use                                                        |
-| ----------------------------------------- | ---------------------------------------------------------- |
-| Mutate exported span attributes           | `postProcessor`                                            |
-| Drop spans entirely                       | `FilteringSpanProcessor` (early) or tail sampler           |
-| Update an in-process metric on every span | `subscribers`                                              |
-| Send an audit log to a DB                 | `subscribers` (use `log.fork('audit')` if writes are slow) |
-| Re-emit spans to a second backend         | second `BatchSpanProcessor` in `composeSpanProcessors`     |
+| You want…                           | Node                                 | Edge                                        |
+| ----------------------------------- | ------------------------------------ | ------------------------------------------- |
+| Mutate exported span attributes     | `attributeRedactor` / span enrichers | `postProcessor`                             |
+| Drop spans entirely                 | `spanFilter`                         | `postProcessor` or `sampling.tailSampler`   |
+| React to business events in-process | `subscribers` (with `track()`)       | `subscribers` (with `getEdgeSubscribers`)   |
+| Re-emit spans to a second backend   | `destinations`                       | second processor in `composeSpanProcessors` |

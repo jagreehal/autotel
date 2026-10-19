@@ -154,12 +154,13 @@ export default defineWorkerFetch(
 
 ## AWS Lambda
 
-Wrap the traced handler; the audit span is flushed when the handler settles:
+Wrap the handler with `wrapHandler` from `autotel-aws/lambda`: it creates the invocation span and awaits `flush()` before the handler returns, so the audit span leaves a frozen Lambda:
 
 ```typescript
+import { wrapHandler } from 'autotel-aws/lambda';
 import { withAuthz } from './audit';
 
-export const handler = async (event: APIGatewayProxyEventV2) =>
+export const handler = wrapHandler(async (event: APIGatewayProxyEventV2) =>
   withAuthz(
     {
       action: 'invoice.void',
@@ -171,7 +172,8 @@ export const handler = async (event: APIGatewayProxyEventV2) =>
       await invoices.void(event.pathParameters!.id!);
       return { statusCode: 200, body: JSON.stringify({ ok: true }) };
     },
-  );
+  ),
+);
 ```
 
 ## Standalone scripts and cron jobs

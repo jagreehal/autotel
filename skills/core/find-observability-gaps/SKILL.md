@@ -132,6 +132,7 @@ The default view names three for a reason. Sensitive routes weigh double; a dark
 
 ## Related
 
+- Skill `production-observability` for the whole standard a traced route is one part of.
 - Skill `autotel-cli` for the rest of the command surface, including `doctor`.
 - Skill `review-otel-patterns` for the judgement the scanner cannot make.
 - Skill `autotel-request-logging` and skill `autotel-structured-errors` for the APIs most fixes reach for.

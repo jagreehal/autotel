@@ -105,9 +105,9 @@ Two separate config systems serve different purposes:
 
 Implements deferred sampling decisions:
 
-- Spans are buffered in-memory during execution
-- Sampling decision made after span ends (can inspect attributes, status, duration)
-- Default `AdaptiveSampler`: 10% baseline, 100% errors, 100% slow requests
+- Spans are buffered per trace until the local root and every span started under it have ended (bounded by `maxBufferedSpans` and `traceTimeoutMs`), then kept or dropped together
+- The configured sampler decides from the whole trace: any ERROR span, the root's duration, a trace-ID hash for the baseline
+- `sampling: 'production'` uses `AdaptiveSampler`: 10% baseline, every error, every slow root. See [Keeping Costs Down](/autotel/costs/)
 - Custom samplers can implement `Sampler` interface
 
 ## Type-Safe Attributes

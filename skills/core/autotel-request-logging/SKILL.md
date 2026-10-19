@@ -40,16 +40,45 @@ const handler = withTracing({ name: 'http.request' })(
 );
 ```
 
-When the framework creates the span (e.g. Hono middleware), call `getRequestLogger()` with no args:
+When the framework creates the span (e.g. Hono's `otel()` middleware), call `getRequestLogger()` with no args:
 
 ```typescript
-app.use(autotelMiddleware());
+import { otel } from 'autotel-hono';
+
+app.use('*', otel());
 app.get('/api/users', (c) => {
   const log = getRequestLogger();
   log.set({ route: 'users' });
+  log.emitNow();
   return c.json({ users: [] });
 });
 ```
+
+Adapters that emit for you (`autotelMiddleware()` from `autotel-adapters/hono`, `withAutotel()` from `autotel-adapters/express` / `fastify`, …) own the request logger: read it with the adapter's `useLogger()`, and don't call `emitNow()` yourself. See `autotel-frameworks`.
+
+## Correlate pino / winston logs with traces
+
+The request logger is autotel's own wide event. To get `trace_id` / `span_id` on your existing app logs, and export them as OTel log records, instrument the logger library:
+
+```typescript
+// instrumentation.ts, loaded first (ESM: node --import autotel/register)
+import { init } from 'autotel';
+
+init({
+  service: 'api',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  autoInstrumentations: ['http', 'pino'], // or 'winston'
+  logs: true, // OTLP log export; off by default
+});
+
+// logger.ts: its own module, imported after instrumentation.ts
+import pino from 'pino';
+export const logger = pino();
+```
+
+- `autoInstrumentations` needs `@opentelemetry/auto-instrumentations-node` installed, and patches pino as it loads, so the logger must be created after `init()`. `init()` warns if pino / winston were already loaded.
+- Winston needs `@opentelemetry/winston-transport` installed to export log records over OTLP.
+- `init({ logger })` is not this: that logger only receives autotel's own diagnostics.
 
 ## Core Patterns
 
@@ -104,7 +133,7 @@ Source: packages/autotel/src/request-logger.ts
 
 ## Version
 
-Targets autotel v2.23.x.
+Matches autotel 8.x. Verify package exports when working against an older installed version.
 
 See also:
 

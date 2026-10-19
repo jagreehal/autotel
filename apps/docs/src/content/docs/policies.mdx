@@ -123,6 +123,31 @@ same decision — you get whole traces, not fragments.
 }
 ```
 
+**Drop a debug metric, and health-check data points of another**
+
+```json
+[
+  {
+    "id": "drop-debug-metrics",
+    "metric": {
+      "match": [{ "metric_field": "name", "starts_with": "debug." }],
+      "keep": false
+    }
+  },
+  {
+    "id": "drop-health-datapoints",
+    "metric": {
+      "match": [{ "datapoint_attribute": "http.route", "exact": "/health" }],
+      "keep": false
+    }
+  }
+]
+```
+
+Metric `keep` is a boolean (the spec defines no percentage for metrics) and is
+required: a policy without it is skipped rather than read as `false`. Policies
+apply per data point; a metric left with none is dropped.
+
 ## How matching works
 
 Every matcher in `match` must pass — they are ANDed. Each matcher sets exactly
@@ -130,8 +155,11 @@ one field selector and exactly one match operator.
 
 **Field selectors:** `trace_field` (`name`, `trace_id`, `span_id`,
 `status_message`), `log_field` (`body`, `severity_text`, `severity_number`,
-`event_name`, `trace_id`, `span_id`), `span_attribute`, `log_attribute`,
-`resource_attribute`, `scope_attribute`, `span_kind`, `span_status`.
+`event_name`, `trace_id`, `span_id`), `metric_field` (`name`, `description`,
+`unit`), `metric_type` (matches `gauge`, `sum`, `histogram`,
+`exponential_histogram`), `span_attribute`, `log_attribute`,
+`datapoint_attribute`, `resource_attribute`, `scope_attribute`, `span_kind`,
+`span_status`.
 
 **Match operators:** `exact`, `regex`, `exists`, `starts_with`, `ends_with`,
 `contains`. Add `negate: true` to invert, `case_insensitive: true` to fold case.
@@ -144,18 +172,22 @@ wins. Transforms run in the spec's fixed order: `remove` → `redact` → `renam
 
 ## What Autotel implements
 
-Policies compile onto the hooks Autotel already has — `spanFilter` and the log
-record processor chain. There is no separate pipeline to reason about, and a
-policy `spanFilter` composes with one you wrote yourself: a span must pass both.
+Policies compile onto the hooks Autotel already has: `spanFilter`, the log
+record processor chain, and a wrapper around the metric exporters `init()`
+builds. There is no separate pipeline to reason about, and a policy
+`spanFilter` composes with one you wrote yourself: a span must pass both.
+With custom `metricReaders`, wrap their exporter in `PolicyMetricExporter`
+from `autotel/policy`.
 
-| Stage                                                               | Status                                       |
-| ------------------------------------------------------------------- | -------------------------------------------- |
-| `trace.keep.percentage`                                             | Supported — deterministic per-trace sampling |
-| `log.keep` (`"all"` / `"none"` / percentage)                        | Supported                                    |
-| `log.transform` (`remove`, `redact`, `rename`, `add`)               | Supported for log record attributes and body |
-| `metric` targets                                                    | Not supported                                |
-| `trace.keep.mode`, `sampling_precision`, `hash_seed`, `fail_closed` | Not supported                                |
-| `event_attribute`, `link_trace_id` matchers                         | Not supported                                |
+| Stage                                                               | Status                                         |
+| ------------------------------------------------------------------- | ---------------------------------------------- |
+| `trace.keep.percentage`                                             | Supported — deterministic per-trace sampling   |
+| `log.keep` (`"all"` / `"none"` / percentage)                        | Supported                                      |
+| `log.transform` (`remove`, `redact`, `rename`, `add`)               | Supported for log record attributes and body   |
+| `metric.keep` (boolean, per data point)                             | Supported                                      |
+| `metric-rate`, `metric-aggregation`                                 | Not supported (named in the OTEP, unspecified) |
+| `trace.keep.mode`, `sampling_precision`, `hash_seed`, `fail_closed` | Not supported                                  |
+| `event_attribute`, `link_trace_id` matchers                         | Not supported                                  |
 
 `trace.keep.mode` requires the consistent-probability sampling scheme from
 [OTEP 235 / tracestate probability sampling](https://opentelemetry.io/docs/specs/otel/trace/tracestate-probability-sampling/),

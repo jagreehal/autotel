@@ -42,16 +42,12 @@ function captureStackTrace(): string {
 
 /**
  * Modules whose stack frames sit between the user's `trace()` call and this
- * file. Add a module here when you add a file to that call path.
+ * file, as source files (tests, tsx). The extension is anchored so
+ * `functional.ts` does not also match `functional.test.ts`.
  *
- * Frames are identified by filename, so renaming one of these files
- * silently degrades inference to no name rather than failing loudly. The robust
- * upgrade is threading the public entry function (`trace`/`instrument`/
- * `withTracing`) down to `Error.captureStackTrace` as a boundary — that needs a
- * non-V8 fallback, which is more code than this costs. Do it if a rename bites.
- *
- * The extension is anchored so `functional.ts` does not also match
- * `functional.test.ts`.
+ * A bundle names these differently (`functional-DPuMySRd.js`), which is why a
+ * frame is also internal when it is in the same file as this module: the
+ * bundler puts this module and its callers in one chunk.
  */
 const INTERNAL_FRAME_MODULES = [
   'variable-name-inference',
@@ -62,61 +58,52 @@ const INTERNAL_FRAME = new RegExp(
   String.raw`(?:${INTERNAL_FRAME_MODULES.join('|')})\.(?:ts|js)`,
 );
 
-/**
- * Parses the stack trace to find where trace() was called
- *
- * Stack trace format (Node.js):
- *   at functionName (file:line:column)
- *   at file:line:column
- *
- * We skip frames until we find one that's not in the functional API internals.
- * We also need to skip one additional frame (the trace/span/instrument function itself)
- * to get to the actual user code.
- */
-function parseCallLocation(stack: string): CallLocation | undefined {
-  const lines = stack.split('\n');
-  let skippedExternalFrame = false;
+/** Parses one stack line (`at fn (file:line:col)` or `at file:line:col`). */
+function parseFrame(line: string): CallLocation | undefined {
+  const match =
+    line.match(/at\s+(?:.*\s+)?\(?([^:]+):(\d+):(\d+)\)?/) ||
+    line.match(/^.*?([^:]+):(\d+):(\d+)/);
+  if (!match) return undefined;
 
-  for (const line of lines) {
-    if (INTERNAL_FRAME.test(line)) {
-      continue;
-    }
-
-    // Match various stack trace formats
-    // Format 1: at functionName (file:line:column)
-    // Format 2: at file:line:column
-    const match =
-      line.match(/at\s+(?:.*\s+)?\(?([^:]+):(\d+):(\d+)\)?/) ||
-      line.match(/^.*?([^:]+):(\d+):(\d+)/);
-
-    if (match) {
-      let filePath = match[1]!.trim();
-
-      // Handle file:// URLs (convert to paths)
-      if (filePath.startsWith('file://')) {
-        try {
-          filePath = nodeUrl.fileURLToPath(filePath);
-        } catch {
-          continue;
-        }
-      }
-
-      // Skip the first external frame (the trace/span function itself)
-      // We want the frame where the user CALLS trace(), not inside trace()
-      if (!skippedExternalFrame) {
-        skippedExternalFrame = true;
-        continue;
-      }
-
-      return {
-        file: filePath,
-        line: Number.parseInt(match[2]!, 10),
-        column: Number.parseInt(match[3]!, 10),
-      };
+  let filePath = match[1]!.trim();
+  // ESM frames are file:// URLs
+  if (filePath.startsWith('file://')) {
+    try {
+      filePath = nodeUrl.fileURLToPath(filePath);
+    } catch {
+      return undefined;
     }
   }
 
-  return undefined;
+  return {
+    file: filePath,
+    line: Number.parseInt(match[2]!, 10),
+    column: Number.parseInt(match[3]!, 10),
+  };
+}
+
+/** The file this module was loaded from - the source file, or the bundle chunk. */
+const OWN_FILE = (new Error('own file').stack ?? '')
+  .split('\n')
+  .map((line) => parseFrame(line))
+  .find(Boolean)?.file;
+
+/**
+ * The first two stack frames outside autotel: the line that called `trace()`,
+ * then its caller, for when the first is a wrapper around `trace()`.
+ */
+function parseCallLocations(stack: string): CallLocation[] {
+  const locations: CallLocation[] = [];
+
+  for (const line of stack.split('\n')) {
+    if (INTERNAL_FRAME.test(line)) continue;
+    const frame = parseFrame(line);
+    if (!frame || frame.file === OWN_FILE) continue;
+    locations.push(frame);
+    if (locations.length === 2) break;
+  }
+
+  return locations;
 }
 
 /**
@@ -200,6 +187,20 @@ function cacheInference(key: string, value: string | undefined): void {
   inferenceCache.set(key, value);
 }
 
+/** The variable assigned on the source line at `location`, cached per line. */
+function variableNameAt(location: CallLocation): string | undefined {
+  const cacheKey = `${location.file}:${location.line}`;
+  if (inferenceCache.has(cacheKey)) {
+    return inferenceCache.get(cacheKey);
+  }
+
+  const sourceLine = readSourceLine(location.file, location.line);
+  const variableName = sourceLine ? extractVariableName(sourceLine) : undefined;
+  // Cache misses too, to avoid repeated file reads
+  cacheInference(cacheKey, variableName);
+  return variableName;
+}
+
 /**
  * Main entry point: Attempts to infer the variable name from the call stack
  *
@@ -216,34 +217,13 @@ function cacheInference(key: string, value: string | undefined): void {
  */
 export function inferVariableNameFromCallStack(): string | undefined {
   try {
-    // Capture stack trace
-    const stack = captureStackTrace();
-
-    // Parse stack to find trace() call location
-    const callLocation = parseCallLocation(stack);
-    if (!callLocation) {
-      return undefined;
+    // The call site, then its caller, so a helper around trace() takes the
+    // name its caller assigns.
+    for (const location of parseCallLocations(captureStackTrace())) {
+      const name = variableNameAt(location);
+      if (name) return name;
     }
-
-    // Check cache
-    const cacheKey = `${callLocation.file}:${callLocation.line}`;
-    if (inferenceCache.has(cacheKey)) {
-      return inferenceCache.get(cacheKey);
-    }
-
-    // Read source line
-    const sourceLine = readSourceLine(callLocation.file, callLocation.line);
-    if (!sourceLine) {
-      return undefined;
-    }
-
-    // Extract variable name
-    const variableName = extractVariableName(sourceLine);
-
-    // Cache result (even if undefined, to avoid repeated failed attempts)
-    cacheInference(cacheKey, variableName);
-
-    return variableName;
+    return undefined;
   } catch {
     // Graceful degradation - don't break the app if inference fails
     return undefined;

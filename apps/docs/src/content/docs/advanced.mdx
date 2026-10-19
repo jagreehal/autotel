@@ -799,13 +799,13 @@ throws instead.
 
 ## Choosing a Sampler
 
-| Sampler                | Decides on               | Use when                                              |
-| ---------------------- | ------------------------ | ----------------------------------------------------- |
-| `AdaptiveSampler`      | Outcome, after execution | Default. Keeps every error and slow request.          |
-| `DeterministicSampler` | Hash of a shared key     | Several services must agree on one trace.             |
-| `KeyTargetRateSampler` | Observed traffic per key | Traffic is skewed and rare operations matter.         |
-| `RandomSampler`        | Chance, per process      | Single service, no cross-process trace to keep whole. |
-| `UserIdSampler`        | User identity            | Debugging named users or VIP accounts.                |
+| Sampler                | Decides on               | Use when                                               |
+| ---------------------- | ------------------------ | ------------------------------------------------------ |
+| `AdaptiveSampler`      | Outcome, after execution | `production` preset. Keeps every error and slow trace. |
+| `DeterministicSampler` | Hash of a shared key     | Several services must agree on one trace.              |
+| `KeyTargetRateSampler` | Observed traffic per key | Traffic is skewed and rare operations matter.          |
+| `RandomSampler`        | Chance, per process      | Single service, no cross-process trace to keep whole.  |
+| `UserIdSampler`        | User identity            | Debugging named users or VIP accounts.                 |
 
 :::caution
 Sampling in a collector as well? The rates multiply. Autotel's `production`

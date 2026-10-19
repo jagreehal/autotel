@@ -13,9 +13,11 @@
  * - `trace.keep.percentage` — deterministic per-trace probabilistic sampling
  * - `log.keep` — `"all"` / `"none"` / a percentage
  * - `log.transform` — `remove` → `redact` → `rename` → `add` (spec order)
+ * - `metric.keep` — boolean, per data point (wrap the exporter with
+ *   {@link PolicyMetricExporter}; `init()` does it for the exporters it builds)
  *
  * Unsupported (policy is skipped, telemetry is not — per spec fail-open):
- * - `metric` targets
+ * - `metric-rate` / `metric-aggregation` (named in the OTEP, not specified)
  * - `trace.keep.mode` / `sampling_precision` / `hash_seed` / `fail_closed`
  *   (OTEP 235 consistent-probability sampling; autotel's samplers are not
  *   consistent-probability yet)
@@ -41,6 +43,12 @@ import type { AttributeValue, Context } from '@opentelemetry/api';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import type { LogRecordProcessor, SdkLogRecord } from '@opentelemetry/sdk-logs';
 import type { AnyValue } from '@opentelemetry/api-logs';
+import type {
+  PushMetricExporter,
+  ResourceMetrics,
+  MetricData,
+} from '@opentelemetry/sdk-metrics';
+import type { ExportResult } from '@opentelemetry/core';
 import type { UnknownRecord } from './values';
 import { asNumber, asRecord, nonEmptyString } from './values';
 
@@ -62,6 +70,11 @@ export interface PolicyMatcher {
   scope_attribute?: AttributePath;
   span_kind?: string;
   span_status?: string;
+  /** `name`, `description` or `unit`. */
+  metric_field?: string;
+  datapoint_attribute?: AttributePath;
+  /** Selects the metric's type: `gauge`, `sum`, `histogram`, `exponential_histogram`. */
+  metric_type?: string;
 
   // Match operator (exactly one)
   exact?: string;
@@ -109,6 +122,12 @@ export interface PolicyTraceTarget {
   };
 }
 
+export interface PolicyMetricTarget {
+  match: PolicyMatcher[];
+  /** Whether matching data points are kept (spec: a boolean, no percentage). */
+  keep: boolean;
+}
+
 /** A telemetry policy. Exactly one target must be set. */
 export interface Policy {
   id: string;
@@ -118,8 +137,7 @@ export interface Policy {
   labels?: Record<string, string>;
   trace?: PolicyTraceTarget;
   log?: PolicyLogTarget;
-  /** Recognised so it can be reported unsupported rather than silently ignored. */
-  metric?: unknown;
+  metric?: PolicyMetricTarget;
 }
 
 /**
@@ -161,6 +179,9 @@ const FIELD_SELECTORS = [
   'scope_attribute',
   'span_kind',
   'span_status',
+  'metric_field',
+  'datapoint_attribute',
+  'metric_type',
 ] as const;
 
 /** How many of these keys the value actually sets. */
@@ -186,12 +207,12 @@ export function unsupportedReason(policy: Policy): string | undefined {
   if (!policy || nonEmptyString(policy.id) === undefined) {
     return 'policy requires an id';
   }
-  if (policy.metric !== undefined) return 'metric targets are not supported';
+  const targets = countSet(policy, ['trace', 'log', 'metric']);
+  if (targets !== 1) {
+    return 'exactly one target (trace, log or metric) must be set';
+  }
 
-  const targets = countSet(policy, ['trace', 'log']);
-  if (targets !== 1) return 'exactly one target (trace or log) must be set';
-
-  const target = policy.trace ?? policy.log;
+  const target = policy.trace ?? policy.log ?? policy.metric;
   if (!Array.isArray(target?.match) || target.match.length === 0) {
     return 'at least one matcher is required';
   }
@@ -202,6 +223,12 @@ export function unsupportedReason(policy: Policy): string | undefined {
     if (countSet(matcher, MATCH_OPERATORS) !== 1) {
       return 'each matcher must set exactly one match operator';
     }
+  }
+
+  // Proto3 would read a missing bool as false and drop everything it matches;
+  // demand it so a typo cannot silently delete a metric.
+  if (policy.metric && typeof policy.metric.keep !== 'boolean') {
+    return 'metric keep must be true or false';
   }
 
   if (policy.trace?.keep) {
@@ -345,6 +372,13 @@ function resolveField(matcher: PolicyMatcher, view: RecordView): RecordValue {
   if (matcher.trace_field !== undefined) return view.field(matcher.trace_field);
   if (matcher.span_kind !== undefined) return view.field('kind');
   if (matcher.span_status !== undefined) return view.field('status_code');
+  if (matcher.metric_field !== undefined) {
+    return view.field(matcher.metric_field);
+  }
+  if (matcher.metric_type !== undefined) return view.field('type');
+  if (matcher.datapoint_attribute !== undefined) {
+    return view.attribute(joinPath(matcher.datapoint_attribute));
+  }
   if (matcher.span_attribute !== undefined) {
     return view.attribute(joinPath(matcher.span_attribute));
   }
@@ -637,6 +671,121 @@ export class PolicyLogRecordProcessor implements LogRecordProcessor {
 /** True when any active policy targets logs — used to skip wrapping otherwise. */
 export function hasLogPolicies(): boolean {
   return activePolicies.some((policy) => policy.log !== undefined);
+}
+
+// --- metrics ----------------------------------------------------------------
+
+/** DataPointType by value, without importing the SDK enum at runtime. */
+const METRIC_TYPES = ['histogram', 'exponential_histogram', 'gauge', 'sum'];
+
+function metricView(
+  resourceMetrics: ResourceMetrics,
+  scopeName: string,
+  metric: MetricData,
+  attributes: Record<string, AttributeValue | undefined>,
+): RecordView {
+  return {
+    field(name) {
+      switch (name) {
+        case 'name':
+        case 'description':
+        case 'unit': {
+          return metric.descriptor[name];
+        }
+        case 'type': {
+          return METRIC_TYPES[metric.dataPointType];
+        }
+        default: {
+          return;
+        }
+      }
+    },
+    attribute: (key) => attributes[key],
+    resource: (key) => resourceMetrics.resource.attributes[key],
+    scope: (key) => (key === 'name' ? scopeName : undefined),
+  };
+}
+
+/**
+ * Applies `metric` policies to one export batch: a data point is dropped when
+ * any matching policy says `keep: false` (most restrictive wins), and a metric
+ * left with no data points is dropped with it.
+ */
+export function applyMetricPolicies(
+  resourceMetrics: ResourceMetrics,
+): ResourceMetrics {
+  const policies = activePolicies.filter((policy) => policy.metric);
+  if (policies.length === 0) return resourceMetrics;
+
+  return {
+    ...resourceMetrics,
+    scopeMetrics: resourceMetrics.scopeMetrics
+      .map((scopeMetrics) => ({
+        ...scopeMetrics,
+        metrics: scopeMetrics.metrics.flatMap((metric) => {
+          const dataPoints = (
+            metric.dataPoints as Array<{
+              attributes: Record<string, AttributeValue | undefined>;
+            }>
+          ).filter((point) => {
+            const view = metricView(
+              resourceMetrics,
+              scopeMetrics.scope.name,
+              metric,
+              point.attributes,
+            );
+            return policies.every(
+              (policy) =>
+                policy.metric!.keep || !matchesAll(policy.metric!.match, view),
+            );
+          });
+          if (dataPoints.length === 0) return [];
+          // SAFETY: same metric, a subset of its own data points.
+          return [{ ...metric, dataPoints } as MetricData];
+        }),
+      }))
+      .filter((scopeMetrics) => scopeMetrics.metrics.length > 0),
+  };
+}
+
+/**
+ * A metric exporter that applies `metric` policies before export.
+ *
+ * Fail-open: any error exports the batch unmodified.
+ */
+export class PolicyMetricExporter implements PushMetricExporter {
+  constructor(private readonly wrapped: PushMetricExporter) {
+    this.selectAggregationTemporality =
+      wrapped.selectAggregationTemporality?.bind(wrapped);
+    this.selectAggregation = wrapped.selectAggregation?.bind(wrapped);
+  }
+
+  selectAggregationTemporality?: PushMetricExporter['selectAggregationTemporality'];
+  selectAggregation?: PushMetricExporter['selectAggregation'];
+
+  export(
+    metrics: ResourceMetrics,
+    resultCallback: (result: ExportResult) => void,
+  ): void {
+    let filtered = metrics;
+    try {
+      filtered = applyMetricPolicies(metrics);
+    } catch (error) {
+      warnOnce(
+        'metric-eval',
+        `policy evaluation failed for metrics, keeping them: ${String(error)}`,
+      );
+    }
+    this.wrapped.export(filtered, resultCallback);
+  }
+
+  forceFlush(): Promise<void> {
+    return this.wrapped.forceFlush();
+  }
+
+  shutdown(): Promise<void> {
+    return this.wrapped.shutdown();
+  }
 }
 
 // --- file provider ----------------------------------------------------------

@@ -23,9 +23,13 @@ import {
 } from '@opentelemetry/semantic-conventions';
 import type { Sampler } from './sampling';
 import {
+  AlwaysSampler,
   samplingPresets,
   resolveSamplingPreset,
   AUTOTEL_SAMPLING_RATE,
+  AUTOTEL_SAMPLING_TAIL_EVALUATED,
+  AUTOTEL_SAMPLING_TAIL_KEEP,
+  debugCaptureRequested,
 } from './sampling';
 import type { Logger } from './logger';
 import { silentLogger, wrapLogger } from './init-logger';
@@ -43,7 +47,10 @@ import {
   buildPostHogLogProcessors,
   RedactingLogRecordProcessor,
 } from './posthog-logs';
-import { TailSamplingSpanProcessor } from './tail-sampling-processor';
+import {
+  TailSamplingSpanProcessor,
+  findTailSamplingProcessors,
+} from './tail-sampling-processor';
 /**
  * Records nothing and exports nothing, so a `TracerProvider` is still
  * registered when there is no destination. See where it is used below.
@@ -64,6 +71,7 @@ import { EnrichedSpanProcessor } from './enriched-span-processor';
 import { FilteringSpanProcessor } from './filtering-span-processor';
 import {
   PolicyLogRecordProcessor,
+  PolicyMetricExporter,
   policySpanFilter,
   setPolicies,
   watchPolicyFile,
@@ -156,8 +164,8 @@ export {
 function toOtelSampler(sampler: Sampler): OtelSampler {
   return {
     shouldSample(
-      _context: Context,
-      _traceId: string,
+      context: Context,
+      traceId: string,
       spanName: string,
       _spanKind: SpanKind,
       _attributes: Attributes,
@@ -167,6 +175,7 @@ function toOtelSampler(sampler: Sampler): OtelSampler {
         operationName: spanName,
         args: [],
         links,
+        traceId,
       };
       const shouldTrace = sampler.shouldSample(samplingContext);
       const rate = sampler.sampleRate?.(samplingContext);
@@ -178,6 +187,18 @@ function toOtelSampler(sampler: Sampler): OtelSampler {
       // Let a query reweight counts back to the true population.
       if (shouldTrace && rate !== undefined && rate > 1) {
         result.attributes = { [AUTOTEL_SAMPLING_RATE]: rate };
+      }
+      // `autotel.debug` baggage keeps the trace, auto-instrumented roots included.
+      if (
+        shouldTrace &&
+        sampler.needsTailSampling?.() &&
+        debugCaptureRequested(context)
+      ) {
+        result.attributes = {
+          ...result.attributes,
+          [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+          [AUTOTEL_SAMPLING_TAIL_KEEP]: true,
+        };
       }
       return result;
     },
@@ -513,17 +534,41 @@ export function init(cfg: AutotelConfig): void {
         ? [mergedConfig.logRecordProcessor]
         : undefined;
 
+  const autotelSampler =
+    mergedConfig.sampler ??
+    (mergedConfig.sampling
+      ? resolveSamplingPreset(mergedConfig.sampling)
+      : undefined);
+  if (autotelSampler) {
+    mergedConfig.sampler = autotelSampler;
+  }
+
   // Build array of span processors (supports multiple)
   let spanProcessors: SpanProcessor[] = [];
 
   if (configuredSpanProcessors !== undefined) {
-    // User provided custom processors (full control), including an empty list
+    // User provided custom processors (full control), including an empty list.
+    // Left unwrapped so a branch can keep every span (an audit trail beside a
+    // sampled exporter). With a tail sampler and no wrapped branch, warn.
     spanProcessors.push(...configuredSpanProcessors);
+    const tailProcessors = findTailSamplingProcessors(configuredSpanProcessors);
+    for (const tail of tailProcessors) tail.setDefaultSampler(autotelSampler);
+    if (
+      autotelSampler?.needsTailSampling?.() &&
+      configuredSpanProcessors.length > 0 &&
+      tailProcessors.length === 0
+    ) {
+      setupWarn(
+        '[autotel] A tail sampler is configured but none of your spanProcessors is wrapped in TailSamplingSpanProcessor, so every span is exported. Wrap the exporting processor (import { TailSamplingSpanProcessor } from "autotel/tail-sampling-processor"), or pass spanExporters to have autotel wrap it.',
+      );
+    }
   } else if (configuredSpanExporters && configuredSpanExporters.length > 0) {
     // User provided custom exporters (wrap each with tail sampling)
     for (const exporter of configuredSpanExporters) {
       spanProcessors.push(
-        new TailSamplingSpanProcessor(new BatchSpanProcessor(exporter)),
+        new TailSamplingSpanProcessor(new BatchSpanProcessor(exporter), {
+          sampler: autotelSampler,
+        }),
       );
     }
   } else {
@@ -540,7 +585,9 @@ export function init(cfg: AutotelConfig): void {
       });
 
       spanProcessors.push(
-        new TailSamplingSpanProcessor(new BatchSpanProcessor(traceExporter)),
+        new TailSamplingSpanProcessor(new BatchSpanProcessor(traceExporter), {
+          sampler: autotelSampler,
+        }),
       );
     }
   }
@@ -712,9 +759,15 @@ export function init(cfg: AutotelConfig): void {
       const exportIntervalMillis = readMillisEnv('OTEL_METRIC_EXPORT_INTERVAL');
       const exportTimeoutMillis = readMillisEnv('OTEL_METRIC_EXPORT_TIMEOUT');
 
+      // `metric` policies apply at export; gated on `policies` being set, not
+      // on the set being non-empty, because the set reloads at runtime.
       const readerOptions: ConstructorParameters<
         typeof PeriodicExportingMetricReader
-      >[0] = { exporter: metricExporter };
+      >[0] = {
+        exporter: mergedConfig.policies
+          ? new PolicyMetricExporter(metricExporter)
+          : metricExporter,
+      };
       if (exportIntervalMillis !== undefined) {
         readerOptions.exportIntervalMillis = exportIntervalMillis;
       }
@@ -865,18 +918,12 @@ export function init(cfg: AutotelConfig): void {
     }
   }
 
-  const autotelSampler =
-    mergedConfig.sampler ??
-    (mergedConfig.sampling
-      ? resolveSamplingPreset(mergedConfig.sampling)
-      : undefined);
-  if (autotelSampler) {
-    mergedConfig.sampler = autotelSampler;
-  }
+  // One sampler decides: the configured one, else OTEL_TRACES_SAMPLER, else
+  // keep everything (as the tracing wrapper does when nothing was chosen).
   const sampler: OtelSampler = autotelSampler
     ? followLocalParent(toOtelSampler(autotelSampler))
     : (envConfig.otelSampler ??
-      followLocalParent(toOtelSampler(samplingPresets.production())));
+      followLocalParent(toOtelSampler(new AlwaysSampler())));
 
   const sdkOptions: AutotelSdkOptions = {
     resource,
