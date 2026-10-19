@@ -1,5 +1,12 @@
 # autotel-pact
 
+## 25.0.8
+
+### Patch Changes
+
+- Updated dependencies [dfea242]
+  - autotel@8.3.0
+
 ## 25.0.7
 
 ### Patch Changes

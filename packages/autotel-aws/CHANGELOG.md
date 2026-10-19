@@ -1,5 +1,12 @@
 # autotel-aws
 
+## 1.4.3
+
+### Patch Changes
+
+- Updated dependencies [dfea242]
+  - autotel@8.3.0
+
 ## 1.4.2
 
 ### Patch Changes

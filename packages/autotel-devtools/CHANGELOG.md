@@ -1,5 +1,12 @@
 # autotel-devtools
 
+## 31.4.4
+
+### Patch Changes
+
+- Updated dependencies [dfea242]
+  - autotel@8.3.0
+
 ## 31.4.3
 
 ### Patch Changes

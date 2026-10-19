@@ -1,5 +1,12 @@
 # autotel-audit
 
+## 1.2.7
+
+### Patch Changes
+
+- Updated dependencies [dfea242]
+  - autotel@8.3.0
+
 ## 1.2.6
 
 ### Patch Changes
