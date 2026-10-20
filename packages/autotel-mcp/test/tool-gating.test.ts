@@ -87,6 +87,7 @@ describe('capability-aware tool registration', () => {
     expect(names.has('discover_log_fields')).toBe(false);
     expect(names.has('discover_services')).toBe(true);
     expect(names.has('list_metrics')).toBe(true);
+    expect(names.has('get_metric_series')).toBe(true);
     expect(names.has('search_logs')).toBe(false);
   });
 
@@ -127,6 +128,7 @@ describe('capability-aware tool registration', () => {
       'correlate',
       'explain_slowdown',
       'list_metrics',
+      'get_metric_series',
       'search_logs',
       'discover_trace_fields',
       'discover_log_fields',

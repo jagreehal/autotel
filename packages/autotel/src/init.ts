@@ -34,6 +34,7 @@ import {
 import type { Logger } from './logger';
 import { silentLogger, wrapLogger } from './init-logger';
 import type { Attributes, Context, SpanKind, Link } from '@opentelemetry/api';
+import { diag } from '@opentelemetry/api';
 import type { ValidationConfig } from './validation';
 import {
   PeriodicExportingMetricReader,
@@ -68,7 +69,10 @@ class NoopSpanProcessor implements SpanProcessor {
 import { BaggageSpanProcessor } from './baggage-span-processor';
 import { RequestAttributesSpanProcessor } from './request-attributes';
 import { EnrichedSpanProcessor } from './enriched-span-processor';
-import { FilteringSpanProcessor } from './filtering-span-processor';
+import {
+  FilteringSpanProcessor,
+  type SpanFilterPredicate,
+} from './filtering-span-processor';
 import {
   PolicyLogRecordProcessor,
   PolicyMetricExporter,
@@ -77,6 +81,11 @@ import {
   watchPolicyFile,
 } from './policy';
 import { SpanNameNormalizingProcessor } from './span-name-normalizer';
+import {
+  ignoredRoutesFilter,
+  nextFetchNoise,
+  stripUrlQuery,
+} from './request-noise';
 import {
   AttributeRedactingProcessor,
   normalizeAttributeRedactorConfig,
@@ -470,7 +479,7 @@ export function init(cfg: AutotelConfig): void {
     }
   }
 
-  // Detect hostname for proper Datadog correlation and Service Catalog discovery
+  // Detect the hostname for the host.name resource attribute
   const hostname = detectHostname();
 
   let resource = resourceFromAttributes({
@@ -481,13 +490,11 @@ export function init(cfg: AutotelConfig): void {
     'deployment.environment.name': environment, // OTel v1.27.0+ standard
   });
 
-  // Add hostname attributes for Datadog Service Catalog and infrastructure correlation
+  // `host.name` is the convention, and what Datadog and every other backend
+  // read for the host. Datadog's own `datadog.host.name` only overrides it.
   if (hostname) {
     resource = resource.merge(
-      resourceFromAttributes({
-        'host.name': hostname, // OpenTelemetry standard
-        'datadog.host.name': hostname, // Datadog-specific, highest priority for Datadog
-      }),
+      resourceFromAttributes({ 'host.name': hostname }),
     );
   }
 
@@ -668,6 +675,16 @@ export function init(cfg: AutotelConfig): void {
 
   // Step 2: Wrap with SpanNameNormalizingProcessor (middle)
   // Normalizer runs in onStart(), so span names are normalized before any onEnd processing
+  // Next.js names fetch spans with the full URL; its query string is
+  // unbounded and carries ids, so it never reaches the span name.
+  if (process.env.NEXT_RUNTIME && spanProcessors.length > 0) {
+    spanProcessors = spanProcessors.map(
+      (processor) =>
+        new SpanNameNormalizingProcessor(processor, {
+          normalizer: stripUrlQuery,
+        }),
+    );
+  }
   if (mergedConfig.spanNameNormalizer && spanProcessors.length > 0) {
     spanProcessors = spanProcessors.map(
       (processor) =>
@@ -689,6 +706,24 @@ export function init(cfg: AutotelConfig): void {
     mergedConfig.spanFilter = userSpanFilter
       ? (span) => userSpanFilter(span) && policySpanFilter(span)
       : policySpanFilter;
+  }
+
+  // Routes to ignore, and Next.js's fetch noise. Only installed when they can
+  // apply: a filter makes tail sampling hold whole traces.
+  const requestFilters: SpanFilterPredicate[] = [];
+  if (mergedConfig.ignoreRoutes?.length) {
+    requestFilters.push(ignoredRoutesFilter(mergedConfig.ignoreRoutes));
+  }
+  if (process.env.NEXT_RUNTIME && spanProcessors.length > 0) {
+    const nextFetch = nextFetchNoise();
+    requestFilters.push(nextFetch.filter);
+    spanProcessors.push(nextFetch.recorder);
+  }
+  if (requestFilters.length > 0) {
+    const userSpanFilter = mergedConfig.spanFilter;
+    mergedConfig.spanFilter = (span) =>
+      requestFilters.every((keep) => keep(span)) &&
+      (userSpanFilter?.(span) ?? true);
   }
 
   // Step 3: Wrap with FilteringSpanProcessor (outermost - executes first in onEnd)
@@ -925,6 +960,17 @@ export function init(cfg: AutotelConfig): void {
     : (envConfig.otelSampler ??
       followLocalParent(toOtelSampler(new AlwaysSampler())));
 
+  const onOtherApiCopy = instrumentationsOnOtherApiCopy(
+    (finalInstrumentations ?? []).flat(),
+  );
+  if (onOtherApiCopy.length > 0) {
+    setupWarn(
+      `[autotel] ${onOtherApiCopy.join(', ')} loaded a different copy of @opentelemetry/api than autotel. ` +
+        'If its spans are missing, keep @opentelemetry/api external so every bundle shares one copy ' +
+        '(Next.js: withAutotelConfig from autotel-adapters/next-config).',
+    );
+  }
+
   const sdkOptions: AutotelSdkOptions = {
     resource,
     // The SDK runs resource detection after merging `resource`. Passing
@@ -1081,6 +1127,26 @@ export function getEventsConfig(): EventsConfig | null {
 /**
  * Warn once if not initialized (same behavior in all environments)
  */
+/**
+ * Instrumentations built against another `@opentelemetry/api` copy.
+ *
+ * Copies of the API share one global registry, so they cannot be counted
+ * from it. Each InstrumentationBase builds its diag logger from its own copy,
+ * though, so a logger of another class than ours means another copy. One
+ * without that logger is not judged.
+ */
+function instrumentationsOnOtherApiCopy(
+  instrumentations: ReadonlyArray<{ instrumentationName: string }>,
+): string[] {
+  const ours = diag.createComponentLogger({ namespace: 'autotel' }).constructor;
+  return instrumentations
+    .filter((instrumentation) => {
+      const theirs = (instrumentation as { _diag?: object })._diag;
+      return theirs !== undefined && theirs.constructor !== ours;
+    })
+    .map((instrumentation) => instrumentation.instrumentationName);
+}
+
 export function warnIfNotInitialized(context: string): void {
   if (!initialized && !warnedOnce) {
     logger.warn(

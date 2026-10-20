@@ -391,3 +391,53 @@ declare global {
     __emit: (type: string, data: unknown) => void;
   }
 }
+
+describe('live map: measured consumer frames', () => {
+  const measured = () =>
+    renderLiveMapHtml(
+      buildLiveMap(
+        { ...snapshotOf(), consumersMeasured: true },
+        catalogOf([ORDERS, PAYMENTS], ['OrderPlaced']),
+      ),
+      {
+        mode: 'live',
+        liveUrl: '/events',
+        liveEventName: 'track',
+        liveConsumeEventName: 'consume',
+      },
+    );
+  const CONSUMED = 'consumed-by:event:OrderPlaced->service:PaymentService';
+
+  it('a producer frame alone leaves a measured consumer edge unseen', async () => {
+    const page = await open(measured());
+    await emit(page, { name: 'order.placed', producer: 'OrdersService' });
+    expect(await byId(page, CONSUMED).getAttribute('class')).toContain(
+      'liveness-declared-only',
+    );
+    expect(await nodeCount(page, 'service:PaymentService')).toBe(0);
+    await page.close();
+  });
+
+  /** Opened before the first checkout, the edge must still come alive. */
+  it('a consume frame promotes, counts and solidly marks that edge only', async () => {
+    const page = await open(measured());
+    const markers = await page.evaluate(() => {
+      const before = document.getElementById('markers')!.childElementCount;
+      window.__emit('consume', {
+        event: 'order.placed',
+        consumer: 'PaymentService',
+      });
+      const layer = document.getElementById('markers')!;
+      return {
+        added: layer.childElementCount - before,
+        hollow: layer.querySelectorAll('.asserted').length,
+      };
+    });
+    expect(markers).toEqual({ added: 1, hollow: 0 });
+    expect(await byId(page, CONSUMED).getAttribute('class')).toContain(
+      'liveness-observed',
+    );
+    expect(await nodeCount(page, 'service:PaymentService')).toBe(1);
+    await page.close();
+  });
+});

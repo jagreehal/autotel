@@ -1,8 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { stream, streamSSE } from 'hono/streaming';
+import { HTTPException } from 'hono/http-exception';
 import { otel } from './index';
-import type { Attributes, Context, Span, SpanOptions, Tracer } from 'autotel';
+import type {
+  Attributes,
+  Context as OtelContext,
+  Span,
+  SpanOptions,
+  Tracer,
+} from 'autotel';
 import { SpanKind, propagation, context, otelTrace } from 'autotel';
 import type { HttpMetricsConfig } from './metrics';
 
@@ -13,7 +20,7 @@ type MockSpan = ReturnType<typeof createMockSpan>;
 interface SpanCollector {
   span: MockSpan;
   options: SpanOptions | undefined;
-  parentContext?: Context;
+  parentContext?: OtelContext;
 }
 
 /** What the fake meter recorded. */
@@ -53,7 +60,7 @@ function createMockTracer(spanCollector: SpanCollector): Tracer {
       (
         _name: string,
         options: SpanOptions,
-        parentContext: Context,
+        parentContext: OtelContext,
         callback: (span: Span) => Promise<Response>,
       ) => {
         const span = createMockSpan();
@@ -254,7 +261,7 @@ describe('otel middleware', () => {
         (
           _name: string,
           options: SpanOptions,
-          _context: Context,
+          _context: OtelContext,
           callback: (span: Span) => Promise<Response>,
         ) => {
           spanCollector.span = baseSpan;
@@ -373,6 +380,190 @@ describe('otel middleware', () => {
     expect(spanCollector.span.setAttribute).toHaveBeenCalledWith(
       'http.route',
       '/subapp/hello',
+    );
+  });
+
+  it('reports the full template for a sub-app mounted under a basePath', async () => {
+    const { spanCollector, recordCollector } = createCollectors();
+    const tracer = createMockTracer(spanCollector);
+    const meter = createMockMeter(recordCollector);
+
+    const users = new Hono().get('/:id', (c) => c.text(c.req.param('id')));
+    const app = new Hono().basePath('/api');
+    app.use(otel({ tracer, meter }));
+    app.route('/users', users);
+
+    await send(app, 'http://localhost/api/users/42');
+
+    expect(spanCollector.span.setAttribute).toHaveBeenCalledWith(
+      'http.route',
+      '/api/users/:id',
+    );
+    expect(recordCollector.durationRecords[0]!.attrs['http.route']).toBe(
+      '/api/users/:id',
+    );
+  });
+
+  it('uses getRoute for the route, span name and metric, ignoring a throw', async () => {
+    const { spanCollector, recordCollector } = createCollectors();
+    const tracer = createMockTracer(spanCollector);
+    const meter = createMockMeter(recordCollector);
+
+    const app = new Hono<{ Variables: { operation: string } }>();
+    app.use(otel({ tracer, meter, getRoute: (c) => c.get('operation') }));
+    app.post('/rpc', (c) => {
+      c.set('operation', 'users.create');
+      return c.text('ok');
+    });
+    const rpc = await app.request('http://localhost/rpc', { method: 'POST' });
+    await rpc.arrayBuffer();
+
+    expect(spanCollector.span.setAttribute).toHaveBeenCalledWith(
+      'http.route',
+      'users.create',
+    );
+    expect(spanCollector.span.updateName).toHaveBeenCalledWith(
+      'POST users.create',
+    );
+    expect(recordCollector.durationRecords[0]!.attrs['http.route']).toBe(
+      'users.create',
+    );
+
+    const throwing = createCollectors();
+    const fallback = new Hono()
+      .use(
+        otel({
+          tracer: createMockTracer(throwing.spanCollector),
+          meter: createMockMeter(throwing.recordCollector),
+          getRoute: () => {
+            throw new Error('resolver failed');
+          },
+        }),
+      )
+      .get('/hello', (c) => c.text('ok'));
+    const res = await send(fallback, 'http://localhost/hello');
+    expect(res.status).toBe(200);
+    expect(throwing.spanCollector.span.setAttribute).toHaveBeenCalledWith(
+      'http.route',
+      '/hello',
+    );
+  });
+
+  it('does not fail the request when the app was built by another copy of Hono', async () => {
+    // `routePath()` reads a Symbol private to its own copy of Hono. A request
+    // from another copy lacks it; the deprecated getter on that request is
+    // what still answers.
+    const { spanCollector, recordCollector } = createCollectors();
+    const middleware = otel({
+      tracer: createMockTracer(spanCollector),
+      meter: createMockMeter(recordCollector),
+    });
+    const c = {
+      req: {
+        method: 'GET',
+        url: 'http://localhost/users/1',
+        routePath: '/users/:id',
+        header: () => ({}),
+        raw: new Request('http://localhost/users/1'),
+      },
+      res: new Response(null, { status: 204 }),
+      error: undefined,
+    };
+
+    // SAFETY: the middleware reads only the fields above from a context.
+    await middleware(c as unknown as Context, async () => {});
+
+    expect(spanCollector.span.setAttribute).toHaveBeenCalledWith(
+      'http.route',
+      '/users/:id',
+    );
+  });
+
+  it('sets error.type on span and metric: exception class, or 5xx status', async () => {
+    const { spanCollector, recordCollector } = createCollectors();
+    const app = new Hono()
+      .use(
+        otel({
+          tracer: createMockTracer(spanCollector),
+          meter: createMockMeter(recordCollector),
+        }),
+      )
+      .get('/throws', () => {
+        throw new TypeError('boom');
+      })
+      .get('/unavailable', (c) => c.text('down', 503))
+      .get('/ok', (c) => c.text('ok'));
+
+    await send(app, 'http://localhost/throws');
+    expect(spanCollector.span.setAttribute).toHaveBeenCalledWith(
+      'error.type',
+      'TypeError',
+    );
+    expect(spanCollector.span.setStatus).toHaveBeenCalledWith({
+      code: 2,
+      message: 'boom',
+    });
+
+    await send(app, 'http://localhost/unavailable');
+    expect(spanCollector.span.setAttribute).toHaveBeenCalledWith(
+      'error.type',
+      '503',
+    );
+
+    await send(app, 'http://localhost/ok');
+    expect(spanCollector.span.setAttribute).not.toHaveBeenCalledWith(
+      'error.type',
+      expect.anything(),
+    );
+
+    expect(
+      recordCollector.durationRecords.map((r) => r.attrs['error.type']),
+    ).toEqual(['TypeError', '503', undefined]);
+  });
+
+  it('leaves error.type off a handled 4xx', async () => {
+    const { recordCollector } = createCollectors();
+    const app = new Hono()
+      .use(
+        otel({ disableTracing: true, meter: createMockMeter(recordCollector) }),
+      )
+      .get('/denied', () => {
+        throw new HTTPException(401);
+      });
+
+    await send(app, 'http://localhost/denied');
+    expect(
+      recordCollector.durationRecords[0]!.attrs['error.type'],
+    ).toBeUndefined();
+  });
+
+  it('sets error.type on the metric when tracing is disabled', async () => {
+    const { recordCollector } = createCollectors();
+    const app = new Hono()
+      .use(
+        otel({ disableTracing: true, meter: createMockMeter(recordCollector) }),
+      )
+      .get('/throws', () => {
+        throw new RangeError('bad');
+      });
+
+    await send(app, 'http://localhost/throws');
+    expect(recordCollector.durationRecords[0]!.attrs['error.type']).toBe(
+      'RangeError',
+    );
+  });
+
+  /* Deno's built-in meter accepts DOUBLE only. */
+  it('creates both instruments as DOUBLE', () => {
+    const meter = createMockMeter(createCollectors().recordCollector);
+    otel({ meter });
+    expect(meter.createHistogram).toHaveBeenCalledWith(
+      'http.server.request.duration',
+      expect.objectContaining({ valueType: 1 }),
+    );
+    expect(meter.createUpDownCounter).toHaveBeenCalledWith(
+      'http.server.active_requests',
+      expect.objectContaining({ valueType: 1 }),
     );
   });
 
@@ -696,7 +887,10 @@ describe('otel middleware: streamed responses', () => {
     expect(spanCollector.span.recordException).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'model call failed' }),
     );
-    expect(spanCollector.span.setStatus).toHaveBeenCalledWith({ code: 2 });
+    expect(spanCollector.span.setStatus).toHaveBeenCalledWith({
+      code: 2,
+      message: 'model call failed',
+    });
     expect(spanCollector.span.end).toHaveBeenCalledTimes(1);
   });
 

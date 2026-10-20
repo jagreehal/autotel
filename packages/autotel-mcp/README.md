@@ -6,7 +6,7 @@ An MCP server that gives AI agents the ability to investigate OpenTelemetry trac
 
 - **Backend-agnostic.** Built-in OTLP collector on port 4318 accepts data from any OTel-instrumented app.
 - **All three signals.** Traces, metrics, and logs: with cross-signal correlation.
-- **Agent-optimized.** 41 tools designed for progressive investigation: discover → diagnose → correlate → root cause.
+- **Agent-optimized.** 51 tools designed for progressive investigation: discover → diagnose → correlate → root cause.
 - **Zero infrastructure.** In-memory by default, persistent with `--persist`.
 
 ### Requirements
@@ -230,7 +230,7 @@ AI Agent ──MCP──────────┘
 
 1. Your instrumented app sends traces/metrics/logs via OTLP to `http://localhost:4318`
 2. autotel-mcp stores the data in libsql (in-memory by default)
-3. Your AI agent connects via MCP and investigates using 41 tools
+3. Your AI agent connects via MCP and investigates using 51 tools
 
 ## Backends
 
@@ -521,7 +521,7 @@ them can run an investigation without stopping to ask about each query.
 
 ## Tools
 
-50 tools organized by investigation workflow, when the backend serves traces,
+51 tools organized by investigation workflow, when the backend serves traces,
 metrics and logs. Tools for a signal the backend lacks are not registered.
 
 Every tool rejects an argument it does not take, naming it. A result that stops at its
@@ -621,7 +621,8 @@ config and semantic-convention references; `estimate` is
 <details>
 <summary><b>Signals (3)</b></summary>
 
-- **list_metrics**: Available metric series
+- **list_metrics**: Available metric series (names and metadata)
+- **get_metric_series**: Data points for one metric over a time window
 - **search_logs**: Log search by severity, service, trace ID, text
 
 </details>

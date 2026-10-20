@@ -17,4 +17,16 @@ export type PlaceOrderInput = {
   metadata?: { source: 'web' | 'mobile' | 'api' };
 };
 
-export type OrderPlacedMessage = PlaceOrderInput & { type: 'OrderPlaced' };
+/** W3C trace context the producer puts on the wire, so consumers link back. */
+export type MessageHeaders = Record<string, string>;
+
+export type OrderPlacedMessage = PlaceOrderInput & {
+  type: 'OrderPlaced';
+  headers?: MessageHeaders;
+};
+
+export type PaymentCapturedMessage = {
+  orderId: string;
+  items: OrderItem[];
+  headers?: MessageHeaders;
+};

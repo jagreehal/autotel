@@ -32,6 +32,13 @@ export type RenderMapOptions = {
    * claiming to be live.
    */
   liveEventName?: string;
+  /**
+   * SSE event name carrying measured receipts, `{ event, consumer }`: a
+   * consumer's own span linked to the message that carried the event. The only
+   * frame that may promote, count or solidly mark a consumer edge. Unset means
+   * consumer edges only ever move hollow, on producer frames.
+   */
+  liveConsumeEventName?: string;
   title?: string;
 };
 
@@ -248,6 +255,7 @@ export function renderLiveMapHtml(
     mode,
     liveUrl: options.liveUrl ?? null,
     liveEventName: options.liveEventName ?? 'message',
+    liveConsumeEventName: options.liveConsumeEventName ?? null,
     // Keyed independently of edges: a catalog can declare an event that no
     // service sends or receives, which has no edge to be found through.
     eventNodes: Object.fromEntries(
@@ -390,15 +398,15 @@ export function renderLiveMapHtml(
         ? `<div class="notes">
       <p class="note-title">Why ${s.assertedEdges} relationship${s.assertedEdges === 1 ? '' : 's'} cannot be confirmed</p>
       <p class="note">A producer's telemetry proves an event fired. It cannot prove anyone received it, so consumer arrows stay dotted however busy the event is, and a consumer never gains a count from a producer's frame.</p>
-      <p class="note-foot">Measured consumption is not supported yet: snapshots are built from <code>track()</code> events, and consumer spans are not read. Until that lands, every consumer arrow here is a declaration — from the catalog's <code>receives</code>, or the producer's <code>_autotel.consumers</code> — and not a measurement.</p>
+      <p class="note-foot">This snapshot did not read consumer spans, so every consumer arrow here is a declaration from the catalog's <code>receives</code> or the producer's <code>_autotel.consumers</code>, and not a measurement. Register <code>snapshot.spanProcessor</code> and give each <code>traceConsumer</code> a <code>headersFrom</code> to measure them.</p>
     </div>`
         : ''
     }
     <div class="legend">
-      <span><i style="border-color: var(--observed)"></i>observed — a real <code>track()</code> call crossed this</span>
+      <span><i style="border-color: var(--observed)"></i>observed: the runtime saw this happen</span>
       <span><i style="border-color: var(--declared); border-top-style: dashed"></i>declared, never seen in this run</span>
       <span><i style="border-color: var(--undocumented)"></i>ran, not in the catalog</span>
-      <span><i style="border-color: var(--observed); border-top-style: dotted"></i>consumer asserted — not observable from producer telemetry</span>
+      ${s.assertedEdges > 0 ? '<span><i style="border-color: var(--observed); border-top-style: dotted"></i>consumer asserted: not observable from producer telemetry</span>' : ''}
     </div>
   </div>
 </div>
@@ -481,7 +489,7 @@ export function renderLiveMapHtml(
     }
   }
 
-  function send(edge) {
+  function send(edge, hollow = false) {
     // Stillness is the finding: an edge with no evidence never moves.
     if (edge.liveness === 'declared-only') return;
     if (reduced) {
@@ -492,7 +500,7 @@ export function renderLiveMapHtml(
     const length = edge.path.getTotalLength();
     const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     dot.setAttribute('class',
-      'marker' + (edge.evidence === 'asserted' ? ' asserted' : '') +
+      'marker' + (hollow || edge.evidence === 'asserted' ? ' asserted' : '') +
       (edge.liveness === 'undocumented' ? ' undocumented' : ''));
     markerLayer.append(dot);
     const started = performance.now();
@@ -570,13 +578,23 @@ export function renderLiveMapHtml(
         status.textContent = notes.length ? 'live · ' + notes.join(' · ') : 'live';
       }
 
-      // A consumer edge still moves — the event fired and travelled toward that
-      // consumer — but with a hollow marker, and it evidences nothing about the
-      // consumer itself.
-      for (const edge of [...producers, ...channels, ...consumers]) {
+      for (const edge of [...producers, ...channels]) {
         promote(edge);
         edge.count += 1;
         send(edge);
+      }
+
+      // A consumer edge still moves, since the event fired and travelled toward
+      // that consumer, but with a hollow marker, and it evidences nothing about the
+      // consumer itself. On a measured map the edge's liveness came from
+      // consumer spans, so a producer frame must not promote or count it: an
+      // edge nobody was seen receiving on stays still.
+      for (const edge of consumers) {
+        if (edge.evidence === 'asserted') {
+          promote(edge);
+          edge.count += 1;
+        }
+        send(edge, true);
       }
 
       // Only the endpoints this frame is actual evidence for. A producer's
@@ -596,6 +614,23 @@ export function renderLiveMapHtml(
       for (const edge of channels) touched.add(edge.target);
       for (const id of touched) bumpNode(id);
     });
+
+    if (config.liveConsumeEventName) {
+      source.addEventListener(config.liveConsumeEventName, (event) => {
+        let payload;
+        try { payload = JSON.parse(event.data); } catch { return; }
+        if (!payload || typeof payload.event !== 'string' ||
+          typeof payload.consumer !== 'string') return;
+        const target = 'service:' + payload.consumer;
+        for (const edge of byMatchKey.get(normalise(payload.event)) ?? []) {
+          if (edge.kind !== 'consumed-by' || edge.target !== target) continue;
+          promote(edge);
+          edge.count += 1;
+          send(edge);
+          bumpNode(target);
+        }
+      });
+    }
   }
 })();
 </script>

@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { withAutotelConfig } from 'autotel-adapters/next-config';
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -7,4 +8,6 @@ const nextConfig: NextConfig = {
   transpilePackages: ['require-in-the-middle', 'import-in-the-middle'],
 };
 
-export default nextConfig;
+// Keeps @opentelemetry/api external, so autotel and every instrumentation
+// share one copy whether Next bundles them or not.
+export default withAutotelConfig(nextConfig);

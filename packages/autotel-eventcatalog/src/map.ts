@@ -15,9 +15,11 @@
 //   evidence — whether the runtime *could* have shown it. A producer writes the
 //     event, so `produces` and `publishes-to` are `observed` evidence: they come
 //     from a real `track()` call. Consumption is not visible from the producer's
-//     telemetry, so `consumed-by` is always `asserted`, however busy the event
-//     is. Collapsing these into one axis is what lets a diagram imply it watched
-//     something it only read.
+//     telemetry, so `consumed-by` is `asserted` unless the snapshot read consumer
+//     spans (`consumersMeasured`), in which case it is `observed` and its
+//     liveness says whether that consumer was actually seen receiving. Collapsing
+//     these into one axis is what lets a diagram imply it watched something it
+//     only read.
 //
 // The renderers own how that is drawn; this module owns what is true.
 
@@ -170,6 +172,7 @@ export function buildLiveMap(
   catalog: CatalogState,
 ): LiveMap {
   const observations = Object.values(snapshot.events);
+  const measured = snapshot.consumersMeasured === true;
 
   // Catalog ids are PascalCase, `track()` names are dotted, so both sides are
   // resolved to one node id before anything is compared.
@@ -376,13 +379,34 @@ export function buildLiveMap(
       // may set `declared`.
       relation('consumed-by', eventNodeId, consumerNodeId);
     }
+
+    // Measured receipts: a consumer span linked to the trace that tracked this
+    // event, on the channel it was published to.
+    for (const receipt of observation.observedConsumers ?? []) {
+      const consumerNodeId = `service:${receipt.consumer}`;
+      const consumerState = node(
+        consumerNodeId,
+        'service',
+        catalog.services.get(receipt.consumer)?.name ?? receipt.consumer,
+      );
+      consumerState.declared ||= catalog.services.has(receipt.consumer);
+      witnessCount(consumerState, receipt.count, receipt.lastSeen);
+
+      const consumed = relation('consumed-by', eventNodeId, consumerNodeId);
+      consumed.observed = true;
+      consumed.count += receipt.count;
+      advanceLastSeen(consumed, receipt.lastSeen);
+      consumed.eventKey = observation.name;
+    }
   }
 
-  // A consumer edge cannot be corroborated by the producer's telemetry, so it
-  // takes its liveness from whether the event itself was seen. Doing this after
-  // both passes means it reads the final state of the event, not a partial one.
+  // Without consumer spans, a consumer edge cannot be corroborated, so it takes
+  // its liveness from whether the event itself was seen. Doing this after both
+  // passes means it reads the final state of the event, not a partial one. A
+  // measured snapshot skips this: an edge nobody was seen receiving on stays
+  // unobserved, which is the finding.
   for (const rel of relations.values()) {
-    if (rel.kind !== 'consumed-by') continue;
+    if (rel.kind !== 'consumed-by' || measured) continue;
     const eventState = nodeStates.get(rel.source);
     if (!eventState?.observed) continue;
     rel.observed = true;
@@ -409,8 +433,11 @@ export function buildLiveMap(
       source: rel.source,
       target: rel.target,
       kind: rel.kind,
+      // Measured: a consumer edge only the producer named, and nobody was
+      // seen receiving on, is still a claim.
       evidence:
-        rel.kind === 'consumed-by'
+        rel.kind === 'consumed-by' &&
+        (!measured || (!rel.observed && !rel.declared))
           ? ('asserted' as const)
           : ('observed' as const),
       liveness: livenessOf(rel),

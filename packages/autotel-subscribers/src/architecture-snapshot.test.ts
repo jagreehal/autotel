@@ -306,3 +306,168 @@ describe('ArchitectureSnapshotSubscriber', () => {
     expect(sub.toSnapshot({ now: FIXED_NOW }).events).toEqual({});
   });
 });
+
+describe('ArchitectureSnapshotSubscriber consumer measurement', () => {
+  const consumerSpan = (
+    link: { traceId: string; spanId: string },
+    consumer: string,
+    channel = 'orders.events',
+    kind = 4,
+  ) => ({
+    kind,
+    attributes: {
+      'messaging.destination.name': channel,
+      'messaging.consumer.group.name': consumer,
+    },
+    links: [{ context: link }],
+    endTime: [1_779_386_400, 0] as [number, number],
+  });
+
+  const send = (sub: ArchitectureSnapshotSubscriber, payload: EventPayload) =>
+    // SAFETY: sendToDestination is protected; the test drives it directly so
+    // the payload carries trace context, which trackEvent cannot supply.
+    (
+      sub as unknown as { sendToDestination(p: EventPayload): Promise<void> }
+    ).sendToDestination(payload);
+
+  /** An event tracked inside producer span `spanId` of trace `traceId`. */
+  const tracked = (
+    name: string,
+    link: { traceId: string; spanId: string },
+    channel = 'orders.events',
+  ): EventPayload => ({
+    ...event(name, { _autotel: { channel, producer: 'OrdersService' } }),
+    autotel: {
+      trace_id: link.traceId,
+      span_id: link.spanId,
+      correlation_id: 'c',
+    },
+  });
+
+  const P1 = { traceId: 't-1', spanId: 's-1' };
+  const P2 = { traceId: 't-2', spanId: 's-2' };
+
+  it('credits a consumer whichever side of the join arrives first', async () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    const processor = sub.spanProcessor;
+
+    await send(sub, tracked('order.placed', P1));
+    processor.onEnd(consumerSpan(P1, 'PaymentService'));
+
+    processor.onEnd(consumerSpan(P2, 'PaymentService'));
+    await send(sub, tracked('order.placed', P2));
+
+    const snap = sub.toSnapshot({ now: FIXED_NOW });
+    expect(snap.consumersMeasured).toBe(true);
+    expect(snap.events['order.placed'].observedConsumers).toEqual([
+      {
+        consumer: 'PaymentService',
+        channel: 'orders.events',
+        count: 2,
+        firstSeen: '2026-05-21T18:00:00.000Z',
+        lastSeen: '2026-05-21T18:00:00.000Z',
+      },
+    ]);
+  });
+
+  /** Two messages on one channel in one trace are two producer spans. */
+  it('credits only the message the consumer linked to', async () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    const processor = sub.spanProcessor;
+    await send(sub, tracked('order.placed', { traceId: 't-1', spanId: 'a' }));
+    await send(sub, tracked('order.updated', { traceId: 't-1', spanId: 'b' }));
+
+    processor.onEnd(
+      consumerSpan({ traceId: 't-1', spanId: 'a' }, 'PaymentService'),
+    );
+
+    const snap = sub.toSnapshot({ now: FIXED_NOW });
+    expect(snap.events['order.placed'].observedConsumers?.[0]?.count).toBe(1);
+    expect(snap.events['order.updated'].observedConsumers).toBeUndefined();
+  });
+
+  it('ignores other channels, other spans and non-consumer spans', async () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    const processor = sub.spanProcessor;
+    await send(sub, tracked('order.placed', P1));
+
+    processor.onEnd(consumerSpan(P1, 'Audit', 'payments.events'));
+    processor.onEnd(consumerSpan({ traceId: 't-1', spanId: 'x' }, 'Audit'));
+    processor.onEnd(consumerSpan(P1, 'Audit', 'orders.events', 3));
+
+    const snap = sub.toSnapshot({ now: FIXED_NOW });
+    expect(snap.events['order.placed'].observedConsumers).toBeUndefined();
+  });
+
+  it('bounds what one producer span can buffer', async () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    const processor = sub.spanProcessor;
+    for (let i = 0; i < 100; i++) {
+      processor.onEnd(consumerSpan(P1, 'PaymentService'));
+    }
+    await send(sub, tracked('order.placed', P1));
+
+    const snap = sub.toSnapshot({ now: FIXED_NOW });
+    expect(snap.events['order.placed'].observedConsumers?.[0]?.count).toBe(16);
+  });
+
+  it('reports each measured receipt to onConsumerObserved', async () => {
+    const seen: unknown[] = [];
+    const sub = new ArchitectureSnapshotSubscriber({
+      service: 'orders',
+      onConsumerObserved: (receipt) => seen.push(receipt),
+    });
+    await send(sub, tracked('order.placed', P1));
+    sub.spanProcessor.onEnd(consumerSpan(P1, 'PaymentService'));
+
+    expect(seen).toEqual([
+      {
+        event: 'order.placed',
+        consumer: 'PaymentService',
+        channel: 'orders.events',
+        at: '2026-05-21T18:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('keeps a throwing onConsumerObserved out of span.end()', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const sub = new ArchitectureSnapshotSubscriber({
+      service: 'orders',
+      onConsumerObserved: () => {
+        throw new Error('sse writer closed');
+      },
+    });
+    await send(sub, tracked('order.placed', P1));
+
+    expect(() =>
+      sub.spanProcessor.onEnd(consumerSpan(P1, 'PaymentService')),
+    ).not.toThrow();
+    // The receipt is still recorded; only the notification failed.
+    const snap = sub.toSnapshot({ now: FIXED_NOW });
+    expect(snap.events['order.placed'].observedConsumers?.[0]?.count).toBe(1);
+    expect(error).toHaveBeenCalledOnce();
+    error.mockRestore();
+  });
+
+  it('keeps a malformed consumer span out of span.end()', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    const span = {
+      ...consumerSpan(P1, 'PaymentService'),
+      endTime: [Number.NaN, 0] as [number, number],
+    };
+
+    expect(() => sub.spanProcessor.onEnd(span)).not.toThrow();
+    expect(error).toHaveBeenCalledOnce();
+    error.mockRestore();
+  });
+
+  it('marks a snapshot unmeasured when no span processor was taken', async () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    await send(sub, tracked('order.placed', P1));
+    expect(
+      sub.toSnapshot({ now: FIXED_NOW }).consumersMeasured,
+    ).toBeUndefined();
+  });
+});

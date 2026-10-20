@@ -51,6 +51,20 @@ export function register() {
 }
 ```
 
+With the app in `src/app`, `instrumentation.ts` goes in `src/` too. Keep one `@opentelemetry/api` for every bundle:
+
+```typescript
+// next.config.ts
+import { withAutotelConfig } from 'autotel-adapters/next-config';
+
+export default withAutotelConfig(
+  {},
+  { externals: ['@prisma/instrumentation'] },
+);
+```
+
+Add `@opentelemetry/api` to the app's own dependencies. Under Next.js, `init()` drops the duplicate `AppRender.fetch` span when undici traced the same call, drops Next's telemetry call, and strips query strings from fetch span names. Drop health checks with `ignoreRoutes: ['/api/health']`.
+
 Step 2: Wrap route handlers:
 
 ```typescript

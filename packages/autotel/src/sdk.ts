@@ -202,6 +202,17 @@ export class AutotelSdk implements AutotelSdkLike {
     });
     trace.setGlobalTracerProvider(this.tracerProvider);
 
+    // Prisma's instrumentation publishes the provider it holds when enable()
+    // runs, first in its constructor, before this provider existed. Bundled
+    // with its own @opentelemetry/api copy (Next.js), that was the copy's
+    // proxy. registerInstrumentations() has since given it this provider, so
+    // enabling again publishes that.
+    for (const instrumentation of instrumentations) {
+      if (instrumentation.instrumentationName === '@prisma/instrumentation') {
+        instrumentation.enable();
+      }
+    }
+
     const logProcessors = this.resolveLogProcessors();
     if (logProcessors) {
       this.loggerProvider = new LoggerProvider({

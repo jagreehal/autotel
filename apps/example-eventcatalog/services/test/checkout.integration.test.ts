@@ -16,7 +16,7 @@ import { placeOrder } from '../src/orders/index';
 import { handleOrderPlaced } from '../src/payments/index';
 import { handlePaymentCaptured } from '../src/inventory/index';
 import { generateRecommendation } from '../src/recommendations/index';
-import type { PlaceOrderInput, OrderPlacedMessage } from '../src/shared/types';
+import type { PlaceOrderInput } from '../src/shared/types';
 
 const snapshot = new ArchitectureSnapshotSubscriber({
   service: 'example-eventcatalog',
@@ -26,6 +26,8 @@ beforeAll(() => {
   init({
     service: 'example-eventcatalog',
     subscribers: [snapshot],
+    spanProcessors: [snapshot.spanProcessor],
+    events: { includeTraceContext: true },
   });
 });
 
@@ -48,13 +50,12 @@ const sampleOrder: PlaceOrderInput = {
 
 describe('checkout flow → architecture snapshot', () => {
   it('captures every event the CheckoutFlow page claims to observe', async () => {
-    await placeOrder(sampleOrder);
-    const msg: OrderPlacedMessage = { type: 'OrderPlaced', ...sampleOrder };
-    await Promise.all([handleOrderPlaced(msg), generateRecommendation(msg)]);
-    await handlePaymentCaptured({
-      orderId: sampleOrder.id,
-      items: sampleOrder.items,
-    });
+    const msg = await placeOrder(sampleOrder);
+    const [captured] = await Promise.all([
+      handleOrderPlaced(msg),
+      generateRecommendation(msg),
+    ]);
+    if (captured) await handlePaymentCaptured(captured);
 
     const snap = snapshot.toSnapshot();
 

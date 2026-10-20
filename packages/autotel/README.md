@@ -580,7 +580,7 @@ export const createOrder = withTracing({ name: 'order.create' })(
 
 // For one-off work, run a named operation directly
 function timed<T>(operation: string, fn: () => Promise<T>): Promise<T> {
-  return trace(operation, async (ctx) => {
+  return trace.run(operation, async (ctx) => {
     ctx.setAttribute('operation', operation);
     return await fn();
   });
@@ -594,6 +594,8 @@ function timed<T>(operation: string, fn: () => Promise<T>): Promise<T> {
 3. `trace.run(name, ctx => result)` runs one operation immediately with explicit context.
 
 **`trace` wraps, `trace.run` runs.** No `trace(...)` form executes your function, so importing a module of them has no side effects. Reach the span inside any traced body through the ambient `ctx` import.
+
+> **Upgrading from the `ctx` factory form?** `trace(name, ctx => async () => …)` no longer injects a context: it wraps the factory itself, so calling the wrapper returns your inner function without running it. Use `withTracing({ name })(ctx => async () => …)`, or `trace.run(name, ctx => …)` to run now. Autotel warns once when a wrapper is called with no arguments and hands back a function.
 
 - Automatic span lifecycle (`start`, `end`, status, and error recording).
 - Function names feed `operation.name`, `code.function`, and events enrichment.
@@ -701,7 +703,7 @@ import { trace, span, withTracing, defineBaggageSchema } from 'autotel';
 type TenantBaggage = { tenantId: string; region?: string };
 const tenantBaggage = defineBaggageSchema<TenantBaggage>('tenant');
 
-export const handler = trace<TenantBaggage>((ctx) => async () => {
+export const handler = withTracing({ name: 'handler' })((ctx) => async () => {
   // Type-safe get
   const tenant = tenantBaggage.get(ctx);
   if (tenant?.tenantId) {
@@ -2052,7 +2054,7 @@ const off = subscribeChannel('my-lib:event', (message) => {
 
 ## Auto Instrumentation & Advanced Configuration
 
-- `autoInstrumentations` : Enable OpenTelemetry auto-instrumentations (HTTP, Express, Fastify, Prisma, Pino…). Requires `@opentelemetry/auto-instrumentations-node`.
+- `autoInstrumentations` : Enable OpenTelemetry auto-instrumentations (HTTP, Express, Fastify, Pino…). Requires `@opentelemetry/auto-instrumentations-node`. Prisma is not one of them: pass `new PrismaInstrumentation()` from `@prisma/instrumentation` in `instrumentations` (see [Prisma](#prisma)).
 - `instrumentations` : Provide manual instrumentation instances, e.g., `new HttpInstrumentation()`.
 - `resource` / `resourceAttributes` : Declare cluster/region/tenant metadata once and it flows everywhere.
 - `spanProcessor`, `metricReader`, `logRecordProcessors` : Plug in any OpenTelemetry exporter or your in-house pipeline.
@@ -2820,6 +2822,69 @@ export default wrapModule(
 - `PostHogSubscriber`, `MixpanelSubscriber`, … : Provided in `autotel-subscribers`; create your own by implementing the `EventSubscriber` interface.
 
 Each API is type-safe, works in both ESM and CJS, and is designed to minimize boilerplate while staying close to OpenTelemetry primitives.
+
+## Filtering spans
+
+`spanFilter` decides per span, once it has ended; return `false` to drop it. What happens to the rest of the trace depends on where the dropped span sits:
+
+- **A local root** (a request's server span, or a span with no local parent): the whole trace goes, its database and outbound spans included. Nothing is left orphaned.
+- **Any other span**: only that span goes. Its children are re-parented to its nearest kept ancestor, so the trace stays connected.
+
+This holds with the exporters autotel builds (`endpoint`, `spanExporters`); a `spanProcessors` pipeline gets it when its exporting processor is wrapped in `TailSamplingSpanProcessor`. The filter sees attributes before redaction.
+
+`ignoreRoutes` is the common case done for you. It drops a server span by the route the framework resolved (`http.route`, `next.route`), or, without one, by its path (`url.path`, or the older `http.target` that Next.js's own server span carries) with dot segments resolved:
+
+```typescript
+init({
+  service: 'web',
+  // Path prefixes on segment boundaries, or patterns.
+  ignoreRoutes: ['/api/health', /^\/_next\//],
+});
+```
+
+### Next.js
+
+Put `instrumentation.ts` next to your `app` directory: in `src/` when the app lives in `src/app`. Next reads it from there only.
+
+Autotel and your instrumentations must share one `@opentelemetry/api`. Next bundles every package it is not told to keep external, so a bundled autotel next to an external `@prisma/instrumentation` (or the reverse) runs on two copies. Keep `@opentelemetry/api` itself external and every bundle loads the app's one copy:
+
+```typescript
+// next.config.ts
+import { withAutotelConfig } from 'autotel-adapters/next-config';
+
+export default withAutotelConfig(
+  { reactCompiler: true },
+  // Instrumentations you also want kept out of the bundle (optional).
+  { externals: ['@prisma/instrumentation'] },
+);
+```
+
+`@opentelemetry/api` (and anything in `externals`) must be a dependency of the app itself: Next bundles a listed package it cannot resolve from the app, such as a workspace package's dependency or the workspace package itself. `withAutotelConfig` fails the build when one is missing. `init()` warns when an instrumentation still runs on another copy.
+
+When `init()` runs under Next.js (from `instrumentation.ts`):
+
+- Next's `AppRender.fetch` span is dropped when an undici span (`autoInstrumentations: ['undici']`) traced the same call under it, since both describe one request; the undici span takes its place in the trace. Without an undici span beneath it, Next's span stays: it is then the only record of the call.
+- Next's own usage telemetry call (`telemetry.nextjs.org`) is dropped. `NEXT_TELEMETRY_DISABLED=1` stops it at the source.
+- A URL in a span name loses its query string and fragment: Next's `fetch GET https://bank.example/balances?on_behalf_of=…` is exported as `fetch GET https://bank.example/balances`.
+
+### Prisma
+
+```typescript
+import { init } from 'autotel';
+import { PrismaInstrumentation } from '@prisma/instrumentation';
+
+init({
+  service: 'web',
+  instrumentations: [
+    // Engine spans add about six spans per query; drop them unless you need them.
+    new PrismaInstrumentation({ ignoreSpanTypes: [/^prisma:engine:/] }),
+  ],
+});
+```
+
+- `@prisma/instrumentation` is not part of `autoInstrumentations`; pass it in `instrumentations`.
+- It publishes its tracer provider when constructed, which is before `init()` has registered one. Autotel republishes it once the provider exists, so Prisma spans export even when a bundler gave `@prisma/instrumentation` its own copy of `@opentelemetry/api`. Under Next.js, avoid the second copy at all with `withAutotelConfig` (see [Next.js](#nextjs)).
+- With MongoDB, Prisma's engine spans put the query in `db.query.text` with every value inlined. The `attributeRedactor` presets replace those values with `?` (`mongoQueryLiterals`); a custom redactor config opts in with `mongoQueryLiterals: true`. SQL engines send parameters, so their query text has no values to scrub.
 
 ## FAQ & Next Steps
 

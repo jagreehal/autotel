@@ -13,7 +13,7 @@ import { handleOrderPlaced, setStripeStub } from './payments/index';
 import { handlePaymentCaptured, setWmsStub } from './inventory/index';
 import { generateRecommendation } from './recommendations/index';
 import { setIsoClock } from './shared/clock';
-import type { PlaceOrderInput, OrderPlacedMessage } from './shared/types';
+import type { PlaceOrderInput } from './shared/types';
 
 // Deterministic counters so the committed snapshot's fieldStats.sampleValues
 // stay byte-stable across regenerations. The architectural shape (event
@@ -50,6 +50,8 @@ const snapshot = new ArchitectureSnapshotSubscriber({
 init({
   service: 'example-eventcatalog',
   subscribers: [snapshot],
+  spanProcessors: [snapshot.spanProcessor],
+  events: { includeTraceContext: true },
 });
 
 const RUNS_PER_SCENARIO = 5;
@@ -70,10 +72,12 @@ function orderFor(i: number, scenario: string): PlaceOrderInput {
 }
 
 async function walkCheckout(order: PlaceOrderInput) {
-  await placeOrder(order);
-  const msg: OrderPlacedMessage = { type: 'OrderPlaced', ...order };
-  await Promise.all([handleOrderPlaced(msg), generateRecommendation(msg)]);
-  await handlePaymentCaptured({ orderId: order.id, items: order.items });
+  const msg = await placeOrder(order);
+  const [captured] = await Promise.all([
+    handleOrderPlaced(msg),
+    generateRecommendation(msg),
+  ]);
+  if (captured) await handlePaymentCaptured(captured);
 }
 
 async function walkFailedCheckout(order: PlaceOrderInput) {
@@ -87,9 +91,7 @@ async function walkFailedCheckout(order: PlaceOrderInput) {
       }),
     },
   });
-  await placeOrder(order);
-  const msg: OrderPlacedMessage = { type: 'OrderPlaced', ...order };
-  await handleOrderPlaced(msg);
+  await handleOrderPlaced(await placeOrder(order));
 }
 
 async function main() {

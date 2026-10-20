@@ -5,7 +5,7 @@ import { placeOrder } from '../src/orders/index';
 import { handleOrderPlaced } from '../src/payments/index';
 import { handlePaymentCaptured } from '../src/inventory/index';
 import { generateRecommendation } from '../src/recommendations/index';
-import type { PlaceOrderInput, OrderPlacedMessage } from '../src/shared/types';
+import type { PlaceOrderInput } from '../src/shared/types';
 
 describe('snapshot integration — fieldStats', () => {
   it('captures per-path runtime types and sample values for tracked events', async () => {
@@ -16,6 +16,8 @@ describe('snapshot integration — fieldStats', () => {
     init({
       service: 'example-eventcatalog',
       subscribers: [snapshot],
+      spanProcessors: [snapshot.spanProcessor],
+      events: { includeTraceContext: true },
     });
 
     const order: PlaceOrderInput = {
@@ -28,10 +30,12 @@ describe('snapshot integration — fieldStats', () => {
       metadata: { source: 'web' },
     };
 
-    await placeOrder(order);
-    const msg: OrderPlacedMessage = { type: 'OrderPlaced', ...order };
-    await Promise.all([handleOrderPlaced(msg), generateRecommendation(msg)]);
-    await handlePaymentCaptured({ orderId: order.id, items: order.items });
+    const msg = await placeOrder(order);
+    const [captured] = await Promise.all([
+      handleOrderPlaced(msg),
+      generateRecommendation(msg),
+    ]);
+    if (captured) await handlePaymentCaptured(captured);
 
     const snap = snapshot.toSnapshot();
     const orderPlaced = snap.events['order.placed'];

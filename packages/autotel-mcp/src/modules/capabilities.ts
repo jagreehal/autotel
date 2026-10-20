@@ -57,6 +57,7 @@ export function buildCapabilitiesDocument(
           'Probe metrics and logs through the same backend abstraction, with fixture-backed support for local development.',
         tools: [
           'list_metrics',
+          'get_metric_series',
           'search_logs',
           'discover_trace_fields',
           'discover_log_fields',

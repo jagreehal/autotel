@@ -122,12 +122,20 @@ export function buildToolCatalog(): ToolCatalogEntry[] {
     },
     {
       name: 'list_metrics',
-      description: 'List metric series if the backend supports metrics.',
+      description:
+        'List the metrics a service emits: name, unit, kind, no data points.',
       intent: 'inspect metrics',
     },
     {
+      name: 'get_metric_series',
+      description:
+        'Read the data points of one metric over a window, per attribute set.',
+      intent: 'read metric values',
+    },
+    {
       name: 'search_logs',
-      description: 'Search logs if the backend supports logs.',
+      description:
+        'Search logs by service, severity, message text, trace id or attributes.',
       intent: 'inspect logs',
     },
     {

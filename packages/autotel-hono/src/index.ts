@@ -22,6 +22,7 @@ import {
 } from './metrics';
 
 const INSTRUMENTATION_SCOPE_NAME = 'autotel-hono';
+const ERROR_TYPE = 'error.type';
 
 type TimeInput = number | [number, number];
 type TracerProvider = { getTracer(name: string, version?: string): Tracer };
@@ -40,6 +41,13 @@ export type OtelConfig = {
   meterProvider?: MeterProvider;
   tracerName?: string;
   spanNameFactory?: (c: Context) => string;
+  /**
+   * The route to report in place of the matched Hono pattern, e.g. an RPC
+   * operation name an adapter has put on the context. Used for `http.route`,
+   * the default span name and the duration metric. Return nothing to keep the
+   * pattern; a throw is ignored.
+   */
+  getRoute?: (c: Context) => string | undefined;
   captureRequestHeaders?: string[];
   captureResponseHeaders?: string[];
   captureActiveRequests?: boolean;
@@ -141,6 +149,44 @@ function onBodyEnd(c: Context, onEnd: (cause?: unknown) => void): boolean {
   return true;
 }
 
+/**
+ * The matched route pattern, e.g. `/api/users/:id` for an app mounted with
+ * `.route()` or a `@hono/zod-openapi` route.
+ *
+ * `routePath()` reads the request through a Symbol private to one copy of
+ * Hono, so it throws when the app was built with another copy (a duplicate in
+ * `node_modules`, or a framework bundling its own). The deprecated getter
+ * belongs to the copy that built the request, so it still answers; a broken
+ * route attribute must never fail the request it describes.
+ */
+function matchedRoute(c: Context): string {
+  try {
+    return routePath(c);
+  } catch {
+    try {
+      return c.req.routePath;
+    } catch {
+      return '';
+    }
+  }
+}
+
+/**
+ * `error.type` for a failed request, or undefined for one that did not fail.
+ *
+ * Per the HTTP conventions: the exception's class when one was thrown, else
+ * the status code as text for a 5xx. Set on the span and the duration metric,
+ * so error rate can be read from either.
+ */
+function errorType(cause: unknown, status: number): string | undefined {
+  if (cause !== undefined && cause !== null) {
+    return cause instanceof Error
+      ? cause.constructor?.name || cause.name || 'Error'
+      : '_OTHER';
+  }
+  return status >= 500 ? String(status) : undefined;
+}
+
 export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
   const config = normalizeConfig(userConfig);
   const tracer = resolveTracer(config);
@@ -154,8 +200,17 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
   const requestDuration = createRequestDurationTracker(metricsConfig);
   const activeReqs = createActiveRequestsTracker(metricsConfig);
 
+  const routeOf = (c: Context): string => {
+    try {
+      const resolved = config.getRoute?.(c);
+      if (resolved) return resolved;
+    } catch {
+      // A failing resolver still leaves a usable span: fall back to the pattern.
+    }
+    return matchedRoute(c);
+  };
   const spanName = (c: Context) =>
-    config.spanNameFactory?.(c) ?? `${c.req.method} ${routePath(c)}`;
+    config.spanNameFactory?.(c) ?? `${c.req.method} ${routeOf(c)}`;
 
   return createMiddleware(async (c, next) => {
     const method = c.req.method;
@@ -179,7 +234,16 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
       }
     }
 
-    const finalize = (span?: Span, cause?: unknown) => {
+    const finalize = (span?: Span, thrown?: unknown) => {
+      // Hono catches a handler's throw and keeps it on `c.error`, so `next()`
+      // resolves; only an error thrown past Hono arrives as `thrown`.
+      const cause = thrown ?? c.error;
+      // A throw Hono turned into a 4xx (an HTTPException) is the client's
+      // error, which the HTTP conventions leave unmarked on a server.
+      const failure =
+        thrown === undefined && c.res.status < 500
+          ? undefined
+          : errorType(cause, c.res.status);
       try {
         const status = c.res.status;
 
@@ -191,6 +255,7 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
             }
           }
           span.setAttribute(HTTPAttributes.responseStatusCode, status);
+          if (failure) span.setAttribute(ERROR_TYPE, failure);
           if (status >= 500) {
             span.setStatus({ code: SpanStatusCode.ERROR });
           }
@@ -203,18 +268,25 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
             } catch {
               // Ignore errors when recording exception
             }
-            span.setStatus({ code: SpanStatusCode.ERROR });
+            if (failure) {
+              span.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: cause instanceof Error ? cause.message : String(cause),
+              });
+            }
           }
         }
       } finally {
         activeReqs?.decrement(stableAttrs);
-        span?.setAttribute(HTTPAttributes.route, routePath(c));
+        const route = routeOf(c);
+        span?.setAttribute(HTTPAttributes.route, route);
         span?.updateName(spanName(c));
         const durationSeconds = (now() - startTime) / 1000;
         requestDuration.record(durationSeconds, {
           ...stableAttrs,
-          [HTTPAttributes.route]: routePath(c),
+          [HTTPAttributes.route]: route,
           [HTTPAttributes.responseStatusCode]: c.res.status,
+          ...(failure ? { [ERROR_TYPE]: failure } : {}),
         });
       }
     };
@@ -240,7 +312,7 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
         attributes: {
           ...stableAttrs,
           [URLAttributes.full]: c.req.url,
-          [HTTPAttributes.route]: routePath(c),
+          [HTTPAttributes.route]: matchedRoute(c),
         },
       },
       parent,
@@ -260,7 +332,7 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
             span.end(config.getTime?.());
           });
           if (deferred) return;
-          finalize(span, c.error);
+          finalize(span);
         } catch (error) {
           finalize(span, error);
           throw error;

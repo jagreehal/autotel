@@ -2,6 +2,7 @@
   "spec": "autotel-architecture/v0.1.0",
   "generatedAt": "2026-05-22T00:00:00.000Z",
   "service": "example-eventcatalog",
+  "consumersMeasured": true,
   "events": {
     "inventory.reserved": {
       "name": "inventory.reserved",
@@ -18,7 +19,11 @@
         "reservedAt",
         "warehouseId"
       ],
-      "sampleTraceIds": [],
+      "sampleTraceIds": [
+        "44b24eab41001990f971c9f912274354",
+        "6076e54f505bae774f81eeffba4f254b",
+        "9720c53ead2054dcb70d8b1ab0d2c555"
+      ],
       "channel": "inventory.events",
       "producer": "InventoryService",
       "consumers": [],
@@ -205,7 +210,11 @@
         "shipping.addressId",
         "totalCents"
       ],
-      "sampleTraceIds": [],
+      "sampleTraceIds": [
+        "277342679e609e721d3b5f48638531c1",
+        "6d1e58b56764af0f8ab303016b770b0d",
+        "7a15c30e5b6f9e28787dfeb21ae45873"
+      ],
       "channel": "orders.events",
       "producer": "OrdersService",
       "consumers": [
@@ -430,6 +439,22 @@
           "firstSeen": "2026-05-22T00:00:00.000Z",
           "lastSeen": "2026-05-22T00:00:00.000Z"
         }
+      ],
+      "observedConsumers": [
+        {
+          "consumer": "PaymentService",
+          "channel": "orders.events",
+          "count": 7,
+          "firstSeen": "2026-05-22T00:00:00.000Z",
+          "lastSeen": "2026-05-22T00:00:00.000Z"
+        },
+        {
+          "consumer": "RecommendationsService",
+          "channel": "orders.events",
+          "count": 5,
+          "firstSeen": "2026-05-22T00:00:00.000Z",
+          "lastSeen": "2026-05-22T00:00:00.000Z"
+        }
       ]
     },
     "payment.captured": {
@@ -445,7 +470,11 @@
         "psp",
         "pspTransactionId"
       ],
-      "sampleTraceIds": [],
+      "sampleTraceIds": [
+        "00dae127292f69703b428a25fc2f83dc",
+        "0eff69943ae60fe9c8396df8a7fb0aaa",
+        "4f58fb4fddbf444ddc27149d9caa6d3a"
+      ],
       "channel": "payments.events",
       "producer": "PaymentService",
       "consumers": [],
@@ -583,6 +612,15 @@
           "firstSeen": "2026-05-22T00:00:00.000Z",
           "lastSeen": "2026-05-22T00:00:00.000Z"
         }
+      ],
+      "observedConsumers": [
+        {
+          "consumer": "InventoryService",
+          "channel": "payments.events",
+          "count": 5,
+          "firstSeen": "2026-05-22T00:00:00.000Z",
+          "lastSeen": "2026-05-22T00:00:00.000Z"
+        }
       ]
     },
     "payment.failed": {
@@ -597,7 +635,10 @@
         "orderId",
         "psp"
       ],
-      "sampleTraceIds": [],
+      "sampleTraceIds": [
+        "c7d8e5f13a0e460546e66d767227301d",
+        "f664151158ae5e1db96e362f74e5ff2a"
+      ],
       "channel": "payments.events",
       "producer": "PaymentService",
       "consumers": [],
@@ -728,7 +769,11 @@
         "usage.completionTokens",
         "usage.promptTokens"
       ],
-      "sampleTraceIds": [],
+      "sampleTraceIds": [
+        "23ba0a264be61c12b0a57fb16a601d22",
+        "b19f8b653a85cad6615f05d470bb5256",
+        "bf2fdacab92ae50aa021774c0201de36"
+      ],
       "channel": "orders.events",
       "producer": "RecommendationsService",
       "consumers": [],

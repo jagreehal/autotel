@@ -576,3 +576,396 @@ describe('baseline', () => {
     expect(hasRegressed(added)).toBe(false);
   });
 });
+
+/**
+ * Real Hono apps are rarely one file of `app.get('/literal')`. Routes are
+ * declared with `@hono/zod-openapi` (`.openapi(createRoute({ method, path }))`)
+ * and sub-apps are mounted with `.route(prefix, app)` under a `.basePath()`.
+ * The map must report the path a request actually takes, or nothing joins.
+ */
+describe('hono route composition', () => {
+  function routesOf(files: Record<string, string>): string[] {
+    const root = projectFiles(files, {
+      hono: '^4.0.0',
+      '@hono/zod-openapi': '^1.0.0',
+    });
+    const result = scan({
+      projectRoot: root,
+      framework: 'hono',
+      project: collectProjectFacts(root),
+    });
+    return result.map.routes
+      .map((route) => `${route.method ?? '*'} ${route.path} ${route.file}`)
+      .toSorted();
+  }
+
+  it('reads method and path from .openapi(createRoute(...))', () => {
+    expect(
+      routesOf({
+        'src/index.ts': `
+          import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
+          const app = new OpenAPIHono();
+          const getUser = createRoute({ method: 'get', path: '/users/{id}', responses: {} });
+          app.openapi(getUser, (c) => c.json({}));
+          app.openapi(createRoute({ method: 'post', path: '/users', responses: {} }), (c) => c.json({}));
+        `,
+      }),
+    ).toEqual(['GET /users/:id src/index.ts', 'POST /users src/index.ts']);
+  });
+
+  it('follows a route definition imported from another file', () => {
+    expect(
+      routesOf({
+        'src/routes/users.routes.ts': `
+          import { createRoute } from '@hono/zod-openapi';
+          export const listUsers = createRoute({ method: 'get', path: '/', responses: {} });
+        `,
+        'src/routes/users.ts': `
+          import { OpenAPIHono } from '@hono/zod-openapi';
+          import { listUsers } from './users.routes';
+          export const users = new OpenAPIHono().openapi(listUsers, (c) => c.json([]));
+        `,
+        'src/index.ts': `
+          import { OpenAPIHono } from '@hono/zod-openapi';
+          import { users } from './routes/users';
+          const app = new OpenAPIHono().basePath('/api');
+          app.route('/users', users);
+        `,
+      }),
+    ).toEqual(['GET /api/users src/routes/users.ts']);
+  });
+
+  it('prefixes sub-apps mounted with .route(), through basePath and default exports', () => {
+    expect(
+      routesOf({
+        'src/orders.ts': `
+          import { Hono } from 'hono';
+          const orders = new Hono();
+          orders.use('*', async (_c, next) => next());
+          orders.get('/:id', (c) => c.json({}));
+          export default orders;
+        `,
+        'src/v1.ts': `
+          import { Hono } from 'hono';
+          import orders from './orders.js';
+          export default new Hono().route('/orders', orders).get('/ping', (c) => c.text('ok'));
+        `,
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          import v1 from './v1';
+          const app = new Hono();
+          const api = app.basePath('/api');
+          api.route('/v1', v1);
+        `,
+      }),
+    ).toEqual([
+      '* /api/v1/orders/* src/orders.ts',
+      'GET /api/v1/orders/:id src/orders.ts',
+      'GET /api/v1/ping src/v1.ts',
+    ]);
+  });
+
+  it('applies a base path once, to the routes registered through it', () => {
+    expect(
+      routesOf({
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          const root = new Hono();
+          root.get('/', (c) => c.text('home'));
+          const api = root.basePath('/api').get('/inline', (c) => c.text('a'));
+          api.get('/later', (c) => c.text('b'));
+          const v2 = new Hono().basePath('/v2').get('/x', (c) => c.text('c'));
+          v2.get('/y', (c) => c.text('d'));
+          root.route('/mounted', v2);
+        `,
+      }),
+    ).toEqual([
+      'GET / src/index.ts',
+      'GET /api/inline src/index.ts',
+      'GET /api/later src/index.ts',
+      'GET /mounted/v2/x src/index.ts',
+      'GET /mounted/v2/y src/index.ts',
+    ]);
+  });
+
+  it('treats a fluent registration result as the same app, so its mount applies', () => {
+    expect(
+      routesOf({
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          const child = new Hono();
+          const routes = child.get('/users', (c) => c.json([]));
+          const more = routes.post('/users', (c) => c.json({})).use('*', async (_c, next) => next());
+          const app = new Hono();
+          app.route('/api', more);
+        `,
+      }),
+    ).toEqual([
+      '* /api/* src/index.ts',
+      'GET /api/users src/index.ts',
+      'POST /api/users src/index.ts',
+    ]);
+  });
+
+  it('follows a default export that is a fluent chain on another app', () => {
+    expect(
+      routesOf({
+        'src/users.ts': `
+          import { Hono } from 'hono';
+          const child = new Hono();
+          export default child.get('/users', (c) => c.json([]));
+        `,
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          import routes from './users';
+          const app = new Hono();
+          app.route('/api', routes);
+        `,
+      }),
+    ).toEqual(['GET /api/users src/users.ts']);
+  });
+
+  it('maps a route whose path is a constant', () => {
+    expect(
+      routesOf({
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          const USERS = '/users';
+          const app = new Hono();
+          app.get(USERS, (c) => c.json([]));
+        `,
+      }),
+    ).toEqual(['GET /users src/index.ts']);
+  });
+
+  it('keeps a base path set inside a factory function', () => {
+    expect(
+      routesOf({
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          function makeRoutes() {
+            const r = new Hono().basePath('/x');
+            r.get('/y', (c) => c.json([]));
+            return r;
+          }
+          const app = new Hono();
+          app.route('/v1', makeRoutes());
+        `,
+      }),
+    ).toEqual(['GET /v1/x/y src/index.ts']);
+  });
+
+  it('keeps the routes of apps mounted in a cycle', () => {
+    expect(
+      routesOf({
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          const a = new Hono();
+          const b = new Hono();
+          a.get('/x', (c) => c.json([]));
+          b.get('/y', (c) => c.json([]));
+          a.route('/b', b);
+          b.route('/a', a);
+        `,
+      }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('registers on the app a factory call returns, not on the factory', () => {
+    expect(
+      routesOf({
+        'src/users.ts': `
+          import { createFactory } from 'hono/factory';
+          const factory = createFactory();
+          export const routes = factory.createApp().get('/users', (c) => c.json([]));
+          export default factory.createApp().get('/orders', (c) => c.json([]));
+        `,
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          import orders, { routes } from './users';
+          const app = new Hono();
+          app.route('/api', routes);
+          app.route('/shop', orders);
+        `,
+      }),
+    ).toEqual(['GET /api/users src/users.ts', 'GET /shop/orders src/users.ts']);
+  });
+
+  it('maps factory-built sub-apps under a template-literal prefix', () => {
+    expect(
+      routesOf({
+        'src/app.ts': `
+          import { Hono } from 'hono';
+          import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+
+          export const app = new Hono();
+          app.get('/api/v1/plain', (c) => c.json({ ok: true }));
+
+          const getUser = createRoute({
+            method: 'get',
+            path: '/users/{id}',
+            request: { params: z.object({ id: z.string() }) },
+            responses: { 200: { description: 'ok' } },
+          });
+          export function createUserRoutes() {
+            const r = new OpenAPIHono();
+            r.openapi(getUser, (c) => c.json({ id: c.req.valid('param').id }, 200));
+            return r;
+          }
+
+          const BASE_URL = '/api/v1';
+          const orders = new Hono();
+          orders.get('/:id', (c) => c.json({ id: c.req.param('id') }));
+          app.route(\`\${BASE_URL}/users\`, createUserRoutes());
+          app.route(\`\${BASE_URL}/orders\`, orders);
+        `,
+      }),
+    ).toEqual([
+      'GET /api/v1/orders/:id src/app.ts',
+      'GET /api/v1/plain src/app.ts',
+      'GET /api/v1/users/users/:id src/app.ts',
+    ]);
+  });
+
+  it('keeps two factories that both name their app r apart', () => {
+    expect(
+      routesOf({
+        'src/users.ts': `
+          import { Hono } from 'hono';
+          export function users() {
+            const r = new Hono();
+            r.get('/:id', (c) => { return c.text('u'); });
+            return r;
+          }
+          export const orders = () => { const r = new Hono(); r.get('/:id', (c) => c.text('o')); return r; };
+        `,
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          import { users, orders } from './users';
+          const PREFIX = '/v1' + '/shop';
+          const app = new Hono();
+          app.route(PREFIX + '/users', users());
+          app.route(\`\${PREFIX}/orders\`, orders());
+        `,
+      }),
+    ).toEqual([
+      'GET /v1/shop/orders/:id src/users.ts',
+      'GET /v1/shop/users/:id src/users.ts',
+    ]);
+  });
+
+  it('keeps apps from the same factory apart', () => {
+    expect(
+      routesOf({
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          import { createFactory } from 'hono/factory';
+          const factory = createFactory();
+          const a = factory.createApp();
+          const b = factory.createApp();
+          const c = factory.createApp().basePath('/c');
+          a.get('/a', (ctx) => ctx.text('a'));
+          b.get('/b', (ctx) => ctx.text('b'));
+          c.get('/z', (ctx) => ctx.text('c'));
+          const app = new Hono();
+          app.route('/x', a);
+        `,
+      }),
+    ).toEqual([
+      'GET /b src/index.ts',
+      'GET /c/z src/index.ts',
+      'GET /x/a src/index.ts',
+    ]);
+  });
+
+  it('keeps hono-openapi (rhinobase) routes, whose path is an ordinary literal', () => {
+    expect(
+      routesOf({
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          import { describeRoute, validator } from 'hono-openapi';
+          const app = new Hono();
+          app.get('/users/:id', describeRoute({ responses: {} }), validator('param', schema), (c) => c.json({}));
+        `,
+      }),
+    ).toEqual(['GET /users/:id src/index.ts']);
+  });
+});
+
+/**
+ * Hono mounted in a Next.js catch-all (`app/api/[[...route]]/route.ts`
+ * exporting `handle(app)`) is how many apps run Hono. The Next scan saw one
+ * catch-all; the API surface is the Hono app's routes.
+ */
+describe('Hono inside a Next.js catch-all', () => {
+  function nextRoutesOf(files: Record<string, string>): string[] {
+    const root = projectFiles(files, { next: '^16.0.0', hono: '^4.0.0' });
+    const result = scan({
+      projectRoot: root,
+      framework: 'next',
+      project: collectProjectFacts(root),
+    });
+    return result.map.routes
+      .map(
+        (route) =>
+          `${route.framework} ${route.method ?? '*'} ${route.path} ${route.file}`,
+      )
+      .toSorted();
+  }
+
+  const honoApp = `
+    import { Hono } from 'hono';
+    import { orders } from './orders';
+    export const app = new Hono().basePath('/api');
+    app.get('/health', (c) => c.json({ ok: true }));
+    app.route('/orders', orders);
+  `;
+  const orders = `
+    import { Hono } from 'hono';
+    export const orders = new Hono();
+    orders.get('/:id', (c) => c.json({}));
+  `;
+
+  it('reports the Hono routes in place of the catch-all', () => {
+    expect(
+      nextRoutesOf({
+        'src/server/app.ts': honoApp,
+        'src/server/orders.ts': orders,
+        'src/app/api/[[...route]]/route.ts': `
+          import { handle } from 'hono/vercel';
+          import { app } from '../../../server/app';
+          export const GET = handle(app);
+          export const POST = handle(app);
+        `,
+        'src/app/api/plain/route.ts': `
+          export async function GET() { return Response.json({}); }
+        `,
+      }),
+    ).toEqual([
+      'hono GET /api/health src/server/app.ts',
+      'hono GET /api/orders/:id src/server/orders.ts',
+      'next GET /api/plain src/app/api/plain/route.ts',
+    ]);
+  });
+
+  it('follows a tsconfig paths alias to the app', () => {
+    expect(
+      nextRoutesOf({
+        'tsconfig.json': `{
+          // comments are allowed here
+          "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["./src/*"] } }
+        }`,
+        'src/server/app.ts': honoApp,
+        'src/server/orders.ts': orders,
+        'src/app/api/[...route]/route.ts': `
+          import { handle } from 'hono/vercel';
+          import { app } from '@/server/app';
+          export const GET = handle(app);
+        `,
+      }),
+    ).toEqual([
+      'hono GET /api/health src/server/app.ts',
+      'hono GET /api/orders/:id src/server/orders.ts',
+    ]);
+  });
+});

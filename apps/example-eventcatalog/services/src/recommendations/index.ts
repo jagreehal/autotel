@@ -63,6 +63,8 @@ function buildPrompt(msg: OrderPlacedMessage) {
 export const generateRecommendation = traceConsumer({
   system: 'kafka',
   destination: 'orders.events',
+  consumerGroup: 'RecommendationsService',
+  headersFrom: 'headers',
 })(() => async (msg: OrderPlacedMessage) => {
   const result = await openai.chat.completions.create({
     model: 'gpt-4o-mini',

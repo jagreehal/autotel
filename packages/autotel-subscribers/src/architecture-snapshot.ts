@@ -49,6 +49,12 @@ export type ArchitectureSnapshot = {
   spec: typeof ARCHITECTURE_SNAPSHOT_SPEC;
   generatedAt: string;
   service: string;
+  /**
+   * True when consumer spans were read (the subscriber's `spanProcessor` was
+   * registered). Only then does an empty `observedConsumers` mean "nobody was
+   * seen receiving it" rather than "nobody was watching".
+   */
+  consumersMeasured?: boolean;
   events: Record<string, EventObservation>;
 };
 
@@ -78,6 +84,12 @@ export type EventObservation = {
    * relationship must read this instead.
    */
   sources?: EventSource[];
+  /**
+   * Consumers seen receiving this event, measured from their `traceConsumer`
+   * spans rather than declared by the producer. Present only when consumer
+   * spans were read; see {@link ArchitectureSnapshot.consumersMeasured}.
+   */
+  observedConsumers?: ObservedConsumer[];
   /** Observed runtime types and sample primitive values per field path. */
   fieldStats?: Record<string, FieldStats>;
   /** Optional contract schema metadata carried from track() call sites. */
@@ -96,6 +108,100 @@ export type EventSource = {
   firstSeen: string;
   lastSeen: string;
 };
+
+/** One consumer seen receiving an event on a channel, with its own count. */
+export type ObservedConsumer = {
+  consumer: string;
+  channel: string;
+  count: number;
+  firstSeen: string;
+  lastSeen: string;
+};
+
+/** A ReadableSpan as the consumer join reads one, without a hard SDK dependency. */
+export interface ConsumerSpanLike {
+  kind: number;
+  attributes: Record<string, SpanAttributeValue>;
+  links: Array<{ context: { traceId: string; spanId: string } }>;
+  endTime: [number, number];
+  resource?: { attributes: Record<string, SpanAttributeValue> };
+}
+
+/** What a span or resource attribute can hold once recorded. */
+export type SpanAttributeValue =
+  | string
+  | number
+  | boolean
+  | Array<string | number | boolean | null | undefined>
+  | undefined;
+
+/** The SpanProcessor shape `init({ spanProcessors })` accepts. */
+export interface ConsumerSpanProcessor {
+  onStart(): void;
+  onEnd(span: ConsumerSpanLike): void;
+  shutdown(): Promise<void>;
+  forceFlush(): Promise<void>;
+}
+
+/** OTel `SpanKind.CONSUMER`. */
+const SPAN_KIND_CONSUMER = 4;
+
+/**
+ * Producer spans remembered on each side of the producer/consumer join. Either
+ * side can arrive first: `track()` payloads reach subscribers through a queue,
+ * so a consumer span often ends before the event it received is recorded.
+ */
+const MAX_JOIN_SPANS = 10_000;
+/**
+ * Entries kept per producer span. One span is one publish, so more than a
+ * handful means a consumer redelivering in a loop; later ones are dropped.
+ */
+const MAX_PER_SPAN = 16;
+
+type Delivery = { event: string; channel?: string };
+type Receipt = { consumer: string; channel: string; at: string };
+
+/** A consumer measured receiving an event, as `onConsumerObserved` reports it. */
+export type ConsumerReceipt = Receipt & { event: string };
+
+/** Join key: the producer span a message was published from. */
+const spanKey = (traceId: string, spanId: string) => `${traceId}/${spanId}`;
+
+// Insertion-order eviction; a span evicted before its other half arrives is
+// not counted.
+function remember<T>(index: Map<string, T[]>, key: string, item: T): void {
+  const list = index.get(key);
+  if (list) {
+    if (list.length < MAX_PER_SPAN) list.push(item);
+    return;
+  }
+  if (index.size >= MAX_JOIN_SPANS) {
+    const oldest = index.keys().next().value;
+    if (oldest !== undefined) index.delete(oldest);
+  }
+  index.set(key, [item]);
+}
+
+function recordConsumer(
+  observation: { observedConsumers?: ObservedConsumer[] },
+  { consumer, channel, at }: Receipt,
+): void {
+  const consumers = (observation.observedConsumers ??= []);
+  const existing = consumers.find(
+    (entry) => entry.consumer === consumer && entry.channel === channel,
+  );
+  if (existing) {
+    existing.count += 1;
+    if (at < existing.firstSeen) existing.firstSeen = at;
+    if (at > existing.lastSeen) existing.lastSeen = at;
+    return;
+  }
+  consumers.push({ consumer, channel, count: 1, firstSeen: at, lastSeen: at });
+}
+
+function hrTimeToIso([seconds, nanos]: [number, number]): string {
+  return new Date(seconds * 1000 + Math.floor(nanos / 1e6)).toISOString();
+}
 
 /**
  * Order two (producer, channel) pairs, comparing the fields rather than a
@@ -148,6 +254,11 @@ export interface ArchitectureSnapshotConfig {
   service: string;
   /** Maximum number of trace IDs to retain per event (default 3). */
   maxSampleTraceIds?: number;
+  /**
+   * Called each time a consumer is measured receiving an event, so a live
+   * view can draw the exact consumer edge rather than guess from the producer.
+   */
+  onConsumerObserved?: (receipt: ConsumerReceipt) => void;
 }
 
 const DEFAULT_MAX_SAMPLES = 3;
@@ -157,12 +268,92 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
 
   private readonly service: string;
   private readonly maxSampleTraceIds: number;
+  private readonly onConsumerObserved?: (receipt: ConsumerReceipt) => void;
   private readonly observations = new Map<string, EventObservation>();
+  private readonly deliveries = new Map<string, Delivery[]>();
+  private readonly receipts = new Map<string, Receipt[]>();
+  private consumersMeasured = false;
+  private processor?: ConsumerSpanProcessor;
 
   constructor(config: ArchitectureSnapshotConfig) {
     super();
     this.service = config.service;
     this.maxSampleTraceIds = config.maxSampleTraceIds ?? DEFAULT_MAX_SAMPLES;
+    this.onConsumerObserved = config.onConsumerObserved;
+  }
+
+  /**
+   * Register with `init({ spanProcessors: [snapshot.spanProcessor] })` to
+   * measure consumption: a `traceConsumer` span whose producer link points at
+   * the span an event was tracked in, on the same channel, counts as that
+   * consumer receiving that event. So `track()` the event inside the
+   * `traceProducer` that publishes it: one producer span is one message, and an
+   * event tracked anywhere else is never credited to a consumer. Consumers need
+   * `headersFrom` so the link exists, and
+   * `init({ events: { includeTraceContext: true } })` so tracked events carry
+   * the span the link is matched against. The consumer is
+   * `messaging.consumer.group.name`, falling back to the span's `service.name`.
+   */
+  get spanProcessor(): ConsumerSpanProcessor {
+    this.consumersMeasured = true;
+    this.processor ??= {
+      onStart: () => {},
+      // Runs inside span.end(): nothing in the join may fail the application's
+      // work or starve the processors after this one.
+      onEnd: (span) => {
+        try {
+          this.recordConsumerSpan(span);
+        } catch (error) {
+          console.error(`[${this.name}] consumer span not recorded:`, error);
+        }
+      },
+      shutdown: async () => {},
+      forceFlush: async () => {},
+    };
+    return this.processor;
+  }
+
+  private recordConsumerSpan(span: ConsumerSpanLike): void {
+    if (span.kind !== SPAN_KIND_CONSUMER) return;
+    const channel = span.attributes['messaging.destination.name'];
+    const consumer =
+      span.attributes['messaging.consumer.group.name'] ??
+      span.resource?.attributes['service.name'];
+    if (typeof channel !== 'string' || typeof consumer !== 'string') return;
+
+    const receipt = { consumer, channel, at: hrTimeToIso(span.endTime) };
+    const keys = new Set(
+      span.links.map((l) => spanKey(l.context.traceId, l.context.spanId)),
+    );
+    for (const key of keys) {
+      for (const delivery of this.deliveries.get(key) ?? []) {
+        this.credit(delivery, receipt);
+      }
+      remember(this.receipts, key, receipt);
+    }
+  }
+
+  private recordDelivery(key: string, delivery: Delivery): void {
+    for (const receipt of this.receipts.get(key) ?? []) {
+      this.credit(delivery, receipt);
+    }
+    remember(this.deliveries, key, delivery);
+  }
+
+  // Each side matches only what the other side already holds, so every
+  // (delivery, receipt) pair is credited exactly once whichever arrives first.
+  private credit(delivery: Delivery, receipt: Receipt): void {
+    if (delivery.channel !== receipt.channel) return;
+    const observation = this.observations.get(delivery.event);
+    if (!observation) return;
+    recordConsumer(observation, receipt);
+    // Caught here as well as in onEnd so a throwing listener cannot stop the
+    // remaining pairs in this loop from being credited.
+    try {
+      this.onConsumerObserved?.({ ...receipt, event: delivery.event });
+    } catch (error) {
+      console.error(`[${this.name}] onConsumerObserved failed:`, error);
+    }
   }
 
   protected async sendToDestination(payload: EventPayload): Promise<void> {
@@ -173,6 +364,9 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
     const existing = this.observations.get(payload.name);
     const now = payload.timestamp;
     const traceId = payload.autotel?.trace_id;
+    const spanId = payload.autotel?.span_id;
+    const deliveryKey =
+      traceId && spanId ? spanKey(traceId, spanId) : undefined;
     const attrs = payload.attributes ?? {};
     const autotelMeta = readAutotelMeta(attrs);
     const cleanAttrs = stripAutotelMeta(attrs);
@@ -212,6 +406,12 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
           },
         ],
       });
+      if (deliveryKey) {
+        this.recordDelivery(deliveryKey, {
+          event: payload.name,
+          channel: autotelMeta.channel,
+        });
+      }
       return;
     }
 
@@ -245,6 +445,12 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
           hash: payload.schema.hash,
         }
       : undefined;
+    if (deliveryKey) {
+      this.recordDelivery(deliveryKey, {
+        event: payload.name,
+        channel: autotelMeta.channel,
+      });
+    }
   }
 
   /**
@@ -286,6 +492,19 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
             }))
             .toSorted(compareSources),
         }),
+        ...(obs.observedConsumers && {
+          observedConsumers: obs.observedConsumers
+            .map((entry) => ({
+              ...entry,
+              firstSeen: freezeTimestamps ?? entry.firstSeen,
+              lastSeen: freezeTimestamps ?? entry.lastSeen,
+            }))
+            .toSorted(
+              (a, b) =>
+                a.consumer.localeCompare(b.consumer) ||
+                a.channel.localeCompare(b.channel),
+            ),
+        }),
       };
     }
 
@@ -293,6 +512,7 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
       spec: ARCHITECTURE_SNAPSHOT_SPEC,
       generatedAt: freezeTimestamps ?? now().toISOString(),
       service: this.service,
+      ...(this.consumersMeasured && { consumersMeasured: true }),
       events,
     };
   }
@@ -316,6 +536,8 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
   /** Reset all accumulated state. Useful between test cases. */
   reset(): void {
     this.observations.clear();
+    this.deliveries.clear();
+    this.receipts.clear();
   }
 }
 

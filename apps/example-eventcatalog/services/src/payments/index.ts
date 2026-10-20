@@ -2,8 +2,11 @@
 // PaymentCaptured or PaymentFailed.
 
 import { span } from 'autotel';
-import { traceConsumer } from 'autotel/messaging';
-import type { OrderPlacedMessage } from '../shared/types';
+import { traceConsumer, traceProducer } from 'autotel/messaging';
+import type {
+  OrderPlacedMessage,
+  PaymentCapturedMessage,
+} from '../shared/types';
 import { paymentCapturedEvent, paymentFailedEvent } from '../shared/events';
 import { isoNow } from '../shared/clock';
 
@@ -32,9 +35,40 @@ export function setStripeStub(next: StripeStub): void {
 const MAX_ATTEMPTS = 3;
 const BACKOFFS_MS = [200, 800];
 
+// Tracked inside the producer span, like `order.placed`, so Inventory's link
+// resolves to exactly this event.
+const publishPaymentCaptured = traceProducer({
+  system: 'kafka',
+  destination: 'payments.events',
+})(
+  (ctx) =>
+    async (
+      msg: OrderPlacedMessage,
+      pspTransactionId: string,
+    ): Promise<PaymentCapturedMessage> => {
+      paymentCapturedEvent.track({
+        orderId: msg.id,
+        amountCents: msg.totalCents,
+        currency: msg.currency,
+        psp: 'stripe',
+        pspTransactionId,
+        capturedAt: isoNow(),
+        _autotel: { channel: 'payments.events', producer: 'PaymentService' },
+      });
+      return {
+        orderId: msg.id,
+        items: msg.items,
+        headers: ctx.getAllPropagationHeaders(),
+      };
+    },
+);
+
+/** Resolves to the published `PaymentCaptured` message, or nothing on failure. */
 export const handleOrderPlaced = traceConsumer({
   system: 'kafka',
   destination: 'orders.events',
+  consumerGroup: 'PaymentService',
+  headersFrom: 'headers',
 })(() => async (msg: OrderPlacedMessage) => {
   let lastDecline = '';
   let attempts = 0;
@@ -49,16 +83,7 @@ export const handleOrderPlaced = traceConsumer({
     });
 
     if (result.status === 'succeeded') {
-      paymentCapturedEvent.track({
-        orderId: msg.id,
-        amountCents: msg.totalCents,
-        currency: msg.currency,
-        psp: 'stripe',
-        pspTransactionId: result.pspTransactionId,
-        capturedAt: isoNow(),
-        _autotel: { channel: 'payments.events', producer: 'PaymentService' },
-      });
-      return;
+      return publishPaymentCaptured(msg, result.pspTransactionId);
     }
 
     lastDecline = result.declineCode;
@@ -74,4 +99,5 @@ export const handleOrderPlaced = traceConsumer({
     failedAt: isoNow(),
     _autotel: { channel: 'payments.events', producer: 'PaymentService' },
   });
+  return undefined;
 });

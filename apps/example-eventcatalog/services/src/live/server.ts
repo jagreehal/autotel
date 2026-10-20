@@ -4,7 +4,8 @@
 //   GET /                  → dashboard HTML (served from services/public/live.html)
 //   GET /snapshot.json     → current ArchitectureSnapshot
 //   GET /drift.json        → current drift report (computed against the static catalog)
-//   GET /events            → SSE: streams live events as they fire
+//   GET /events            → SSE: streams live events as they fire (`track`)
+//                            and consumers measured receiving them (`consume`)
 //   GET /map               → the catalog topology, live: a marker crosses an
 //                            edge when that event actually fires. Rebuilt per
 //                            request from the running snapshot, so an event
@@ -30,7 +31,7 @@ import {
   type DriftReport,
 } from 'autotel-eventcatalog';
 
-import type { LiveEvent, LiveStreamSubscriber } from './stream';
+import type { LiveFrame, LiveStreamSubscriber } from './stream';
 
 /** Everything this server answers with on its JSON endpoints. */
 type JsonBody =
@@ -127,6 +128,8 @@ async function renderLiveMap(
     // The SSE frames here are named `track`; a `message` listener would never
     // fire and the page would claim to be live while sitting still.
     liveEventName: 'track',
+    // Measured receipts: the only frames that move a consumer edge solidly.
+    liveConsumeEventName: 'consume',
     title: 'E-Commerce — catalog, live',
   });
 }
@@ -223,9 +226,9 @@ function handleSse(
   });
   res.write('retry: 2000\n\n');
 
-  const write = (event: LiveEvent) => {
-    res.write(`event: track\n`);
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  const write = (frame: LiveFrame) => {
+    res.write(`event: ${frame.type === 'consume' ? 'consume' : 'track'}\n`);
+    res.write(`data: ${JSON.stringify(frame)}\n\n`);
   };
 
   const unsubscribe = stream.subscribe(write);

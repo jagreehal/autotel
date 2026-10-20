@@ -10,6 +10,7 @@ export default defineConfig({
     hono: 'src/hono.ts',
     tanstack: 'src/tanstack.ts',
     next: 'src/next.ts',
+    'next-config': 'src/next-config.ts',
     nitro: 'src/nitro.ts',
     cloudflare: 'src/cloudflare.ts',
     express: 'src/express.ts',

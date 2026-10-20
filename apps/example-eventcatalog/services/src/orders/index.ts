@@ -16,12 +16,31 @@ const kafka = {
   publish: async (_topic: string, _msg: OrderPlacedMessage) => undefined,
 };
 
+// The headers carry this span's context, so each consumer's span links back to
+// it. `order.placed` is tracked inside the same span: one producer span is one
+// message, which is how the snapshot knows which event a consumer received.
 const publishOrderPlaced = traceProducer({
   system: 'kafka',
   destination: 'orders.events',
-})(
-  () => async (msg: OrderPlacedMessage) => kafka.publish('orders.events', msg),
-);
+})((ctx) => async (msg: OrderPlacedMessage) => {
+  const sent = { ...msg, headers: ctx.getAllPropagationHeaders() };
+  await kafka.publish('orders.events', sent);
+  orderPlacedEvent.track({
+    orderId: msg.id,
+    customerId: msg.customerId,
+    totalCents: msg.totalCents,
+    currency: msg.currency,
+    items: msg.items,
+    shipping: msg.shipping,
+    metadata: msg.metadata,
+    _autotel: {
+      channel: 'orders.events',
+      producer: 'OrdersService',
+      consumers: ['PaymentService', 'RecommendationsService'],
+    },
+  });
+  return sent;
+});
 
 export const placeOrder = withTracing({})(
   (ctx) => async (order: PlaceOrderInput) => {
@@ -30,23 +49,6 @@ export const placeOrder = withTracing({})(
     ctx.setAttribute('order.item_count', order.items.length);
 
     await db.orders.insert(order);
-    await publishOrderPlaced({ type: 'OrderPlaced', ...order });
-
-    orderPlacedEvent.track({
-      orderId: order.id,
-      customerId: order.customerId,
-      totalCents: order.totalCents,
-      currency: order.currency,
-      items: order.items,
-      shipping: order.shipping,
-      metadata: order.metadata,
-      _autotel: {
-        channel: 'orders.events',
-        producer: 'OrdersService',
-        consumers: ['PaymentService', 'RecommendationsService'],
-      },
-    });
-
-    return order;
+    return publishOrderPlaced({ type: 'OrderPlaced', ...order });
   },
 );
