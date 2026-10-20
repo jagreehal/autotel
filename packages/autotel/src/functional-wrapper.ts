@@ -657,11 +657,40 @@ export function wrapPlainWithTracing<TArgs extends unknown[], TReturn>(
     fn as InstrumentableFunction,
     variableName,
   );
+  const checked = warnOnCtxFactory(fn, options.name ?? effectiveVariableName);
   return wrapWithTracingSync(
-    (_ctx: TraceContext) => fn,
+    (_ctx: TraceContext) => checked,
     options,
     effectiveVariableName,
   );
+}
+
+/**
+ * Say so when `trace()` is handed a context factory, the `withTracing` form.
+ *
+ * `trace(name, ctx => async () => ...)` compiles, and calling the wrapper
+ * returns the inner function unrun while the span ends OK. The signature is a callback that declares a
+ * parameter, called with none, returning a function. A curried function called
+ * with its argument does not match. This only observes; what runs is unchanged.
+ */
+function warnOnCtxFactory<TArgs extends unknown[], TReturn>(
+  fn: (...args: TArgs) => TReturn | Promise<TReturn>,
+  name: string | undefined,
+): (...args: TArgs) => TReturn | Promise<TReturn> {
+  if (fn.length === 0) return fn;
+  let warned = false;
+  return function (this: unknown, ...args: TArgs) {
+    const result = fn.apply(this, args);
+    if (!warned && args.length === 0 && typeof result === 'function') {
+      warned = true;
+      console.warn(
+        `[autotel] trace('${name ?? 'anonymous'}') returned a function without running it. ` +
+          'trace(name, fn) wraps fn itself; for the (ctx) => async () => ... factory form use ' +
+          'withTracing({ name })(ctx => ...), or trace.run(name, ctx => ...) to run it now.',
+      );
+    }
+    return result;
+  };
 }
 
 /** Run one operation immediately with its span-bound context. */

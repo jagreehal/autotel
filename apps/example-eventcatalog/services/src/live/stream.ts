@@ -3,6 +3,7 @@
 // updates to connected dashboards the moment a track() call fires.
 
 import { EventSubscriber, type EventPayload } from 'autotel-subscribers';
+import type { ConsumerReceipt } from 'autotel-subscribers/architecture-snapshot';
 
 /** What an event attribute can hold once it has been serialized for the wire. */
 export type LiveAttributeValue =
@@ -28,7 +29,12 @@ export type LiveEvent = {
   producer?: string;
 };
 
-export type LiveEventListener = (event: LiveEvent) => void;
+/** A consumer measured receiving an event, from its own span. */
+export type LiveConsumeFrame = ConsumerReceipt & { type: 'consume' };
+
+export type LiveFrame = LiveEvent | LiveConsumeFrame;
+
+export type LiveEventListener = (frame: LiveFrame) => void;
 
 /**
  * Cap on concurrent SSE listeners. The dashboard is a demo, but a misbehaving
@@ -69,9 +75,18 @@ export class LiveStreamSubscriber extends EventSubscriber {
       channel: meta.channel,
       producer: meta.producer,
     };
+    this.broadcast(event);
+  }
+
+  /** Pass as the snapshot's `onConsumerObserved`. */
+  consumed = (receipt: ConsumerReceipt): void => {
+    this.broadcast({ type: 'consume', ...receipt });
+  };
+
+  private broadcast(frame: LiveFrame): void {
     for (const fn of this.listeners) {
       try {
-        fn(event);
+        fn(frame);
       } catch (err) {
         // Listener errors must never block the producer.
         process.stderr.write(

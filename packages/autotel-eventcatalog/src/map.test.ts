@@ -55,10 +55,13 @@ function snapshot(
       channel: string;
       consumers: string[];
       sources: Array<Record<string, unknown>>;
+      observedConsumers: Array<Record<string, unknown>>;
     }>
   >,
+  options: { consumersMeasured?: boolean } = {},
 ): ArchitectureSnapshot {
   return {
+    ...options,
     spec: 'autotel-architecture/v0.1.0',
     generatedAt: '2026-09-07T00:00:00.000Z',
     service: 'shop',
@@ -512,10 +515,8 @@ describe('renderLiveMapHtml', () => {
 
     const html = renderLiveMapHtml(withConsumer);
     expect(html).toContain('cannot be confirmed');
-    // Nothing reads consumer spans, so pointing at traceConsumer promised a
-    // result the code cannot produce.
-    expect(html).not.toContain('traceConsumer');
-    expect(html).toContain('Measured consumption is not supported yet');
+    // The note names the way out: measuring consumers from their spans.
+    expect(html).toContain('snapshot.spanProcessor');
   });
 
   /**
@@ -639,5 +640,79 @@ describe('renderLiveMapHtml', () => {
     const html = renderLiveMapHtml(hostile);
     expect(html).not.toContain('<img src=x');
     expect(html).toContain('&lt;img src=x');
+  });
+});
+
+describe('buildLiveMap with measured consumers', () => {
+  const PAYMENTS = {
+    id: 'PaymentService',
+    name: 'Payment Service',
+    receives: [{ id: 'OrderPlaced', from: [{ id: 'orders.events' }] }],
+  };
+  const RECOMMENDATIONS = {
+    id: 'RecommendationsService',
+    name: 'Recommendations Service',
+    receives: [{ id: 'OrderPlaced', from: [{ id: 'orders.events' }] }],
+  };
+  const receipt = (consumer: string, count: number) => ({
+    consumer,
+    channel: 'orders.events',
+    count,
+    firstSeen: '2026-09-07T00:00:00.000Z',
+    lastSeen: '2026-09-07T00:00:00.000Z',
+  });
+
+  const map = buildLiveMap(
+    snapshot(
+      {
+        'order.placed': {
+          observedCount: 5,
+          producer: 'OrdersService',
+          channel: 'orders.events',
+          consumers: ['Billing'],
+          observedConsumers: [
+            receipt('PaymentService', 4),
+            receipt('Audit', 2),
+          ],
+        },
+      },
+      { consumersMeasured: true },
+    ),
+    catalog({
+      services: [ORDERS, PAYMENTS, RECOMMENDATIONS],
+      events: ['OrderPlaced'],
+    }),
+  );
+  const edge = (consumer: string) =>
+    map.edges.find(
+      (e) => e.id === `consumed-by:event:OrderPlaced->service:${consumer}`,
+    );
+
+  it('counts a measured consumer from its own receipts, not the event', () => {
+    expect(edge('PaymentService')).toMatchObject({
+      evidence: 'observed',
+      liveness: 'observed',
+      count: 4,
+    });
+  });
+
+  it('leaves a declared consumer nobody saw receive as declared-only', () => {
+    expect(edge('RecommendationsService')).toMatchObject({
+      evidence: 'observed',
+      liveness: 'declared-only',
+      count: 0,
+    });
+  });
+
+  it('flags a measured consumer the catalog never declared', () => {
+    expect(edge('Audit')?.liveness).toBe('undocumented');
+  });
+
+  it('keeps a producer-named consumer nobody saw receive as asserted', () => {
+    expect(edge('Billing')).toMatchObject({
+      evidence: 'asserted',
+      count: 0,
+    });
+    expect(map.summary.assertedEdges).toBe(1);
   });
 });

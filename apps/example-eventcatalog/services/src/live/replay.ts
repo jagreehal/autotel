@@ -38,6 +38,9 @@ export async function attachRecorder(
   let firstAt: number | null = null;
 
   const unsubscribe = stream.subscribe((event) => {
+    // Replay re-tracks events without their spans, so a recorded receipt
+    // could never be reproduced; record only what replay can play back.
+    if (event.type !== 'event') return;
     const now = Date.now();
     if (firstAt === null) firstAt = now;
     const line: RecordedLine = { at: now - firstAt, event };

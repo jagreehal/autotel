@@ -9,6 +9,7 @@
     "lint": "oxlint -c oxlint.json --disable-nested-config"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*",
     "autotel-web": "workspace:*",

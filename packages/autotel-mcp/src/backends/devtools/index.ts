@@ -3,7 +3,7 @@
 import type { Issue } from 'autotel-devtools/issues';
 import type { AgentUsageQuery, IssueListQuery } from '../telemetry';
 import { HttpError, jsonGet, jsonPost } from '../../lib/http';
-import { compileTraceQuery } from './query-pushdown';
+import { compileLogQuery, compileTraceQuery, literal } from './query-pushdown';
 import {
   spanMatchesQuery,
   traceMatchesQuery,
@@ -14,6 +14,7 @@ import type {
   BackendCapabilities,
   BackendHealth,
   CorrelatedSignals,
+  LogRecord,
   LogSearchQuery,
   LogSearchResult,
   MetricSearchQuery,
@@ -122,6 +123,25 @@ interface DevtoolsSeriesResponse {
   series?: DevtoolsMetricSeries[];
 }
 
+/** One log as `POST /api/query/logs` returns it (`LogData` in devtools). */
+interface DevtoolsLog {
+  traceId?: string;
+  spanId?: string;
+  resourceName?: string;
+  severityText?: string;
+  body: string | Record<string, unknown>;
+  timestamp: number;
+  attributes?: Record<string, unknown>;
+}
+
+interface DevtoolsLogsResponse {
+  logs?: DevtoolsLog[];
+}
+
+interface DevtoolsStatsResponse {
+  traceCount?: number;
+}
+
 interface DevtoolsHealthResponse {
   ok?: boolean;
   service?: string;
@@ -192,8 +212,10 @@ export class DevtoolsBackend implements TelemetryBackend {
       }
       this.hasIssuesApi = true;
       return data.issues;
-    } catch {
-      this.hasIssuesApi = false;
+    } catch (error) {
+      // Only a 404 proves an older server. A timeout must be retried next call,
+      // not turn issue state off for the life of the process.
+      if (isNotFound(error)) this.hasIssuesApi = false;
       return undefined;
     }
   }
@@ -209,7 +231,7 @@ export class DevtoolsBackend implements TelemetryBackend {
       );
     } catch (error) {
       // A devtools without the route answers 404: report it as unsupported.
-      if (error instanceof HttpError && error.status === 404) return undefined;
+      if (isNotFound(error)) return undefined;
       throw error;
     }
   }
@@ -220,7 +242,7 @@ export class DevtoolsBackend implements TelemetryBackend {
         ? await jsonPost<object>(`${this.baseUrl}/api/validation/run`, {})
         : await jsonGet<object>(`${this.baseUrl}/api/validation`);
     } catch (error) {
-      if (error instanceof HttpError && error.status === 404) return undefined;
+      if (isNotFound(error)) return undefined;
       throw error;
     }
   }
@@ -233,42 +255,33 @@ export class DevtoolsBackend implements TelemetryBackend {
   }
 
   /**
-   * Run a query server-side, or return null when this server cannot.
+   * Page through `POST /api/query/traces`, handing each trace to `visit` until
+   * it returns false or the pages run out. Returns false when this server has
+   * no store-backed query API, so the caller falls back to the live tail.
    *
-   * Null means "fall back", not "no results" — conflating the two would report
+   * False means "fall back", not "no results"; conflating the two would report
    * an empty investigation against a server that simply predates the endpoint.
    */
-  private async queryRecords(
-    query: TraceSearchQuery,
-    wanted: number,
-    accepts: (trace: TraceRecord) => boolean,
-    pushDownWindow = true,
-  ): Promise<TraceRecord[] | null> {
-    if (this.hasQueryApi === false) return null;
+  private async scanStore(
+    text: string,
+    window: { start: number; end: number } | undefined,
+    visit: (trace: DevtoolsTrace) => boolean,
+  ): Promise<boolean> {
+    if (this.hasQueryApi === false) return false;
 
     try {
-      const matches: TraceRecord[] = [];
       const seenCursors = new Set<string>();
       let cursor: string | null | undefined;
 
       do {
         const body: Record<string, unknown> = {
-          query: compileTraceQuery(query),
-          // Trace-level predicates are applied after hydration. Read a useful
-          // candidate page even when the caller only wants one final match.
+          query: text,
+          // Callers filter after hydration. Read a useful candidate page even
+          // when the caller only wants one final match.
           limit: 100,
         };
         if (cursor) body.cursor = cursor;
-        if (
-          pushDownWindow &&
-          query.startTimeUnixMs !== undefined &&
-          query.endTimeUnixMs !== undefined
-        ) {
-          body.window = {
-            start: query.startTimeUnixMs,
-            end: query.endTimeUnixMs,
-          };
-        }
+        if (window) body.window = window;
 
         const data = await jsonPost<DevtoolsQueryResponse>(
           `${this.baseUrl}/api/query/traces`,
@@ -282,15 +295,11 @@ export class DevtoolsBackend implements TelemetryBackend {
         // read-back shape carries `count` instead. Require the former.
         if (!('nextCursor' in data)) {
           this.hasQueryApi = false;
-          return null;
+          return false;
         }
         this.hasQueryApi = true;
         for (const trace of data.traces ?? []) {
-          const record = this.toTraceRecord(trace);
-          if (accepts(record)) {
-            matches.push(record);
-          }
-          if (matches.length >= wanted) return matches;
+          if (!visit(trace)) return true;
         }
 
         cursor = data.nextCursor;
@@ -298,17 +307,67 @@ export class DevtoolsBackend implements TelemetryBackend {
         if (cursor) seenCursors.add(cursor);
       } while (cursor);
 
-      return matches;
+      return true;
     } catch (error) {
-      // Any failure here is recoverable: the read-back path below answers the
-      // same question less efficiently, and a working answer beats an error.
-      // Only a definitive 404 proves this is a legacy server. A timeout or 5xx
-      // is transient and must be probed again on the next investigation.
-      if (error instanceof HttpError && error.status === 404) {
-        this.hasQueryApi = false;
-      }
-      return null;
+      // Any failure here is recoverable: the read-back path answers the same
+      // question less efficiently, and a working answer beats an error. Only a
+      // definitive 404 proves this is a legacy server. A timeout or 5xx is
+      // transient and must be probed again on the next investigation.
+      if (isNotFound(error)) this.hasQueryApi = false;
+      return false;
     }
+  }
+
+  /** Run a query server-side, or return null when this server cannot. */
+  private async queryRecords(
+    query: TraceSearchQuery,
+    wanted: number,
+    accepts: (trace: TraceRecord) => boolean,
+    pushDownWindow = true,
+  ): Promise<TraceRecord[] | null> {
+    const window =
+      pushDownWindow &&
+      query.startTimeUnixMs !== undefined &&
+      query.endTimeUnixMs !== undefined
+        ? { start: query.startTimeUnixMs, end: query.endTimeUnixMs }
+        : undefined;
+    const matches: TraceRecord[] = [];
+    const ok = await this.scanStore(
+      compileTraceQuery(query),
+      window,
+      (trace) => {
+        const record = this.toTraceRecord(trace);
+        if (accepts(record)) matches.push(record);
+        return matches.length < wanted;
+      },
+    );
+    return ok ? matches : null;
+  }
+
+  /**
+   * Traces from the store, newest first, falling back to the live tail.
+   *
+   * The tail is only what devtools still holds in memory; the store is the
+   * whole retained history, which is what `searchTraces` and the summaries
+   * already read. Listing tools must see the same data or they contradict them.
+   */
+  private async storeTraces(
+    text: string,
+    window?: { start: number; end: number },
+  ): Promise<DevtoolsTrace[]> {
+    const traces: DevtoolsTrace[] = [];
+    // Scans at most MAX_SCANNED_TRACES of retained history.
+    const ok = await this.scanStore(text, window, (trace) => {
+      traces.push(trace);
+      return traces.length < MAX_SCANNED_TRACES;
+    });
+    if (ok) return traces;
+    const tail = await this.fetchTraces();
+    return window
+      ? tail.filter(
+          (t) => t.startTime >= window.start && t.startTime <= window.end,
+        )
+      : tail;
   }
 
   async healthCheck(): Promise<BackendHealth> {
@@ -324,14 +383,14 @@ export class DevtoolsBackend implements TelemetryBackend {
           message: `${this.baseUrl} is held by "${health.service}", not autotel-devtools`,
         };
       }
-      const traces = await this.fetchTraces();
+      const traceCount = await this.countTraces();
       const version = health.version ? ` v${health.version}` : '';
       // Name the URL: two devtools on one machine (a stale one on 4318, the
       // app exporting to 4848) both answer "reachable", and the count alone
       // cannot say which one this is.
       return {
         healthy: true,
-        message: `autotel-devtools${version} at ${this.baseUrl} reachable, ${traces.length} trace(s) captured${this.describeQueryApi()}`,
+        message: `autotel-devtools${version} at ${this.baseUrl} reachable, ${traceCount} trace(s) captured${this.describeQueryApi()}`,
       };
     } catch (error) {
       return {
@@ -344,15 +403,15 @@ export class DevtoolsBackend implements TelemetryBackend {
   capabilities(): BackendCapabilities {
     return {
       traces: 'available',
-      // Metrics are served from the store. Logs still only stream to the UI
-      // over WebSocket, so they stay unsupported here.
+      // Both served from the store. A devtools too old to have the endpoints
+      // says so per call (`unsupported` + detail) rather than at registration.
       metrics: 'available',
-      logs: 'unsupported',
+      logs: 'available',
     };
   }
 
   async listServices(_query?: ServiceQuery): Promise<ServiceListResult> {
-    const traces = await this.fetchTraces();
+    const traces = await this.storeTraces('');
     const services = new Set<string>();
     for (const trace of traces) {
       for (const span of trace.spans) {
@@ -363,7 +422,7 @@ export class DevtoolsBackend implements TelemetryBackend {
   }
 
   async listOperations(serviceName: string): Promise<OperationListResult> {
-    const traces = await this.fetchTraces();
+    const traces = await this.storeTraces(`service = ${literal(serviceName)}`);
     const operations = new Set<string>();
     for (const trace of traces) {
       for (const span of trace.spans) {
@@ -403,9 +462,20 @@ export class DevtoolsBackend implements TelemetryBackend {
   }
 
   async getTrace(traceId: string): Promise<TraceRecord | null> {
-    const traces = await this.fetchTraces();
-    const trace = traces.find((candidate) => candidate.traceId === traceId);
-    return trace ? this.toTraceRecord(trace) : null;
+    let found: DevtoolsTrace | undefined;
+    const ok = await this.scanStore(
+      `trace_id = ${literal(traceId)}`,
+      undefined,
+      (trace) => {
+        if (trace.traceId === traceId) found = trace;
+        return !found;
+      },
+    );
+    if (!ok) {
+      const traces = await this.fetchTraces();
+      found = traces.find((candidate) => candidate.traceId === traceId);
+    }
+    return found ? this.toTraceRecord(found) : null;
   }
 
   async searchSpans(query: SpanSearchQuery): Promise<SpanSearchResult> {
@@ -437,8 +507,12 @@ export class DevtoolsBackend implements TelemetryBackend {
     return { items, totalCount: filtered.length };
   }
 
-  async serviceMap(_lookbackMinutes = 60, limit = 20): Promise<ServiceMap> {
-    const traces = await this.fetchTraces();
+  async serviceMap(lookbackMinutes = 60, limit = 20): Promise<ServiceMap> {
+    const end = Date.now();
+    const traces = await this.storeTraces('', {
+      start: end - lookbackMinutes * 60_000,
+      end,
+    });
     const records = traces.map((trace) => this.toTraceRecord(trace));
     return buildServiceMap(records, limit);
   }
@@ -464,7 +538,8 @@ export class DevtoolsBackend implements TelemetryBackend {
         `${this.baseUrl}/api/metrics`,
       );
       catalogue = data.metrics ?? [];
-    } catch {
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
       // A devtools predating the metrics API. Say why rather than reporting an
       // empty catalogue, which would read as "this service emits no metrics".
       return {
@@ -518,8 +593,10 @@ export class DevtoolsBackend implements TelemetryBackend {
         body,
       );
       series = data.series ?? [];
-    } catch {
-      return [];
+    } catch (error) {
+      // An older devtools has no series to give; any other failure is real.
+      if (isNotFound(error)) return [];
+      throw error;
     }
 
     const filtered = query?.serviceName
@@ -539,19 +616,77 @@ export class DevtoolsBackend implements TelemetryBackend {
     }));
   }
 
-  async searchLogs(_query?: LogSearchQuery): Promise<LogSearchResult> {
-    return {
-      items: [],
-      totalCount: 0,
-      unsupported: true,
-      detail:
-        'autotel-devtools exposes traces only over HTTP — logs stream to the UI over WebSocket',
+  async searchLogs(query?: LogSearchQuery): Promise<LogSearchResult> {
+    const body: Record<string, unknown> = {
+      query: compileLogQuery(query ?? {}),
+      limit: query?.limit ?? 100,
     };
+    if (
+      query?.startTimeUnixMs !== undefined ||
+      query?.endTimeUnixMs !== undefined
+    ) {
+      body.window = {
+        start: query.startTimeUnixMs ?? 0,
+        end: query.endTimeUnixMs ?? Number.MAX_SAFE_INTEGER,
+      };
+    }
+
+    let logs: DevtoolsLog[];
+    try {
+      const data = await jsonPost<DevtoolsLogsResponse>(
+        `${this.baseUrl}/api/query/logs`,
+        body,
+      );
+      logs = data.logs ?? [];
+    } catch (error) {
+      if (isNotFound(error)) {
+        return {
+          items: [],
+          totalCount: 0,
+          unsupported: true,
+          detail:
+            'This autotel-devtools has no log query API; upgrade it to read logs',
+        };
+      }
+      throw error;
+    }
+
+    const items = logs.map((log): LogRecord => ({
+      timestampUnixMs: log.timestamp,
+      severityText: log.severityText ?? '',
+      body: typeof log.body === 'string' ? log.body : JSON.stringify(log.body),
+      serviceName: log.resourceName,
+      traceId: log.traceId,
+      spanId: log.spanId,
+      attributes: normalizeTags(log.attributes),
+    }));
+    return { items, totalCount: items.length };
   }
 
   async getCorrelatedSignals(traceId: string): Promise<CorrelatedSignals> {
-    const trace = await this.getTrace(traceId);
-    return { trace, metrics: [], logs: [] };
+    // The trace is the anchor; a log query that fails leaves it standing.
+    const [trace, logs] = await Promise.all([
+      this.getTrace(traceId),
+      this.searchLogs({ traceId, limit: 100 }).then(
+        (result) => result.items,
+        () => [],
+      ),
+    ]);
+    return { trace, metrics: [], logs };
+  }
+
+  /** Retained traces from `/api/stats`, or the live tail on an older server. */
+  private async countTraces(): Promise<number> {
+    try {
+      const stats = await jsonGet<DevtoolsStatsResponse>(
+        `${this.baseUrl}/api/stats`,
+      );
+      if (typeof stats.traceCount === 'number') return stats.traceCount;
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+    const tail = await this.fetchTraces();
+    return tail.length;
   }
 
   /** Report the store-backed query API in the health line, so a stale devtools is visible. */
@@ -585,6 +720,13 @@ export class DevtoolsBackend implements TelemetryBackend {
 
     return { traceId: trace.traceId, spans };
   }
+}
+
+/** Traces a listing scans from the store before it stops. */
+const MAX_SCANNED_TRACES = 5000;
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof HttpError && error.status === 404;
 }
 
 function serviceOf(span: DevtoolsSpan, trace: DevtoolsTrace): string {

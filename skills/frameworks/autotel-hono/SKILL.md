@@ -29,6 +29,7 @@ app.use(
     captureActiveRequests: true,
     captureRequestDuration: true,
     spanNameFactory: (c) => `${c.req.method} ${c.req.routePath}`,
+    getRoute: (c) => c.req.header('x-rpc-method'), // reported in place of the matched pattern
   }),
 );
 ```
@@ -37,7 +38,7 @@ app.use(
 
 - Every HTTP request gets a span with method, route, URL, status code
 - The span and duration end when the body has been sent, so streamed responses (`streamSSE`, AI SDK UI streams) record their full length
-- Errors (5xx) are recorded as span exceptions
+- Errors (5xx) are recorded as span exceptions, with `error.type` on the span and the duration metric
 - Optional: request/response headers, active request count, duration histogram
 
 ## Common Mistakes

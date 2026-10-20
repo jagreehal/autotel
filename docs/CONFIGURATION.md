@@ -181,6 +181,13 @@ The presets mask values before any exporter sees them:
 - `strict`: everything in `default` plus JWTs, bearer tokens, IBANs, and API keys in values.
 - `pci-dss`: focuses on card data (`card`, `cvv`, `pan`, expiry) and credit card numbers.
 
+Every preset also scrubs two kinds of value no pattern recognises:
+
+- **URL query values.** `url.full`, `url.query`, `http.url` and `http.target` keep their parameter names and lose their values, in the query and in a fragment: `…/balances?on_behalf_of=REDACTED`, as the HTTP semantic conventions recommend. Query strings carry account ids, emails and signed tokens.
+- **MongoDB query literals.** On a span whose `db.system` is `mongodb`, the values in `db.query.text` / `db.statement` become `?`, keeping field names, the query's shape, and field paths (`"$total"`) inside `$expr` and expression stages such as `$group`. Prisma's MongoDB engine inlines every value it queries or writes.
+
+A custom config turns these on with `urlQueryValues: true` and `mongoQueryLiterals: true`.
+
 Built-in value masks keep a recognizable suffix where useful: credit cards become `****1111`, emails `a***@***.com`, IPv4 `***.***.***.1`, JWTs `eyJ***.***`, and bearer tokens `Bearer ***`.
 
 Pass an object instead of a preset name for custom key and value patterns. See `REDACTOR_PATTERNS` and `REDACTOR_PRESETS` from `autotel` and the `AttributeRedactingProcessor` for the full surface.

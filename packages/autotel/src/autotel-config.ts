@@ -872,6 +872,25 @@ export interface AutotelConfig {
   spanFilter?: SpanFilterPredicate;
 
   /**
+   * Routes whose requests are not traced at all: health checks, static assets.
+   *
+   * Each entry is a path prefix, matched on segment boundaries
+   * (`'/api/health'` matches `/api/health/check`, not `/api/healthcare`), or a
+   * RegExp tested against the path. A server span is matched on every name
+   * its route goes by: `url.path`, `http.target` (Next.js's own server span
+   * carries only this one), `http.route` and `next.route`. Dropping the
+   * server span drops the whole request, its database and outbound spans too.
+   *
+   * Composes with `spanFilter`: a span must pass both.
+   *
+   * @example
+   * ```typescript
+   * init({ service: 'web', ignoreRoutes: ['/api/health', /^\/_next\//] })
+   * ```
+   */
+  ignoreRoutes?: Array<string | RegExp>;
+
+  /**
    * Telemetry Policies (experimental) — OTEP 4738.
    *
    * Portable, fail-open rules deciding what telemetry is kept and how it is

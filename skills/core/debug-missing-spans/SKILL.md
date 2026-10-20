@@ -19,7 +19,7 @@ code → SDK init → sampler → processor → exporter → network → backend
 
 This skill walks each link in order with a quick check you can run. Don't skip steps. The cause is rarely where you'd guess.
 
-## Check these two first
+## Check these three first
 
 1. **No endpoint, no export.** Node `init()` has no default endpoint and no
    localhost fallback. Without `endpoint`, `destinations`, `spanExporters`,
@@ -38,6 +38,12 @@ This skill walks each link in order with a quick check you can run. Don't skip s
    `trace()` / `withTracing()` / `instrument()` are dropped on export, and each
    wrapped span decides on its own. Reproduce with `sampling: 'development'`.
    See [`tune-sampling`](../tune-sampling/SKILL.md).
+
+3. **Two copies of `@opentelemetry/api` (Next.js, bundlers).** An
+   instrumentation on a different API copy than autotel sends its spans to a
+   provider nobody exports from. `init()` warns and names it. Under Next.js,
+   use `withAutotelConfig` from `autotel-adapters/next-config` and add
+   `@opentelemetry/api` to the app's dependencies.
 
 ## Step 0: Reproduce locally with the pretty exporter
 

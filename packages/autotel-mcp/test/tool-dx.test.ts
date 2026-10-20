@@ -165,6 +165,18 @@ describe('agent guard rails', () => {
     await client.close();
   });
 
+  it("reads a metric's points, which list_metrics does not return", async () => {
+    const client = await connect();
+    const result = (await callJson(client, 'get_metric_series', {
+      metricName: 'http.server.duration',
+      serviceName: 'checkout',
+    })) as { data: { series: Array<{ points: Array<{ value: number }> }> } };
+    expect(result.data.series[0]?.points.map((p) => p.value)).toEqual([
+      350, 280,
+    ]);
+    await client.close();
+  });
+
   it('aggregates spans from a sample when the backend cannot', async () => {
     const client = await connect();
     const body = (await callJson(client, 'aggregate_spans', {

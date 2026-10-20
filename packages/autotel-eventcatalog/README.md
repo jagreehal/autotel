@@ -63,7 +63,7 @@ autotel-eventcatalog map \
 ```
 
 ```
-13 observed, 2 declared-but-never-seen, 2 undocumented, 5 asserted (mode: static)
+13 observed, 2 declared-but-never-seen, 0 undocumented, 0 asserted (mode: static)
 ```
 
 One self-contained HTML file — no build step, no CDN, no dependencies — where:
@@ -137,15 +137,50 @@ Two things are kept apart on purpose:
 - **liveness** — catalog vs snapshot presence.
 - **evidence** — whether the runtime _could_ have seen it. A producer writes the
   event, so `produces` and `publishes-to` edges carry `observed` evidence. **A
-  consumer edge is always `asserted`**, however busy the event is: a producer's
-  telemetry proves an event fired and can never prove anyone received it.
-  Asserted edges move with a _hollow_ marker.
+  consumer edge is `asserted`** unless consumer spans were read, however busy
+  the event is: a producer's telemetry proves an event fired and can never
+  prove anyone received it. Asserted edges move with a _hollow_ marker.
 
 Collapsing those into one axis is how a diagram ends up implying it watched
 something it only read. `map` will not do that, and a unit test holds the line.
 
-Consumption becomes observable once consumers are instrumented too; until then
-the picture says which half it knows.
+### Measured consumers
+
+Register the snapshot's span processor, turn on trace context for events, and
+give each `traceConsumer` a `headersFrom` and a `consumerGroup`:
+
+```typescript
+init({
+  service: 'checkout',
+  subscribers: [snapshot],
+  spanProcessors: [snapshot.spanProcessor],
+  events: { includeTraceContext: true },
+});
+
+export const handleOrderPlaced = traceConsumer({
+  system: 'kafka',
+  destination: 'orders.events',
+  consumerGroup: 'PaymentService',
+  headersFrom: 'headers',
+})(() => async (msg) => {
+  /* ... */
+});
+```
+
+Track each event inside the `traceProducer` that publishes it. One producer
+span is one message, so a consumer span whose link points at that span, on the
+same channel, counts as that consumer receiving exactly that event. An event
+tracked outside a producer span is never credited to a consumer. The
+snapshot records it under `observedConsumers` and sets `consumersMeasured`.
+In a measured snapshot every consumer edge carries `observed` evidence, and its
+liveness is the finding: a catalog `receives` nobody was seen receiving on is
+`declared-only`, and a consumer the catalog never mentions is `undocumented`.
+Live mode still draws consumer markers hollow on a producer frame, because that
+frame says the event was sent, not that this copy arrived.
+
+For live mode, pass the snapshot's `onConsumerObserved` to your SSE stream and
+name that frame with `liveConsumeEventName`: a `{ event, consumer }` frame is the
+only thing that promotes, counts or solidly marks a consumer edge.
 
 ## Install
 

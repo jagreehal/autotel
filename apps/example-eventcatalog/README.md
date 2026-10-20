@@ -49,12 +49,22 @@ catalog alone.
 For the live version, start the demo and open **<http://localhost:4000/map>**:
 
 ```bash
-REPLAY_PATH=services/test/demo.jsonl pnpm services:live
+pnpm services:live
 ```
 
-A marker crosses an edge the moment that event fires. Consumer edges move with a
-_hollow_ marker, because the producer's telemetry proves the event fired and
-cannot prove anyone received it.
+A marker crosses an edge the moment that event fires. A consumer edge gets a
+solid marker when that consumer's own span arrives, and a _hollow_ one on the
+producer's frame, which proves the event was sent but not that this copy
+arrived. A replayed session (`REPLAY_PATH=...`) has no consumer spans, so it
+falls back to drawing every consumer edge as asserted.
+
+Which consumers receive what is measured, not declared. Each event is tracked
+inside the `traceProducer` that publishes it, every `traceConsumer` links back
+to that span through message headers, and `build-snapshot.ts` registers
+`snapshot.spanProcessor`. In the live demo a consumer edge moves solidly only
+on a `consume` frame, which is that consumer's own span arriving. That is how the map knows the catalog's claim
+that **Orders Service** receives `PaymentCaptured` and `InventoryReserved` is
+not true of this code. Those two edges stay dashed and grey.
 
 ---
 

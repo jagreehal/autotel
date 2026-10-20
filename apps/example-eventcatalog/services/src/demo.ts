@@ -8,7 +8,7 @@ import { placeOrder } from './orders/index';
 import { handleOrderPlaced } from './payments/index';
 import { handlePaymentCaptured } from './inventory/index';
 import { generateRecommendation } from './recommendations/index';
-import type { PlaceOrderInput, OrderPlacedMessage } from './shared/types';
+import type { PlaceOrderInput } from './shared/types';
 
 init({
   service: 'example-eventcatalog',
@@ -32,15 +32,12 @@ async function main() {
     metadata: { source: 'web' },
   };
 
-  await placeOrder(order);
-
-  const placedMessage: OrderPlacedMessage = { type: 'OrderPlaced', ...order };
-  await Promise.all([
+  const placedMessage = await placeOrder(order);
+  const [captured] = await Promise.all([
     handleOrderPlaced(placedMessage),
     generateRecommendation(placedMessage),
   ]);
-
-  await handlePaymentCaptured({ orderId: order.id, items: order.items });
+  if (captured) await handlePaymentCaptured(captured);
 
   console.log('demo: checkout flow completed for order', order.id);
 }

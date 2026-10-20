@@ -30,6 +30,18 @@ afterEach(() => {
 });
 
 describe('getAutoInstrumentations', () => {
+  it('excludes nothing for a manual Prisma instrumentation, which has no auto counterpart', () => {
+    const calls = captureConfig();
+
+    getAutoInstrumentations(true, new Set(['PrismaInstrumentation']));
+
+    // `@opentelemetry/instrumentation-prisma` does not exist: naming it here
+    // only earns a diag.error from getNodeAutoInstrumentations.
+    expect(
+      Object.keys(calls[0] ?? {}).filter((key) => /prisma/i.test(key)),
+    ).toEqual([]);
+  });
+
   it('expands the short names in the array form', () => {
     const calls = captureConfig();
 

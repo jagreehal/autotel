@@ -80,13 +80,12 @@ describe('DevtoolsBackend', () => {
     expect(new DevtoolsBackend(BASE).kind).toBe('devtools');
   });
 
-  it('exposes traces available, metrics/logs unsupported', () => {
-    const caps = new DevtoolsBackend(BASE).capabilities();
-    expect(caps.traces).toBe('available');
-    // Metrics are served from the devtools store. Logs still only stream to
-    // the UI over WebSocket.
-    expect(caps.metrics).toBe('available');
-    expect(caps.logs).toBe('unsupported');
+  it('exposes traces, metrics and logs as available', () => {
+    expect(new DevtoolsBackend(BASE).capabilities()).toEqual({
+      traces: 'available',
+      metrics: 'available',
+      logs: 'available',
+    });
   });
 
   it('maps devtools traces to TraceRecord (ms timestamps, direct status)', () => {
@@ -286,6 +285,33 @@ describe('DevtoolsBackend', () => {
     expect(result.items.map((t) => t.traceId)).toEqual(['bad']);
   });
 
+  it('getCorrelatedSignals keeps the trace when the log query fails', async () => {
+    const body = trace({
+      traceId: 'wanted',
+      service: 'api',
+      spans: [
+        {
+          traceId: 'wanted',
+          spanId: '1',
+          name: 'op',
+          startTime: 1,
+          duration: 1,
+        },
+      ],
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async (
+      input: Parameters<typeof fetch>[0],
+    ) =>
+      String(input).endsWith('/api/query/logs')
+        ? new Response('boom', { status: 500 })
+        : Response.json({ traces: [body], count: 1 })) as typeof fetch);
+    const signals = await new DevtoolsBackend(BASE).getCorrelatedSignals(
+      'wanted',
+    );
+    expect(signals.trace?.traceId).toBe('wanted');
+    expect(signals.logs).toEqual([]);
+  });
+
   it('getTrace returns a single trace by id, null when missing', async () => {
     const backend = new DevtoolsBackend(BASE);
     stubFetch([
@@ -335,15 +361,58 @@ describe('DevtoolsBackend', () => {
     expect(health.message).toContain('not autotel-devtools');
   });
 
-  it('searchLogs reports unsupported; listMetrics only on a devtools without the metrics API', async () => {
+  it('searchLogs pushes filters to the log store and maps records', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({
+        logs: [
+          {
+            id: 'l1',
+            timestamp: 1000,
+            body: { msg: 'boom' },
+            resourceName: 'checkout',
+            severityText: 'ERROR',
+            traceId: 't1',
+            attributes: { 'order.id': 'o1' },
+          },
+        ],
+        nextCursor: null,
+      }),
+    );
+    const result = await new DevtoolsBackend(BASE).searchLogs({
+      serviceName: 'checkout',
+      severityText: 'ERROR',
+      text: 'boom',
+      startTimeUnixMs: 500,
+    });
+    const [url, init] = fetchSpy.mock.calls[0]!;
+    expect(String(url)).toBe(`${BASE}/api/query/logs`);
+    expect(JSON.parse(String(init?.body))).toEqual({
+      query: 'service = "checkout" AND severity = "ERROR" AND "boom"',
+      limit: 100,
+      window: { start: 500, end: Number.MAX_SAFE_INTEGER },
+    });
+    expect(result.items).toEqual([
+      {
+        timestampUnixMs: 1000,
+        severityText: 'ERROR',
+        body: '{"msg":"boom"}',
+        serviceName: 'checkout',
+        traceId: 't1',
+        spanId: undefined,
+        attributes: { 'order.id': 'o1' },
+      },
+    ]);
+  });
+
+  it('searchLogs and listMetrics report unsupported on a devtools without the APIs', async () => {
     const backend = new DevtoolsBackend(BASE);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('not found', { status: 404 }),
+    );
     const logs = await backend.searchLogs({});
     expect(logs.unsupported).toBe(true);
     expect(logs.detail).toContain('autotel-devtools');
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response('not found', { status: 404 }),
-    );
     const metrics = await backend.listMetrics({});
     expect(metrics.unsupported).toBe(true);
     expect(metrics.detail).toContain('autotel-devtools');
@@ -930,5 +999,107 @@ describe('DevtoolsBackend — metrics', () => {
       serviceName: 'worker',
     });
     expect(series).toHaveLength(1);
+  });
+});
+
+/**
+ * Every read goes to the store, not just search.
+ *
+ * The live tail (`GET /v1/traces`) is only what devtools still holds in
+ * memory. A listing or a lookup that reads it disagrees with `searchTraces`,
+ * which reads the store: `get_trace` would call a trace missing that the
+ * summary tool can describe.
+ */
+describe('DevtoolsBackend: reads beyond the live tail', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const stored = trace({
+    traceId: 'old',
+    service: 'api',
+    spans: [
+      {
+        traceId: 'old',
+        spanId: 's1',
+        name: 'GET /orders',
+        startTime: 1000,
+        duration: 10,
+      },
+    ],
+  });
+
+  /** A store that holds `old`, a tail that has already dropped it. */
+  function stubStore(routes: Record<string, () => Response> = {}) {
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async (
+      input: Parameters<typeof fetch>[0],
+      init?: RequestInit,
+    ) => {
+      const path = new URL(String(input)).pathname;
+      if (routes[path]) return routes[path]();
+      if (path === '/api/query/traces') {
+        bodies.push(JSON.parse(String(init?.body ?? '{}')));
+        return Response.json({ traces: [stored], nextCursor: null });
+      }
+      if (path === '/healthz')
+        return Response.json({ ok: true, service: 'autotel-devtools' });
+      return Response.json({ traces: [], count: 0 });
+    }) as typeof fetch);
+    return bodies;
+  }
+
+  it('getTrace finds a trace that has left the live tail', async () => {
+    const bodies = stubStore();
+    const found = await new DevtoolsBackend(BASE).getTrace('old');
+    expect(found?.traceId).toBe('old');
+    expect(bodies[0].query).toBe('trace_id = "old"');
+  });
+
+  it('listServices and listOperations read the store', async () => {
+    const bodies = stubStore();
+    const backend = new DevtoolsBackend(BASE);
+    expect((await backend.listServices()).services).toEqual(['api']);
+    expect((await backend.listOperations('api')).operations).toEqual([
+      'GET /orders',
+    ]);
+    expect(bodies[1].query).toBe('service = "api"');
+  });
+
+  it('serviceMap pushes its lookback down as a window', async () => {
+    const bodies = stubStore();
+    const before = Date.now();
+    await new DevtoolsBackend(BASE).serviceMap(15);
+    const window = bodies[0].window as { start: number; end: number };
+    expect(window.end - window.start).toBe(15 * 60_000);
+    expect(window.end).toBeGreaterThanOrEqual(before);
+  });
+
+  it('healthCheck counts retained traces, not the tail', async () => {
+    stubStore({ '/api/stats': () => Response.json({ traceCount: 4200 }) });
+    const health = await new DevtoolsBackend(BASE).healthCheck();
+    expect(health.message).toContain('4200 trace(s)');
+  });
+
+  it('a transient issues failure does not switch issue state off', async () => {
+    let calls = 0;
+    stubStore({
+      '/api/issues': () =>
+        ++calls === 1
+          ? new Response('boom', { status: 500 })
+          : Response.json({ issues: [] }),
+    });
+    const backend = new DevtoolsBackend(BASE);
+    const query = { start: 0, end: 1, quietMs: 0 };
+    expect(await backend.listIssues(query)).toBeUndefined();
+    expect(await backend.listIssues(query)).toEqual([]);
+  });
+
+  it('a metrics failure is an error, not an empty answer', async () => {
+    stubStore({
+      '/api/query/metrics': () => new Response('boom', { status: 500 }),
+      '/api/metrics': () => new Response('boom', { status: 500 }),
+    });
+    const backend = new DevtoolsBackend(BASE);
+    await expect(backend.getMetricSeries('m')).rejects.toThrow();
+    await expect(backend.listMetrics()).rejects.toThrow();
   });
 });

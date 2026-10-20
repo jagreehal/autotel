@@ -792,3 +792,242 @@ describe('normalizeAttributeRedactorConfig', () => {
     expect(normalizeAttributeRedactorConfig(null)).toBeUndefined();
   });
 });
+
+/**
+ * Prisma's MongoDB engine writes the query with its values inlined, so a
+ * lookup by API key exports the key and a write exports what was written.
+ * A value pattern cannot see these: a 64-char hex HMAC or an amount matches
+ * no PII shape. The presets scrub the literals and keep the query's shape.
+ */
+describe('MongoDB query text', () => {
+  const HMAC = 'a'.repeat(64);
+  const query = `db.ApiKey.aggregate([ { $match: { $expr: { $and: [ { $eq: [ "$keyHmac", { $literal: "${HMAC}", }, ], }, ], }, }, }, { $limit: 1, }, ])`;
+  const insert = `db.Payment.insertOne({ "payee": "Jo Bloggs", "amount": 1250.5, "settled": false, "sortCode": "40-11-62" })`;
+
+  function redact(
+    attributes: Attributes,
+    redactor: AttributeRedactorConfig | 'default' | 'strict' | 'pci-dss',
+  ): Attributes {
+    const next = new MockSpanProcessor();
+    new AttributeRedactingProcessor(next, { redactor }).onEnd(
+      createMockReadableSpan(attributes),
+    );
+    return next.endedSpans[0]!.attributes;
+  }
+
+  it.each(['default', 'strict', 'pci-dss'] as const)(
+    'the %s preset replaces values and keeps field references and shape',
+    (preset) => {
+      const text = String(
+        redact({ 'db.system': 'mongodb', 'db.query.text': query }, preset)[
+          'db.query.text'
+        ],
+      );
+      expect(text).not.toContain(HMAC);
+      expect(text).toContain('"$keyHmac"');
+      expect(text).toContain('db.ApiKey.aggregate(');
+      expect(text).toContain('$literal: ?');
+    },
+  );
+
+  it('scrubs strings and numbers in a write, under the newer db.system.name', () => {
+    const text = String(
+      redact(
+        { 'db.system.name': 'mongodb', 'db.statement': insert },
+        'default',
+      )['db.statement'],
+    );
+    expect(text).toBe(
+      'db.Payment.insertOne({ "payee": ?, "amount": ?, "settled": ?, "sortCode": ? })',
+    );
+  });
+
+  it('scrubs a $literal whatever it holds, a $-prefixed string included', () => {
+    const text = String(
+      redact(
+        {
+          'db.system': 'mongodb',
+          'db.query.text':
+            'db.User.aggregate([ { $match: { $expr: { $eq: [ "$name", { $literal: "$private-customer-name" } ] } } }, { $project: { tag: { $literal: { a: "$x", n: 5, list: [ "$y" ] } } } } ])',
+        },
+        'default',
+      )['db.query.text'],
+    );
+    expect(text).not.toContain('private-customer-name');
+    expect(text).not.toContain('"$x"');
+    expect(text).not.toContain('"$y"');
+    expect(text).toBe(
+      'db.User.aggregate([ { $match: { $expr: { $eq: [ "$name", { $literal: ? } ] } } }, { $project: { tag: { $literal: ? } } } ])',
+    );
+  });
+
+  it('scrubs a $literal written as a quoted key, as JSON writes it', () => {
+    const scrub = (text: string) =>
+      redact({ 'db.system': 'mongodb', 'db.query.text': text }, 'default')[
+        'db.query.text'
+      ];
+    expect(scrub('{"$literal":"$private_customer_name"}')).toBe(
+      '{"$literal":?}',
+    );
+    expect(scrub("{ '$literal' : { 'a': '$secret_field' } }")).toBe(
+      "{ '$literal' : ? }",
+    );
+    expect(scrub('{ $literal: "$private_customer_name" }')).toBe(
+      '{ $literal: ? }',
+    );
+  });
+
+  it('reads operator keys and numbers only outside strings', () => {
+    const scrub = (text: string) =>
+      redact({ 'db.system': 'mongodb', 'db.query.text': text }, 'default')[
+        'db.query.text'
+      ];
+    // The reported leak: `$literal:` inside a value split it at the quote.
+    expect(
+      scrub(
+        '{"note":"private_customer_name $literal: hello","other":"normal"}',
+      ),
+    ).toBe('{"note":?,"other":?}');
+    // A string holding quotes, colons and digits is still one value.
+    expect(
+      scrub(String.raw`{ "a": "x \"$literal\": 1, \"b\": 2", "n": 3 }`),
+    ).toBe('{ "a": ?, "n": ? }');
+  });
+
+  it('keeps a $-string only where MongoDB reads it as a field path', () => {
+    const scrub = (text: string) =>
+      redact({ 'db.system': 'mongodb', 'db.query.text': text }, 'default')[
+        'db.query.text'
+      ];
+    // A query filter compares against the string itself.
+    expect(
+      scrub('db.User.find({ token: "$abcDEF", name: { $eq: "$admin" } })'),
+    ).toBe('db.User.find({ token: ?, name: { $eq: ? } })');
+    // An update's $set writes it.
+    expect(
+      scrub('db.User.updateOne({ _id: "x" }, { $set: { name: "$admin" } })'),
+    ).toBe('db.User.updateOne({ _id: ? }, { $set: { name: ? } })');
+    // $expr and expression stages read field paths.
+    expect(
+      scrub(
+        'db.Order.aggregate([ { $match: { status: "$open", $expr: { $gt: [ "$total", 5 ] } } }, { $group: { _id: "$customer", n: { $sum: "$items.qty" } } }, { $unwind: "$lines" } ])',
+      ),
+    ).toBe(
+      'db.Order.aggregate([ { $match: { status: ?, $expr: { $gt: [ "$total", ? ] } } }, { $group: { _id: "$customer", n: { $sum: "$items.qty" } } }, { $unwind: "$lines" } ])',
+    );
+  });
+
+  it('scrubs regex, hex, bigint and special-number literals', () => {
+    const scrub = (text: string) =>
+      redact({ 'db.system': 'mongodb', 'db.query.text': text }, 'default')[
+        'db.query.text'
+      ];
+    expect(
+      scrub(
+        String.raw`{ email: /john@x\.com/i, h: 0x1F, l: 5n, m: .5, k: -Infinity, z: NaN }`,
+      ),
+    ).toBe('{ email: ?, h: ?, l: ?, m: ?, k: ?, z: ? }');
+  });
+
+  it('keeps only $-strings shaped like a field path, so a stored value starting with $ still goes', () => {
+    const text = String(
+      redact(
+        {
+          'db.system': 'mongodb',
+          'db.query.text':
+            'db.Note.aggregate([ { $project: { "body": "$5 off, code SAVE-5", "ref": "$$ROOT.items" } } ])',
+        },
+        'default',
+      )['db.query.text'],
+    );
+    expect(text).toBe(
+      'db.Note.aggregate([ { $project: { "body": ?, "ref": "$$ROOT.items" } } ])',
+    );
+  });
+
+  it('leaves other databases alone, whose drivers send parameters', () => {
+    const sql = `SELECT * FROM "User" WHERE "email" = $1 LIMIT 1`;
+    expect(
+      redact({ 'db.system': 'postgresql', 'db.query.text': sql }, 'default')[
+        'db.query.text'
+      ],
+    ).toBe(sql);
+  });
+
+  it('is opt-in for a custom config', () => {
+    const attrs = { 'db.system': 'mongodb', 'db.query.text': query };
+    expect(redact(attrs, { keyPatterns: [/password/] })['db.query.text']).toBe(
+      query,
+    );
+    expect(
+      String(redact(attrs, { mongoQueryLiterals: true })['db.query.text']),
+    ).not.toContain(HMAC);
+  });
+});
+
+/**
+ * An outbound call's `url.full` carries whatever the query string does:
+ * account ids, emails, signed tokens. The HTTP conventions say to scrub
+ * sensitive query values and to write `REDACTED` in their place. The presets
+ * replace every value and keep the parameter names.
+ */
+describe('URL query values', () => {
+  const redact = (
+    attributes: Attributes,
+    redactor: AttributeRedactorConfig | 'default' | 'strict' | 'pci-dss',
+  ): Attributes => {
+    const next = new MockSpanProcessor();
+    new AttributeRedactingProcessor(next, { redactor }).onEnd(
+      createMockReadableSpan(attributes),
+    );
+    return next.endedSpans[0]!.attributes;
+  };
+
+  it.each(['default', 'strict', 'pci-dss'] as const)(
+    'the %s preset keeps names and replaces values',
+    (preset) => {
+      expect(
+        redact(
+          {
+            'url.full':
+              'https://bank.example/v1/balances/find?on_behalf_of=1234-5678&page=2#top',
+            'url.query': 'account_id=1234-5678&flag',
+            'http.url': 'http://svc/x?token=abc',
+            'http.target': '/api/users?email=jo%40example.com',
+          },
+          preset,
+        ),
+      ).toEqual({
+        'url.full':
+          'https://bank.example/v1/balances/find?on_behalf_of=REDACTED&page=REDACTED#top',
+        'url.query': 'account_id=REDACTED&flag',
+        'http.url': 'http://svc/x?token=REDACTED',
+        'http.target': '/api/users?email=REDACTED',
+      });
+    },
+  );
+
+  it('replaces values in a fragment too', () => {
+    expect(
+      redact(
+        { 'url.full': 'https://app.example/cb#access_token=abc&state=x' },
+        'default',
+      )['url.full'],
+    ).toBe('https://app.example/cb#access_token=REDACTED&state=REDACTED');
+  });
+
+  it('leaves a URL without a query alone, and is opt-in for a custom config', () => {
+    expect(
+      redact({ 'url.full': 'https://bank.example/v1/x' }, 'default')[
+        'url.full'
+      ],
+    ).toBe('https://bank.example/v1/x');
+    const url = 'https://bank.example/v1/x?id=7';
+    expect(redact({ 'url.full': url }, { keyPatterns: [] })['url.full']).toBe(
+      url,
+    );
+    expect(
+      redact({ 'url.full': url }, { urlQueryValues: true })['url.full'],
+    ).toBe('https://bank.example/v1/x?id=REDACTED');
+  });
+});

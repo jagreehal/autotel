@@ -41,11 +41,14 @@ import {
 } from './values';
 
 /**
- * Custom redactor function type
+ * Custom redactor function type. `attributes` is the whole attribute set of
+ * the span being redacted, when there is one, for rules that depend on what
+ * else the span says (which database a query ran against).
  */
 export type AttributeRedactorFn = (
   key: string,
   value: AttributeValue,
+  attributes?: Attributes,
 ) => AttributeValue;
 
 /**
@@ -105,6 +108,23 @@ export interface AttributeRedactorConfig {
 
   /** Custom redactor function for full control */
   redactor?: AttributeRedactorFn;
+
+  /**
+   * Replace the literal values in MongoDB query text (`db.query.text`,
+   * `db.statement` on a span whose `db.system` is `mongodb`) with `?`,
+   * keeping its shape and field names. Prisma's MongoDB engine inlines every
+   * value, so a lookup exports what it looked up and a write what it wrote;
+   * no value pattern recognises a key hash or an amount. On in every preset.
+   */
+  mongoQueryLiterals?: boolean;
+
+  /**
+   * Replace every query parameter value in `url.full`, `url.query`,
+   * `http.url` and `http.target` with `REDACTED`, keeping the names, as the
+   * HTTP conventions recommend. Query strings carry account ids, emails and
+   * signed tokens that no value pattern recognises. On in every preset.
+   */
+  urlQueryValues?: boolean;
 }
 
 /**
@@ -260,6 +280,8 @@ export const REDACTOR_PRESETS = {
     valuePatterns: DEFAULT_VALUE_PATTERNS,
     builtins: true,
     replacement: '[REDACTED]',
+    mongoQueryLiterals: true,
+    urlQueryValues: true,
   },
 
   /**
@@ -277,6 +299,8 @@ export const REDACTOR_PRESETS = {
     ],
     builtins: true,
     replacement: '[REDACTED]',
+    mongoQueryLiterals: true,
+    urlQueryValues: true,
   },
 
   /**
@@ -288,6 +312,8 @@ export const REDACTOR_PRESETS = {
     valuePatterns: [builtinToValuePattern('creditCard')],
     builtins: ['creditCard'],
     replacement: '[REDACTED]',
+    mongoQueryLiterals: true,
+    urlQueryValues: true,
   },
 } satisfies Record<AttributeRedactorPreset, AttributeRedactorConfig>;
 
@@ -326,6 +352,14 @@ export function normalizeAttributeRedactorConfig(
     config.builtins = record.builtins.filter(
       (name): name is BuiltinPatternName => asString(name) !== undefined,
     );
+  }
+
+  const urlQueryValues = asBoolean(record.urlQueryValues);
+  if (urlQueryValues !== undefined) config.urlQueryValues = urlQueryValues;
+
+  const mongoQueryLiterals = asBoolean(record.mongoQueryLiterals);
+  if (mongoQueryLiterals !== undefined) {
+    config.mongoQueryLiterals = mongoQueryLiterals;
   }
 
   if (isFunction(record.redactor)) {
@@ -454,7 +488,20 @@ function createRedactorFromConfig(
     .filter((vp) => vp.mask)
     .map((vp) => [cloneRegex(vp.pattern), vp.mask!]);
 
-  return (key: string, value: AttributeValue): AttributeValue => {
+  return (
+    key: string,
+    original: AttributeValue,
+    attributes?: Attributes,
+  ): AttributeValue => {
+    let value =
+      config.mongoQueryLiterals && isMongoQueryText(key, original, attributes)
+        ? scrubMongoQueryLiterals(String(original))
+        : original;
+    const urlText = asString(value);
+    if (config.urlQueryValues && urlText !== undefined && URL_KEYS.has(key)) {
+      value = redactQueryValues(urlText, key === 'url.query');
+    }
+
     // Key-pattern and path-based redaction only applies to string values.
     // Numbers, booleans and other non-string attributes are not credentials;
     // replacing them with the string '[REDACTED]' silently changes their
@@ -504,6 +551,208 @@ function createRedactorFromConfig(
       defaultReplacement,
     );
   };
+}
+
+const QUERY_TEXT_KEYS = new Set(['db.query.text', 'db.statement']);
+const URL_KEYS = new Set(['url.full', 'url.query', 'http.url', 'http.target']);
+
+/**
+ * `text` with each query (and fragment) parameter's value replaced by
+ * `REDACTED`. `text` is a URL or target unless `queryOnly`, when it is the
+ * query string itself.
+ */
+function redactQueryValues(text: string, queryOnly: boolean): string {
+  if (queryOnly) return redactPairs(text);
+  const hash = text.indexOf('#');
+  const path = hash === -1 ? text : text.slice(0, hash);
+  const fragment = hash === -1 ? '' : `#${redactPairs(text.slice(hash + 1))}`;
+  const query = path.indexOf('?');
+  return (
+    (query === -1
+      ? path
+      : path.slice(0, query + 1) + redactPairs(path.slice(query + 1))) +
+    fragment
+  );
+}
+
+/** `a=1&b` as `a=REDACTED&b`: a name without `=` has no value to replace. */
+function redactPairs(pairs: string): string {
+  return pairs
+    .split('&')
+    .map((pair) => {
+      const equals = pair.indexOf('=');
+      return equals === -1 ? pair : `${pair.slice(0, equals + 1)}REDACTED`;
+    })
+    .join('&');
+}
+
+function isMongoQueryText(
+  key: string,
+  value: AttributeValue,
+  attributes: Attributes | undefined,
+): boolean {
+  if (!QUERY_TEXT_KEYS.has(key) || asString(value) === undefined) return false;
+  const system = attributes?.['db.system.name'] ?? attributes?.['db.system'];
+  return system === 'mongodb';
+}
+
+/** A `$`-string kept as a field reference: `$name`, `$a.b`, `$$ROOT.items`. */
+const FIELD_PATH = /^\$\$?[A-Za-z_][\w.]*$/;
+/** The colon after a key, from where the scan stands. */
+const KEY_COLON = /\s*:\s*/y;
+/** A bare key, as the shell writes it. */
+const BARE_KEY = /[$A-Za-z_][\w$.]*(?=\s*:)/y;
+/**
+ * Keys whose value MongoDB evaluates as an aggregation expression, where a
+ * `$`-string is a field path. Everywhere else (a filter, an update) it is the
+ * value itself. `$set` stays out: in an update it writes its operand.
+ */
+const EXPRESSION_KEYS = new Set([
+  '$expr',
+  '$project',
+  '$group',
+  '$addFields',
+  '$replaceRoot',
+  '$replaceWith',
+  '$bucket',
+  '$bucketAuto',
+  '$sortByCount',
+  '$unwind',
+  '$lookup',
+  '$graphLookup',
+  '$redact',
+  '$setWindowFields',
+]);
+/** `$literal` as a bare key, as the shell writes it. */
+const BARE_LITERAL_KEY = /\$literal(?=\s*:)/y;
+/** A number, boolean, null or regex, ending where a value ends. */
+const SCALAR =
+  /(?:-?(?:0[xX][\da-fA-F]+|\d+n|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|Infinity)|NaN|true|false|null|undefined|\/(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n])+\/[a-z]*)(?=\s*[,\]})])/y;
+
+/**
+ * MongoDB shell-style query text with every literal value replaced by `?`:
+ * `{ $eq: [ "$keyHmac", { $literal: "9f…" } ] }` becomes
+ * `{ $eq: [ "$keyHmac", { $literal: ? } ] }`. Object keys, operators, and
+ * field references inside `$expr` and expression stages stay, so the query is still readable and groups. A `$literal`
+ * goes whole, whatever it holds: it is a value by definition, `$` or not.
+ *
+ * One pass, left to right, that steps over each string whole: whatever a
+ * string contains (quotes, colons, `$literal`, digits) is that string's
+ * content, never structure.
+ */
+export function scrubMongoQueryLiterals(text: string): string {
+  let out = '';
+  let index = 0;
+  // The last character emitted outside whitespace: a value follows `:`, `[`,
+  // `,` or `(`, and a bare key does not follow an identifier character.
+  let previous = '';
+  let lastKey = '';
+  // Per open bracket: whether a `$`-string inside it is a field path.
+  const expression = [false];
+  /** Whether the value starting here is read as an expression. */
+  const inExpression = () =>
+    expression.at(-1)! || (previous === ':' && EXPRESSION_KEYS.has(lastKey));
+
+  /** At a `$literal` key's colon: keep the colon, replace the operand whole. */
+  const replaceOperand = () => {
+    KEY_COLON.lastIndex = index;
+    const colon = KEY_COLON.exec(text)![0];
+    out += `${colon}?`;
+    index = endOfValue(text, index + colon.length);
+    previous = '?';
+  };
+
+  while (index < text.length) {
+    const char = text[index]!;
+
+    if (char === '"' || char === "'") {
+      const end = endOfString(text, index) + 1;
+      const quoted = text.slice(index, end);
+      const content = quoted.slice(1, -1);
+      index = end;
+      KEY_COLON.lastIndex = end;
+      if (KEY_COLON.test(text)) {
+        out += quoted;
+        previous = char;
+        lastKey = content;
+        if (content === '$literal') replaceOperand();
+      } else {
+        out += inExpression() && FIELD_PATH.test(content) ? quoted : '?';
+        previous = '?';
+      }
+      continue;
+    }
+
+    BARE_LITERAL_KEY.lastIndex = index;
+    if (!/[\w$]/.test(previous) && BARE_LITERAL_KEY.test(text)) {
+      out += '$literal';
+      index += '$literal'.length;
+      replaceOperand();
+      continue;
+    }
+
+    BARE_KEY.lastIndex = index;
+    const key = /[{,]/.test(previous) ? BARE_KEY.exec(text) : null;
+    if (key) {
+      out += key[0];
+      index += key[0].length;
+      lastKey = key[0];
+      previous = key[0].at(-1)!;
+      continue;
+    }
+
+    SCALAR.lastIndex = index;
+    const scalar = /[:[,(]/.test(previous) ? SCALAR.exec(text) : null;
+    if (scalar) {
+      out += '?';
+      index += scalar[0].length;
+      previous = '?';
+      continue;
+    }
+
+    if (char === '{' || char === '[') expression.push(inExpression());
+    else if ((char === '}' || char === ']') && expression.length > 1) {
+      expression.pop();
+    }
+    out += char;
+    if (!/\s/.test(char)) previous = char;
+    index++;
+  }
+  return out;
+}
+
+/** Where the value starting at `start` ends: a string, a bracketed value, or a bare token. */
+function endOfValue(text: string, start: number): number {
+  let depth = 0;
+  for (let index = start; index < text.length; index++) {
+    const char = text[index]!;
+    if (char === '"' || char === "'") {
+      index = endOfString(text, index);
+      if (depth === 0) return index + 1;
+    } else if (char === '{' || char === '[') {
+      depth++;
+    } else if (char === '}' || char === ']') {
+      if (depth === 0) return trimEnd(text, start, index);
+      if (--depth === 0) return index + 1;
+    } else if (char === ',' && depth === 0) {
+      return trimEnd(text, start, index);
+    }
+  }
+  return text.length;
+}
+
+function endOfString(text: string, open: number): number {
+  for (let index = open + 1; index < text.length; index++) {
+    if (text[index] === '\\') index++;
+    else if (text[index] === text[open]) return index;
+  }
+  return text.length - 1;
+}
+
+/** `end`, moved back over whitespace that is not part of the value. */
+function trimEnd(text: string, start: number, end: number): number {
+  while (end > start && /\s/.test(text[end - 1]!)) end--;
+  return end;
 }
 
 /**
@@ -556,7 +805,7 @@ function createRedactedSpan(
   const redactedAttributes: Attributes = {};
   for (const [key, value] of Object.entries(span.attributes)) {
     if (value !== undefined) {
-      redactedAttributes[key] = redactor(key, value);
+      redactedAttributes[key] = redactor(key, value, span.attributes);
     }
   }
 

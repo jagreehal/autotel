@@ -95,6 +95,29 @@ Navigation helpers such as `redirect()` and `notFound()` remain framework
 control flow: `withAutotel()` rethrows their signals without recording a
 phantom request error, including when a signal is wrapped in `cause`.
 
+### `next.config`: one `@opentelemetry/api`
+
+```ts
+// next.config.ts
+import { withAutotelConfig } from 'autotel-adapters/next-config';
+
+export default withAutotelConfig(
+  { reactCompiler: true },
+  { externals: ['@prisma/instrumentation'] }, // optional
+);
+```
+
+Next bundles every server package it is not told to keep external. When autotel
+and an instrumentation land on different sides of that line they run on two
+copies of `@opentelemetry/api`. `withAutotelConfig` adds `@opentelemetry/api` (and `externals`) to
+`serverExternalPackages`, so every bundle loads the app's one copy.
+
+Each of them must be a dependency of the app: Next bundles a listed
+package it cannot resolve from the app directory, which is what happens to a
+workspace package's dependency in a monorepo. `withAutotelConfig` fails the
+build instead. `autotel-adapters/next-config` has no runtime dependency, so
+`next.config.ts` can import it.
+
 ## Nitro
 
 ```ts

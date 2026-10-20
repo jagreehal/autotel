@@ -5,12 +5,11 @@
 import type {
   AttributeValue as OtelAttributeValue,
   Span,
-  SpanStatusCode,
   BaggageEntry,
   Context,
   Link,
 } from '@opentelemetry/api';
-import { context, propagation } from '@opentelemetry/api';
+import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 // namespace import for browser-bundler compat; `import type` is erased — see node-require.ts
 import type { AsyncLocalStorage } from 'node:async_hooks';
 import * as nodeAsyncHooks from 'node:async_hooks';
@@ -22,9 +21,19 @@ import { isFunction } from './values';
 
 const explicitSpanStatuses = new WeakMap<Span, SpanStatusCode>();
 
-/** The status a TraceContext consumer explicitly chose for this span, if any. */
+/**
+ * The status the code explicitly chose for this span, if any: through a
+ * TraceContext, or through the plain OpenTelemetry API on the span itself
+ * (`getActiveSpan().setStatus(...)`), which the SDK span records as `status`.
+ */
 export function explicitSpanStatus(span: Span): SpanStatusCode | undefined {
-  return explicitSpanStatuses.get(span);
+  const chosen = explicitSpanStatuses.get(span);
+  if (chosen !== undefined) return chosen;
+  const recorded = (span as { status?: { code?: SpanStatusCode } }).status
+    ?.code;
+  return recorded === undefined || recorded === SpanStatusCode.UNSET
+    ? undefined
+    : recorded;
 }
 
 type AsyncLocalBox<T> = {

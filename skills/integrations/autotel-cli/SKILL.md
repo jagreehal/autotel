@@ -129,6 +129,8 @@ npx autotel-cli map --baseline git:origin/main   # exit 1 when a check regresses
 npx autotel-cli map --format github --limit 10   # GitHub Actions annotations on the PR diff
 ```
 
+Hono apps map under their full paths: `.openapi(createRoute(...))` from `@hono/zod-openapi`, `describeRoute` from `hono-openapi`, sub-apps mounted with `.route(prefix, app)` or `.basePath()` across files, paths built from constants, and tsconfig `paths` aliases. On a Next.js app, a Hono app served from a catch-all (`export const GET = handle(app)` from `hono/vercel`) reports its own routes.
+
 Writes `autotel.map.json` next to `package.json`; commit it so `--baseline` has something to compare against. For the checks, scoring, and waiver comments, use skill `find-observability-gaps`.
 
 ---

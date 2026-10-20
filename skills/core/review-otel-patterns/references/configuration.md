@@ -128,6 +128,8 @@ const config: AttributeRedactorConfig = {
 init({ service: 'my-app', attributeRedactor: config });
 ```
 
+All three presets also replace query and fragment values in `url.full`, `url.query`, `http.url` and `http.target` with `REDACTED` (names kept), and literals in MongoDB query text (`db.query.text`, `db.statement`) with `?`. A custom config opts in with `urlQueryValues: true` and `mongoQueryLiterals: true`.
+
 Each key pattern is tested against the full key and its last dot segment, so `/^x-internal-/i` also matches `http.request.header.x-internal-id`. String arrays under a matching key have each element replaced.
 
 For free-text fields outside the span pipeline (logs, error messages, frontend payloads), use `createStringRedactor('default')` from `autotel`. It applies the preset's value patterns and returns a `(s: string) => string`.

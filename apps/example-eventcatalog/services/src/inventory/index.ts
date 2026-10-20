@@ -4,6 +4,7 @@ import { span, withTracing } from 'autotel';
 import { traceConsumer } from 'autotel/messaging';
 import { inventoryReservedEvent } from '../shared/events';
 import { isoNow } from '../shared/clock';
+import type { PaymentCapturedMessage } from '../shared/types';
 
 type ReserveItems = Array<{
   sku: string;
@@ -52,7 +53,9 @@ export const reserveStock = withTracing({})(
 export const handlePaymentCaptured = traceConsumer({
   system: 'kafka',
   destination: 'payments.events',
+  consumerGroup: 'InventoryService',
+  headersFrom: 'headers',
 })(
-  () => async (msg: { orderId: string; items: ReserveItems }) =>
+  () => async (msg: PaymentCapturedMessage) =>
     reserveStock(msg.orderId, msg.items),
 );

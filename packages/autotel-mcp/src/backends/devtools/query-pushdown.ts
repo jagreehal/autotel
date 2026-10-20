@@ -13,7 +13,7 @@
  */
 
 import { tagKind } from '../../lib/values';
-import type { TagValue, TraceSearchQuery } from '../../types';
+import type { LogSearchQuery, TagValue, TraceSearchQuery } from '../../types';
 
 export function compileTraceQuery(query: TraceSearchQuery): string {
   const clauses: string[] = [];
@@ -21,16 +21,40 @@ export function compileTraceQuery(query: TraceSearchQuery): string {
   if (query.service) clauses.push(`service = ${literal(query.service)}`);
   if (query.operation) clauses.push(`name = ${literal(query.operation)}`);
 
-  for (const [key, value] of Object.entries(query.tags ?? {})) {
-    if (value === undefined || value === null) continue;
-    clauses.push(`${quote(key)} = ${literal(value)}`);
-  }
+  pushAttributes(clauses, query.tags);
 
   return clauses.join(' AND ');
 }
 
+/** Same idea for logs, against devtools' log vocabulary (`LOG_SCHEMA`). */
+export function compileLogQuery(query: LogSearchQuery): string {
+  const clauses: string[] = [];
+
+  if (query.serviceName)
+    clauses.push(`service = ${literal(query.serviceName)}`);
+  if (query.traceId) clauses.push(`trace_id = ${literal(query.traceId)}`);
+  if (query.spanId) clauses.push(`span_id = ${literal(query.spanId)}`);
+  if (query.severityText)
+    clauses.push(`severity = ${literal(query.severityText)}`);
+  pushAttributes(clauses, query.attributes);
+  // A bare quoted string is free text: body, service, severity and values.
+  if (query.text) clauses.push(quote(query.text));
+
+  return clauses.join(' AND ');
+}
+
+function pushAttributes(
+  clauses: string[],
+  attributes: Record<string, TagValue> | undefined,
+): void {
+  for (const [key, value] of Object.entries(attributes ?? {})) {
+    if (value === undefined || value === null) continue;
+    clauses.push(`${quote(key)} = ${literal(value)}`);
+  }
+}
+
 /** A value as query-language source: numbers and booleans bare, text quoted. */
-function literal(value: TagValue): string {
+export function literal(value: TagValue): string {
   // `tagKind` reports `number` only for a finite one, so an infinity or a NaN
   // falls through to the quoted form rather than emitting bare `Infinity`.
   const kind = tagKind(value);

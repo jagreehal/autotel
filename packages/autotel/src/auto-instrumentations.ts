@@ -45,7 +45,6 @@ const INSTRUMENTATION_CLASS_TO_PACKAGE = new Map<string, string>(
     FastifyInstrumentation: '@opentelemetry/instrumentation-fastify',
     MongoDBInstrumentation: '@opentelemetry/instrumentation-mongodb',
     MongooseInstrumentation: '@opentelemetry/instrumentation-mongoose',
-    PrismaInstrumentation: '@opentelemetry/instrumentation-prisma',
     PinoInstrumentation: '@opentelemetry/instrumentation-pino',
     WinstonInstrumentation: '@opentelemetry/instrumentation-winston',
     RedisInstrumentation: '@opentelemetry/instrumentation-redis',

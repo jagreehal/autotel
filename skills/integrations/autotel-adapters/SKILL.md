@@ -75,6 +75,17 @@ export const withTracing = (handler) => withAutotel(handler, autotelOptions);
 
 `redirect()` and `notFound()` work by throwing. `withAutotel` asks Next itself to classify each throw and rethrows navigation signals untouched, so they leave no phantom error on the span. This covers signals wrapped in `cause`. Do not add your own `NEXT_REDIRECT` message matching.
 
+**`next.config.ts`:** `withAutotelConfig` from `autotel-adapters/next-config` adds `@opentelemetry/api` (and your `externals`) to `serverExternalPackages`, so autotel and every instrumentation share one API copy. It throws when a listed package is not installed for the app, since Next would bundle it instead.
+
+```typescript
+import { withAutotelConfig } from 'autotel-adapters/next-config';
+
+export default withAutotelConfig(
+  { reactCompiler: true },
+  { externals: ['@prisma/instrumentation'] },
+);
+```
+
 ### Nitro
 
 ```typescript

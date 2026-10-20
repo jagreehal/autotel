@@ -12,7 +12,7 @@ import { placeOrder } from '../orders/index';
 import { handleOrderPlaced, setStripeStub } from '../payments/index';
 import { handlePaymentCaptured } from '../inventory/index';
 import { generateRecommendation } from '../recommendations/index';
-import type { PlaceOrderInput, OrderPlacedMessage } from '../shared/types';
+import type { PlaceOrderInput } from '../shared/types';
 
 import { LiveStreamSubscriber } from './stream';
 import { startLiveServer } from './server';
@@ -34,14 +34,19 @@ const RECORD_PATH = process.env.RECORD_PATH; // capture session to disk
 const REPLAY_PATH = process.env.REPLAY_PATH; // play a recorded session back
 const REPLAY_SPEED = Number(process.env.REPLAY_SPEED ?? 1);
 
+const stream = new LiveStreamSubscriber();
 const snapshot = new ArchitectureSnapshotSubscriber({
   service: 'example-eventcatalog',
+  onConsumerObserved: stream.consumed,
 });
-const stream = new LiveStreamSubscriber();
 
 init({
   service: 'example-eventcatalog',
   subscribers: [snapshot, stream],
+  // A replay re-tracks recorded events without their spans, so nothing could
+  // be measured and every consumer edge would read as never received.
+  ...(!REPLAY_PATH && { spanProcessors: [snapshot.spanProcessor] }),
+  events: { includeTraceContext: true },
 });
 
 let driftIntroduced = false;
@@ -118,10 +123,12 @@ function patchRecommendationToIntroduceDrift(): void {
 }
 
 async function walkHappyPath(order: PlaceOrderInput): Promise<void> {
-  await placeOrder(order);
-  const msg: OrderPlacedMessage = { type: 'OrderPlaced', ...order };
-  await Promise.all([handleOrderPlaced(msg), generateRecommendation(msg)]);
-  await handlePaymentCaptured({ orderId: order.id, items: order.items });
+  const msg = await placeOrder(order);
+  const [captured] = await Promise.all([
+    handleOrderPlaced(msg),
+    generateRecommendation(msg),
+  ]);
+  if (captured) await handlePaymentCaptured(captured);
 }
 
 async function tick(): Promise<void> {

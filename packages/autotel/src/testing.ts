@@ -253,10 +253,16 @@ export function createTraceCollector(): TraceCollector {
       attributes: {},
       events: [],
       links: [],
-      status: { code: SpanStatusCode.OK },
+      // UNSET until someone sets it, as on an SDK span.
+      status: { code: SpanStatusCode.UNSET },
     };
 
-    const mockSpan: Span = {
+    const mockSpan: Span & { readonly status: SpanStatus } = {
+      // Readable like an SDK span's, so code that checks a status already
+      // set on the span sees the same thing here as in production.
+      get status() {
+        return spanData.status!;
+      },
       spanContext: () => spanContextData,
 
       setStatus(status: SpanStatus) {

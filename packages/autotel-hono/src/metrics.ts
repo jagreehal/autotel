@@ -21,6 +21,7 @@ export type Meter = {
     options?: {
       description?: string;
       unit?: string;
+      valueType?: number;
       advice?: { explicitBucketBoundaries?: number[] };
     },
   ) => Histogram;
@@ -28,9 +29,16 @@ export type Meter = {
     name: string,
     options?: {
       description?: string;
+      valueType?: number;
     },
   ) => UpDownCounter;
 };
+
+/**
+ * `ValueType.DOUBLE` from `@opentelemetry/api`. Deno's built-in meter accepts
+ * no other value type.
+ */
+const DOUBLE = 1;
 
 /** OTel HTTP server metric names (stable convention names) */
 const METRIC_HTTP_SERVER_REQUEST_DURATION = 'http.server.request.duration';
@@ -59,6 +67,7 @@ export function createRequestDurationTracker(config: HttpMetricsConfig): {
     {
       description: 'Duration of HTTP server requests in seconds',
       unit: 's',
+      valueType: DOUBLE,
       advice: { explicitBucketBoundaries: HTTP_DURATION_BUCKETS },
     },
   );
@@ -82,6 +91,7 @@ export function createActiveRequestsTracker(config: HttpMetricsConfig):
     METRIC_HTTP_SERVER_ACTIVE_REQUESTS,
     {
       description: 'Number of active (in-flight) HTTP server requests',
+      valueType: DOUBLE,
     },
   );
   return {
