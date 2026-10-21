@@ -22,12 +22,12 @@ function installModelContext() {
     async getTools() {
       return [...tools.values()].map((tool) => ({ name: tool['name'] }));
     },
-    async executeTool(tool: { name: string }, input: string) {
+    async executeTool(tool: { name: string }, input: object = {}) {
       const execute = tools.get(tool.name)?.['execute'] as (
         value: unknown,
         options: unknown,
       ) => unknown;
-      return execute(JSON.parse(input), {
+      return execute(structuredClone(input), {
         signal: new AbortController().signal,
       });
     },
@@ -75,7 +75,7 @@ describe('instrumentWebMCP telemetry export', () => {
       execute: () => 'three results',
     });
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(tool!, '{"q":"hat"}');
+    await document.modelContext!.executeTool(tool!, { q: 'hat' });
 
     const span = exported.find((candidate) =>
       candidate.name.startsWith('execute_tool '),

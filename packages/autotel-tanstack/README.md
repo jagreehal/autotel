@@ -114,7 +114,7 @@ export const getUser = createServerFn({ method: 'GET' }).handler(
 );
 
 export const createUser = createServerFn({ method: 'POST' })
-  .inputValidator((d: UserInput) => d)
+  .validator((d: UserInput) => d)
   .handler(async ({ data }) => {
     return await db.users.create({ data });
   });

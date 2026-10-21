@@ -136,9 +136,7 @@ export function joinPostHog(
       hook[MARKER] = registry;
       // Appended, never assigned: `before_send` is a chain the page may already
       // use to redact or drop events, and replacing it would switch that off.
-      instance.set_config({
-        before_send: [...hooks, hook],
-      } as Parameters<NonNullable<PostHogLike['set_config']>>[0]);
+      instance.set_config({ before_send: [...hooks, hook] });
       return true;
     } catch {
       // A PostHog that cannot be configured is still one worth reading from.

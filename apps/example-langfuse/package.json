@@ -10,12 +10,12 @@
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "ai": "7.0.138",
-    "ai-sdk-ollama": "4.4.0",
+    "ai": "7.0.143",
+    "ai-sdk-ollama": "4.5.1",
     "autotel": "workspace:*",
     "autotel-genai": "workspace:*",
     "autotel-langfuse": "workspace:*",
-    "dotenv": "^18.0.7",
+    "dotenv": "^18.0.8",
     "zod": "^4.6.7"
   },
   "devDependencies": {

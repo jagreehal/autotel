@@ -45,13 +45,13 @@ function installFakeModelContext() {
           : {}),
       }));
     },
-    async executeTool(tool: { name: string }, input: string) {
+    async executeTool(tool: { name: string }, input: object = {}) {
       const entry = registry.get(tool.name)!;
       const execute = entry.tool['execute'] as (
         i: unknown,
         o: unknown,
       ) => unknown;
-      const value = await execute(JSON.parse(input), {
+      const value = await execute(structuredClone(input), {
         signal: new AbortController().signal,
       });
       const raw =
@@ -131,7 +131,7 @@ describe('instrumentWebMCP', () => {
     instrumentWebMCP({ span: recordingSpan, capturePayloads: true });
     await register({ execute: () => 'found 3 items' });
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(tool as never, '{"q":"x"}');
+    await document.modelContext!.executeTool(tool as never, { q: 'x' });
 
     const span = spans.find((s) => s.name.startsWith('execute_tool '));
     expect(span?.attributes).toMatchObject({
@@ -153,10 +153,9 @@ describe('instrumentWebMCP', () => {
       execute: ({ address }: { address: string }) => `shipping to ${address}`,
     });
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(
-      tool as never,
-      '{"address":"10 Private Lane"}',
-    );
+    await document.modelContext!.executeTool(tool as never, {
+      address: '10 Private Lane',
+    });
 
     const span = spans.find((entry) => entry.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.input']).toBeUndefined();
@@ -170,7 +169,7 @@ describe('instrumentWebMCP', () => {
       execute: () => ({ content: [{ type: 'text', text: 'hi' }] }),
     });
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(tool as never, '{}');
+    await document.modelContext!.executeTool(tool as never, {});
 
     const span = spans.find((s) => s.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.result.envelope']).toBe(true);
@@ -180,7 +179,7 @@ describe('instrumentWebMCP', () => {
     instrumentWebMCP({ span: recordingSpan });
     await register({ execute: () => '' });
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(tool as never, '{}');
+    await document.modelContext!.executeTool(tool as never, {});
 
     const span = spans.find((s) => s.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.result.substituted']).toBe(true);
@@ -201,7 +200,7 @@ describe('instrumentWebMCP', () => {
 
     const received = await document.modelContext!.executeTool(
       tool as never,
-      '{}',
+      {},
     );
     const span = spans.find((entry) => entry.name.startsWith('execute_tool '));
 
@@ -220,7 +219,7 @@ describe('instrumentWebMCP', () => {
     const [tool] = await document.modelContext!.getTools();
 
     await expect(
-      document.modelContext!.executeTool(tool as never, '{}'),
+      document.modelContext!.executeTool(tool as never, {}),
     ).resolves.toBe('later');
     const span = spans.find((entry) => entry.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.result']).toBe('later');
@@ -236,7 +235,7 @@ describe('instrumentWebMCP', () => {
     const [tool] = await document.modelContext!.getTools();
 
     await expect(
-      document.modelContext!.executeTool(tool as never, '{}'),
+      document.modelContext!.executeTool(tool as never, {}),
     ).resolves.toBe('Error: inventory service unavailable');
     const span = spans.find((entry) => entry.name.startsWith('execute_tool '));
     expect(span?.attributes['error.type']).toBe('tool_error');
@@ -254,7 +253,7 @@ describe('instrumentWebMCP', () => {
     const [tool] = await document.modelContext!.getTools();
 
     await expect(
-      document.modelContext!.executeTool(tool as never, '{}'),
+      document.modelContext!.executeTool(tool as never, {}),
     ).resolves.toBe('ok');
     const span = spans.find((entry) => entry.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.classifier.error.type']).toBe('Error');
@@ -265,7 +264,7 @@ describe('instrumentWebMCP', () => {
     await register({ execute: ({ q }: { q: string }) => `searched ${q}` });
     const [tool] = await document.modelContext!.getTools();
     await expect(
-      document.modelContext!.executeTool(tool as never, '{"q":"hats"}'),
+      document.modelContext!.executeTool(tool as never, { q: 'hats' }),
     ).resolves.toBe('searched hats');
   });
 
@@ -487,7 +486,7 @@ describe('instrumentWebMCP', () => {
     instrumentWebMCP({ span: recordingSpan });
     await register();
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(tool as never, '{}');
+    await document.modelContext!.executeTool(tool as never, {});
 
     // `execute_tool {gen_ai.tool.name}`, the GenAI convention — a constant
     // name makes every row of a trace list read identically.
@@ -505,7 +504,7 @@ describe('instrumentWebMCP', () => {
 
     // The rejection still reaches the caller unchanged.
     await expect(
-      document.modelContext!.executeTool(tool as never, '{}'),
+      document.modelContext!.executeTool(tool as never, {}),
     ).rejects.toThrow('inventory service is down');
 
     const span = spans.find((s) => s.name.startsWith('execute_tool '));
@@ -526,7 +525,7 @@ describe('instrumentWebMCP', () => {
     const [tool] = await document.modelContext!.getTools();
 
     await expect(
-      document.modelContext!.executeTool(tool as never, '{}'),
+      document.modelContext!.executeTool(tool as never, {}),
     ).rejects.toThrow('upstream timed out');
 
     const span = spans.find((s) => s.name.startsWith('execute_tool '));
@@ -543,7 +542,7 @@ describe('instrumentWebMCP', () => {
     });
     const [tool] = await document.modelContext!.getTools();
     await expect(
-      document.modelContext!.executeTool(tool as never, '{}'),
+      document.modelContext!.executeTool(tool as never, {}),
     ).rejects.toThrow();
 
     const span = spans.find((s) => s.name.startsWith('execute_tool '));
@@ -580,7 +579,7 @@ describe('instrumentWebMCP', () => {
     });
     instrumentWebMCP({ span: recordingSpan });
     await register({ execute: () => '' });
-    await document.modelContext!.executeTool({ name: 'search' } as never, '{}');
+    await document.modelContext!.executeTool({ name: 'search' } as never, {});
 
     expect(returned).toEqual(['']);
     // The span still records what Chrome will show the agent.
@@ -600,7 +599,7 @@ describe('instrumentWebMCP', () => {
     });
     await register({ execute: () => 'Declined: outside your plan' });
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(tool as never, '{}');
+    await document.modelContext!.executeTool(tool as never, {});
 
     const span = spans.find((s) => s.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.result.refused']).toBe(true);
@@ -619,7 +618,7 @@ describe('instrumentWebMCP', () => {
     const [tool] = await document.modelContext!.getTools();
 
     await expect(
-      document.modelContext!.executeTool(tool as never, '{}'),
+      document.modelContext!.executeTool(tool as never, {}),
     ).resolves.toBe('ok');
     const span = spans.find((s) => s.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.classifier.error.type']).toBe('Error');
@@ -635,14 +634,14 @@ describe('instrumentWebMCP', () => {
       execute: async () => {
         const tools = await document.modelContext!.getTools();
         const inner = tools.find((t) => t.name === 'search')!;
-        await document.modelContext!.executeTool(inner as never, '{}');
+        await document.modelContext!.executeTool(inner as never, {});
         return 'done';
       },
     });
     await register();
     const tools = await document.modelContext!.getTools();
     const checkout = tools.find((t) => t.name === 'checkout')!;
-    await document.modelContext!.executeTool(checkout as never, '{}');
+    await document.modelContext!.executeTool(checkout as never, {});
 
     const outer = spans.find((s) => s.name === 'execute_tool checkout');
     const inner = spans.find((s) => s.name === 'execute_tool search');
@@ -656,8 +655,8 @@ describe('instrumentWebMCP', () => {
     instrumentWebMCP({ span: recordingSpan });
     await register();
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(tool as never, '{}');
-    await document.modelContext!.executeTool(tool as never, '{}');
+    await document.modelContext!.executeTool(tool as never, {});
+    await document.modelContext!.executeTool(tool as never, {});
 
     const executions = spans.filter((s) => s.name.startsWith('execute_tool '));
     expect(executions.map((s) => s.attributes['webmcp.execute.depth'])).toEqual(
@@ -757,8 +756,8 @@ describe('instrumentWebMCP', () => {
     instrumentWebMCP({ span: recordingSpan });
     await register();
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(tool as never, '{}');
-    await document.modelContext!.executeTool(tool as never, '{}');
+    await document.modelContext!.executeTool(tool as never, {});
+    await document.modelContext!.executeTool(tool as never, {});
 
     const executions = spans.filter((s) => s.name.startsWith('execute_tool '));
     expect(executions.map((s) => s.attributes['webmcp.execute.seq'])).toEqual([
@@ -770,7 +769,7 @@ describe('instrumentWebMCP', () => {
     instrumentWebMCP({ span: recordingSpan });
     await register();
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(tool as never, '{}');
+    await document.modelContext!.executeTool(tool as never, {});
 
     const registerSpan = spans.find((s) => s.name === 'webmcp.tool.register');
     const executeSpan = spans.find((s) => s.name.startsWith('execute_tool '));
@@ -786,7 +785,7 @@ describe('instrumentWebMCP', () => {
       execute: () => 'checkout was not confirmed.',
     });
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(tool as never, '{}');
+    await document.modelContext!.executeTool(tool as never, {});
 
     const span = spans.find((s) => s.name.startsWith('execute_tool '));
     expect(span?.attributes['webmcp.result.refused']).toBe(true);
@@ -807,8 +806,8 @@ describe('instrumentWebMCP', () => {
     const tools = await document.modelContext!.getTools();
     const checkout = tools.find((t) => t.name === 'checkout')!;
     const report = tools.find((t) => t.name === 'export_report')!;
-    await document.modelContext!.executeTool(checkout as never, '{}');
-    await document.modelContext!.executeTool(report as never, '{}');
+    await document.modelContext!.executeTool(checkout as never, {});
+    await document.modelContext!.executeTool(report as never, {});
 
     const executions = spans.filter((s) => s.name.startsWith('execute_tool '));
     expect(executions[0]?.attributes['webmcp.result.refusal']).toBe(
@@ -821,7 +820,7 @@ describe('instrumentWebMCP', () => {
     instrumentWebMCP({ span: recordingSpan });
     await register();
     const [tool] = await document.modelContext!.getTools();
-    await document.modelContext!.executeTool(tool as never, '{"q":"x"}');
+    await document.modelContext!.executeTool(tool as never, { q: 'x' });
 
     const ids = new Set(
       spans.map((s) => s.attributes['webmcp.installation.id']),

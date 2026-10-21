@@ -613,6 +613,69 @@ describe('hono route composition', () => {
     ).toEqual(['GET /users/:id src/index.ts', 'POST /users src/index.ts']);
   });
 
+  it('keeps paths without a leading slash, as Hono serves them, on apps only', () => {
+    expect(
+      routesOf({
+        'src/index.ts': `
+          import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
+          const BASE = 'api/v1';
+          const events = new OpenAPIHono()
+            .openapi(createRoute({ method: 'get', path: '', responses: {} }), (c) => c.json([]))
+            .openapi(createRoute({ method: 'post', path: 'replay', responses: {} }), (c) => c.json({}));
+          const cache = new Map();
+          cache.get('settings', {});
+          export const app = new OpenAPIHono()
+            .route(\`\${BASE}/events\`, events)
+            .post(\`\${BASE}/event\`, (c) => c.redirect('/api/v1/events', 307));
+        `,
+      }),
+    ).toEqual([
+      'GET /api/v1/events src/index.ts',
+      'POST /api/v1/event src/index.ts',
+      'POST /api/v1/events/replay src/index.ts',
+    ]);
+  });
+
+  it('keeps paths without a leading slash on a standalone app', () => {
+    expect(
+      routesOf({
+        'src/index.ts': `
+          import { Hono } from 'hono';
+          const app = new Hono();
+          app.get('health', (c) => c.text('ok'));
+          export const inline = new Hono().post('ping', (c) => c.text('pong'));
+        `,
+      }),
+    ).toEqual(['GET /health src/index.ts', 'POST /ping src/index.ts']);
+  });
+
+  it('keeps paths without a leading slash on factory and imported apps', () => {
+    expect(
+      routesOf({
+        'src/app.ts': `
+          import { Hono } from 'hono';
+          export const app = new Hono();
+        `,
+        'src/routes.ts': `
+          import { createFactory } from 'hono/factory';
+          import { app } from './app';
+          app.get('health', (c) => c.text('ok'));
+          const factory = createFactory();
+          export const made = factory.createApp().get('made', (c) => c.text('a'));
+          function build() {
+            const local = factory.createApp();
+            local.get('local', (c) => c.text('b'));
+            return local;
+          }
+        `,
+      }),
+    ).toEqual([
+      'GET /health src/routes.ts',
+      'GET /local src/routes.ts',
+      'GET /made src/routes.ts',
+    ]);
+  });
+
   it('follows a route definition imported from another file', () => {
     expect(
       routesOf({

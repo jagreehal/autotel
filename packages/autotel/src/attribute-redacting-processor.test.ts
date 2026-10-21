@@ -877,6 +877,24 @@ describe('MongoDB query text', () => {
     );
   });
 
+  it('replaces a $literal call such as ObjectId("…") whole', () => {
+    const scrub = (text: string) =>
+      redact({ 'db.system': 'mongodb', 'db.query.text': text }, 'default')[
+        'db.query.text'
+      ];
+    // As Prisma's MongoDB engine writes an id match.
+    expect(
+      scrub(
+        'db.Client.aggregate([ { $match: { $expr: { $eq: [ "$_id", { $literal: ObjectId("0e2e0000000000000000cc01"), }, ], }, }, }, ])',
+      ),
+    ).toBe(
+      'db.Client.aggregate([ { $match: { $expr: { $eq: [ "$_id", { $literal: ?, }, ], }, }, }, ])',
+    );
+    expect(scrub('{ $literal: ISODate("2026-10-21T00:00:00Z") }')).toBe(
+      '{ $literal: ? }',
+    );
+  });
+
   it('reads operator keys and numbers only outside strings', () => {
     const scrub = (text: string) =>
       redact({ 'db.system': 'mongodb', 'db.query.text': text }, 'default')[

@@ -721,7 +721,7 @@ export function scrubMongoQueryLiterals(text: string): string {
   return out;
 }
 
-/** Where the value starting at `start` ends: a string, a bracketed value, or a bare token. */
+/** Where the value starting at `start` ends: a string, a bracketed value, a call such as `ObjectId("…")`, or a bare token. */
 function endOfValue(text: string, start: number): number {
   let depth = 0;
   for (let index = start; index < text.length; index++) {
@@ -729,9 +729,9 @@ function endOfValue(text: string, start: number): number {
     if (char === '"' || char === "'") {
       index = endOfString(text, index);
       if (depth === 0) return index + 1;
-    } else if (char === '{' || char === '[') {
+    } else if (char === '{' || char === '[' || char === '(') {
       depth++;
-    } else if (char === '}' || char === ']') {
+    } else if (char === '}' || char === ']' || char === ')') {
       if (depth === 0) return trimEnd(text, start, index);
       if (--depth === 0) return index + 1;
     } else if (char === ',' && depth === 0) {

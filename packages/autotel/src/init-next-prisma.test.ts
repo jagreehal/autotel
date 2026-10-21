@@ -177,7 +177,7 @@ describe('ignoreRoutes', () => {
     ]);
   });
 
-  it('judges a request by its resolved route, and a raw path once normalized', async () => {
+  it('judges a request by its resolved route, and a raw path only as sent', async () => {
     const { init, shutdown } = await load();
     const exporter = new KeepingExporter();
     init({
@@ -198,10 +198,76 @@ describe('ignoreRoutes', () => {
       kind: SpanKind.SERVER,
       attributes: { 'url.path': '/api/health/%2e%2e/%2e%2e/admin' },
     });
+    emit('GET dotted', {
+      kind: SpanKind.SERVER,
+      attributes: { 'url.path': '/admin/../api/health' },
+    });
 
     expect(await exported(exporter, shutdown)).toEqual([
       'GET /admin',
+      'GET dotted',
       'GET raw',
+    ]);
+  });
+
+  it('judges the path too when the resolved route is a catch-all', async () => {
+    const { init, shutdown } = await load();
+    const exporter = new KeepingExporter();
+    init({
+      service: 'routes',
+      spanExporters: [exporter],
+      ignoreRoutes: ['/api/v1/health'],
+    });
+
+    // A Hono app served from app/api/v1/[...endpoint]/route.ts.
+    emit('GET /api/v1/[...endpoint]', {
+      kind: SpanKind.SERVER,
+      attributes: {
+        'next.route': '/api/v1/[...endpoint]',
+        'http.route': '/api/v1/[...endpoint]',
+        'http.target': '/api/v1/health/check',
+      },
+    });
+    emit('GET /api/v1/*', {
+      kind: SpanKind.SERVER,
+      attributes: { 'http.route': '/api/v1/*', 'url.path': '/api/v1/health' },
+    });
+    emit('GET /api/v1/[...endpoint] payments', {
+      kind: SpanKind.SERVER,
+      attributes: {
+        'next.route': '/api/v1/[...endpoint]',
+        'http.target': '/api/v1/payments',
+      },
+    });
+
+    // Paths the URL parser reads one way and the app another.
+    emit('GET /api/v1/[...endpoint] encoded', {
+      kind: SpanKind.SERVER,
+      attributes: {
+        'next.route': '/api/v1/[...endpoint]',
+        'http.target': '/api/v1/health/..%2F..%2Fpayments',
+      },
+    });
+    emit('GET /api/v1/[...endpoint] host', {
+      kind: SpanKind.SERVER,
+      attributes: {
+        'next.route': '/api/v1/[...endpoint]',
+        'http.target': '//evil/api/v1/health',
+      },
+    });
+    emit('GET /api/v1/[...endpoint] tab', {
+      kind: SpanKind.SERVER,
+      attributes: {
+        'next.route': '/api/v1/[...endpoint]',
+        'http.target': '/api/v1/he\talth',
+      },
+    });
+
+    expect(await exported(exporter, shutdown)).toEqual([
+      'GET /api/v1/[...endpoint] encoded',
+      'GET /api/v1/[...endpoint] host',
+      'GET /api/v1/[...endpoint] payments',
+      'GET /api/v1/[...endpoint] tab',
     ]);
   });
 

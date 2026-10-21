@@ -20,7 +20,7 @@ import { recordSpan } from '../../components/TracesDevtools'
 
 // 1. Basic traced function
 const basicTraceBase = createServerFn({ method: 'POST' })
-  .inputValidator((d: string) => d)
+  .validator((d: string) => d)
   .handler(async ({ data }) => {
     // Simulate some work
     await new Promise((resolve) =>
@@ -83,7 +83,7 @@ const distributedTrace = traceServerFn(distributedTraceBase, {
 
 // 5. Concurrent operations (shows parallel spans)
 const singleOpBase = createServerFn({ method: 'POST' })
-  .inputValidator((d: number) => d)
+  .validator((d: number) => d)
   .handler(
     recordTiming('playground.singleOp', async ({ data: opNumber }) => {
       await new Promise((resolve) =>

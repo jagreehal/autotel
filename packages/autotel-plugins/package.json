@@ -82,7 +82,7 @@
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "@google-cloud/bigquery": ">=9.2.0",
+    "@google-cloud/bigquery": ">=9.3.0",
     "@opentelemetry/instrumentation-amqplib": ">=0.70.0",
     "@opentelemetry/instrumentation-kafkajs": ">=0.32.0"
   },
@@ -99,12 +99,12 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@google-cloud/bigquery": "^9.2.0",
+    "@google-cloud/bigquery": "^9.3.0",
     "@opentelemetry/core": "^2.12.0",
     "@types/node": "^26.6.5",
     "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.4"
+    "vitest": "^5.0.5"
   },
   "repository": {
     "type": "git",

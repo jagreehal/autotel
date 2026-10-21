@@ -40,7 +40,7 @@
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "vitest": ">=5.0.4"
+    "vitest": ">=5.0.5"
   },
   "peerDependenciesMeta": {
     "vitest": {
@@ -49,11 +49,11 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
-    "executable-stories-formatters": "1.24.0",
-    "executable-stories-vitest": "8.10.2",
+    "executable-stories-formatters": "1.27.0",
+    "executable-stories-vitest": "8.11.1",
     "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.4"
+    "vitest": "^5.0.5"
   },
   "repository": {
     "type": "git",

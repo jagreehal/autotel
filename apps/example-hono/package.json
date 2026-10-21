@@ -11,12 +11,12 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.4",
+    "@hono/node-server": "^2.1.5",
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*",
     "autotel-devtools": "workspace:*",
     "autotel-hono": "workspace:*",
-    "dotenv": "^18.0.7",
+    "dotenv": "^18.0.8",
     "hono": "^4.13.13"
   },
   "devDependencies": {

@@ -21,11 +21,8 @@
  */
 
 import { context, trace, type SpanContext } from '@opentelemetry/api';
+import type { CaptureResult } from 'posthog-js';
 
-/**
- * Structural copy of PostHog's `CaptureResult`. Only `properties` is touched;
- * everything else is passed through untouched.
- */
 /** What a PostHog event property can hold: JSON, since that is what is sent. */
 export type PostHogPropertyValue =
   | string
@@ -36,10 +33,8 @@ export type PostHogPropertyValue =
   | Array<PostHogPropertyValue>
   | { [key: string]: PostHogPropertyValue };
 
-export interface CaptureResultLike {
-  properties: Record<string, PostHogPropertyValue>;
-  [key: string]: PostHogPropertyValue;
-}
+/** PostHog's own event shape. */
+export type CaptureResultLike = CaptureResult;
 
 export type BeforeSendLike = (
   event: CaptureResultLike | null,

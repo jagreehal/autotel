@@ -8,7 +8,7 @@
     "start:loop": "tsx --import ./src/instrumentation.mjs src/loop.ts"
   },
   "dependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.81.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.81.2",
     "@opentelemetry/exporter-logs-otlp-http": "^0.223.0",
     "@opentelemetry/sdk-logs": "^0.223.0",
     "autotel": "workspace:*",
