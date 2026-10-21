@@ -57,28 +57,23 @@ In a server, merge it where services are assembled:
 appLayer.pipe(Layer.provideMerge(layer({ serviceName: 'my-api' })));
 ```
 
-### 3. Join the surrounding trace with `withAutotel`
+### 3. Effect spans join the surrounding trace
 
-Effect takes a span's parent from its own `Tracer.ParentSpan`, and marks a span
-as a root when it has none. `withAutotel` hands it the autotel span that is
-active around the run, so an `Effect.withSpan` inside an instrumented handler
+From effect 4.0.5, an `Effect.withSpan` run inside an autotel span takes that
+span as its parent, so a plain `Effect.runPromise` in an instrumented handler
 lands in that request's trace:
 
 ```typescript
-import { layer, withAutotel } from 'autotel-effect';
-
 app.get('/api/todos', async () => {
   // inside autotel's `node:http` span
-  return Effect.runPromise(withAutotel(program));
+  return Effect.runPromise(program);
 });
 ```
 
-It reads the active span when the effect **runs**, not when it is built, so a
-program assembled once at startup still joins the request it is run inside.
-That is also why it is not part of `layer()`: a layer is built once for the
-whole application, before any request span exists.
+The parent is the span active when the effect **runs**, not when it is built,
+so a program assembled once at startup still joins the request it is run inside.
 
-Trace shape with it:
+Trace shape:
 
 ```text
 HTTP GET /api/todos     (autotel node:http)
@@ -110,7 +105,7 @@ layer({ serviceName: 'my-api', logs: false });
 
 ### The trace is one tree, not two
 
-With `Effect.runPromise(withAutotel(program))`, HTTP spans from autotel's `node:http` instrumentation are the parents of domain spans from `Effect.withSpan`:
+With `Effect.runPromise(program)` inside the request span, HTTP spans from autotel's `node:http` instrumentation are the parents of domain spans from `Effect.withSpan`:
 
 ```text
 HTTP GET /api/todos     (autotel node:http)
@@ -185,6 +180,6 @@ The package imports `@effect/opentelemetry/OtelTracer` and `.../Resource` by sub
 - No second exporter: autotel already owns export.
 - One `layer()` call, not `layer()` merged with `loggerLayer()` — the first already installs the second.
 - `logs: { console: false }` wherever `captureConsole()` is on, or each Effect log is reported twice.
-- `Effect.runPromise(withAutotel(program))` wherever the run happens inside an autotel span, so the Effect spans join that trace.
+- effect 4.0.5 or later, so an `Effect.runPromise` inside an autotel span joins that trace.
 - Span instrumentation on an Effect comes from `Effect.fn` / `Effect.withSpan`, never from wrapping the function in `trace()`.
 - Every `Data.TaggedError` carries its detail in a `message` prop, so failed spans record a real `exception.message`.

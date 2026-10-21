@@ -43,7 +43,7 @@
     "mongodb": "^7.7.0",
     "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.4"
+    "vitest": "^5.0.5"
   },
   "keywords": [
     "opentelemetry",

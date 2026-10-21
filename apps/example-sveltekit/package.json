@@ -7,7 +7,7 @@
     "check": "node --experimental-strip-types src/hooks.server.ts"
   },
   "dependencies": {
-    "@sveltejs/kit": "^3.0.1",
+    "@sveltejs/kit": "^3.1.0",
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*"
   },

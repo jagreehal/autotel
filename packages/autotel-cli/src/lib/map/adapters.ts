@@ -657,6 +657,35 @@ const ROUTER_METHODS = new Set([
   'doc31',
 ]);
 
+/**
+ * Whether a chain root is provably a Hono app: `new Hono()`,
+ * `new OpenAPIHono()`, `factory.createApp()`, or a `const` holding one,
+ * local, top-level, or imported from another file.
+ */
+function isHonoApp(root: Node, scope: Scope, depth = 0): boolean {
+  if (depth > 8) return false;
+  if (root.isKind(SyntaxKind.NewExpression)) {
+    return root.getExpression().getText().endsWith('Hono');
+  }
+  if (root.isKind(SyntaxKind.CallExpression)) {
+    const callee = root.getExpression();
+    return (
+      callee.isKind(SyntaxKind.PropertyAccessExpression) &&
+      callee.getName() === 'createApp'
+    );
+  }
+  if (!root.isKind(SyntaxKind.Identifier)) return false;
+  const declaration = root.getSymbol()?.getDeclarations()[0];
+  const value =
+    declaration?.isKind(SyntaxKind.VariableDeclaration) &&
+    !isTopLevel(declaration)
+      ? declaration.getInitializer()
+      : constantOf(root, scope);
+  return value !== undefined
+    ? isHonoApp(chainOf(value, scope).root, scope, depth + 1)
+    : false;
+}
+
 /** Hono's joining of a mount prefix and a route path: `/users` + `/` is `/users`. */
 function joinPath(prefix: string, routePath: string): string {
   if (!prefix || prefix === '/') return routePath;
@@ -1069,7 +1098,14 @@ function routerRoutes(
          that is scanned later. `named` is true when the chain starts at an
          identifier, whose own base path then applies. */
   type AppRef = { key: string; named: boolean; prefix: string };
-  const registrations: Array<{ route: RawRouteEntry; app: AppRef }> = [];
+  /* `bare`: a plain-verb path without a leading slash. Hono serves it (it
+         prepends `/`), but so reads `cache.get('key', fallback)`, so it counts
+         only on a receiver known to be an app. */
+  const registrations: Array<{
+    route: RawRouteEntry;
+    app: AppRef;
+    bare: boolean;
+  }> = [];
   const mounts: Array<{ parent: AppRef; child: string; prefix: string }> = [];
   const bases = new Map<string, { app: string; prefix: string }>();
   const refOf = (source: SourceFile, expression: Node): AppRef => {
@@ -1156,7 +1192,12 @@ function routerRoutes(
         routePath = literal;
         method = verb === 'use' || verb === 'all' ? null : verb.toUpperCase();
       }
-      if (routePath !== '*' && !routePath.startsWith('/')) continue;
+      const bare =
+        verb !== 'openapi' &&
+        routePath !== '*' &&
+        !routePath.startsWith('/') &&
+        !isHonoApp(chainOf(callee.getExpression(), scope).root, scope);
+      if (bare && framework !== 'hono') continue;
 
       registrations.push({
         route: {
@@ -1171,6 +1212,7 @@ function routerRoutes(
           },
         },
         app,
+        bare,
       });
     }
   }
@@ -1228,9 +1270,16 @@ function routerRoutes(
   const served = entry
     ? resolve(refOf(entry.getSourceFile(), entry)).app
     : undefined;
+  const apps = new Set([
+    ...edges.flatMap((edge) => [edge.parent, edge.child]),
+    ...registrations
+      .filter((registration) => !registration.bare)
+      .map((registration) => resolve(registration.app).app),
+  ]);
   const routes: RawRouteEntry[] = [];
-  for (const { route, app } of registrations) {
+  for (const { route, app, bare } of registrations) {
     const { app: key, prefix } = resolve(app);
+    if (bare && !apps.has(key)) continue;
     const tail = joinPath(prefix, route.path);
     const paths = new Set<string>();
     for (const mount of mountsOf(key, new Set())) {
@@ -1238,7 +1287,14 @@ function routerRoutes(
         paths.add(joinPath(mount.prefix, tail));
       }
     }
-    for (const routePath of paths) routes.push({ ...route, path: routePath });
+    for (const routePath of paths) {
+      // Hono serves `api/v1/x` at `/api/v1/x`.
+      const full =
+        routePath === '*' || routePath.startsWith('/')
+          ? routePath
+          : `/${routePath}`;
+      routes.push({ ...route, path: full });
+    }
   }
   return routes;
 }

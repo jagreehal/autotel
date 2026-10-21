@@ -136,10 +136,7 @@ const tools = [
       const registered = (await document.modelContext.getTools()).find(
         (candidate) => candidate.name === 'search',
       );
-      await document.modelContext.executeTool(
-        registered,
-        JSON.stringify({ query: 'mug' }),
-      );
+      await document.modelContext.executeTool(registered, { query: 'mug' });
       return 'Reordered 2 lines';
     },
     sample: {},
@@ -214,12 +211,7 @@ async function run(tool, consentShownAs = tool.name) {
   const registered = (await document.modelContext.getTools()).find(
     (candidate) => candidate.name === tool.name,
   );
-  // Chrome takes the input as a JSON string, not as the object the
-  // draft specifies.
-  await document.modelContext.executeTool(
-    registered,
-    JSON.stringify(tool.sample),
-  );
+  await document.modelContext.executeTool(registered, tool.sample);
 }
 
 function drawToolButtons() {

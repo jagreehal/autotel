@@ -81,7 +81,7 @@ autotel/
 │   ├── autotel-web/           # Browser SDK: traceparent + baggage, canonical browser signals, frustration/breadcrumbs/engagement
 │   ├── autotel-webmcp/        # Browser WebMCP tool registration/execution tracing
 │   ├── autotel-builtin-ai/   # Chrome built-in AI (Prompt/Summarizer/Writer/...) session tracing
-│   ├── autotel-effect/        # Effect v4 bridge: layer() provides Effect's Tracer, withAutotel() joins the surrounding trace
+│   ├── autotel-effect/        # Effect v4 bridge: layer() provides Effect's Tracer; Effect spans join the surrounding trace
 │   ├── autotel-vitest/        # Vitest fixture: one span per test, trace annotation on the report
 │   └── ...
 ├── docs/
@@ -153,7 +153,7 @@ When the user wants observability, suggest these entry points. All from `autotel
 | **Next.js**            | `autotel-adapters/next` (`withAutotel`, streaming-aware emit).                                                                                                                                                                                                                                                                                                                                          |
 | **Custom HTTP**        | `autotel-adapters/toolkit` (`defineFrameworkIntegration`); see `examples/community-framework-skeleton/`.                                                                                                                                                                                                                                                                                                |
 | **Browser / SPA**      | `autotel-web`: `init()` injects `traceparent` on same-origin requests; name cross-origin APIs in `propagateTo` and have them allow the header. For per-tenant tracing, call `setBaggage({ 'tenant.id': id })` after login: it propagates as a W3C `baggage` header (same-origin/fail-closed) and the backend's `BaggageSpanProcessor` tags server spans. Do **not** hand-roll a fetch wrapper for this. |
-| **Effect v4**          | `autotel-effect`: `layer({ serviceName })` once in the layer graph, then `Effect.runPromise(withAutotel(program))` wherever the run sits inside an autotel span, so Effect spans join that trace. Instrument effects with `Effect.fn` / `Effect.withSpan`, never `trace()`.                                                                                                                             |
+| **Effect v4**          | `autotel-effect`: `layer({ serviceName })` once in the layer graph, and an `Effect.runPromise` inside an autotel span joins that trace (effect 4.0.5+). Instrument effects with `Effect.fn` / `Effect.withSpan`, never `trace()`.                                                                                                                                                                       |
 | **Tests**              | `autotel-vitest` / `autotel-playwright`: one span per test, `traceparent` injected into requests to the API, and each test annotated with its trace so the report links back to it.                                                                                                                                                                                                                     |
 
 Always suggest `init()` (or instrumentation) once at app entry; then spans + request logger or `trace()` in handlers.

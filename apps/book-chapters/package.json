@@ -42,8 +42,8 @@
     "run-oe": "node scripts/run-examples.mjs oe-"
   },
   "dependencies": {
-    "ai": "7.0.138",
-    "ai-sdk-ollama": "4.4.0",
+    "ai": "7.0.143",
+    "ai-sdk-ollama": "4.5.1",
     "autotel": "workspace:*",
     "autotel-devtools": "workspace:*",
     "autotel-genai": "workspace:*",

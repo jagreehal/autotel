@@ -104,10 +104,10 @@
   },
   "peerDependencies": {
     "hono": ">=4.13.13",
-    "@tanstack/react-start": "^1.168.61",
-    "@tanstack/solid-start": "^1.168.58",
-    "next": ">=16.4.0",
-    "h3": "^2.0.2",
+    "@tanstack/react-start": "^1.169.3",
+    "@tanstack/solid-start": "^1.169.3",
+    "next": ">=16.4.2",
+    "h3": "^2.0.5",
     "nitropack": "^2.13.4",
     "rxjs": ">=7.8.2"
   },
@@ -141,7 +141,7 @@
     "rxjs": "^7.8.2",
     "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.4"
+    "vitest": "^5.0.5"
   },
   "repository": {
     "type": "git",

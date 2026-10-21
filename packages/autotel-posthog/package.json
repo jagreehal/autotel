@@ -41,8 +41,8 @@
     "autotel": "workspace:*",
     "autotel-subscribers": "workspace:*",
     "autotel-web": "workspace:*",
-    "posthog-js": ">=1.438.8",
-    "posthog-node": ">=5.55.2"
+    "posthog-js": ">=1.438.12",
+    "posthog-node": ">=5.56.2"
   },
   "devDependencies": {
     "@opentelemetry/context-async-hooks": "^2.12.0",
@@ -52,13 +52,13 @@
     "autotel": "workspace:*",
     "autotel-subscribers": "workspace:*",
     "autotel-web": "workspace:*",
-    "jsdom": "30.1.2",
-    "posthog-js": "1.438.8",
-    "posthog-node": "^5.55.2",
+    "jsdom": "30.1.3",
+    "posthog-js": "1.438.12",
+    "posthog-node": "^5.56.2",
     "rimraf": "^6.1.3",
     "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.4"
+    "vitest": "^5.0.5"
   },
   "keywords": [
     "opentelemetry",

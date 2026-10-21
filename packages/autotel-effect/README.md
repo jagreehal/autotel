@@ -73,30 +73,23 @@ In a server, merge the layer where you assemble services:
 appLayer.pipe(Layer.provideMerge(layer({ serviceName: 'my-api' })));
 ```
 
-### 3. Join the surrounding trace with `withAutotel`
+### 3. Effect spans join the surrounding trace
 
-Effect takes a span's parent from its own `Tracer.ParentSpan`, not from the
-ambient OpenTelemetry context, and marks a span as a root when it has none. So a
-bare `Effect.runPromise` inside an instrumented HTTP handler opens a **new
-trace** — the handler's span and the Effect's span end up in two separate
-traces, with nothing to say they belong together. `withAutotel` hands Effect the
-active autotel span as the parent:
+From effect 4.0.5, an `Effect.withSpan` run inside an autotel span takes that
+span as its parent, so a plain `Effect.runPromise` in an instrumented HTTP
+handler stays in the request's trace:
 
 ```typescript
-import { withAutotel } from 'autotel-effect';
-
 app.get('/api/todos', async () => {
   // inside autotel's `node:http` span
-  return Effect.runPromise(withAutotel(program));
+  return Effect.runPromise(program);
 });
 ```
 
-It reads the active span when the effect **runs**, so a program assembled once
-at startup still joins the request it is run inside. That is also why this is
-not part of `layer()`: a layer is built once for the whole application, long
-before any request span exists.
+The parent is the span active when the effect **runs**, so a program assembled
+once at startup still joins the request it is run inside.
 
-With it, HTTP spans from autotel's `node:http` instrumentation become parents of
+HTTP spans from autotel's `node:http` instrumentation become parents of
 domain spans from `Effect.withSpan`.
 
 ### Don't reach for `trace()` here
@@ -162,15 +155,13 @@ that assert on exported spans.
 
 ## Trace shape
 
-With `Effect.runPromise(withAutotel(program))`:
+With `Effect.runPromise(program)` inside the request span:
 
 ```text
 HTTP GET /api/todos     (autotel node:http)
   └── todo.list         (Effect.withSpan)
         └── db.query    (another withSpan or instrumented client)
 ```
-
-Without `withAutotel`, `todo.list` is the root of a second, unrelated trace.
 
 ### Failures: put the detail in `message`
 

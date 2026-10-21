@@ -596,7 +596,7 @@
     "import-in-the-middle": "^3.5.2"
   },
   "peerDependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.81.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.81.2",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.223.0",
     "@opentelemetry/exporter-logs-otlp-proto": "^0.223.0",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.223.0",
@@ -662,7 +662,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@edge-runtime/vm": "^5.0.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.81.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.81.2",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.223.0",
     "@opentelemetry/exporter-logs-otlp-proto": "^0.223.0",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.223.0",
@@ -685,7 +685,7 @@
     "typescript": "^7.0.2",
     "unplugin-swc": "^2.0.0",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^5.0.4",
+    "vitest": "^5.0.5",
     "vitest-mock-extended": "^5.1.1",
     "winston": "^3.19.0",
     "yaml": "^2.9.1"

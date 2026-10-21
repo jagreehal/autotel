@@ -2,9 +2,9 @@
  * The devtools' WebMCP tools, exercised the way an agent calls them: through
  * `document.modelContext`, not by calling the handlers directly.
  *
- * The double from `webmcpable/testing` reproduces Chrome's measured behaviour —
- * `executeTool` takes a JSON *string*, `inputSchema` comes back as one, results
- * are serialised. Going through it is what makes "the agent gets a sentence it
+ * The double from `webmcpable/testing` reproduces Chrome 155's measured
+ * behaviour: `executeTool` takes the input object, `inputSchema` comes back as
+ * an object, results are serialised. Going through it is what makes "the agent gets a sentence it
  * can act on" an assertion rather than a hope.
  */
 
@@ -41,19 +41,21 @@ trace.spans = [trace.rootSpan];
  * Stated locally rather than pulling in an ambient types package for one file.
  */
 interface TestModelContext {
-  executeTool(tool: { name: string }, inputArguments: string): Promise<string>;
-  getTools(): Promise<Array<{ name: string; inputSchema: string }>>;
+  executeTool(tool: { name: string }, input: unknown): Promise<string>;
+  getTools(): Promise<
+    Array<{ name: string; inputSchema: { required?: string[] } }>
+  >;
 }
 
 const modelContext = () =>
   (document as unknown as { modelContext: TestModelContext }).modelContext;
 
-/** Call a tool the way an agent does: by name, with a JSON string. */
+/** Call a tool the way an agent does: by name, with its input object. */
 async function callTool(name: string, input: unknown = {}) {
   const registered = await modelContext().getTools();
   const tool = registered.find((t) => t.name === name);
   expect(tool, `${name} is not registered`).toBeDefined();
-  return modelContext().executeTool(tool!, JSON.stringify(input));
+  return modelContext().executeTool(tool!, input);
 }
 
 function jsonResponse(body: unknown, status = 200) {
@@ -93,9 +95,7 @@ describe('devtools WebMCP tools', () => {
 
     const tools = await modelContext().getTools();
     const get = tools.find((t) => t.name === 'autotel_get_trace')!;
-    // Chrome hands back `inputSchema` as a JSON string, and so does the double.
-    const schema = JSON.parse(get.inputSchema);
-    expect(schema.required).toEqual(['traceId']);
+    expect(get.inputSchema.required).toEqual(['traceId']);
   });
 
   it('unmount withdraws every tool', async () => {

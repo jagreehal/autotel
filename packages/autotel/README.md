@@ -2832,7 +2832,7 @@ Each API is type-safe, works in both ESM and CJS, and is designed to minimize bo
 
 This holds with the exporters autotel builds (`endpoint`, `spanExporters`); a `spanProcessors` pipeline gets it when its exporting processor is wrapped in `TailSamplingSpanProcessor`. The filter sees attributes before redaction.
 
-`ignoreRoutes` is the common case done for you. It drops a server span by the route the framework resolved (`http.route`, `next.route`), or, without one, by its path (`url.path`, or the older `http.target` that Next.js's own server span carries) with dot segments resolved:
+`ignoreRoutes` is the common case done for you. It drops a server span by the route the framework resolved (`http.route`, `next.route`), or, without one, by its path (`url.path`, or the older `http.target` that Next.js's own server span carries) as sent. A path the URL parser would change (dot segments, `//`, a backslash, a control character) or one with an encoded separator (`%2F`, `%5C`) is never dropped, since the app may serve it elsewhere. A catch-all route (`[...slug]`, `*`) serves many paths, so for one the path is judged too: a Hono app served from `app/api/[...route]/route.ts` can still ignore `/api/health`.
 
 ```typescript
 init({

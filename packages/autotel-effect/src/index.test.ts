@@ -9,7 +9,7 @@ import * as Clock from 'effect/Clock';
 import * as Effect from 'effect/Effect';
 import type * as LogLevel from 'effect/LogLevel';
 import * as References from 'effect/References';
-import { layer, loggerLayer, withAutotel } from './index.js';
+import { layer, loggerLayer } from './index.js';
 
 const exporter = createMemoryExporter();
 const logExporter = new InMemoryLogRecordExporter();
@@ -73,14 +73,12 @@ describe('layer', () => {
   });
 });
 
-describe('withAutotel', () => {
-  it('nests the Effect span under the surrounding autotel span', async () => {
+describe('the surrounding autotel span', () => {
+  it('parents an Effect span run inside it', async () => {
     await trace.run('http.get', async () => {
       await Effect.runPromise(
-        withAutotel(
-          Effect.withSpan('todo.list')(Effect.void).pipe(
-            Effect.provide(layer({ serviceName: 'svc-d' })),
-          ),
+        Effect.withSpan('todo.list')(Effect.void).pipe(
+          Effect.provide(layer({ serviceName: 'svc-d' })),
         ),
       );
     });
@@ -94,13 +92,11 @@ describe('withAutotel', () => {
     expect(child!.parentSpanId).toBe(root!.spanId);
   });
 
-  it('reads the surrounding span when the effect runs, not when it is built', async () => {
+  it('is read when the effect runs, not when it is built', async () => {
     // A program built once at module scope and run per request is the shape
     // that matters: the parent has to be whatever span is active at run time.
-    const program = withAutotel(
-      Effect.withSpan('todo.count')(Effect.void).pipe(
-        Effect.provide(layer({ serviceName: 'svc-e' })),
-      ),
+    const program = Effect.withSpan('todo.count')(Effect.void).pipe(
+      Effect.provide(layer({ serviceName: 'svc-e' })),
     );
 
     await trace.run('http.count', async () => {
@@ -114,31 +110,10 @@ describe('withAutotel', () => {
     expect(child!.parentSpanId).toBe(root!.spanId);
   });
 
-  it('a bare runPromise inside an autotel span starts a new trace', async () => {
-    // Effect's scheduler runs fibers outside the caller's async context, so
-    // @effect/opentelemetry misses the ambient autotel span. When this test
-    // fails, @effect/opentelemetry has fixed that and withAutotel can go.
-    await trace.run('http.bare', async () => {
-      await Effect.runPromise(
-        Effect.withSpan('todo.bare')(Effect.void).pipe(
-          Effect.provide(layer({ serviceName: 'svc-bare' })),
-        ),
-      );
-    });
-    await flush();
-
-    const root = exporter.findSpan('http.bare');
-    const child = exporter.findSpan('todo.bare');
-    expect(child!.traceId).not.toBe(root!.traceId);
-    expect(child!.parentSpanId).toBeUndefined();
-  });
-
-  it('runs unchanged when nothing is traced around it', async () => {
+  it('leaves the Effect span a root when nothing is traced around it', async () => {
     await Effect.runPromise(
-      withAutotel(
-        Effect.withSpan('todo.orphan')(Effect.void).pipe(
-          Effect.provide(layer({ serviceName: 'svc-f' })),
-        ),
+      Effect.withSpan('todo.orphan')(Effect.void).pipe(
+        Effect.provide(layer({ serviceName: 'svc-f' })),
       ),
     );
     await flush();

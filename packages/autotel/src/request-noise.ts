@@ -16,28 +16,46 @@ import type { SpanFilterPredicate } from './filtering-span-processor';
 export type IgnoredRoute = string | RegExp;
 
 /**
+ * A wildcard segment: Next's `[...slug]` and `[[...slug]]`, `*`, `*name`,
+ * `:name*` and `:name+`. A route with one serves many paths, so it doesn't
+ * say which was requested.
+ */
+const CATCH_ALL = /\[\.\.\.|\*|:\w+\+/;
+
+/**
  * The names a server span gives its route. A route the framework resolved
  * (`http.route`, Next's `next.route`) is the one served, so it is judged
- * alone. Without one, the raw path (`url.path`, or Next's older
- * `http.target`) is judged after the URL parser resolves dot segments, so
- * `/api/health/../admin` is `/admin`.
+ * alone, unless it is a catch-all: then the path is judged too.
  */
 function routesOf(span: ReadableSpan): string[] {
   const resolved = ['http.route', 'next.route']
     .map((key) => span.attributes[key])
     .filter((value): value is string => typeof value === 'string');
-  if (resolved.length > 0) return resolved;
+  if (resolved.length > 0 && !resolved.some((route) => CATCH_ALL.test(route))) {
+    return resolved;
+  }
+  return [...resolved, ...pathsOf(span)];
+}
+
+/**
+ * The raw path (`url.path`, or Next's older `http.target`), judged only as
+ * sent: when the URL parser leaves it unchanged and it carries no encoded
+ * separator (`%2F`, `%5C`). Dot segments, `//host`, backslashes and control
+ * characters all change it, and an app may serve such a path elsewhere.
+ */
+function pathsOf(span: ReadableSpan): string[] {
   return ['url.path', 'http.target']
     .map((key) => span.attributes[key])
     .filter((value): value is string => typeof value === 'string')
-    .map((path) => normalizePath(path));
+    .map((target) => target.split('?')[0]!)
+    .filter((path) => !/%2f|%5c/i.test(path) && parsedPath(path) === path);
 }
 
-function normalizePath(path: string): string {
+function parsedPath(path: string): string | undefined {
   try {
     return new URL(path, 'http://route.invalid').pathname;
   } catch {
-    return path.split('?')[0]!;
+    return undefined;
   }
 }
 

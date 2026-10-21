@@ -44,7 +44,11 @@ let cachedRequire: NodeRequire | undefined;
 
 function getNodeRequire(): NodeRequire {
   if (cachedRequire) return cachedRequire;
-  const base = asString(globalThis.__filename) ?? import.meta.url;
+  // import.meta.url first: under `node -e` or a REPL, `__filename` resolves
+  // to the host's global ('[eval]', '[stdin]'), which createRequire rejects.
+  const base =
+    import.meta.url ??
+    (typeof __filename === 'string' ? __filename : undefined);
   if (!base) {
     // No module path in this runtime. Surface as a missing-module error so
     // optional lookups via `safeRequire()` degrade gracefully to `undefined`.
