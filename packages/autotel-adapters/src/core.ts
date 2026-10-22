@@ -12,6 +12,7 @@ import {
   trace,
 } from 'autotel';
 import {
+  markServerError,
   mergeRequestLoggerOptions,
   shouldInstrumentPath,
   type RouteAdapterOptions,
@@ -104,8 +105,13 @@ export function createRequestRunner(storage: AsyncLocalStorage<RequestLogger>) {
         log.error(error instanceof Error ? error : new Error(String(error)));
         throw error;
       } finally {
+        const finalized = options?.finalize?.();
+        markServerError(
+          ctx,
+          finalized?.['http.response.status_code'] as number | undefined,
+        );
         if (options?.autoEmit !== false) {
-          log.emitNow(options?.finalize?.());
+          log.emitNow(finalized);
         }
       }
     });

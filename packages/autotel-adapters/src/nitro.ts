@@ -17,7 +17,16 @@ import {
 export interface NitroEventLike {
   method?: string;
   path?: string;
-  context?: Record<string, unknown>;
+  context?: {
+    /** h3 v1 sets `path`, h3 v2 sets `route`. */
+    matchedRoute?: { path?: string; route?: string };
+    [key: string]: unknown;
+  };
+}
+
+function matchedRoute(event: NitroEventLike): string | undefined {
+  const matched = event.context?.matchedRoute;
+  return matched?.route ?? matched?.path;
 }
 
 export interface NitroWithAutotelOptions extends Omit<
@@ -37,7 +46,8 @@ function enrichFromEvent(
 
   return {
     'http.request.method': event.method,
-    'http.route': event.path,
+    'url.path': event.path,
+    'http.route': matchedRoute(event),
     ...(typeof event.context?.requestId === 'string'
       ? { 'http.request.id': event.context.requestId }
       : {}),
@@ -84,6 +94,7 @@ const integration = defineFrameworkIntegration<NitroEventLike>({
   extractRequest: (event) => ({
     method: event.method ?? 'GET',
     path: event.path ?? '/',
+    route: matchedRoute(event),
     requestId:
       typeof event.context?.requestId === 'string'
         ? event.context.requestId
@@ -95,11 +106,11 @@ const integration = defineFrameworkIntegration<NitroEventLike>({
 function resolveSpanName(
   event: NitroEventLike,
   options?: NitroWithAutotelOptions,
-): string {
+): string | undefined {
   if (typeof options?.spanName === 'function') {
     return options.spanName(event);
   }
-  return options?.spanName ?? `nitro.${event.method ?? 'request'}`;
+  return options?.spanName;
 }
 
 export function withAutotelEventHandler<TEvent extends NitroEventLike, TReturn>(

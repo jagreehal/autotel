@@ -1,7 +1,7 @@
 /* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-known-value-widening -- This is where a backend's raw attribute bag becomes canonical tags. The input is unread JSON and the output is an open tag map, because an attribute set is not a fixed field list. */
 
 import type { SpanStatusCode, TagValue } from '../types';
-import { asNumber, asTagValue } from '../lib/values';
+import { asNumber, asRecord, asTagValue } from '../lib/values';
 import { primaryException } from 'autotel-devtools/issues';
 
 /**
@@ -12,18 +12,36 @@ import { primaryException } from 'autotel-devtools/issues';
  * per backend.
  */
 
-/** Coerce an arbitrary attribute value into a flat tag value. */
+/**
+ * Coerce an arbitrary attribute value into a flat tag value. A shape (an
+ * array, say) goes as JSON; anything else as its text.
+ */
 export function normalizeTagValue(value: unknown): TagValue {
-  return asTagValue(value) ?? String(value);
+  const tag = asTagValue(value);
+  if (tag !== undefined) return tag;
+  if (typeof value !== 'object' || value === null) return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
-/** Coerce a record of raw attributes into flat tags. */
+/**
+ * Coerce a record of raw attributes into flat tags. A nested object (a pino
+ * `{ nested: { id: 1 } }`, a Datadog `{ http: { method } }`) becomes dotted
+ * keys: `nested.id`, `http.method`.
+ */
 export function normalizeTags(
-  attributes: Record<string, unknown> | undefined,
+  attributes: Record<string, unknown> | null | undefined,
+  prefix = '',
 ): Record<string, TagValue> {
   const tags: Record<string, TagValue> = {};
   for (const [key, value] of Object.entries(attributes ?? {})) {
-    tags[key] = normalizeTagValue(value);
+    if (value === null || value === undefined) continue;
+    const nested = asRecord(value);
+    if (nested) Object.assign(tags, normalizeTags(nested, `${prefix}${key}.`));
+    else tags[`${prefix}${key}`] = normalizeTagValue(value);
   }
   return tags;
 }

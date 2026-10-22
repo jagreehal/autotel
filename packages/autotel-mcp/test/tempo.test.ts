@@ -78,6 +78,14 @@ describe('TempoBackend — OTLP parsing', () => {
                         key: 'http.status_code',
                         value: { intValue: '500' },
                       },
+                      {
+                        key: 'tags',
+                        value: {
+                          arrayValue: {
+                            values: [{ stringValue: 'a' }, { intValue: '1' }],
+                          },
+                        },
+                      },
                     ],
                     status: { code: 2 },
                   },
@@ -98,6 +106,7 @@ describe('TempoBackend — OTLP parsing', () => {
     expect(span.operationName).toBe('POST /orders');
     expect(span.durationMs).toBeCloseTo(100);
     expect(span.statusCode).toBe('ERROR');
+    expect(span.tags.tags).toBe('["a",1]');
     expect(span.hasError).toBe(true);
     expect(span.tags['http.status_code']).toBe(500);
   });

@@ -108,7 +108,7 @@ Two separate config systems serve different purposes:
 
 Implements deferred sampling decisions:
 
-- Spans are buffered per trace until the local root and every span started under it have ended (bounded by `maxBufferedSpans` and `traceTimeoutMs`, fail-open), then kept or dropped together (no orphan children)
+- Spans are buffered per local root (no parent, or a remote one) until it and every span started under it have ended (bounded by `maxBufferedSpans` and `traceTimeoutMs`, fail-open), then kept or dropped together (no orphan children)
 - Kept when any span carries `autotel.sampling.tail.keep = true` (wrapper verdict or `forceKeep()`); otherwise the configured sampler decides from the whole trace (any ERROR span, root duration, trace-id hash), which covers auto-instrumented roots
 - Default `AdaptiveSampler`: 10% baseline, 100% errors, 100% slow requests
 - Custom samplers can implement `Sampler` interface
@@ -299,6 +299,8 @@ No loader hooks required, just use `--require ./instrumentation.js`
 
 **Why ESM requires direct dependency:**
 OpenTelemetry's ESM instrumentation uses `import-in-the-middle` to hook into module loading. For this to work, the auto-instrumentations package must be resolvable from your app's node_modules, not just from autotel's dependencies.
+
+`autotel/register` (and `autotel/auto`, which imports it) wraps only modules under `node_modules` and Node builtins. Instrumentations never hook app code, so app modules load unwrapped: start-up rewrites nothing of yours and evaluation order stays as written.
 
 ### Peer Dependencies
 

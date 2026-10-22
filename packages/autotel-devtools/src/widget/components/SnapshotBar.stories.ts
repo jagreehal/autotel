@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/svelte-vite';
-import { expect, userEvent } from 'storybook/test';
+import { expect, userEvent, waitFor } from 'storybook/test';
 import SnapshotBar from './SnapshotBar.svelte';
 import {
   clearAllData,
@@ -72,7 +72,8 @@ export const ClearsData: Story = {
 
     await userEvent.click(canvas.getByRole('button', { name: /Clear/i }));
 
-    await expect(tracesSignal.value).toHaveLength(0);
+    // Clear asks the server to empty its store first.
+    await waitFor(() => expect(tracesSignal.value).toHaveLength(0));
   },
 };
 

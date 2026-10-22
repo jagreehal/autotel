@@ -1,3 +1,5 @@
+import { SpanStatusCode } from 'autotel';
+import { createTraceCollector } from 'autotel/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { useLogger, withAutotel } from './fastify';
 import type { FastifyRequestLike, FastifyReplyLike } from './fastify';
@@ -75,5 +77,19 @@ describe('fastify adapter', () => {
 
     await expect(handler(req(), { statusCode: 500 })).rejects.toThrow('boom');
     expect(onEmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the span ERROR when the reply is a 5xx', async () => {
+    const collector = createTraceCollector();
+    const handler = withAutotel((_request, reply: FastifyReplyLike) => {
+      reply.statusCode = 503;
+      return 'unavailable';
+    });
+
+    await handler(req(), { statusCode: 200 });
+
+    expect(collector.expectSpan('GET /api/orders/:id').status.code).toBe(
+      SpanStatusCode.ERROR,
+    );
   });
 });

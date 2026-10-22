@@ -88,6 +88,8 @@ import {
 } from './request-noise';
 import {
   AttributeRedactingProcessor,
+  createAttributeRedactor,
+  createSensitiveKeyTest,
   normalizeAttributeRedactorConfig,
 } from './attribute-redacting-processor';
 import { createStringRedactor, type StringRedactor } from './redact-values';
@@ -661,9 +663,31 @@ export function init(cfg: AutotelConfig): void {
     );
   }
 
-  // Store string redactor for use by PostHog log/subscriber paths
+  // Store string redactor for use by subscriber paths
   if (mergedConfig.attributeRedactor) {
     _stringRedactor = createStringRedactor(mergedConfig.attributeRedactor);
+  }
+  // Log records get the span redactor's full rules, walked into nested values
+  const logRedactor = mergedConfig.attributeRedactor
+    ? createAttributeRedactor(mergedConfig.attributeRedactor)
+    : null;
+  const logKeyIsSensitive = mergedConfig.attributeRedactor
+    ? createSensitiveKeyTest(mergedConfig.attributeRedactor)
+    : undefined;
+  const redactorConfig = mergedConfig.attributeRedactor;
+  if (
+    typeof redactorConfig === 'object' &&
+    redactorConfig.redactor &&
+    !redactorConfig.keyPatterns?.length &&
+    !redactorConfig.paths?.length
+  ) {
+    logger.warn(
+      {},
+      '[autotel] attributeRedactor has a custom redactor but no keyPatterns or paths. ' +
+        'Log values nested under a key reach it under their dotted key ' +
+        "(a password inside { password: { value } } arrives as 'password.value'), " +
+        'and no key covers its whole object. Declare keyPatterns for keys whose whole value must be redacted.',
+    );
   }
 
   // Wire string redactor to subscribers that support it (e.g., PostHogSubscriber)
@@ -819,7 +843,17 @@ export function init(cfg: AutotelConfig): void {
     configuredLogRecordProcessors &&
     configuredLogRecordProcessors.length > 0
   ) {
-    logRecordProcessors = [...configuredLogRecordProcessors];
+    // Redacted like every other log path: a processor the caller brings is
+    // where logs most often leave the process.
+    logRecordProcessors = configuredLogRecordProcessors.map((processor) =>
+      logRedactor
+        ? new RedactingLogRecordProcessor(
+            processor,
+            logRedactor,
+            logKeyIsSensitive,
+          )
+        : processor,
+    );
   }
 
   // Auto-configure OTLP log exporters when logs are enabled.
@@ -839,8 +873,12 @@ export function init(cfg: AutotelConfig): void {
       let processor: LogRecordProcessor = new BatchLogRecordProcessor({
         exporter: logExporter,
       });
-      if (_stringRedactor) {
-        processor = new RedactingLogRecordProcessor(processor, _stringRedactor);
+      if (logRedactor) {
+        processor = new RedactingLogRecordProcessor(
+          processor,
+          logRedactor,
+          logKeyIsSensitive,
+        );
       }
       if (!logRecordProcessors) {
         logRecordProcessors = [];
@@ -860,7 +898,8 @@ export function init(cfg: AutotelConfig): void {
   // PostHog OTLP logs integration
   const posthogProcessors = buildPostHogLogProcessors(
     mergedConfig.posthog,
-    _stringRedactor,
+    logRedactor,
+    logKeyIsSensitive,
   );
   if (posthogProcessors.length > 0) {
     if (!logRecordProcessors) {

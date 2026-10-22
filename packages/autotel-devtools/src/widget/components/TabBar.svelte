@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { selectedTabSignal, setSelectedTab } from '../store.svelte';
+  import { openTab, selectedTabSignal } from '../store.svelte';
   import { cn } from '../utils/cn';
   import { TAB_DEFS } from '../tabs';
 
@@ -21,7 +21,7 @@
 >
   {#each TAB_DEFS as { id, label, icon: Icon } (id)}
     <button
-      onclick={() => setSelectedTab(id)}
+      onclick={() => openTab(id)}
       class={cn(
         'flex items-center gap-2 px-3 py-2 text-xs font-medium rounded transition-colors whitespace-nowrap',
         selected === id

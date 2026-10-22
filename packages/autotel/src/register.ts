@@ -33,9 +33,33 @@
 // namespace import for browser-bundler compat — see node-require.ts
 import * as nodeModule from 'node:module';
 
-// Use the official OpenTelemetry instrumentation hook which wraps import-in-the-middle
-// This ensures proper integration with OTel's instrumentation system
-nodeModule.register('@opentelemetry/instrumentation/hook.mjs', import.meta.url);
+/**
+ * Never wrap the app's own files: any `file:` URL outside `node_modules`.
+ *
+ * Instrumentations hook packages and Node builtins, never application code, so
+ * wrapping it bought nothing and cost a lot: every module rewritten at start-up,
+ * `failed to wrap` warnings for barrels, and changed evaluation order turning a
+ * latent import cycle into a `Cannot access 'x' before initialization` crash.
+ *
+ * Excluding app code rather than including only hooked modules keeps `init()`
+ * free to run anywhere. A hooked-only loader cannot wrap a module whose `Hook()`
+ * arrives after it loads, and ESM loads the whole static graph before running
+ * any of it, so an `init()` inside the app's own graph would patch nothing.
+ * Yarn PnP serves packages from `.yarn/` zips rather than `node_modules`, so
+ * PnP support means widening this pattern.
+ */
+const APP_CODE = /^file:(?!.*\/node_modules\/)/;
+
+// The OpenTelemetry hook, not `import-in-the-middle/hook.mjs` directly: the
+// instrumentations call `Hook()` from the copy `@opentelemetry/instrumentation`
+// depends on, and only that copy's loader reports wrapped modules to them.
+nodeModule.register(
+  '@opentelemetry/instrumentation/hook.mjs',
+  import.meta.url,
+  {
+    data: { exclude: [APP_CODE] },
+  },
+);
 // Read by init() to skip its "no ESM hook" warning. Symbol.for, not an import,
 // so this file stays standalone.
 (globalThis as Record<symbol, unknown>)[Symbol.for('autotel.register')] = true;

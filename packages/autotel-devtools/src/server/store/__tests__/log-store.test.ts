@@ -167,6 +167,17 @@ describe('querying', () => {
     expect(logs.map((l) => l.body)).toEqual(['payment failed']);
   });
 
+  it('filters a nested attribute by its dotted key, and keeps it nested', () => {
+    // A pino child binding arrives as an object; autotel-mcp shows it as
+    // `bound.id`, so that key has to find the row.
+    store.ingestLogs([
+      log({ body: 'child request', attributes: { bound: { id: 2 } } }),
+    ]);
+    const { logs } = store.queryLogs({ query: 'bound.id = 2' });
+    expect(logs.map((l) => l.body)).toEqual(['child request']);
+    expect(logs[0]?.attributes).toEqual({ bound: { id: 2 } });
+  });
+
   it('filters by trace id, to see the logs belonging to one trace', () => {
     const { logs } = store.queryLogs({ query: 'trace_id = "t-bad"' });
     expect(logs).toHaveLength(1);

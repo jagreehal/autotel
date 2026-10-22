@@ -1047,6 +1047,8 @@ export const processUser = withTracing({})((ctx) => async (user) => {
 | `validateEnum`   | boolean                                    | `true`     | Normalize enum values (e.g., HTTP methods) |
 | `warnDeprecated` | boolean                                    | `true`     | Log warnings for deprecated attributes     |
 
+Guardrails apply per call. `init({ attributeRedactor })` redacts every span attribute and log record before export, with the same key rules, paths, built-in patterns and custom `redactor` for both. It walks log bodies and nested attributes under dotted keys (`customer.password`), a sensitive key redacts everything beneath it (binary values included), and processors in `logRecordProcessors` receive the redacted record. `createStringRedactor()` applies the same value rules to a bare string.
+
 ### Domain Helpers
 
 Domain helpers bundle multiple attribute groups for common scenarios:
@@ -2166,6 +2168,8 @@ node --import ./instrumentation.mjs src/server.js
 - Import `autotel/register` **before** any other imports
 - Use `--import` flag (not `--require`)
 
+`autotel/register` wraps only modules under `node_modules` and Node builtins, so your own modules load as written. `autotel/auto` registers through `autotel/register`.
+
 **CommonJS Setup**
 
 No special flags required. Just use `--require`:
@@ -2202,7 +2206,7 @@ NODE_OPTIONS="--experimental-loader=@opentelemetry/instrumentation/hook.mjs --im
 - **Adaptive sampling** : 10% baseline, 100% for errors/slow spans by default (override via `sampler`).
 - **Rate limiting & circuit breakers** : Prevent telemetry storms when backends misbehave.
 - **Validation** : Configurable attribute/event name lengths, maximum counts, and nesting depth.
-- **Sensitive data redaction** : Passwords, tokens, API keys, and any custom regex you provide are automatically masked before export.
+- **Sensitive data redaction** : Passwords, tokens, API keys, and any custom regex you provide are masked in span attributes and log records before export. `init({ attributeRedactor })` walks log bodies and nested attributes under dotted keys, and a sensitive key redacts its whole subtree.
 - **Auto-flush** : Events buffers drain when root spans end (disable with `flushOnRootSpanEnd: false`).
 - **Runtime flags** : Toggle metrics or swap endpoints via env vars without code edits.
 
@@ -2827,7 +2831,7 @@ Each API is type-safe, works in both ESM and CJS, and is designed to minimize bo
 
 `spanFilter` decides per span, once it has ended; return `false` to drop it. What happens to the rest of the trace depends on where the dropped span sits:
 
-- **A local root** (a request's server span, or a span with no local parent): the whole trace goes, its database and outbound spans included. Nothing is left orphaned.
+- **A local root** (a request's server span, or a span with no local parent): it goes with every span under it, database and outbound spans included. Nothing is left orphaned. Siblings under the same remote parent stay: filtering Next.js's `next.bubble` span keeps the request beside it.
 - **Any other span**: only that span goes. Its children are re-parented to its nearest kept ancestor, so the trace stays connected.
 
 This holds with the exporters autotel builds (`endpoint`, `spanExporters`); a `spanProcessors` pipeline gets it when its exporting processor is wrapped in `TailSamplingSpanProcessor`. The filter sees attributes before redaction.

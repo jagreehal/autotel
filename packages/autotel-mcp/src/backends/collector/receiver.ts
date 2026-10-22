@@ -1,7 +1,12 @@
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { CollectorStore } from './store';
-import { exceptionTags, spanKindTag } from '../span-mapping';
+import {
+  exceptionTags,
+  normalizeTagValue,
+  normalizeTags,
+  spanKindTag,
+} from '../span-mapping';
 import type { SourceMapResolver } from 'autotel-devtools/sourcemaps';
 import type {
   SpanRecord,
@@ -19,6 +24,8 @@ interface OtlpAnyValue {
   intValue?: string | number;
   doubleValue?: number;
   boolValue?: boolean;
+  arrayValue?: { values?: OtlpAnyValue[] };
+  kvlistValue?: { values?: OtlpKeyValue[] };
 }
 
 interface OtlpKeyValue {
@@ -26,21 +33,30 @@ interface OtlpKeyValue {
   value: OtlpAnyValue;
 }
 
-function decodeAnyValue(v: OtlpAnyValue): TagValue {
+/** An OTLP AnyValue as plain JS: a kvlist is an object, an array a list. */
+function anyValueToJs(v: OtlpAnyValue): unknown {
   if (v.stringValue !== undefined) return v.stringValue;
   if (v.intValue !== undefined) return Number(v.intValue);
   if (v.doubleValue !== undefined) return v.doubleValue;
   if (v.boolValue !== undefined) return v.boolValue;
+  if (v.arrayValue) return (v.arrayValue.values ?? []).map(anyValueToJs);
+  if (v.kvlistValue) return kvsToObject(v.kvlistValue.values);
   return '';
 }
 
+function kvsToObject(kvs: OtlpKeyValue[] | undefined): Record<string, unknown> {
+  return Object.fromEntries(
+    (kvs ?? []).map((kv) => [kv.key, anyValueToJs(kv.value)]),
+  );
+}
+
+function decodeAnyValue(v: OtlpAnyValue): TagValue {
+  return normalizeTagValue(anyValueToJs(v));
+}
+
+/** Attributes as flat tags; a kvlist attribute becomes dotted keys. */
 function attrsToRecord(kvs: OtlpKeyValue[] | undefined) {
-  if (!kvs) return {};
-  const out: Record<string, TagValue> = {};
-  for (const kv of kvs) {
-    out[kv.key] = decodeAnyValue(kv.value);
-  }
-  return out;
+  return normalizeTags(kvsToObject(kvs));
 }
 
 function getServiceName(kvs: OtlpKeyValue[] | undefined): string {

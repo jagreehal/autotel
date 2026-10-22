@@ -31,7 +31,7 @@ import {
 } from '../../modules/query-filters';
 import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
-import { normalizeTagValue } from '../span-mapping';
+import { normalizeTags } from '../span-mapping';
 
 /**
  * Cloudflare Observability: traces and Workers logs over the unified SQL API
@@ -437,23 +437,12 @@ function explainFailure(error: unknown): unknown {
   return error.body ? new Error(`${error.message} — ${error.body}`) : error;
 }
 
-function tagsOf(
-  attributes: Record<string, unknown> | null | undefined,
-): Record<string, ReturnType<typeof normalizeTagValue>> {
-  return Object.fromEntries(
-    Object.entries(attributes ?? {}).map(([key, value]) => [
-      key,
-      normalizeTagValue(value),
-    ]),
-  );
-}
-
 /** Group a flat span list into traces, preserving attributes verbatim. */
 export function rowsToTraces(rows: CloudflareSpanRow[]): TraceRecord[] {
   const byTraceId = new Map<string, SpanRecord[]>();
   for (const row of rows) {
     const error = row.error || undefined;
-    const tags = tagsOf(row.attributes);
+    const tags = normalizeTags(row.attributes);
     if (row.httpStatus != null && tags['http.response.status_code'] == null) {
       tags['http.response.status_code'] = row.httpStatus;
     }
@@ -482,7 +471,7 @@ export function rowsToTraces(rows: CloudflareSpanRow[]): TraceRecord[] {
 }
 
 export function rowToLog(row: CloudflareLogRow): LogRecord {
-  const attributes = tagsOf(row.attributes);
+  const attributes = normalizeTags(row.attributes);
   if (row.rayId) attributes['cloudflare.ray_id'] = row.rayId;
   const log: LogRecord = {
     timestampUnixMs: parseCloudflareTime(row.timestamp),

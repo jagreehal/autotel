@@ -100,6 +100,12 @@ export interface RawRouteEntry {
   /** Repo-relative, POSIX separators — stable across machines in the map file. */
   file: string;
   handler: SourceLocation | null;
+  /**
+   * Served through autotel middleware registered on its app or an app it is
+   * mounted under, so the integration creates its request span. Scan-time
+   * only: not written to the map.
+   */
+  ambient?: boolean;
 }
 
 /** A scanned entry point with checks, sensitivity, and score attached. */

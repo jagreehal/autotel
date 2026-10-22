@@ -467,7 +467,13 @@ function extractOtlpValue(value: OtlpAttribute['value']): TagValue | undefined {
     if (Number.isFinite(parsed)) return parsed;
   }
   if (value.doubleValue !== undefined) return value.doubleValue;
-  if (value.arrayValue) return JSON.stringify(value.arrayValue.values ?? []);
+  if (value.arrayValue) {
+    return JSON.stringify(
+      (value.arrayValue.values ?? []).map((item) =>
+        extractOtlpValue(item as OtlpAttribute['value']),
+      ),
+    );
+  }
   return undefined;
 }
 

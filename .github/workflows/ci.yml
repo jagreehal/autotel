@@ -8,12 +8,26 @@ on:
     branches:
       - main
 
+# A newer push to a PR supersedes the run in progress. Each commit on main
+# gets its own group, so every one of them keeps its run.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      # On a PR, lint, type-check and test only the packages it changed and
+      # the ones depending on them. main always checks everything.
+      AFFECTED: ${{ github.event_name == 'pull_request' && '--affected' || '' }}
+      TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # `--affected` diffs against the base branch, so it needs history.
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v6
 
@@ -24,6 +38,16 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Turbo's local cache, carried between runs: a package whose inputs did
+      # not change replays its build, lint, type-check and test from here.
+      # main saves it; PRs only read it.
+      - name: Restore Turbo cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
 
       - name: Check new packages are bootstrapped on npm
         run: node scripts/check-publishable.mjs
@@ -38,24 +62,57 @@ jobs:
         env:
           NODE_ENV: production
 
+      - name: Compare bundle sizes against baseline
+        run: node scripts/check-bundle-size.mjs
+
       - name: Build Storybook (autotel-devtools)
         run: pnpm turbo run build-storybook --filter=autotel-devtools
 
       - name: Lint
-        run: pnpm lint
+        run: pnpm turbo run lint ${{ env.AFFECTED }}
 
       - name: Type check
-        run: pnpm type-check
+        run: pnpm turbo run type-check ${{ env.AFFECTED }}
+
+      # Browsers are keyed on the lockfile, which pins every Playwright
+      # version. The OS packages they need are not cached, so a hit still
+      # installs those.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: |
           pnpm --filter @jagreehal/example-playwright-e2e exec playwright install --with-deps chromium
           pnpm --filter autotel-devtools exec playwright install --with-deps chromium
 
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: |
+          pnpm --filter @jagreehal/example-playwright-e2e exec playwright install-deps chromium
+          pnpm --filter autotel-devtools exec playwright install-deps chromium
+
       - name: Run tests
-        run: pnpm test
+        run: pnpm turbo run test ${{ env.AFFECTED }}
         env:
           NODE_ENV: test
+
+      # Turbo never evicts its cache, so entries no run has written for a week
+      # go before main saves it.
+      - name: Prune Turbo cache
+        if: github.event_name == 'push'
+        run: find .turbo/cache -type f -mtime +7 -delete
+
+      - name: Save Turbo cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
 
   mongoose-integration:
     runs-on: ubuntu-latest

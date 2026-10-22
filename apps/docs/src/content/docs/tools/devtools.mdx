@@ -40,7 +40,8 @@ resource, error aggregation with clickable stack frames
 LLM and agent runs ([see below](#genai-runs)), and a **Security** lens that
 surfaces spans carrying the `security.*` schema (see
 [Security Observability](/autotel/integrations/security/)). Search debounces at
-300ms.
+300ms. **Clear** empties the server's store along with the browser's, and
+clicking the **Traces** tab returns to the trace list.
 
 **CLI options:**
 
@@ -179,10 +180,13 @@ glance:
   what to do", "a tool is real code the agent ran", "the model writes the
   answer"). Auto-play, step with the arrow keys / Space, Esc to exit; clicking a
   span jumps the tour to that step.
-- **Trace**: decomposes the selected run into a depth-indented tree of what
-  happened inside it: each model call broken into its reasoning, the tools it
-  called (with arguments and results) and the text it wrote, with nested
-  sub-agents underneath. A **Timeline** view shows the same run as time-aligned
+- **Trace**: draws the selected run as a live waterfall. Each model call,
+  broken into its reasoning, the tools it called (with arguments and results)
+  and the text it wrote, sits on a time axis with its duration and cost, with
+  nested sub-agents underneath. Rows fold, the slowest call and failed calls
+  are marked, and a run in progress draws its open parents as running. The tree
+  takes the keyboard: arrow keys move and fold, Enter opens the span. A
+  **Timeline** view shows the same run as time-aligned
   lanes.
 
 ## Coding agents
@@ -278,7 +282,9 @@ parent = NULL
 ```
 
 Any field that is not a declared column is looked up as a span attribute, so
-everything a service emits is queryable without being declared anywhere. Values
+everything a service emits is queryable without being declared anywhere.
+Nested attributes match by dotted key: `bound.id = 2` finds
+`{ bound: { id: 2 } }`. Values
 always become bound parameters and identifiers always come from a schema, so no
 text you type reaches the SQL string.
 

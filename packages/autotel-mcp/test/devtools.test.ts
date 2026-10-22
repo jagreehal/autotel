@@ -404,6 +404,33 @@ describe('DevtoolsBackend', () => {
     ]);
   });
 
+  it('searchLogs flattens nested log attributes to dotted keys', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({
+        logs: [
+          {
+            id: 'l1',
+            timestamp: 1000,
+            body: 'child request',
+            attributes: {
+              bound: { id: 2 },
+              nested: { id: 1, deep: { ok: true } },
+              list: [{ id: 3 }],
+            },
+          },
+        ],
+        nextCursor: null,
+      }),
+    );
+    const result = await new DevtoolsBackend(BASE).searchLogs({});
+    expect(result.items[0]?.attributes).toEqual({
+      'bound.id': 2,
+      'nested.id': 1,
+      'nested.deep.ok': true,
+      list: '[{"id":3}]',
+    });
+  });
+
   it('searchLogs and listMetrics report unsupported on a devtools without the APIs', async () => {
     const backend = new DevtoolsBackend(BASE);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(

@@ -131,6 +131,8 @@ npx autotel-cli map --format github --limit 10   # GitHub Actions annotations on
 
 Hono apps map under their full paths: `.openapi(createRoute(...))` from `@hono/zod-openapi`, `describeRoute` from `hono-openapi`, sub-apps mounted with `.route(prefix, app)` or `.basePath()` across files, paths built from constants, and tsconfig `paths` aliases. On a Next.js app, a Hono app served from a catch-all (`export const GET = handle(app)` from `hono/vercel`) reports its own routes.
 
+`autotelMiddleware()` credits every route of the app it is registered on, including inside app factories, through aliases, and on parent apps, when its path pattern matches and it runs before the route. `.use()` calls stay out of the route map. The redaction check follows `init()` into the helpers it calls.
+
 Writes `autotel.map.json` next to `package.json`; commit it so `--baseline` has something to compare against. For the checks, scoring, and waiver comments, use skill `find-observability-gaps`.
 
 ---

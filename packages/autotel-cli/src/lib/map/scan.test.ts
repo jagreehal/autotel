@@ -722,7 +722,6 @@ describe('hono route composition', () => {
         `,
       }),
     ).toEqual([
-      '* /api/v1/orders/* src/orders.ts',
       'GET /api/v1/orders/:id src/orders.ts',
       'GET /api/v1/ping src/v1.ts',
     ]);
@@ -763,11 +762,7 @@ describe('hono route composition', () => {
           app.route('/api', more);
         `,
       }),
-    ).toEqual([
-      '* /api/* src/index.ts',
-      'GET /api/users src/index.ts',
-      'POST /api/users src/index.ts',
-    ]);
+    ).toEqual(['GET /api/users src/index.ts', 'POST /api/users src/index.ts']);
   });
 
   it('follows a default export that is a fluent chain on another app', () => {
@@ -1030,5 +1025,295 @@ describe('Hono inside a Next.js catch-all', () => {
       'hono GET /api/health src/server/app.ts',
       'hono GET /api/orders/:id src/server/orders.ts',
     ]);
+  });
+});
+
+describe('middleware and init() found outside the entry files', () => {
+  function scanFiles(files: Record<string, string>) {
+    const root = projectFiles(files);
+    return scan({
+      projectRoot: root,
+      framework: 'hono',
+      project: collectProjectFacts(root),
+    });
+  }
+  const traceOf = (result: ReturnType<typeof scan>) =>
+    result.map.routes.map(
+      (route) =>
+        `${route.method} ${route.path} ${route.checks['trace']?.status}`,
+    );
+
+  it('credits autotel middleware registered inline on the app', () => {
+    expect(
+      traceOf(
+        scanFiles({
+          'src/routes/users.ts': `
+            import { Hono } from 'hono';
+            import { autotelMiddleware } from 'autotel-adapters/hono';
+            const app = new Hono();
+            app.use('*', autotelMiddleware());
+            app.get('/users/:id', (c) => c.json({}));
+          `,
+        }),
+      ),
+    ).toEqual(['GET /users/:id pass']);
+  });
+
+  it('credits autotel middleware registered inside an app factory', () => {
+    const result = scanFiles({
+      'src/lib/create-app.ts': `
+        import { Hono } from 'hono';
+        import { autotelMiddleware as observe } from 'autotel-adapters/hono';
+        export function createApp() {
+          const app = new Hono();
+          const mw = observe();
+          app.use(mw);
+          return app;
+        }
+        export const createBareApp = () => new Hono();
+      `,
+      'src/routes/users.ts': `
+        import { createApp, createBareApp } from '../lib/create-app.js';
+        const app = createApp();
+        app.get('/users/:id', (c) => c.json({}));
+        const bare = createBareApp();
+        bare.get('/status', (c) => c.text('ok'));
+      `,
+    });
+    expect(traceOf(result).toSorted()).toEqual([
+      'GET /status fail',
+      'GET /users/:id pass',
+    ]);
+    expect(result.map.routes[0]).not.toHaveProperty('ambient');
+  });
+
+  it('credits a sub-app through middleware on the app it is mounted under', () => {
+    expect(
+      traceOf(
+        scanFiles({
+          'src/lib/create-app.ts': `
+            import { Hono } from 'hono';
+            export const createApp = () => new Hono();
+          `,
+          'src/routes/users.ts': `
+            import { createApp } from '../lib/create-app.js';
+            export const users = createApp();
+            users.get('/:id', (c) => c.json({}));
+          `,
+          'src/routes/orders.ts': `
+            import { createApp } from '../lib/create-app.js';
+            export const orders = createApp();
+            orders.get('/:id', (c) => c.json({}));
+          `,
+          'src/http.ts': `
+            import { Hono } from 'hono';
+            import { autotelMiddleware } from 'autotel-adapters/hono';
+            import { users } from './routes/users.js';
+            import { orders } from './routes/orders.js';
+            const app = new Hono();
+            app.use('*', autotelMiddleware());
+            app.route('/users', users);
+            const other = new Hono();
+            other.route('/orders', orders);
+          `,
+        }),
+      ).toSorted(),
+    ).toEqual(['GET /orders/:id fail', 'GET /users/:id pass']);
+  });
+
+  it('credits middleware only for the routes its path matches', () => {
+    expect(
+      traceOf(
+        scanFiles({
+          'src/routes/site.ts': `
+            import { Hono } from 'hono';
+            import { autotelMiddleware } from 'autotel-adapters/hono';
+            const app = new Hono();
+            app.use('/public/*', autotelMiddleware());
+            app.get('/public', (c) => c.text('index'));
+            app.get('/public/:slug', (c) => c.text('page'));
+            app.get('/private', (c) => c.text('secret'));
+          `,
+        }),
+      ).toSorted(),
+    ).toEqual([
+      'GET /private fail',
+      'GET /public pass',
+      'GET /public/:slug pass',
+    ]);
+  });
+
+  it('credits middleware only when it runs for every URL the route accepts', () => {
+    expect(
+      traceOf(
+        scanFiles({
+          'src/routes/users.ts': `
+            import { Hono } from 'hono';
+            import { autotelMiddleware } from 'autotel-adapters/hono';
+            const app = new Hono();
+            app.use('/users/:id', autotelMiddleware());
+            app.use('/api/*', autotelMiddleware());
+            app.get('/users/:id', (c) => c.json({}));
+            app.get('/users/:id/orders', (c) => c.json({}));
+            app.get('/users/*', (c) => c.json({}));
+            app.get('/users/:id?', (c) => c.json({}));
+            app.get('/api', (c) => c.json({}));
+            app.get('/api/files/*', (c) => c.json({}));
+          `,
+        }),
+      ).toSorted(),
+    ).toEqual([
+      'GET /api pass',
+      'GET /api/files/* pass',
+      'GET /users/* fail',
+      'GET /users/:id pass',
+      'GET /users/:id/orders fail',
+      'GET /users/:id? fail',
+    ]);
+  });
+
+  it('credits middleware only for routes registered after it', () => {
+    expect(
+      traceOf(
+        scanFiles({
+          'src/routes/site.ts': `
+            import { Hono } from 'hono';
+            import { autotelMiddleware } from 'autotel-adapters/hono';
+            const app = new Hono();
+            app.get('/early', (c) => c.text('a'));
+            app.use(autotelMiddleware());
+            app.get('/late', (c) => c.text('b'));
+          `,
+        }),
+      ).toSorted(),
+    ).toEqual(['GET /early fail', 'GET /late pass']);
+  });
+
+  it('credits a mount only when the middleware runs before it, under its path', () => {
+    expect(
+      traceOf(
+        scanFiles({
+          'src/routes/users.ts': `
+            import { Hono } from 'hono';
+            export const users = new Hono();
+            users.get('/:id', (c) => c.json({}));
+          `,
+          'src/routes/orders.ts': `
+            import { Hono } from 'hono';
+            export const orders = new Hono();
+            orders.get('/:id', (c) => c.json({}));
+          `,
+          'src/http.ts': `
+            import { Hono } from 'hono';
+            import { autotelMiddleware } from 'autotel-adapters/hono';
+            import { users } from './routes/users.js';
+            import { orders } from './routes/orders.js';
+            const app = new Hono();
+            app.route('/orders', orders);
+            app.use('/users/*', autotelMiddleware());
+            app.route('/users', users);
+          `,
+        }),
+      ).toSorted(),
+    ).toEqual(['GET /orders/:id fail', 'GET /users/:id pass']);
+  });
+
+  it('credits middleware registered in the file the app is imported from', () => {
+    expect(
+      traceOf(
+        scanFiles({
+          'src/lib/app.ts': `
+            import { Hono } from 'hono';
+            import { autotelMiddleware } from 'autotel-adapters/hono';
+            export const app = new Hono();
+            app.use('*', autotelMiddleware());
+          `,
+          'src/routes/users.ts': `
+            import { app } from '../lib/app.js';
+            app.get('/users/:id', (c) => c.json({}));
+          `,
+        }),
+      ),
+    ).toEqual(['GET /users/:id pass']);
+  });
+
+  it('gives .use() no entry of its own', () => {
+    const result = scanFiles({
+      'src/routes/users.ts': `
+        import { Hono } from 'hono';
+        const app = new Hono();
+        app.use('*', async (_c, next) => next());
+        app.use('/admin/*', async (_c, next) => next());
+        app.get('/users/:id', (c) => c.json({}));
+      `,
+    });
+    expect(result.map.routes.map((route) => route.path)).toEqual([
+      '/users/:id',
+    ]);
+  });
+
+  const SENSITIVE_ROUTE = {
+    'src/routes/payments.ts': `
+      import { Hono } from 'hono';
+      const app = new Hono();
+      app.post('/payments/:id/card', (c) => c.json({}));
+    `,
+  };
+  const redactionOf = (result: ReturnType<typeof scan>) =>
+    result.suggestions.find((suggestion) => suggestion.id === 'redaction')
+      ?.message;
+
+  it('follows init() into a helper the instrumentation file imports', () => {
+    expect(
+      redactionOf(
+        scanFiles({
+          ...SENSITIVE_ROUTE,
+          'src/instrumentation.ts': `
+            import { initTelemetry } from './telemetry.js';
+            initTelemetry();
+          `,
+          'src/telemetry.ts': `
+            import { init } from 'autotel';
+            export function initTelemetry() {
+              init({ service: 'r', attributeRedactor: 'default' });
+            }
+          `,
+        }),
+      ),
+    ).toBeUndefined();
+
+    expect(
+      redactionOf(
+        scanFiles({
+          ...SENSITIVE_ROUTE,
+          'src/instrumentation.ts': `
+            import { initTelemetry } from './telemetry.js';
+            initTelemetry();
+          `,
+          'src/telemetry.ts': `
+            import { init } from 'autotel';
+            export const initTelemetry = () => init({ service: 'r' });
+          `,
+        }),
+      ),
+    ).toBe(
+      'sensitive routes but init() sets no attributeRedactor (src/telemetry.ts)',
+    );
+  });
+
+  it('says init() was not found rather than that it lacks a redactor', () => {
+    expect(
+      redactionOf(
+        scanFiles({
+          ...SENSITIVE_ROUTE,
+          'src/instrumentation.ts': `
+            import { initTelemetry } from '@acme/telemetry';
+            initTelemetry();
+          `,
+        }),
+      ),
+    ).toBe(
+      "sensitive routes, and couldn't find init() to check for attributeRedactor (followed from src/instrumentation.ts)",
+    );
   });
 });

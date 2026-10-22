@@ -3,11 +3,16 @@
  *
  * Keeps or drops whole traces, decided once the trace has finished here.
  *
+ * "Trace" here means a local root (no parent, or a remote one) and every span
+ * started under it. One trace id can hold several: two requests a browser
+ * sent under one page trace, or Next.js's `next.bubble` span beside the real
+ * `BaseServer.handleRequest`. Each is decided on its own, so a verdict on one
+ * never reaches its siblings.
+ *
  * How it works:
- * 1. Every span of a trace is buffered until the trace's local root (no
- *    parent, or a remote one) has ended and every span started under it has
- *    ended too, or `traceTimeoutMs` passes. Spans that end after the decision
- *    follow it.
+ * 1. Every span is buffered until its local root has ended and every span
+ *    started under it has ended too, or `traceTimeoutMs` passes. Spans that
+ *    end after the decision follow it.
  * 2. The trace is kept when any span carries `autotel.sampling.tail.keep =
  *    true`: a `trace()` wrapper kept it (error, slow, baseline) or the code
  *    called `forceKeep()`.
@@ -19,7 +24,8 @@
  * Children follow their trace, so a dropped trace leaves no orphan spans.
  *
  * `spanFilter` drops are applied here too when a FilteringSpanProcessor wraps
- * this one: a filtered local root drops its whole trace, and the children of
+ * this one: a filtered local root drops its own tree (not its siblings under
+ * the same remote parent), and the children of
  * any other filtered span are re-parented to its nearest kept ancestor.
  *
  * The processor holds spans only when something needs the whole trace: a
@@ -72,6 +78,11 @@ interface PendingTrace {
   spans: ReadableSpan[];
   /** Spans started and not yet ended. */
   open: number;
+  /**
+   * Span id of the local root this trace is keyed on. Absent for spans no
+   * `onStart` keyed, grouped by trace id with any local root as the root.
+   */
+  rootId?: string;
   root?: ReadableSpan;
   deadline: number;
 }
@@ -84,6 +95,15 @@ interface Verdict {
 
 /** Verdicts remembered for spans that end after their trace was decided. */
 const MAX_DECIDED_TRACES = 10_000;
+
+/** A local trace's key: its trace id and the span id of its local root. */
+function traceKey(span: Span): string {
+  return spanKey(span.spanContext());
+}
+
+function spanKey({ traceId, spanId }: SpanContext): string {
+  return `${traceId}:${spanId}`;
+}
 
 function isLocalRoot(span: ReadableSpan): boolean {
   const parent = span.parentSpanContext;
@@ -99,6 +119,15 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
   private readonly decided = new Map<string, Verdict>();
   /** Span ids a wrapping `spanFilter` rejected, consumed when the span ends. */
   private readonly filtered = new Set<string>();
+  /**
+   * The local trace each span belongs to, by `traceId:spanId`, read when a
+   * child starts and when the span ends. Kept past the span's end, since a
+   * child may start after its parent ended, and freed with its trace's
+   * verdict.
+   */
+  private readonly keyOf = new Map<string, string>();
+  /** The spans keyed under each local trace, to free them with it. */
+  private readonly spansOf = new Map<string, string[]>();
   private buffered = 0;
   private filtering = false;
   private sweeper?: ReturnType<typeof setInterval>;
@@ -138,13 +167,26 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
   onStart(span: Span, parentContext: Context): void {
     this.wrappedProcessor.onStart(span, parentContext);
     if (!this.buffering) return;
-    const { traceId } = span.spanContext();
-    if (!this.decided.has(traceId)) this.pendingTrace(traceId).open++;
+    // Read by id, so a parent passed as a bare span context counts. A remote
+    // parent, or a local one started before buffering, was never keyed: the
+    // span is a local root of its own.
+    const parent = span.parentSpanContext;
+    const key =
+      (parent && !parent.isRemote && this.keyOf.get(spanKey(parent))) ||
+      traceKey(span);
+    const id = traceKey(span);
+    this.keyOf.set(id, key);
+    const ids = this.spansOf.get(key);
+    if (ids) ids.push(id);
+    else this.spansOf.set(key, [id]);
+    if (!this.decided.has(key)) this.pendingTrace(key).open++;
   }
 
   onEnd(span: ReadableSpan): void {
-    const { traceId } = span.spanContext();
-    const verdict = this.decided.get(traceId);
+    const { spanId, traceId } = span.spanContext();
+    // A span started before buffering was never keyed; group it by trace id.
+    const key = this.keyOf.get(`${traceId}:${spanId}`) ?? traceId;
+    const verdict = this.decided.get(key);
     if (verdict) {
       this.endLate(span, verdict);
       return;
@@ -157,15 +199,17 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
       return;
     }
 
-    const trace = this.pendingTrace(traceId);
+    const trace = this.pendingTrace(key);
     trace.spans.push(span);
     this.buffered++;
     // A span started before this processor existed was never counted.
     trace.open = Math.max(0, trace.open - 1);
-    if (isLocalRoot(span)) trace.root = span;
+    if (trace.rootId ? spanId === trace.rootId : isLocalRoot(span)) {
+      trace.root = span;
+    }
 
     if (trace.root && trace.open === 0) {
-      this.decide(traceId, trace);
+      this.decide(key, trace);
       return;
     }
     while (this.buffered > this.maxBufferedSpans) {
@@ -176,22 +220,23 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
 
   /** Sweep expired traces. Exposed for tests; the processor runs it itself. */
   sweep(now = Date.now()): void {
-    for (const [traceId, trace] of this.pending) {
+    for (const [key, trace] of this.pending) {
       // Insertion order is creation order, so deadlines ascend.
       if (trace.deadline > now) break;
-      this.decide(traceId, trace, trace.root ? undefined : true);
+      this.decide(key, trace, trace.root ? undefined : true);
     }
   }
 
-  private pendingTrace(traceId: string): PendingTrace {
-    let trace = this.pending.get(traceId);
+  private pendingTrace(key: string): PendingTrace {
+    let trace = this.pending.get(key);
     if (!trace) {
       trace = {
         spans: [],
         open: 0,
+        rootId: key.includes(':') ? key.slice(key.indexOf(':') + 1) : undefined,
         deadline: Date.now() + this.traceTimeoutMs,
       };
-      this.pending.set(traceId, trace);
+      this.pending.set(key, trace);
       this.startSweeper();
     }
     return trace;
@@ -207,8 +252,8 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
   }
 
   /** Decide a trace and release its spans. `failOpen` keeps it unjudged. */
-  private decide(traceId: string, trace: PendingTrace, failOpen?: true): void {
-    this.pending.delete(traceId);
+  private decide(key: string, trace: PendingTrace, failOpen?: true): void {
+    this.pending.delete(key);
     this.buffered -= trace.spans.length;
 
     const reparent = new Map<string, SpanContext | undefined>();
@@ -226,9 +271,12 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
         !reparent.has(root.spanContext().spanId) &&
         this.keepTrace(root, trace.spans));
 
-    this.decided.set(traceId, { keep, reparent });
+    this.decided.set(key, { keep, reparent });
     if (this.decided.size > MAX_DECIDED_TRACES) {
-      this.decided.delete(this.decided.keys().next().value!);
+      const evicted = this.decided.keys().next().value!;
+      this.decided.delete(evicted);
+      for (const id of this.spansOf.get(evicted) ?? []) this.keyOf.delete(id);
+      this.spansOf.delete(evicted);
     }
     if (!keep) return;
     for (const span of trace.spans) {
@@ -297,13 +345,15 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
   shutdown(): Promise<void> {
     // Nothing more will end. Decide what has a root on what it has, and
     // export the rest (no root ever ended) rather than lose it.
-    for (const [traceId, trace] of this.pending) {
-      this.decide(traceId, trace, trace.root ? undefined : true);
+    for (const [key, trace] of this.pending) {
+      this.decide(key, trace, trace.root ? undefined : true);
     }
     clearInterval(this.sweeper);
     this.sweeper = undefined;
     this.decided.clear();
     this.filtered.clear();
+    this.keyOf.clear();
+    this.spansOf.clear();
     return this.wrappedProcessor.shutdown();
   }
 }

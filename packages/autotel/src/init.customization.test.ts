@@ -642,6 +642,31 @@ describe('init() customization', () => {
     expect(sdkInstances.at(-1)!.options.logRecordProcessors).toEqual([]);
   });
 
+  it('redacts logs sent through a caller-supplied log processor', async () => {
+    const { init, sdkInstances } = await loadInitWithMocks();
+    const received: Array<{ attributes: Record<string, unknown> }> = [];
+    const own = {
+      onEmit: (record: { attributes: Record<string, unknown> }) =>
+        received.push(record),
+      shutdown: () => Promise.resolve(),
+      forceFlush: () => Promise.resolve(),
+    } as unknown as LogRecordProcessor;
+
+    init({
+      service: 'own-log-processor',
+      metrics: false,
+      attributeRedactor: 'default',
+      logRecordProcessors: [own],
+    });
+    const [wrapped] = sdkInstances.at(-1)!.options.logRecordProcessors!;
+    wrapped!.onEmit({
+      body: 'login',
+      attributes: { password: 'hunter2' },
+    } as never);
+
+    expect(received[0]?.attributes).toEqual({ password: '[REDACTED]' });
+  });
+
   it('still builds a log processor from a configured endpoint', async () => {
     const { init, sdkInstances } = await loadInitWithMocks();
 

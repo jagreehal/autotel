@@ -12,6 +12,7 @@ import {
   toRouteAdapterOptions,
   type RouteAdapterOptions,
 } from './core';
+import { defaultSpanName } from './toolkit/integration';
 
 export interface FastifyRequestLike {
   method?: string;
@@ -47,18 +48,21 @@ function headerValue(
   return typeof value === 'string' ? value : undefined;
 }
 
+function routeTemplate(request: FastifyRequestLike): string | undefined {
+  return request.routeOptions?.url ?? request.routerPath;
+}
+
 function enrichFromRequest(
   request?: FastifyRequestLike,
 ): Record<string, unknown> | undefined {
   if (!request) return undefined;
 
-  const route = request.routeOptions?.url ?? request.routerPath ?? request.url;
   const requestId = request.id ?? headerValue(request.headers, 'x-request-id');
 
   return {
     'http.request.method': request.method,
     'url.full': request.url,
-    'http.route': route,
+    'http.route': routeTemplate(request),
     'http.request.id': requestId,
   };
 }
@@ -97,7 +101,8 @@ export function withAutotel<
     const spanName =
       typeof options?.spanName === 'function'
         ? options.spanName(request)
-        : (options?.spanName ?? `fastify.${request.method ?? 'request'}`);
+        : (options?.spanName ??
+          defaultSpanName(request.method, routeTemplate(request)));
 
     const route =
       request.routeOptions?.url ?? request.routerPath ?? request.url ?? '/';

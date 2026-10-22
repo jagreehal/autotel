@@ -10,7 +10,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createTraceQuery, createLogQuery } from '../signalQuery.svelte';
-import { timeWindowSignal } from '../store.svelte';
+import { flushSync } from 'svelte';
+import { clearAllData, timeWindowSignal } from '../store.svelte';
 import { DEFAULT_SELECTION } from '../timeWindow';
 import type { TraceData } from '../types';
 
@@ -465,5 +466,22 @@ describe('the time window is shared, not per-controller', () => {
 
     logs.setWindow({ type: 'preset', preset: '1h' });
     expect(traces.window.value).toEqual({ type: 'preset', preset: '1h' });
+  });
+});
+
+describe('clearing captured data', () => {
+  it('drops the rows on screen when Clear wipes the data they came from', async () => {
+    const { controller } = make([
+      { body: { traces: [trace('t1')], nextCursor: 'c1' } },
+    ]);
+    await controller.refresh();
+    expect(controller.results.value).toHaveLength(1);
+
+    clearAllData();
+    flushSync();
+
+    expect(controller.results.value).toEqual([]);
+    expect(controller.nextCursor.value).toBeNull();
+    controller.dispose();
   });
 });

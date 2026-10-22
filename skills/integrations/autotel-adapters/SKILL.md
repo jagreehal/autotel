@@ -64,14 +64,13 @@ export const GET = withAutotel(async (request) => {
 import { withAutotel } from 'autotel-adapters/next';
 
 const autotelOptions = {
-  spanName: (req) => `api ${new URL(req?.url ?? '/').pathname}`,
   enrichRequest: (req) => ({ 'tenant.id': req?.headers?.get('x-tenant-id') }),
 };
 
 export const withTracing = (handler) => withAutotel(handler, autotelOptions);
 ```
 
-`withAutotel` accepts any function whose first argument is `NextRequestLike`. The `spanName` option can be a static string or a function receiving the request. The auto-enrichment sets `http.request.method`, `url.full`, `http.route`, and `http.request.header.x-request-id`.
+`withAutotel` accepts any function whose first argument is `NextRequestLike`. The `spanName` option can be a static string or a function receiving the request. The auto-enrichment sets `http.request.method`, `url.full`, `url.path`, and `http.request.header.x-request-id`. Next exposes no matched route, so the default span name is `{METHOD}`. To group by route, pass the template as `http.route` through `enrichRequest` and a matching `spanName` (`'GET /api/orders/[id]'`) per handler. Never put the raw path in `http.route` or the span name: it explodes cardinality.
 
 `redirect()` and `notFound()` work by throwing. `withAutotel` asks Next itself to classify each throw and rethrows navigation signals untouched, so they leave no phantom error on the span. This covers signals wrapped in `cause`. Do not add your own `NEXT_REDIRECT` message matching.
 
@@ -101,7 +100,7 @@ export default defineEventHandler(
 );
 ```
 
-`withAutotelEventHandler` reads `event.method`, `event.path`, and `event.context.requestId` automatically. Pass options as the second argument to share config across handlers.
+`withAutotelEventHandler` reads `event.method`, `event.path`, `event.context.matchedRoute`, and `event.context.requestId` automatically. Pass options as the second argument to share config across handlers.
 
 ### Cloudflare Workers
 
@@ -117,7 +116,7 @@ export default {
 };
 ```
 
-Cloudflare stores the logger in a `WeakMap` keyed on the request object (no `AsyncLocalStorage` available in Workers). Auto-enrichment also sets `cloudflare.country`, `cloudflare.colo`, and `cloudflare.city` from `request.cf`, and falls back to `cf-ray` for the request id. The `enrichRequest` option receives `(request, env, ctx)` for access to environment bindings; `spanName` can be a function of `(request, env)`.
+Cloudflare stores the logger in a `WeakMap` keyed on the request object (no `AsyncLocalStorage` available in Workers). Auto-enrichment also sets `cloudflare.country`, `cloudflare.colo`, and `cloudflare.city` from `request.cf`, and falls back to `cf-ray` for the request id. Like Next, it sets `url.path` only: pass `http.route` through `enrichRequest` and a name through `spanName`. The `enrichRequest` option receives `(request, env, ctx)` for access to environment bindings; `spanName` can be a function of `(request, env)`.
 
 ### Hono
 
@@ -169,7 +168,7 @@ app.get(
 );
 ```
 
-Wraps one route handler `(req, res, next?)`. Default span name `express.<METHOD>`. Options: `spanName`, `enrichRequest`, `requestLoggerOptions`, `autoEmit`, plus route filtering.
+Wraps one route handler `(req, res, next?)`. Default span name `{METHOD} {req.route.path}`. Options: `spanName`, `enrichRequest`, `requestLoggerOptions`, `autoEmit`, plus route filtering.
 
 ### Fastify
 
@@ -185,7 +184,7 @@ fastify.get(
 );
 ```
 
-Same option shape as Express; default span name `fastify.<METHOD>`. Uses `request.id` as the request id when present.
+Same option shape as Express; default span name `{METHOD} {routeOptions.url}`. Uses `request.id` as the request id when present.
 
 ### NestJS
 
@@ -200,7 +199,7 @@ import { useLogger } from 'autotel-adapters/nestjs';
 useLogger().info('loading user');
 ```
 
-`useLogger()` takes no argument and throws outside a request handled by the interceptor. Options go to the constructor: `new AutotelInterceptor({ enrichRequest })`.
+`useLogger()` takes no argument and throws outside a request handled by the interceptor. Options go to the constructor: `new AutotelInterceptor({ enrichRequest })`. The span is named `{METHOD} {route}` and records `Controller.handler` as `code.function.name`.
 
 ### SvelteKit
 
@@ -256,6 +255,13 @@ const useLogger = createUseLogger<MyContext>({
   enrich: (ctx) => ({ 'tenant.id': ctx.tenantId }),
 });
 ```
+
+### Span names, routes, and status
+
+- `http.route` is the matched route template (`/users/:id`); the raw path is `url.path`.
+- Request spans are named `{METHOD} {route}`, or `{METHOD}` when no route matched.
+- A 5xx response sets span status ERROR; a 4xx leaves it unset. Hono records the error it caught on `c.error`.
+- With `autoEmit: false`, `markOutcome({ status, error })` records the outcome on the span without emitting the snapshot. `finishResponse(response, { error })` passes an error the framework caught.
 
 ## Common Mistakes
 

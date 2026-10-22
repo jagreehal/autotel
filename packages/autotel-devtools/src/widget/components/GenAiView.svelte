@@ -71,6 +71,7 @@
     setSelectedTrace,
     openSpanInWaterfall,
     genaiQuerySignal,
+    windowedTracesSignal,
   } from '../store.svelte';
   import ModelHeader from './genai/ModelHeader.svelte';
   import ConversationPanel from './genai/ConversationPanel.svelte';
@@ -81,6 +82,7 @@
   import { summarizeRun } from '../genai/summary';
   import { buildTour } from '../genai/narration';
   import { buildRunTrace } from '../genai/trace';
+  import { runningParents } from '../genai/waterfall';
   import SearchInput from './SearchInput.svelte';
   import { useListKeyboardNav } from './listNav.svelte';
   import { matchesNeedle } from '../utils/textMatch';
@@ -143,7 +145,30 @@
   // both the summary strip and the guided tour to one run.
   const runRows = $derived(runRowsFor(rows, selected?.normalized));
   const runSummary = $derived(summarizeRun(runRows.map((r) => r.normalized)));
-  const runTrace = $derived(buildRunTrace(runRows.map((r) => r.normalized)));
+
+  // A run is live while a parent its spans point at has not arrived and the
+  // trace is still producing spans: OTel exports a span when it ends, so that
+  // parent is most likely still running. The clock only ticks while that holds.
+  let now = $state(Date.now());
+  const runTraces = $derived.by(() => {
+    const ids = new Set(runRows.map((r) => r.traceId));
+    return windowedTracesSignal.value.filter((t) => ids.has(t.traceId));
+  });
+  const runningIds = $derived(runningParents(runTraces, now));
+  // A boolean, so the effect restarts only when the run turns live or quiet,
+  // not on every tick of the clock it drives.
+  const ticking = $derived(mode === 'trace' && runningIds.size > 0);
+  $effect(() => {
+    if (!ticking) return;
+    const timer = setInterval(() => (now = Date.now()), 250);
+    return () => clearInterval(timer);
+  });
+  const runTrace = $derived(
+    buildRunTrace(
+      runRows.map((r) => r.normalized),
+      { runningParentIds: runningIds },
+    ),
+  );
 
   // Guided tour ("Explain this run") — steps through the run's spans in order
   // with plain-language narration. Driving selectedSpanId reuses the existing
@@ -287,6 +312,7 @@
       {:else}
         <RunTraceView
           nodes={runTrace}
+          {now}
           selected={selected?.normalized ?? null}
           onSelectSpan={(span) => {
             select(span);

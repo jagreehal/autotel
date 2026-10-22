@@ -1472,7 +1472,7 @@ export class DevtoolsStore {
     attributes: SpanAttributes,
     timestamp: number,
   ): void {
-    for (const [key, value] of Object.entries(attributes)) {
+    for (const [key, value] of indexedLeaves(attributes)) {
       const encoded = JSON.stringify(value);
       statement.run(signal, key, encoded, String(value), timestamp);
       occurrence.run(signal, entityId, key, encoded);
@@ -2104,5 +2104,27 @@ function decodeCursor(raw: string | undefined): Cursor | null {
     return { startTime, traceId };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Attribute leaves under dotted keys: a nested `{ nested: { id: 1 } }` (a pino
+ * child binding, an OTLP kvlist) is indexed as `nested.id = 1`, the key
+ * autotel-mcp shows it under, so `nested.id = 1` finds the row. An array stays
+ * one leaf.
+ */
+function* indexedLeaves(
+  attributes: Record<string, unknown>,
+  prefix = '',
+): Generator<[string, unknown]> {
+  for (const [key, value] of Object.entries(attributes)) {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      yield* indexedLeaves(
+        value as Record<string, unknown>,
+        `${prefix}${key}.`,
+      );
+    } else {
+      yield [`${prefix}${key}`, value];
+    }
   }
 }

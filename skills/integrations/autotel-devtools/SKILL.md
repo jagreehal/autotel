@@ -88,7 +88,7 @@ export const loadUser = withTracing({ name: 'user.load' })(
 
 - **Traces**: waterfall + flame graph with the trace's logs listed under it (click a line to select its span), search with 300 ms debounce; `q=` in a shared URL fills the search
 - **Agents**: coding-agent sessions (Claude Code, opencode, Codex) folded by `autotel-agents`, with cost split by model, effort, skill, sub-agent and prompt. `npx autotel-devtools claude` starts the receiver and launches Claude Code wired to it, spans included — its `claude_code.interaction` → `llm_request` / `tool` hierarchy lands in **Traces**
-- **GenAI**: LLM calls with tokens, cost and streaming timing
+- **GenAI**: LLM calls with tokens, cost and streaming timing. The Trace view is a live waterfall of the run (bars on a time axis with duration and cost, folded rows, slowest and failed calls marked, running parents drawn as running); arrow keys move through the tree, Enter opens a span
 - **Flow**: request flow across services
 - **Resources**: derived from ingested telemetry
 - **Queries**: database statements grouped by `db.statement.hash` (from `autotel-db`), per database: count, total, p95, rows examined against returned, the plan with its stages, an index suggestion, and "Repeated ×N" when one trace runs a statement more than once. Each plan names the run it came from; spans without a plan say whether explain is off, failed, or has nothing to plan. The waterfall marks FULL SCAN and ×N on database rows. Full-page viewer only
@@ -136,7 +136,8 @@ or coupon code set with `ctx.setAttribute` finds its span when typed on its
 own, as the viewer displays it, array elements included. Attribute **keys** are
 not matched: every span carries resource keys like `host.name` and
 `process.command`, so matching keys would make ordinary words match everything.
-Search by key with `key = value`.
+Search by key with `key = value`. Nested attributes match by dotted key:
+`bound.id = 2` finds `{ bound: { id: 2 } }`.
 
 Registered against `document.modelContext` directly — no library, no runtime dependency. Registration is a no-op in a browser without WebMCP, so no feature detection is needed.
 

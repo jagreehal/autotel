@@ -224,6 +224,8 @@ without telemetry, missing redaction, repeated inline errors that can use an
 existing error catalog, and uncovered writes in a project that already records
 security events.
 
+A route served through `autotelMiddleware()` counts as traced when the middleware is registered on its app, inside an app factory, through an alias, or on a parent app, provided its path pattern matches and it runs before the route. `.use()` calls stay out of the route map. The redaction check follows `init()` into the helpers it calls.
+
 Health checks, probes, and telemetry endpoints are exempt. Anything else can be waived in code:
 
 ```ts

@@ -41,9 +41,10 @@ init({
 
 ### How autotel decides
 
-Autotel samples whole traces. It holds each trace in memory until the local
-root span and every span started under it have ended, then keeps or drops all
-of them together. Your `trace()` functions and the auto-instrumented HTTP,
+Autotel samples whole traces. It holds each local root span (no parent, or a
+remote one) in memory until it and every span started under it have ended,
+then keeps or drops all of them together. Two requests under one browser trace
+each get their own decision. Your `trace()` functions and the auto-instrumented HTTP,
 database and queue spans follow the same decision, so you never get a parent
 without its children.
 
@@ -221,8 +222,10 @@ The filter sees the name, attributes, status, kind, duration and
 instrumentation scope, before redaction runs. It applies to every exporter
 `init()` builds and respects the shape of the trace:
 
-- Filter a request's root span (`GET /health`) and autotel drops the whole
-  trace, including the database ping under it.
+- Filter a request's root span (`GET /health`) and autotel drops it with
+  every span under it, the database ping included. A sibling under the same
+  remote parent stays: filter Next.js's `next.bubble` span and the request
+  beside it still exports.
 - Filter a span in the middle (`fs.read`) and autotel attaches its children to
   the nearest kept ancestor.
 

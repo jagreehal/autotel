@@ -78,6 +78,10 @@ app.get('/chat', (c) => {
 });
 ```
 
+`autotelMiddleware()` sets `http.route` to the last matched route template and
+names the span `{METHOD} {route}`. A 5xx response ends the span with status
+ERROR and records the error Hono caught on `c.error`.
+
 A client that disconnects mid-stream still produces a snapshot, so an abandoned
 generation reads as a cancelled stream rather than a request that never
 finished. The middleware wraps the response without locking the original body,

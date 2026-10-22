@@ -3,7 +3,13 @@ import { globSync } from 'glob';
 import type { PackageJson } from '../../types/index';
 import { fileExists, readFileSafe, readJsonSafe } from '../fs';
 import { findInstrumentationFile } from '../config-detector';
-import { buildFileFacts, createParser, usesAutotelApi } from './facts';
+import {
+  AMBIENT_APIS,
+  buildFileFacts,
+  createParser,
+  usesAutotelApi,
+} from './facts';
+import { resolveImport } from './adapters';
 
 /** What the project has already adopted — the gate for every opportunity rule. */
 export interface ProjectFacts {
@@ -21,6 +27,11 @@ export interface ProjectFacts {
   hasRedaction: boolean;
   /** Path of the instrumentation file, relative to the project root. */
   instrumentationFile: string | null;
+  /**
+   * The file that calls autotel's `init()`: the instrumentation file, or a
+   * helper it imports (`initTelemetry()`). Null when no call was found.
+   */
+  initFile: string | null;
   /** An LLM SDK is installed, so GenAI suggestions are worth making. */
   hasLlmDependency: boolean;
   hasZod: boolean;
@@ -82,9 +93,6 @@ const WIRING_FILES = [
   'app/router.tsx',
 ];
 
-/** Autotel framework integrations that create a request span when called. */
-const AMBIENT_APIS = ['autotelMiddleware', 'autotelHandle'];
-
 function hasAmbientTracing(
   projectRoot: string,
   instrumentationPath: string | null,
@@ -104,6 +112,43 @@ function hasAmbientTracing(
     }
   }
   return false;
+}
+
+/**
+ * The file that calls autotel's `init()`, starting at the instrumentation file
+ * and following its imports into the project, so a shared `initTelemetry()`
+ * helper is found. Project-relative, or null.
+ */
+function findInitFile(
+  projectRoot: string,
+  instrumentationPath: string | null,
+): string | null {
+  if (!instrumentationPath) return null;
+  const parse = createParser();
+  const queue = [instrumentationPath];
+  const seen = new Set<string>();
+  // Follows up to 20 files; a longer helper chain reads as "not found".
+  while (queue.length > 0 && seen.size < 20) {
+    const file = queue.shift()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const source = parse(file);
+    if (!source) continue;
+    if (usesAutotelApi(buildFileFacts(source), ['init'])) {
+      return path.relative(projectRoot, file).split(path.sep).join('/');
+    }
+    for (const declaration of [
+      ...source.getImportDeclarations(),
+      ...source.getExportDeclarations(),
+    ]) {
+      const specifier = declaration.getModuleSpecifierValue();
+      const target = specifier
+        ? resolveImport(projectRoot, file, specifier)
+        : null;
+      if (target) queue.push(path.join(projectRoot, target));
+    }
+  }
+  return null;
 }
 
 /** What projectSource() answers with. */
@@ -183,6 +228,11 @@ export function collectProjectFacts(projectRoot: string): ProjectFacts {
       : '',
   ).join('\n');
 
+  const initFile = findInitFile(projectRoot, instrumentation?.path ?? null);
+  const initText = initFile
+    ? (readFileSafe(path.join(projectRoot, initFile)) ?? '')
+    : '';
+
   const ambientText = `${instrumentationText}\n${wiringText}`;
   const source = projectSource(projectRoot);
   const projectSignalText = `${ambientText}\n${source.text}`;
@@ -194,13 +244,14 @@ export function collectProjectFacts(projectRoot: string): ProjectFacts {
     ambientTracing:
       deps.has('autotel-nuxt') ||
       hasAmbientTracing(projectRoot, instrumentation?.path ?? null),
-    hasRedaction: instrumentationText.includes('attributeRedactor'),
+    hasRedaction: initText.includes('attributeRedactor'),
     instrumentationFile: instrumentation
       ? path
           .relative(projectRoot, instrumentation.path)
           .split(path.sep)
           .join('/')
       : null,
+    initFile,
     hasLlmDependency: LLM_PACKAGES.some((name) => deps.has(name)),
     hasZod: deps.has('zod'),
     hasAuditUsage:

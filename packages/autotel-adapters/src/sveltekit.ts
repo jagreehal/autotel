@@ -43,7 +43,8 @@ function enrichFromEvent(
   return {
     'http.request.method': event.request.method,
     'url.full': event.url.toString(),
-    'http.route': event.route?.id ?? event.url.pathname,
+    'url.path': event.url.pathname,
+    'http.route': event.route?.id ?? undefined,
     ...(event.request.headers.get('x-request-id')
       ? { 'http.request.id': event.request.headers.get('x-request-id')! }
       : {}),
@@ -56,6 +57,7 @@ const integration = defineFrameworkIntegration<SvelteKitEventLike>({
   extractRequest: (event) => ({
     method: event.request.method,
     path: event.url.pathname,
+    route: event.route?.id ?? undefined,
     headers: event.request.headers,
     requestId: event.request.headers.get('x-request-id') ?? undefined,
   }),
