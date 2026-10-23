@@ -1,5 +1,12 @@
 # autotel-pact
 
+## 25.0.11
+
+### Patch Changes
+
+- Updated dependencies [3e5fb70]
+  - autotel@8.5.0
+
 ## 25.0.10
 
 ### Patch Changes
