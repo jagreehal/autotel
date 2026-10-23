@@ -30,7 +30,7 @@ import {
 } from '../../modules/query-filters';
 import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
-import { normalizeTagValue } from '../span-mapping';
+import { normalizeTags } from '../span-mapping';
 
 /**
  * Pydantic Logfire — trace-only backend over the `/v2/query` SQL API.
@@ -321,12 +321,7 @@ export function rowsToTraces(rows: LogfireSpanRow[]): TraceRecord[] {
   for (const row of rows) {
     const startMs = Date.parse(row.start_timestamp);
     const endMs = Date.parse(row.end_timestamp);
-    const tags = Object.fromEntries(
-      Object.entries(row.attributes ?? {}).map(([key, value]) => [
-        key,
-        normalizeTagValue(value),
-      ]),
-    );
+    const tags = normalizeTags(row.attributes);
     const span: SpanRecord = {
       traceId: row.trace_id,
       spanId: row.span_id,

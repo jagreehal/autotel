@@ -84,8 +84,9 @@ export function scan(options: ScanOptions): ScanResult {
         : unreadableResults(target);
     warnings.push(...results.warnings);
 
+    const { ambient: _ambient, ...entry } = raw;
     routes.push({
-      ...raw,
+      ...entry,
       id: routeId(raw),
       checks: results.checks,
       suggestions: results.suggestions,

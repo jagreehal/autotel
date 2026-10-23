@@ -8,7 +8,9 @@
     loadSnapshot,
     exitSnapshotMode,
     clearAllData,
+    connectionUrlSignal,
   } from '../store.svelte';
+  import { httpBaseFromWsUrl } from '../source-client';
   import {
     downloadSnapshotAsJson,
     importSnapshotFromFile,
@@ -52,9 +54,20 @@
     fileInputEl?.click();
   };
 
-  const onClear = () => {
+  const onClear = async () => {
     error = null;
     warning = null;
+    // The server keeps everything too, and the views refetch from it, so a
+    // local-only clear came straight back. One DELETE clears every signal.
+    const wsUrl = connectionUrlSignal.value;
+    const base =
+      (wsUrl ? httpBaseFromWsUrl(wsUrl) : null) ?? globalThis.location.origin;
+    try {
+      const response = await fetch(`${base}/v1/traces`, { method: 'DELETE' });
+      if (!response.ok) warning = `Server kept its data (${response.status}).`;
+    } catch {
+      warning = "Couldn't reach the server; it still has its data.";
+    }
     clearAllData();
   };
 

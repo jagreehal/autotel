@@ -105,7 +105,7 @@ Two separate config systems serve different purposes:
 
 Implements deferred sampling decisions:
 
-- Spans are buffered per trace until the local root and every span started under it have ended (bounded by `maxBufferedSpans` and `traceTimeoutMs`), then kept or dropped together
+- Spans are buffered per local root (no parent, or a remote one) until it and every span started under it have ended (bounded by `maxBufferedSpans` and `traceTimeoutMs`), then kept or dropped together
 - The configured sampler decides from the whole trace: any ERROR span, the root's duration, a trace-ID hash for the baseline
 - `sampling: 'production'` uses `AdaptiveSampler`: 10% baseline, every error, every slow root. See [Keeping Costs Down](/autotel/costs/)
 - Custom samplers can implement `Sampler` interface
@@ -286,6 +286,8 @@ For ESM apps using auto-instrumentation (Pino, Express, HTTP, etc.), you need to
 1. Install `@opentelemetry/auto-instrumentations-node` as a **direct dependency** in your app
 2. Import `autotel/register` **first** to register the ESM loader hooks
 3. Pass instrumentations directly to `init()` using `getNodeAutoInstrumentations()`
+
+The hook wraps only modules under `node_modules` and Node builtins, so your own modules load as written. `autotel/auto` registers through `autotel/register`.
 
 **Option A: With instrumentation.mjs (explicit init, full control):**
 

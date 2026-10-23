@@ -14,10 +14,18 @@ import type {
   ReadableSpan,
 } from '@opentelemetry/sdk-trace-base';
 import {
+  ROOT_CONTEXT,
   SpanStatusCode,
+  trace,
   type Context,
   type Attributes,
 } from '@opentelemetry/api';
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
+import { FilteringSpanProcessor } from './filtering-span-processor';
 import type { Span } from '@opentelemetry/sdk-trace-base';
 
 // Mock span processor
@@ -397,18 +405,37 @@ describe('TailSamplingSpanProcessor', () => {
       expect(mockProcessor.endedSpans).toHaveLength(2);
     });
 
-    // onStart only needs the span's context.
-    const start = (processor: TailSamplingSpanProcessor, span: ReadableSpan) =>
-      processor.onStart(span as unknown as Span, {} as Context);
+    // onStart reads the span's context and its parent from the context.
+    const start = (
+      processor: TailSamplingSpanProcessor,
+      span: ReadableSpan,
+      parent?: ReadableSpan,
+    ) =>
+      processor.onStart(
+        span as unknown as Span,
+        parent
+          ? trace.setSpan(ROOT_CONTEXT, parent as unknown as Span)
+          : ROOT_CONTEXT,
+      );
+    const childOf = (
+      parent: ReadableSpan,
+      attributes: Attributes = {},
+      error = false,
+    ) =>
+      createMockSpan(attributes, {
+        traceId: parent.spanContext().traceId,
+        parentSpanId: parent.spanContext().spanId,
+        error,
+      });
 
     it('waits for children still running when the root ends', () => {
       const processor = new TailSamplingSpanProcessor(mockProcessor, {
         sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
       });
       const root = createMockSpan({}, { traceId: 'w' });
-      const late = child('w', {}, true);
+      const late = childOf(root, {}, true);
       start(processor, root);
-      start(processor, late);
+      start(processor, late, root);
 
       processor.onEnd(root);
       expect(mockProcessor.endedSpans).toHaveLength(0);
@@ -422,12 +449,12 @@ describe('TailSamplingSpanProcessor', () => {
         sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
       });
       const root = createMockSpan({}, { traceId: 'fk' });
-      const kept = child('fk', {
+      const kept = childOf(root, {
         [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
         [AUTOTEL_SAMPLING_TAIL_KEEP]: true,
       });
       start(processor, root);
-      start(processor, kept);
+      start(processor, kept, root);
       processor.onEnd(root);
       processor.onEnd(kept);
       expect(mockProcessor.endedSpans).toHaveLength(2);
@@ -438,9 +465,9 @@ describe('TailSamplingSpanProcessor', () => {
         sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
       });
       const root = createMockSpan({}, { traceId: 'flush' });
-      const late = child('flush', {}, true);
+      const late = childOf(root, {}, true);
       start(processor, root);
-      start(processor, late);
+      start(processor, late, root);
       processor.onEnd(root);
 
       await processor.forceFlush();
@@ -456,11 +483,13 @@ describe('TailSamplingSpanProcessor', () => {
       // Clean root, child never ends: decided on what it has, dropped.
       const root = createMockSpan({}, { traceId: 'down' });
       start(processor, root);
-      start(processor, child('down'));
+      start(processor, childOf(root), root);
       processor.onEnd(root);
       // Root never ends: the finished child is exported.
-      const orphan = child('rootless');
-      start(processor, orphan);
+      const rootless = createMockSpan({}, { traceId: 'rootless' });
+      const orphan = childOf(rootless);
+      start(processor, rootless);
+      start(processor, orphan, rootless);
       processor.onEnd(orphan);
 
       await processor.shutdown();
@@ -475,12 +504,13 @@ describe('TailSamplingSpanProcessor', () => {
       // Root ended, a child never does: decided on the clean root, dropped.
       const root = createMockSpan({}, { traceId: 'stuck' });
       start(processor, root);
-      start(processor, child('stuck'));
+      start(processor, childOf(root), root);
       processor.onEnd(root);
       // Root never ends: its finished child is exported as it stands.
-      const orphan = child('open');
-      start(processor, createMockSpan({}, { traceId: 'open' }));
-      start(processor, orphan);
+      const open = createMockSpan({}, { traceId: 'open' });
+      const orphan = childOf(open);
+      start(processor, open);
+      start(processor, orphan, open);
       processor.onEnd(orphan);
 
       processor.sweep(Date.now() + 1001);
@@ -512,5 +542,76 @@ describe('TailSamplingSpanProcessor', () => {
         root.spanContext().spanId,
       );
     });
+  });
+});
+
+describe('spanFilter beside a remote parent', () => {
+  // Next.js under a browser `traceparent`: its empty `next.bubble` span and
+  // the real request are siblings under the remote browser span. Filtering
+  // the bubble must not take the request with it.
+  it('drops only the filtered local root, not its siblings or their children', async () => {
+    const exporter = new InMemorySpanExporter();
+    const provider = new BasicTracerProvider({
+      spanProcessors: [
+        new FilteringSpanProcessor(
+          new TailSamplingSpanProcessor(new SimpleSpanProcessor(exporter)),
+          { filter: (span) => span.attributes['next.bubble'] !== true },
+        ),
+      ],
+    });
+    const tracer = provider.getTracer('test');
+    const browser = trace.setSpanContext(ROOT_CONTEXT, {
+      traceId: '0af7651916cd43dd8448eb211c80319c',
+      spanId: 'b7ad6b7169203331',
+      traceFlags: 1,
+      isRemote: true,
+    });
+
+    // The bubble ends before the real request starts, so nothing is open.
+    tracer
+      .startSpan(
+        'BaseServer.handleRequest',
+        { attributes: { 'next.bubble': true } },
+        browser,
+      )
+      .end();
+    const request = tracer.startSpan('POST /orders', {}, browser);
+    tracer.startSpan('action.save', {}, trace.setSpan(browser, request)).end();
+    request.end();
+    await provider.forceFlush();
+
+    expect(exporter.getFinishedSpans().map((s) => s.name)).toEqual([
+      'action.save',
+      'POST /orders',
+    ]);
+    await provider.shutdown();
+  });
+
+  it('keeps a child started from a span context with its local parent', async () => {
+    // How autotel-genai parents its late `signals` span: a bare span context,
+    // after the parent has ended and its trace has been decided.
+    const exporter = new InMemorySpanExporter();
+    const provider = new BasicTracerProvider({
+      spanProcessors: [
+        new FilteringSpanProcessor(
+          new TailSamplingSpanProcessor(new SimpleSpanProcessor(exporter)),
+          { filter: (span) => span.name !== 'health' },
+        ),
+      ],
+    });
+    const tracer = provider.getTracer('test');
+    const root = tracer.startSpan('health');
+    root.end();
+    tracer
+      .startSpan(
+        'signals health',
+        {},
+        trace.setSpanContext(ROOT_CONTEXT, root.spanContext()),
+      )
+      .end();
+    await provider.forceFlush();
+
+    expect(exporter.getFinishedSpans()).toEqual([]);
+    await provider.shutdown();
   });
 });

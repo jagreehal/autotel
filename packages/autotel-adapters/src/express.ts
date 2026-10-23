@@ -12,6 +12,7 @@ import {
   toRouteAdapterOptions,
   type RouteAdapterOptions,
 } from './core';
+import { defaultSpanName } from './toolkit/integration';
 
 export interface ExpressRequestLike {
   method?: string;
@@ -49,19 +50,32 @@ function headerValue(
   return typeof value === 'string' ? value : undefined;
 }
 
+/**
+ * `req.route` is set once Express has matched a route. Its path is relative to
+ * the router it was registered on, and that is all `http.route` gets: the
+ * mount point is only available as `req.baseUrl`, the concrete path, so a
+ * router mounted at `/orgs/:orgId` would put the tenant id in the grouping key.
+ * Routes in two routers with the same relative path share a key; recording
+ * mount templates (by patching `Router.use`) would separate them.
+ */
+function routeTemplate(request: ExpressRequestLike): string | undefined {
+  const path = request.route?.path;
+  return typeof path === 'string' ? path : undefined;
+}
+
 function enrichFromRequest(
   request?: ExpressRequestLike,
 ): Record<string, unknown> | undefined {
   if (!request) return undefined;
 
   const url = request.originalUrl ?? request.url;
-  const route = request.route?.path ?? request.path ?? url;
   const requestId = headerValue(request.headers, 'x-request-id');
 
   return {
     'http.request.method': request.method,
     'url.full': url,
-    'http.route': route,
+    'url.path': url?.split('?')[0],
+    'http.route': routeTemplate(request),
     'http.request.id': requestId,
   };
 }
@@ -107,7 +121,8 @@ export function withAutotel<
     const spanName =
       typeof options?.spanName === 'function'
         ? options.spanName(req)
-        : (options?.spanName ?? `express.${req.method ?? 'request'}`);
+        : (options?.spanName ??
+          defaultSpanName(req.method, routeTemplate(req)));
 
     const route =
       req.route?.path ?? req.path ?? req.originalUrl ?? req.url ?? '/';

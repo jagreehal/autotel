@@ -86,6 +86,16 @@ describe('OtlpReceiver', () => {
                   severityText: 'ERROR',
                   body: { stringValue: 'something broke' },
                   traceId: traceIdHex,
+                  attributes: [
+                    {
+                      key: 'nested',
+                      value: {
+                        kvlistValue: {
+                          values: [{ key: 'id', value: { intValue: '1' } }],
+                        },
+                      },
+                    },
+                  ],
                 },
               ],
             },
@@ -104,5 +114,6 @@ describe('OtlpReceiver', () => {
     const logs = await store.searchLogs({ traceId: traceIdHex });
     expect(logs.items).toHaveLength(1);
     expect(logs.items[0].body).toBe('something broke');
+    expect(logs.items[0].attributes).toMatchObject({ 'nested.id': 1 });
   });
 });

@@ -561,6 +561,8 @@ config and semantic-convention references; `estimate` is
 - **get_trace**: Full trace detail by ID
 - **summarize_trace**: Compact summary: span tree, errors, critical path, duration breakdown
 
+Every backend returns nested attributes as dotted keys (`nested.id: 1`) and arrays as JSON.
+
 </details>
 
 <details>

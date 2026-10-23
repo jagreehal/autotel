@@ -12,6 +12,10 @@ import {
   flowCountSignal,
   selectedTraceSignal,
   setSelectedTrace,
+  openTab,
+  openSpanInWaterfall,
+  selectedTabSignal,
+  selectedTraceIdSignal,
   storeTracesSignal,
   workingSetStatusSignal,
   selectAllTraces,
@@ -436,5 +440,24 @@ describe('agent repository filter', () => {
     expect(sortedAgentSessionsSignal.value.map((s) => s.id)).toEqual(['b']);
     clearAllData();
     expect(agentRepositoryFilterSignal.value).toBeNull();
+  });
+});
+
+describe('openTab', () => {
+  it('opens Traces on its list, like "Back to traces"', () => {
+    openSpanInWaterfall('trace-1');
+    expect(selectedTabSignal.value).toBe('traces');
+    expect(selectedTraceIdSignal.value).toBe('trace-1');
+
+    openTab('traces');
+    expect(selectedTraceIdSignal.value).toBeNull();
+  });
+
+  it('leaves the open trace alone when switching to another tab', () => {
+    openSpanInWaterfall('trace-1');
+    openTab('logs');
+    expect(selectedTabSignal.value).toBe('logs');
+    expect(selectedTraceIdSignal.value).toBe('trace-1');
+    setSelectedTrace(null);
   });
 });

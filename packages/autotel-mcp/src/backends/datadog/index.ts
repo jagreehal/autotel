@@ -34,8 +34,8 @@ import {
 } from '../../modules/query-filters';
 import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
-import { normalizeTagValue } from '../span-mapping';
-import { asNumber, asRecord } from '../../lib/values';
+import { normalizeTags } from '../span-mapping';
+import { asNumber } from '../../lib/values';
 
 /**
  * Datadog: traces over the v2 spans search API, logs over the v2 logs search,
@@ -666,9 +666,9 @@ export function groupSpans(events: DatadogSpanEvent[]): TraceRecord[] {
     const isError = attributes.status === 'error';
     const tags: Record<string, TagValue> = {
       ...datadogTags(attributes.tags),
-      ...flattenTags(attributes.attributes),
-      ...flattenTags(attributes.custom),
-      ...flattenTags(attributes.error ?? undefined, 'error.'),
+      ...normalizeTags(attributes.attributes),
+      ...normalizeTags(attributes.custom),
+      ...normalizeTags(attributes.error ?? undefined, 'error.'),
     };
     delete tags.duration;
     if (attributes.type) tags['datadog.type'] = attributes.type;
@@ -698,27 +698,9 @@ export function groupSpans(events: DatadogSpanEvent[]): TraceRecord[] {
   return Array.from(byTraceId, ([traceId, spans]) => ({ traceId, spans }));
 }
 
-/**
- * Datadog returns attributes nested (`{ http: { method: 'GET' } }`); tags are
- * flat dotted keys (`http.method`).
- */
-export function flattenTags(
-  values: Record<string, unknown> | undefined,
-  prefix = '',
-): Record<string, TagValue> {
-  const tags: Record<string, TagValue> = {};
-  for (const [key, value] of Object.entries(values ?? {})) {
-    if (value === null || value === undefined) continue;
-    const nested = asRecord(value);
-    if (nested) Object.assign(tags, flattenTags(nested, `${prefix}${key}.`));
-    else tags[`${prefix}${key}`] = normalizeTagValue(value);
-  }
-  return tags;
-}
-
 function toLogRecord(event: DatadogLogEvent): LogRecord {
   const attributes = event.attributes ?? {};
-  const fields = flattenTags(attributes.attributes);
+  const fields = normalizeTags(attributes.attributes);
   const traceId = fields['otel.trace_id'] ?? fields.trace_id;
   const spanId = fields['otel.span_id'] ?? fields.span_id;
   return {
@@ -786,7 +768,7 @@ function explainRateLimit(error: unknown): never {
 function datadogTags(
   tags: string[] | Record<string, string> | undefined,
 ): Record<string, TagValue> {
-  if (!Array.isArray(tags)) return flattenTags(tags);
+  if (!Array.isArray(tags)) return normalizeTags(tags);
   return Object.fromEntries(
     tags.map((tag) => {
       const separator = tag.indexOf(':');

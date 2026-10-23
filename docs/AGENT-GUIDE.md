@@ -385,7 +385,7 @@ server.on('request', (req, res) => {
 When adding Autotel support for a new framework (e.g. a new web framework):
 
 1. **Prefer `autotel-adapters/toolkit`**
-   Use `defineFrameworkIntegration()` and `createLoggerStorage()` from `autotel-adapters/toolkit` (edge-safe storage: `autotel-adapters/toolkit/storage`). Wire route `include`/`exclude`, serverless `waitUntil`, and streaming `finishResponse` when the framework returns SSE/AI streams. See `examples/community-framework-skeleton/`.
+   Use `defineFrameworkIntegration()` and `createLoggerStorage()` from `autotel-adapters/toolkit` (edge-safe storage: `autotel-adapters/toolkit/storage`). Wire route `include`/`exclude`, serverless `waitUntil`, and streaming `finishResponse` when the framework returns SSE/AI streams. Return the raw path as `path` and the matched route template as `route` from `extractRequest`: the toolkit records them as `url.path` and `http.route` and names the span `{METHOD} {route}`. A route known only after routing goes through `handle.setRoute()`. See `examples/community-framework-skeleton/`.
 
 2. **Built-in subpaths**
    `autotel-adapters/{express,fastify,next,nitro,cloudflare,hono,nestjs,sveltekit,elysia}` and `autotel-nuxt` for Nuxt apps.

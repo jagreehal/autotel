@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { spanKindTag } from '../src/backends/span-mapping';
+import {
+  normalizeTags,
+  normalizeTagValue,
+  spanKindTag,
+} from '../src/backends/span-mapping';
 
 describe('spanKindTag', () => {
   it('reads the OTLP enum number, the OTLP JSON name and a plain name', () => {
@@ -15,5 +19,19 @@ describe('spanKindTag', () => {
     expect(spanKindTag('SPAN_KIND_UNSPECIFIED')).toEqual({});
     expect(spanKindTag(undefined)).toEqual({});
     expect(spanKindTag(9)).toEqual({});
+  });
+});
+
+describe('normalizeTags', () => {
+  it('flattens nested objects to dotted keys and sends arrays as JSON', () => {
+    expect(
+      normalizeTags({ bound: { id: 2, deep: { ok: true } }, list: ['a', 'b'] }),
+    ).toEqual({ 'bound.id': 2, 'bound.deep.ok': true, list: '["a","b"]' });
+  });
+
+  it('keeps the text of a value JSON cannot carry', () => {
+    expect(normalizeTagValue(Number.NaN)).toBe('NaN');
+    expect(normalizeTagValue(10n)).toBe('10');
+    expect(normalizeTagValue([10n])).toBe('10');
   });
 });

@@ -302,6 +302,12 @@ For frameworks that register many routes in one file, the scan reads each
 handler's own body. Forty routes in one `index.ts` get forty scores rather than
 one.
 
+A route served through `autotelMiddleware()` counts as traced when the
+middleware is registered on its app, inside an app factory, through an alias,
+or on a parent app, provided its path pattern matches and it runs before the
+route. `.use()` calls are middleware, so they stay out of the route map. The
+`redaction` check follows `init()` into the helpers it calls.
+
 ## Options
 
 | Flag                   | What it does                                                    |

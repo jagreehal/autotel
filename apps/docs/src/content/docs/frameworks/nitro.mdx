@@ -48,6 +48,10 @@ export default withAutotelEventHandler(async (event) => {
 });
 ```
 
+The span takes `http.route` from h3's matched route (`/api/orders/:id`) and the
+name `{METHOD} {route}`. The raw path goes to `url.path`, and a 5xx response
+ends the span with status ERROR.
+
 ### Nuxt 3
 
 Same plugin and handler patterns work. Nuxt 3 server routes live in

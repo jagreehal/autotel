@@ -24,8 +24,8 @@
  *    the view on every half-typed expression makes the query bar unusable.
  */
 
-import { Signal } from './signals.svelte';
-import { timeWindowSignal } from './store.svelte';
+import { Signal, effect } from './signals.svelte';
+import { dataClearedSignal, timeWindowSignal } from './store.svelte';
 import {
   queryLogs,
   queryTraces,
@@ -128,6 +128,15 @@ export function createSignalQuery<TRow>(
   let sequence = 0;
   let inFlight: AbortController | null = null;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Clear wiped the data: the rows on screen came from it, so they go too.
+  const clearedAt = dataClearedSignal.value;
+  const stopClearWatch = effect(() => {
+    if (dataClearedSignal.value === clearedAt) return;
+    inFlight?.abort();
+    results.value = [];
+    nextCursor.value = null;
+  });
 
   function dispatch(action: TailAction): void {
     tail.value = reduceTail(tail.value, action);
@@ -298,6 +307,7 @@ export function createSignalQuery<TRow>(
     dispose(): void {
       if (debounceTimer) clearTimeout(debounceTimer);
       inFlight?.abort();
+      stopClearWatch();
     },
   };
 }

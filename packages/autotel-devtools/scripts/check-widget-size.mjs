@@ -28,7 +28,12 @@ const budgets = [
   // the manual driver path, or "no plan capture"): 742,281 / 220,295.
   // +2 KB raw / +1 KB gzip for #361-#366: 746,169 / 221,550 measured.
   // +8 KB raw / +2 KB gzip for #380: 752,676 / 223,407 measured.
-  { file: 'fullpage.global.js', raw: 755_000, gzip: 224_000 },
+  // +11 KB raw / +4 KB gzip for the GenAI run waterfall (time axis, cost per
+  // step, folds that keep their children's bars, slowest/error marks, a live
+  // clock for parents still running, the tree keyboard pattern). GenAI is
+  // full-page only; the embedded widget pays only the keyframes. Main
+  // 752,920 / 223,511; with it 763,969 / 227,069 measured.
+  { file: 'fullpage.global.js', raw: 766_000, gzip: 228_000 },
 ];
 
 let failed = false;

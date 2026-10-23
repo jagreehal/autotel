@@ -349,6 +349,9 @@ export const pendingLogCountSignal = computed(
 // Marks the store as displaying a loaded snapshot rather than live data.
 export const snapshotModeSignal = signal(false);
 
+/** Bumped by {@link clearAllData}, so views holding their own rows drop them. */
+export const dataClearedSignal = signal(0);
+
 // ===== Computed Signals =====
 
 /**
@@ -946,6 +949,16 @@ export function setSelectedTrace(
   // that caused the panel to jump dimensions every time you opened a trace.
 }
 
+/**
+ * Tab navigation the user asked for (tab bar, number keys, a stat's link).
+ * Traces opens on its list, as "Back to traces" does. Deep links that select a
+ * trace first call {@link setSelectedTab} instead, so the trace stays open.
+ */
+export function openTab(tab: TabType) {
+  if (tab === 'traces') setSelectedTrace(null);
+  setSelectedTab(tab);
+}
+
 /** Deep-link to a span: open its trace in the Traces waterfall, focused. */
 export function openSpanInWaterfall(traceId: string, spanId?: string) {
   setSelectedTrace(traceId, spanId ?? null);
@@ -991,6 +1004,7 @@ export function clearAllData() {
   selectedSpanIdSignal.value = null;
   workingSetStatusSignal.value = 'pending';
   snapshotModeSignal.value = false;
+  dataClearedSignal.value += 1;
 }
 
 /**

@@ -832,9 +832,11 @@ export interface AutotelConfig {
    * Return `true` to keep the span, `false` to drop it.
    *
    * Behind a TailSamplingSpanProcessor (every exporter `init()` builds) a
-   * filtered local root drops its whole trace, and the children of any other
-   * filtered span are re-parented to its nearest kept ancestor. Behind a plain
-   * processor it drops one span at a time.
+   * filtered local root (no parent, or a remote one) drops itself and every
+   * span under it, never a sibling under the same remote parent: filtering
+   * Next.js's `next.bubble` span leaves the real request beside it. The
+   * children of any other filtered span are re-parented to its nearest kept
+   * ancestor. Behind a plain processor it drops one span at a time.
    *
    * @example Filter out Next.js instrumentation spans
    * ```typescript

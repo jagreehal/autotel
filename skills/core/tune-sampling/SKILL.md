@@ -71,10 +71,11 @@ There are no per-span-kind rates. Know these before you tune:
   function resolves its sampler per call: the `sampler` passed to `trace()` /
   `withTracing()` / `instrument()`, then the one `init()` was given, then
   keep-everything. Set `sampling` explicitly in production.
-- **The decision is made per trace, when its local root ends.**
-  `TailSamplingSpanProcessor` buffers a trace's spans until the local root (no
-  parent, or a remote one) ends, then keeps or drops all of them. Spans that
-  end later follow that verdict, so a dropped trace leaves no orphan children.
+- **The decision is made per local root, when it ends.**
+  `TailSamplingSpanProcessor` buffers the spans under each local root (no
+  parent, or a remote one) until it ends, then keeps or drops all of them.
+  Sibling requests under one remote parent each get their own verdict. Spans
+  that end later follow theirs, so a dropped trace leaves no orphan children.
   The trace is kept when any wrapped span kept it (error, slow, baseline) or
   called `forceKeep()`. Otherwise the sampler decides from the whole trace:
   any span with ERROR status, the root's duration, and the trace id. That is
@@ -164,7 +165,8 @@ to the Collector; only the traces it keeps reach the paid backend.
 
 `spanFilter` respects the trace's shape wherever a `TailSamplingSpanProcessor`
 sits behind it (every exporter `init()` builds): filtering a request's root
-(`GET /health`) drops its whole trace, and filtering a span in the middle
+(`GET /health`) drops it and every span under it, leaving siblings under the
+same remote parent in place, and filtering a span in the middle
 (`fs.read`) re-parents its children to the nearest kept ancestor. Behind a
 plain processor it drops one span at a time.
 

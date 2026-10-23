@@ -64,20 +64,12 @@ function enrichFromRequest(
 ): Record<string, unknown> | undefined {
   if (!request) return undefined;
 
-  let route = '/';
-  if (request.url) {
-    try {
-      route = new URL(request.url).pathname;
-    } catch {
-      route = request.url;
-    }
-  }
   const requestId = getHeader(request.headers, 'x-request-id');
 
   return {
     'http.request.method': request.method,
     'url.full': request.url,
-    'http.route': route,
+    'url.path': resolvePath(request),
     ...(requestId ? { 'http.request.header.x-request-id': requestId } : {}),
   };
 }
@@ -122,11 +114,11 @@ const integration = defineFrameworkIntegration<NextRequestLike | undefined>({
 function resolveSpanName(
   request: NextRequestLike | undefined,
   options?: NextWithAutotelOptions,
-): string {
+): string | undefined {
   if (typeof options?.spanName === 'function') {
     return options.spanName(request);
   }
-  return options?.spanName ?? 'next.request';
+  return options?.spanName;
 }
 
 export function withAutotel<TArgs extends unknown[], TReturn>(

@@ -17,7 +17,6 @@ import type {
   SpanSearchQuery,
   SpanSearchResult,
   SpanStatusCode,
-  TagValue,
   TraceRecord,
   TraceSearchQuery,
   TraceSearchResult,
@@ -30,7 +29,7 @@ import {
 } from '../../modules/query-filters';
 import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
-import { normalizeTagValue } from '../span-mapping';
+import { normalizeTags } from '../span-mapping';
 import type { UnknownRecord } from '../../lib/values';
 import { asNumber, asRecord, nonEmptyString } from '../../lib/values';
 
@@ -415,15 +414,7 @@ function toSpanRecord(span: SignozSpan, fallbackTraceId: string): SpanRecord {
     serviceName: span.serviceName ?? 'unknown',
     startTimeUnixMs: Math.floor((span.startTime ?? 0) / NS_PER_MS),
     durationMs: (span.durationNano ?? 0) / NS_PER_MS,
-    // SAFETY: normalizeTagValue answers with a TagValue for every entry, so
-    // the assembled bag is keyed strings to TagValue; Object.fromEntries
-    // cannot carry that.
-    tags: Object.fromEntries(
-      Object.entries(span.attributes ?? {}).map(([key, value]) => [
-        key,
-        normalizeTagValue(value),
-      ]),
-    ) as Record<string, TagValue>,
+    tags: normalizeTags(span.attributes),
     hasError: span.hasError === true || statusCode === 'ERROR',
     statusCode,
   };

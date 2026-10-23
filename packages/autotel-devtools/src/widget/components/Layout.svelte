@@ -11,7 +11,7 @@
     getInitialTheme,
     selectedTabSignal,
     selectedTraceIdSignal,
-    setSelectedTab,
+    openTab,
     helpShortcutsSignal,
     openHelp,
     closeHelp,
@@ -79,7 +79,7 @@
       if (!isInputFocused() && e.key >= '1' && e.key <= '9') {
         const idx = parseInt(e.key, 10) - 1;
         if (idx < TAB_ORDER.length) {
-          setSelectedTab(TAB_ORDER[idx]);
+          openTab(TAB_ORDER[idx]);
         }
       }
     };

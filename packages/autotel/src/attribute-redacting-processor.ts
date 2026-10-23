@@ -846,6 +846,24 @@ export function createAttributeRedactor(
 }
 
 /**
+ * Whether a config's explicit rules (key patterns and paths) mark a key as
+ * sensitive, for redacting a whole object under it. Only explicit rules: what
+ * a custom `redactor` returns cannot say whether it singled a key out (it may
+ * echo the key, prefix every value, or anything else). Alongside a custom
+ * `redactor`, declare `keyPatterns` or `paths` for the keys whose whole value
+ * must be redacted; otherwise each leaf reaches it under its dotted key.
+ */
+export function createSensitiveKeyTest(
+  config: AttributeRedactorConfig | AttributeRedactorPreset,
+): (key: string) => boolean {
+  const resolved = resolveConfig(config);
+  const keyPatterns = resolved.keyPatterns ?? [];
+  const paths = new Set(resolved.paths);
+  return (key) =>
+    key !== '' && (keyIsSensitive(key, keyPatterns) || paths.has(key));
+}
+
+/**
  * Span processor that redacts sensitive data from span attributes.
  *
  * Redaction happens in onEnd() when all attributes are finalized.

@@ -83,6 +83,9 @@ describe('createStringRedactor', () => {
           },
         ],
         replacement: '<HIDDEN>',
+        // Built-ins are on by default and their email mask runs first, as on
+        // spans; this test is about the replacement string alone.
+        builtins: false,
       });
       expect(redact('Email: test@example.com')).toBe('Email: <HIDDEN>');
     });

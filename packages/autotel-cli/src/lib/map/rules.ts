@@ -214,7 +214,7 @@ const traceRule: RequirementRule = {
     `export const handler = instrument({ key: '${target.method?.toLowerCase() ?? 'handle'} ${target.path}', fn: async () => { /* … */ } });`,
   check(context) {
     if (usesAutotelApi(context, SPAN_WRAPPERS)) return null;
-    if (context.project.ambientTracing) return null;
+    if (context.project.ambientTracing || context.target.ambient) return null;
     if (!context.project.hasAutotel) {
       return {
         message: 'autotel not installed — nothing observes this handler',
@@ -251,9 +251,10 @@ const contextRule: RequirementRule = {
       };
     }
     return {
-      message: context.project.ambientTracing
-        ? 'handler adds nothing to its request span — only method, path and status are recorded'
-        : 'no request-scoped attributes — the span says what failed, not for whom',
+      message:
+        context.project.ambientTracing || context.target.ambient
+          ? 'handler adds nothing to its request span — only method, path and status are recorded'
+          : 'no request-scoped attributes — the span says what failed, not for whom',
     };
   },
 };
@@ -500,12 +501,13 @@ const redactionRule: OpportunityRule = {
   },
   fix: () => "init({ service, attributeRedactor: 'default' })",
   check(context) {
+    const { initFile, instrumentationFile } = context.project;
     return {
-      message: `sensitive routes but init() sets no attributeRedactor${
-        context.project.instrumentationFile
-          ? ` (${context.project.instrumentationFile})`
-          : ''
-      }`,
+      message: initFile
+        ? `sensitive routes but init() sets no attributeRedactor (${initFile})`
+        : `sensitive routes, and couldn't find init() to check for attributeRedactor${
+            instrumentationFile ? ` (followed from ${instrumentationFile})` : ''
+          }`,
     };
   },
 };

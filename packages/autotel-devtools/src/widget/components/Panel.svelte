@@ -30,7 +30,7 @@
     pipActiveSignal,
     totalErrorCountSignal,
     toggleWidget,
-    setSelectedTab,
+    openTab,
     setPanelSize,
     resetPanelSize,
     panelSizeBounds,
@@ -206,7 +206,7 @@
       if (helpShortcutsSignal.value) return; // help open — swallow other keys
       if (!isInputFocused() && ev.key >= '1' && ev.key <= '7') {
         const idx = Number.parseInt(ev.key, 10) - 1;
-        if (idx < TABS_ORDER.length) setSelectedTab(TABS_ORDER[idx]);
+        if (idx < TABS_ORDER.length) openTab(TABS_ORDER[idx]);
       }
     };
 
@@ -388,7 +388,7 @@
           {@const Icon = tab.icon}
           {@const isActive = selectedTab === tab.id}
           <button
-            onclick={() => setSelectedTab(tab.id)}
+            onclick={() => openTab(tab.id)}
             aria-current={isActive ? 'page' : undefined}
             class={cn(
               'flex items-center gap-1.5 px-2.5 h-8 rounded-md flex-shrink-0',

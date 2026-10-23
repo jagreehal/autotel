@@ -28,7 +28,15 @@ export interface NestRequestLike {
   url?: string;
   originalUrl?: string;
   path?: string;
+  /** Set by the Express platform once routing has run. */
+  route?: { path?: string };
+  /** Set by the Fastify platform. */
+  routeOptions?: { url?: string };
   headers?: Record<string, string | string[] | undefined>;
+}
+
+function routeTemplate(request: NestRequestLike): string | undefined {
+  return request.route?.path ?? request.routeOptions?.url;
 }
 
 export interface NestResponseLike {
@@ -52,12 +60,12 @@ function enrichFromRequest(
   if (!request) return undefined;
 
   const url = request.originalUrl ?? request.url;
-  const route = request.path ?? url;
 
   return {
     'http.request.method': request.method,
     'url.full': url,
-    'http.route': route,
+    'url.path': request.path,
+    'http.route': routeTemplate(request),
   };
 }
 
@@ -70,15 +78,11 @@ const integration = defineFrameworkIntegration<NestExecutionContextLike>({
     return {
       method: request.method ?? 'GET',
       path,
+      route: routeTemplate(request),
       headers: request.headers,
     } satisfies ExtractedRequest;
   },
   attachLogger: () => {},
-  spanName: (executionCtx) => {
-    const handler = executionCtx.getHandler().name;
-    const controller = executionCtx.getClass().name;
-    return `nestjs.${controller}.${handler}`;
-  },
 });
 
 export function useLogger(): RequestLogger {
@@ -109,6 +113,9 @@ export class AutotelInterceptor {
             applyLoggerEnrichment(
               handle.logger,
               enrichFromRequest(request),
+              {
+                'code.function.name': `${executionCtx.getClass().name}.${executionCtx.getHandler().name}`,
+              },
               this.options.enrichRequest?.(request),
             );
           }
@@ -123,19 +130,25 @@ export class AutotelInterceptor {
                   settled = true;
 
                   try {
-                    if (!handle.skipped && this.options.autoEmit !== false) {
-                      if (error !== undefined) {
-                        await handle.finish({
-                          error:
-                            error instanceof Error
-                              ? error
-                              : new Error(String(error)),
-                        });
+                    if (!handle.skipped) {
+                      const outcome =
+                        error === undefined
+                          ? {
+                              status: executionCtx.switchToHttp().getResponse()
+                                .statusCode,
+                            }
+                          : {
+                              error:
+                                error instanceof Error
+                                  ? error
+                                  : new Error(String(error)),
+                            };
+                      // The span records how it ended either way; only the
+                      // snapshot is optional.
+                      if (this.options.autoEmit === false) {
+                        handle.markOutcome(outcome);
                       } else {
-                        const response = executionCtx
-                          .switchToHttp()
-                          .getResponse();
-                        await handle.finish({ status: response.statusCode });
+                        await handle.finish(outcome);
                       }
                     }
                   } catch (finishError) {

@@ -15,6 +15,8 @@ import {
 export interface ElysiaContextLike {
   request: Request;
   path: string;
+  /** Matched route template (`/users/:id`). */
+  route?: string;
 }
 
 export interface ElysiaWithAutotelOptions extends FrameworkHandlerOptions {
@@ -38,7 +40,8 @@ function enrichFromContext(
   return {
     'http.request.method': ctx.request.method,
     'url.full': ctx.request.url,
-    'http.route': ctx.path,
+    'url.path': ctx.path,
+    'http.route': ctx.route,
     'http.request.id': requestId,
   };
 }
@@ -49,6 +52,7 @@ const integration = defineFrameworkIntegration<ElysiaContextLike>({
   extractRequest: (ctx) => ({
     method: ctx.request.method,
     path: ctx.path,
+    route: ctx.route,
     headers: ctx.request.headers,
     requestId: getHeader(ctx.request.headers, 'x-request-id'),
   }),

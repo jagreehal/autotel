@@ -72,6 +72,9 @@ export function isAutotelModule(specifier: string): boolean {
   );
 }
 
+/** Autotel framework integrations that create a request span when called. */
+export const AMBIENT_APIS = ['autotelMiddleware', 'autotelHandle'];
+
 /**
  * Whether a canonical Autotel API is actually called in these facts.
  *

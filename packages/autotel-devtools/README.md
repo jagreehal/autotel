@@ -171,6 +171,7 @@ process. Point them at the bound port, or free the original.
 - ✅ **Persistence**: `--db` keeps telemetry across restarts; retention applies count and byte caps
 - ✅ Traces view with waterfall (tree connectors, event markers, critical path) + flame graph
 - ✅ Logs view with a query bar and severity filtering
+- ✅ Clear empties the server's store along with the browser's; the Traces tab opens on the trace list
 - ✅ **Metrics view**: server-reduced time series, merged histogram distributions, interpolated quantiles, sparklines, and capped exemplars that open the trace behind a spike
 - ✅ Error aggregation and grouping
 - ✅ Service map visualization
@@ -203,6 +204,11 @@ filter box.
   arrow keys / Space (Esc exits); clicking a span jumps the tour to that step.
   Use it to show a teammate or a client what the agent did, which tools it
   called, and where the cost went.
+- The **Trace** view draws the run as a live waterfall: model calls, tool calls
+  and sub-agents as bars on a time axis, each with its duration and cost. Rows
+  fold, the slowest call and failed calls are marked, and a run in progress
+  draws its open parents as running. The tree takes the keyboard: arrow keys
+  move and fold, Enter opens the span.
 
 ### Agents: observe Claude Code (and other coding agents)
 
@@ -297,6 +303,9 @@ the order id or coupon code you set with `ctx.setAttribute` finds its span when
 you type it on its own. Attribute **keys** are not matched: every span carries
 resource keys like `host.name` and `process.command`, so matching keys would
 make ordinary words match everything. Search by key with `key = value`.
+
+**Nested attributes** match by dotted key: `bound.id = 2` finds a span or log
+whose attributes hold `{ bound: { id: 2 } }`.
 
 `severity` and `severity_number` both exist on purpose: the text is what you
 read, but "error and above" is a numeric comparison and string ordering cannot

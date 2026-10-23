@@ -8,8 +8,8 @@
  * whether there was anything to download.
  */
 
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/svelte';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import SnapshotBar from '../components/SnapshotBar.svelte';
 import {
   clearAllData,
@@ -49,7 +49,10 @@ beforeEach(() => {
   clearAllData();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe('SnapshotBar', () => {
   it('says what it holds, so the two live states are told apart', () => {
@@ -89,5 +92,38 @@ describe('SnapshotBar', () => {
     render(SnapshotBar);
 
     expect(screen.getByText(/1 trace(?!s)/)).toBeTruthy();
+  });
+
+  describe('Clear', () => {
+    async function clearWith(fetch: () => Promise<Response>) {
+      vi.stubGlobal('fetch', vi.fn(fetch));
+      updateWidgetData({ traces: [trace('t1')] });
+      render(SnapshotBar);
+      await fireEvent.click(screen.getByRole('button', { name: /^Clear$/ }));
+    }
+
+    it('clears the server and the view', async () => {
+      await clearWith(async () => new Response('{}', { status: 200 }));
+
+      expect(await screen.findByText(/No data captured/)).toBeTruthy();
+      expect(screen.queryByText(/server/i)).toBeNull();
+    });
+
+    it('warns when the server refuses, since its data will come back', async () => {
+      await clearWith(async () => new Response('{}', { status: 403 }));
+
+      expect(
+        await screen.findByText(/Server kept its data \(403\)/),
+      ).toBeTruthy();
+    });
+
+    it('warns when the server cannot be reached, since its data will come back', async () => {
+      await clearWith(async () => {
+        throw new TypeError('Failed to fetch');
+      });
+
+      expect(await screen.findByText(/Couldn't reach the server/)).toBeTruthy();
+      expect(screen.getByText(/No data captured/)).toBeTruthy();
+    });
   });
 });

@@ -59,15 +59,6 @@ function enrichFromRequest(
 ): Record<string, unknown> | undefined {
   if (!request) return undefined;
 
-  let route = '/';
-  if (request.url) {
-    try {
-      route = new URL(request.url).pathname;
-    } catch {
-      route = request.url;
-    }
-  }
-
   const requestId =
     getHeader(request.headers, 'x-request-id') ??
     getHeader(request.headers, 'cf-ray');
@@ -75,7 +66,7 @@ function enrichFromRequest(
   return {
     'http.request.method': request.method,
     'url.full': request.url,
-    'http.route': route,
+    'url.path': resolvePath(request),
     'http.request.id': requestId,
     'cloudflare.country': request.cf?.country,
     'cloudflare.colo': request.cf?.colo,
@@ -144,11 +135,11 @@ function resolveSpanName<TEnv>(
   request: CloudflareRequestLike,
   env: TEnv,
   options?: CloudflareWithAutotelOptions<TEnv>,
-): string {
+): string | undefined {
   if (typeof options?.spanName === 'function') {
     return options.spanName(request, env);
   }
-  return options?.spanName ?? `cloudflare.${request.method ?? 'request'}`;
+  return options?.spanName;
 }
 
 export function withAutotelFetch<

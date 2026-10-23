@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Boxes } from '@lucide/svelte';
-  import { resourceSummariesSignal, setSelectedTab } from '../store.svelte';
+  import { openTab, resourceSummariesSignal } from '../store.svelte';
   import { formatTimestamp } from '../utils';
   import { cn } from '../utils/cn';
   import { matchesNeedle } from '../utils/textMatch';
@@ -61,7 +61,7 @@
   {#if value > 0}
     <button
       type="button"
-      onclick={() => setSelectedTab(tab)}
+      onclick={() => openTab(tab)}
       class="group/stat text-left rounded -m-1 p-1 hover:bg-hover transition-colors"
       title={`View ${label.toLowerCase()} in the ${tab} tab`}
     >

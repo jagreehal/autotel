@@ -234,7 +234,7 @@ const processor = new EnrichedSpanProcessor(
 
 ## Attribute Redaction
 
-Automatically redact PII and sensitive data from span attributes for compliance:
+Automatically redact PII and sensitive data from span attributes and log records for compliance:
 
 ```typescript
 init({
@@ -271,6 +271,14 @@ init({
 Key patterns match the full attribute key and its last dot segment, so the
 presets' anchored key patterns redact `user.password` and `http.request.header.authorization`. Custom `keyPatterns` see the last
 segment too. A string array under a matching key has each element replaced.
+
+Log records follow the same rules: key rules, paths, built-in patterns and a
+custom `redactor`. The redactor walks object bodies and nested attributes under
+dotted keys (`customer.password`), and a sensitive key redacts everything
+beneath it, binary values included. Processors passed through
+`logRecordProcessors` receive the redacted record. With a custom `redactor`,
+declare `keyPatterns` or `paths` for keys whose whole object must be redacted;
+otherwise each nested value reaches the redactor under its dotted key.
 
 For redaction driven by portable rule files rather than presets, see
 [Telemetry Policies](/autotel/policies/).

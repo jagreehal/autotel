@@ -20,6 +20,8 @@ import {
 export interface ExtractedRequest {
   method: string;
   path: string;
+  /** Matched route template (`/users/:id`), never the raw path. Omit when unknown. */
+  route?: string;
   headers?:
     | Headers
     | Record<string, string | string[] | undefined>
@@ -57,6 +59,8 @@ export interface FrameworkIntegrationSpec<TCtx> {
 export interface FrameworkRequestHandle extends MiddlewareLoggerResult {
   middlewareOptions: MiddlewareLoggerOptions;
   runWith: <T>(fn: () => T | Promise<T>) => Promise<T>;
+  /** Record a route template only known after routing (sets `http.route`, renames a default-named span). */
+  setRoute: (route: string | undefined) => void;
 }
 
 export interface FrameworkIntegrationHelpers<TCtx> {
@@ -89,7 +93,11 @@ export async function completeIntegratedRequest<T>(
   options: IntegratedCompletionOptions | undefined,
   result: T,
 ): Promise<T> {
-  if (handle.skipped || options?.autoEmit === false) {
+  if (handle.skipped) return result;
+  if (options?.autoEmit === false) {
+    // No snapshot, but the span still says how the request ended.
+    if (result instanceof Response)
+      handle.markOutcome({ status: result.status });
     return result;
   }
 
@@ -141,7 +149,7 @@ export function toRouteAdapterOptions(
 
 export function buildTracedOptions(
   options: TracedOptionInput | undefined,
-  spanName: string,
+  spanName: string | undefined,
 ): FrameworkHandlerOptions {
   return {
     ...toRouteAdapterOptions(options),
@@ -162,7 +170,16 @@ function resolveSpanName<TCtx>(
   if (typeof spec.spanName === 'string') {
     return spec.spanName;
   }
-  return `http.${request.method.toLowerCase() || 'request'}`;
+  return defaultSpanName(request.method, request.route);
+}
+
+/** OTel HTTP server span name: `{method} {http.route}`, or `{method}` without a route. */
+export function defaultSpanName(
+  method: string | undefined,
+  route: string | undefined,
+): string {
+  const m = method || 'HTTP';
+  return route ? `${m} ${route}` : m;
 }
 
 function buildHandle<TCtx>(
@@ -170,6 +187,7 @@ function buildHandle<TCtx>(
   ctx: TCtx,
   traceCtx: TraceContext,
   options: FrameworkHandlerOptions = {},
+  defaultNamed = false,
 ): FrameworkRequestHandle {
   const extracted = spec.extractRequest(ctx);
   const waitUntil = options.waitUntil ?? spec.extractWaitUntil?.(ctx);
@@ -191,7 +209,8 @@ function buildHandle<TCtx>(
   );
   log.set({
     'http.request.method': extracted.method,
-    'http.route': extracted.path,
+    'url.path': extracted.path,
+    'http.route': extracted.route,
     'http.request.id': extracted.requestId,
   });
 
@@ -204,7 +223,7 @@ function buildHandle<TCtx>(
 
   spec.attachLogger(ctx, log);
 
-  const result = createMiddlewareLogger(log, middlewareOptions);
+  const result = createMiddlewareLogger(log, middlewareOptions, traceCtx);
   const storage = spec.storage;
 
   return {
@@ -213,6 +232,13 @@ function buildHandle<TCtx>(
     runWith: async (fn) => {
       if (!storage || result.skipped) return fn();
       return storage.run(log, fn);
+    },
+    setRoute: (route) => {
+      if (!route) return;
+      log.set({ 'http.route': route });
+      if (defaultNamed) {
+        traceCtx.updateName(defaultSpanName(extracted.method, route));
+      }
     },
   };
 }
@@ -239,8 +265,10 @@ function buildSkippedHandle<TCtx>(
     logger,
     middlewareOptions,
     skipped: true,
+    markOutcome: () => {},
     finish: async () => null,
     finishResponse: async (response) => response,
+    setRoute: () => {},
     runWith: async (fn) => {
       if (!spec.storage) return fn();
       return spec.storage.run(logger, fn);
@@ -272,11 +300,18 @@ export function defineFrameworkIntegration<TCtx>(
 
       const spanName =
         options?.spanName ?? resolveSpanName(spec, ctx, extracted);
+      const defaultNamed = !options?.spanName && !spec.spanName;
 
       return trace.run(
         { name: spanName, isError: completion?.isError },
         (traceCtx) => {
-          const handle = buildHandle(spec, ctx, traceCtx, options ?? {});
+          const handle = buildHandle(
+            spec,
+            ctx,
+            traceCtx,
+            options ?? {},
+            defaultNamed,
+          );
           return handler(handle);
         },
       ) as ReturnType<typeof handler>;

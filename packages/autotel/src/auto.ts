@@ -33,19 +33,10 @@
  * @requires Node.js 20.6.0 or later
  */
 
-// namespace import for browser-bundler compat — see node-require.ts
-import * as nodeModule from 'node:module';
-import { createAddHookMessageChannel } from 'import-in-the-middle';
+// Registers the ESM hook first, before any instrumented module loads.
+import './register';
 import { init } from './init';
 import { loadYamlConfig } from './yaml-config';
-
-// Register ESM hooks first (must happen before any instrumented modules load)
-const { registerOptions } = createAddHookMessageChannel();
-nodeModule.register(
-  'import-in-the-middle/hook.mjs',
-  import.meta.url,
-  registerOptions,
-);
 
 // Load YAML config if present (init.ts will also load it, but we need values here)
 const yamlConfig = loadYamlConfig();

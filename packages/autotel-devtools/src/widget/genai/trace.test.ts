@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildRunTrace, flattenTrace, type TraceNode } from './trace';
-import type { GenAiSpan } from './types';
+import {
+  buildRunTrace,
+  flattenTrace,
+  missingParentIds,
+  type TraceNode,
+} from './trace';
+import type { GenAiCost, GenAiSpan } from './types';
 
 function span(overrides: Partial<GenAiSpan> = {}): GenAiSpan {
   return {
@@ -209,5 +214,96 @@ describe('buildRunTrace — extras', () => {
       span({ spanId: 'a', startMs: 100 }),
     ]);
     expect(trace.map((n) => n.spanId)).toEqual(['a', 'b']);
+  });
+});
+
+describe('buildRunTrace — cost, errors and identity', () => {
+  const cost = (
+    total: number,
+    source: GenAiCost['source'] = 'table',
+  ): GenAiCost => ({
+    currency: 'USD',
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    total,
+    source,
+  });
+
+  it('puts a model call its own cost and rolls children up into the agent', () => {
+    const trace = buildRunTrace([
+      span({ spanId: 'agent', operation: 'invoke_agent', endMs: 300 }),
+      span({ spanId: 'c1', parentSpanId: 'agent', cost: cost(0.02) }),
+      span({
+        spanId: 'c2',
+        parentSpanId: 'agent',
+        startMs: 150,
+        cost: cost(0.03),
+      }),
+    ]);
+    expect(trace[0].costUsd).toBeCloseTo(0.05);
+    expect(trace[0].children.map((c) => c.costUsd)).toEqual([0.02, 0.03]);
+  });
+
+  it('leaves cost absent when nothing was priced', () => {
+    const trace = buildRunTrace([
+      span({ spanId: 'c', cost: cost(0, 'unknown') }),
+    ]);
+    expect(trace[0].costUsd).toBeUndefined();
+  });
+
+  it('flags errored spans', () => {
+    const trace = buildRunTrace([span({ spanId: 'e', status: 'error' })]);
+    expect(trace[0].error).toBe(true);
+  });
+
+  it('keeps node ids stable when the run grows', () => {
+    const first = buildRunTrace([span({ spanId: 'a' })]);
+    const later = buildRunTrace([
+      span({ spanId: 'z', startMs: -50 }),
+      span({ spanId: 'a' }),
+    ]);
+    const idOf = (nodes: TraceNode[], spanId: string) =>
+      flattenTrace(nodes).find((n) => n.spanId === spanId)!.id;
+    expect(idOf(later, 'a')).toBe(idOf(first, 'a'));
+  });
+});
+
+describe('buildRunTrace — running parents', () => {
+  const children = [
+    span({ spanId: 'plan', parentSpanId: 'orch', startMs: 900, endMs: 5000 }),
+    span({
+      spanId: 'tool',
+      parentSpanId: 'orch',
+      startMs: 5100,
+      endMs: 5200,
+      operation: 'execute_tool',
+    }),
+  ];
+
+  it('finds the parents children point at that have not arrived', () => {
+    expect(missingParentIds(children)).toEqual(new Set(['orch']));
+    expect(missingParentIds([...children, span({ spanId: 'orch' })]).size).toBe(
+      0,
+    );
+  });
+
+  it('groups the children under a running stand-in that starts with the first', () => {
+    const trace = buildRunTrace(children, {
+      runningParentIds: new Set(['orch']),
+    });
+    expect(kinds(trace)).toEqual([
+      'running:Running',
+      '  step:ollama/granite',
+      '  tool:Tool: chat',
+    ]);
+    expect(trace[0].startMs).toBe(900);
+    expect(trace[0].durationMs).toBeUndefined();
+  });
+
+  it('leaves orphans as roots when their parent is not believed running', () => {
+    const trace = buildRunTrace(children);
+    expect(trace.map((n) => n.kind)).toEqual(['step', 'tool']);
   });
 });

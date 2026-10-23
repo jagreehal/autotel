@@ -27,6 +27,27 @@ Use `defineFrameworkIntegration()` from `autotel-adapters/toolkit` to wire a new
 
 Toolkit options include route `include` / `exclude`, per-route `service`, serverless `waitUntil`, streaming `finishResponse`, and request-level `keep` callbacks.
 
+The request handle also exposes `markOutcome({ status, error })`, which records the status code and error on the span without emitting the snapshot, and `finishResponse(response, { error })` for an error the framework caught on the way to the response.
+
+## Span names and attributes
+
+Request spans follow the OpenTelemetry HTTP conventions:
+
+- `http.route` holds the matched route template (`/users/:id`), and the span is named `{METHOD} {route}`, or `{METHOD}` when no route matched.
+- `url.path` holds the raw request path.
+- A 5xx response ends the span with status ERROR. A 4xx leaves the status unset.
+
+Next.js and Cloudflare Workers have no matched route to read, so they set only `url.path`. Pass `http.route` through `enrichRequest` and a name through `spanName`:
+
+```ts
+export const GET = withAutotel(handler, {
+  spanName: 'GET /api/orders/[id]',
+  enrichRequest: () => ({ 'http.route': '/api/orders/[id]' }),
+});
+```
+
+Hono reads the last matched route after routing and records the error it caught on `c.error` for a 5xx. NestJS records `Controller.handler` as `code.function.name`.
+
 ## When to use `withAutotel` vs `useLogger` alone
 
 Each adapter exports two patterns. Choose based on whether you already have

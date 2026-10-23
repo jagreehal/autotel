@@ -78,6 +78,17 @@ export const POST = withAutotel(async (request: Request) => {
 `withAutotel` creates the span and the request logger; `useLogger(request)`
 returns the logger bound to the active request.
 
+The span records the raw path as `url.path` and takes the name `{METHOD}`. To
+group by route, pass the template through `enrichRequest` and a name through
+`spanName`:
+
+```typescript
+export const GET = withAutotel(handler, {
+  spanName: 'GET /api/orders/[id]',
+  enrichRequest: () => ({ 'http.route': '/api/orders/[id]' }),
+});
+```
+
 ### Navigation is not an error
 
 `redirect()` and `notFound()` work by throwing. Next catches the throw and turns

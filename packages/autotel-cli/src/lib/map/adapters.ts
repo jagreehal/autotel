@@ -8,7 +8,12 @@ import {
   type SourceFile,
   type VariableDeclaration,
 } from 'ts-morph';
-import { moduleBindings, relativeFile, type Parser } from './facts';
+import {
+  AMBIENT_APIS,
+  moduleBindings,
+  relativeFile,
+  type Parser,
+} from './facts';
 import { fileExists, readFileSafe } from '../fs';
 import type {
   Framework,
@@ -686,6 +691,42 @@ function isHonoApp(root: Node, scope: Scope, depth = 0): boolean {
     : false;
 }
 
+/**
+ * Whether a Hono middleware path (`*`, `/api/*`, `/users/:id`) runs for every
+ * URL a route template accepts. Not whether the two strings match: middleware
+ * on `/users/:id` matches the text `/users/*`, yet `/users/a/b` bypasses it.
+ *
+ * A trailing `*` covers the rest, including nothing (`/api/*` runs for `/api`).
+ * A `:param` covers one segment, so only a literal or a plain param under it.
+ * A route segment that can vary in shape (`*`, `:id?`, `:path{.+}`) is covered
+ * only by a trailing `*`. An optional middleware param (`:id?`) also covers its
+ * absence at the end; a constrained one (`:id{[0-9]+}`) counts as covering
+ * nothing. Anything unsure counts as not covered.
+ */
+function patternMatches(pattern: string, routePath: string): boolean {
+  const segments = (p: string) => p.split('/').filter(Boolean);
+  const mw = segments(pattern);
+  const route = segments(routePath);
+  const isParam = (s: string) => s.startsWith(':');
+  const varies = (s: string) =>
+    s === '*' || (isParam(s) && (s.endsWith('?') || s.includes('{')));
+
+  for (let i = 0; ; i++) {
+    const m = mw[i];
+    const r = route[i];
+    const last = i === mw.length - 1;
+    if (m === '*' && last) return true;
+    if (r === undefined) return m === undefined || (last && m.endsWith('?'));
+    if (m === undefined || varies(r)) return false;
+    if (m === '*') continue;
+    if (isParam(m)) {
+      if (m.includes('{')) return false;
+      continue;
+    }
+    if (m !== r) return false;
+  }
+}
+
 /** Hono's joining of a mount prefix and a route path: `/users` + `/` is `/users`. */
 function joinPath(prefix: string, routePath: string): string {
   if (!prefix || prefix === '/') return routePath;
@@ -802,7 +843,7 @@ function chainOf(
 }
 
 /** The file a relative import names, as the project-relative path, or null. */
-function resolveImport(
+export function resolveImport(
   projectRoot: string,
   fromAbsolute: string,
   specifier: string,
@@ -1022,6 +1063,29 @@ function returnedApp(call: Node, scope: Scope): string | null {
 }
 
 /**
+ * Whether a `.use()` argument installs autotel's request span:
+ * `autotelMiddleware()`, aliased on import, or a variable holding that call.
+ */
+function isAmbientMiddleware(arg: Node, scope: Scope): boolean {
+  let node: Node | undefined = arg;
+  if (node.isKind(SyntaxKind.Identifier)) {
+    const declaration = node.getSymbol()?.getDeclarations()[0];
+    node = declaration?.isKind(SyntaxKind.VariableDeclaration)
+      ? declaration.getInitializer()
+      : undefined;
+  }
+  if (!node?.isKind(SyntaxKind.CallExpression)) return false;
+  const callee = node.getExpression();
+  if (!callee.isKind(SyntaxKind.Identifier)) return false;
+  const name = bindingKey(
+    scope.projectRoot,
+    node.getSourceFile(),
+    callee.getText(),
+  ).split('#')[1];
+  return name !== undefined && AMBIENT_APIS.includes(name);
+}
+
+/**
  * Method and path from an OpenAPI route definition: `createRoute({...})`, the
  * object itself, or a variable holding either, here or in an imported file.
  * The `{id}` placeholders become `:id`, as `@hono/zod-openapi` does at runtime.
@@ -1105,9 +1169,23 @@ function routerRoutes(
     route: RawRouteEntry;
     app: AppRef;
     bare: boolean;
+    at: Site;
   }> = [];
-  const mounts: Array<{ parent: AppRef; child: string; prefix: string }> = [];
+  /** Where a call sits, so registration order can be compared. */
+  type Site = { file: string; pos: number };
+  const mounts: Array<{
+    parent: AppRef;
+    child: string;
+    prefix: string;
+    at: Site;
+  }> = [];
   const bases = new Map<string, { app: string; prefix: string }>();
+  /* Apps with autotel middleware registered, and apps a factory built
+     (`const app = createApp()`), keyed to the app the factory returns. The
+     factory link carries middleware only: every `createApp()` result is its
+     own app, so routes are not merged through it. */
+  const ambient: Array<{ app: AppRef; path: string; at: Site }> = [];
+  const builtBy = new Map<string, string>();
   const refOf = (source: SourceFile, expression: Node): AppRef => {
     const { root, prefix } = chainOf(expression, scope);
     return {
@@ -1136,6 +1214,8 @@ function routerRoutes(
     const holds = (key: string, value: Node | undefined): void => {
       if (!value) return;
       const { root, prefix } = chainOf(value, scope);
+      const factoryApp = returnedApp(root, scope);
+      if (factoryApp) builtBy.set(key, factoryApp);
       const named = root.isKind(SyntaxKind.Identifier);
       if (!named && !prefix) return;
       bases.set(key, {
@@ -1163,6 +1243,19 @@ function routerRoutes(
       if (!callee.isKind(SyntaxKind.PropertyAccessExpression)) continue;
       const args = call.getArguments();
       const verb = callee.getName();
+      const at = { file: relative, pos: call.getStart() };
+      // Middleware, not a route: it gets no entry, only credit for the routes
+      // it runs in front of.
+      if (verb === 'use') {
+        if (args.some((arg) => isAmbientMiddleware(arg, scope))) {
+          ambient.push({
+            app: refOf(source, callee.getExpression()),
+            path: (args[0] && stringValue(args[0], scope)) ?? '*',
+            at,
+          });
+        }
+        continue;
+      }
       if (args.length < 2) continue;
 
       const app = refOf(source, callee.getExpression());
@@ -1175,6 +1268,7 @@ function routerRoutes(
           parent: app,
           child: returnedApp(sub, scope) ?? refOf(source, sub).key,
           prefix: mountPath,
+          at,
         });
         continue;
       }
@@ -1190,7 +1284,7 @@ function routerRoutes(
         const literal = stringValue(args[0], scope);
         if (literal === undefined) continue;
         routePath = literal;
-        method = verb === 'use' || verb === 'all' ? null : verb.toUpperCase();
+        method = verb === 'all' ? null : verb.toUpperCase();
       }
       const bare =
         verb !== 'openapi' &&
@@ -1202,7 +1296,7 @@ function routerRoutes(
       registrations.push({
         route: {
           framework,
-          kind: verb === 'use' ? 'middleware' : 'api',
+          kind: 'api',
           method,
           path: routePath,
           file: relative,
@@ -1213,6 +1307,7 @@ function routerRoutes(
         },
         app,
         bare,
+        at,
       });
     }
   }
@@ -1247,23 +1342,79 @@ function routerRoutes(
       parent: parent.app,
       child: through(mount.child).app,
       prefix: joinPath(parent.prefix, mount.prefix),
+      at: mount.at,
     };
   });
-  /** Every path an app is mounted at, with the root app it hangs off. */
+  const middleware = ambient.map(({ app, path: mwPath, at }) => {
+    const resolved = resolve(app);
+    return {
+      app: resolved.app,
+      pattern: joinPath(resolved.prefix, mwPath),
+      at,
+    };
+  });
+  /**
+   * Whether autotel middleware on `key` runs for a request to `routePath`
+   * (relative to `key`) dispatched by the registration at `at`: its pattern
+   * matches, and it was registered first, since Hono runs handlers in
+   * registration order. `at` is null when order is settled already (an app
+   * built by a factory has its middleware before anything is added to it).
+   * Order is known within one file, and across files only when the app is
+   * imported from the file that registers the middleware, which then runs
+   * first. Anything else gets no credit: a false pass hides a dark route.
+   */
+  const coveredOn = (
+    key: string,
+    routePath: string,
+    at: Site | null,
+    seen = new Set<string>(),
+  ): boolean => {
+    if (seen.has(key)) return false;
+    seen.add(key);
+    const home = key.split(/[#@]/)[0];
+    const before = (mw: Site) =>
+      at === null || (mw.file === at.file ? mw.pos < at.pos : mw.file === home);
+    if (
+      middleware.some(
+        (mw) =>
+          mw.app === key &&
+          before(mw.at) &&
+          patternMatches(mw.pattern, routePath),
+      )
+    ) {
+      return true;
+    }
+    const factory = builtBy.get(key);
+    return (
+      factory !== undefined &&
+      coveredOn(through(factory).app, routePath, null, seen)
+    );
+  };
+
+  /**
+   * Every path an app is mounted at, with the root app it hangs off, and
+   * whether autotel middleware runs for `tail` on the way down that chain.
+   */
   const mountsOf = (
     key: string,
+    tail: string,
+    at: Site,
     seen: Set<string>,
-  ): Array<{ prefix: string; root: string }> => {
+  ): Array<{ prefix: string; root: string; covered: boolean }> => {
+    const covered = coveredOn(key, tail, at);
     // An app mounted in a cycle is treated as a root, so its routes stay.
-    if (seen.has(key)) return [{ prefix: '', root: key }];
+    if (seen.has(key)) return [{ prefix: '', root: key, covered }];
     const parents = edges.filter((edge) => edge.child === key);
-    if (parents.length === 0) return [{ prefix: '', root: key }];
+    if (parents.length === 0) return [{ prefix: '', root: key, covered }];
     const next = new Set(seen).add(key);
     return parents.flatMap((edge) =>
-      mountsOf(edge.parent, next).map((mount) => ({
-        prefix: joinPath(mount.prefix, edge.prefix),
-        root: mount.root,
-      })),
+      mountsOf(edge.parent, joinPath(edge.prefix, tail), edge.at, next).map(
+        (mount) => ({
+          prefix: joinPath(mount.prefix, edge.prefix),
+          root: mount.root,
+          covered: covered || mount.covered,
+        }),
+      ),
     );
   };
 
@@ -1277,23 +1428,29 @@ function routerRoutes(
       .map((registration) => resolve(registration.app).app),
   ]);
   const routes: RawRouteEntry[] = [];
-  for (const { route, app, bare } of registrations) {
+  for (const { route, app, bare, at } of registrations) {
     const { app: key, prefix } = resolve(app);
     if (bare && !apps.has(key)) continue;
     const tail = joinPath(prefix, route.path);
-    const paths = new Set<string>();
-    for (const mount of mountsOf(key, new Set())) {
+    // A path reached through two mounts is covered if either chain covers it.
+    const paths = new Map<string, boolean>();
+    for (const mount of mountsOf(key, tail, at, new Set())) {
       if (served === undefined || mount.root === served) {
-        paths.add(joinPath(mount.prefix, tail));
+        const full = joinPath(mount.prefix, tail);
+        paths.set(full, (paths.get(full) ?? false) || mount.covered);
       }
     }
-    for (const routePath of paths) {
+    for (const [routePath, covered] of paths) {
       // Hono serves `api/v1/x` at `/api/v1/x`.
       const full =
         routePath === '*' || routePath.startsWith('/')
           ? routePath
           : `/${routePath}`;
-      routes.push({ ...route, path: full });
+      routes.push({
+        ...route,
+        path: full,
+        ...(covered ? { ambient: true } : {}),
+      });
     }
   }
   return routes;

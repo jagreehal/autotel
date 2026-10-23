@@ -92,7 +92,7 @@ Ready-made presets with the auth headers already wired (`createHoneycombConfig`,
 
 ## Auto-redaction (PII protection)
 
-Built-in masking scrubs sensitive data from span attributes **before** export. When `attributeRedactor` is unset, `init()` applies `'default'` if the resolved environment is `production` (`environment` option, else `NODE_ENV`, else `'development'`), and nothing otherwise. `AUTOTEL_REDACT_PII` (`off` / `default` / `strict` / `pci-dss`) overrides that; `attributeRedactor: false` disables it. Smart partial masking preserves debug signal:
+Built-in masking scrubs sensitive data from span attributes and log records **before** export. When `attributeRedactor` is unset, `init()` applies `'default'` if the resolved environment is `production` (`environment` option, else `NODE_ENV`, else `'development'`), and nothing otherwise. `AUTOTEL_REDACT_PII` (`off` / `default` / `strict` / `pci-dss`) overrides that; `attributeRedactor: false` disables it. Smart partial masking preserves debug signal:
 
 | Pattern      | Example input         | Masked output                  |
 | ------------ | --------------------- | ------------------------------ |
@@ -132,4 +132,6 @@ All three presets also replace query and fragment values in `url.full`, `url.que
 
 Each key pattern is tested against the full key and its last dot segment, so `/^x-internal-/i` also matches `http.request.header.x-internal-id`. String arrays under a matching key have each element replaced.
 
-For free-text fields outside the span pipeline (logs, error messages, frontend payloads), use `createStringRedactor('default')` from `autotel`. It applies the preset's value patterns and returns a `(s: string) => string`.
+Log records get the same rules (key rules, paths, built-ins, custom `redactor`). Object bodies and nested attributes are walked under dotted keys (`customer.password`), a sensitive key redacts its whole subtree including binary values, and `logRecordProcessors` receive the redacted record. With a custom `redactor`, declare `keyPatterns` or `paths` for keys whose whole object must be redacted.
+
+For free-text fields outside the telemetry pipeline (error messages, frontend payloads), use `createStringRedactor('default')` from `autotel`. It applies the span redactor's value rules (value patterns, built-ins, a custom `redactor`) and returns a `(s: string) => string`. Key rules do not apply to a bare string.
