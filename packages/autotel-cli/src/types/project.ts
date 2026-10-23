@@ -11,7 +11,6 @@ export interface PackageJson {
   version?: string;
   type?: 'module' | 'commonjs';
   main?: string;
-  exports?: Record<string, unknown>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;

@@ -25,6 +25,13 @@ const FIXTURE = path.resolve(
  * Each command runs in its own test so a failure pinpoints the broken
  * group instead of failing the whole suite.
  */
+interface Envelope<TData> {
+  ok: boolean;
+  command: string;
+  data: TData;
+  error?: { code: string; message: string };
+}
+
 describe('investigate commands (fixture backend)', () => {
   let stdoutChunks: string[] = [];
   let writeSpy: ReturnType<typeof vi.spyOn>;
@@ -34,8 +41,8 @@ describe('investigate commands (fixture backend)', () => {
     stdoutChunks = [];
     writeSpy = vi
       .spyOn(process.stdout, 'write')
-      .mockImplementation((chunk: unknown) => {
-        stdoutChunks.push(typeof chunk === 'string' ? chunk : String(chunk));
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stdoutChunks.push(String(chunk));
         return true;
       });
   });
@@ -46,19 +53,15 @@ describe('investigate commands (fixture backend)', () => {
 
   const flags = { backend: 'fixture' as const, fixturePath: FIXTURE };
 
-  function capturedEnvelope(): {
-    ok: boolean;
-    command: string;
-    data?: unknown;
-    error?: unknown;
-  } {
+  /** The JSON envelope a command printed, with `data` typed by the test. */
+  function capturedEnvelope<TData>(): Envelope<TData> {
     expect(stdoutChunks.length).toBeGreaterThan(0);
     const joined = stdoutChunks.join('');
-    return JSON.parse(joined) as ReturnType<typeof capturedEnvelope>;
+    return JSON.parse(joined);
   }
 
-  function expectOk(commandName: string): unknown {
-    const env = capturedEnvelope();
+  function expectOk<TData>(commandName: string): TData {
+    const env = capturedEnvelope<TData>();
     expect(
       env.ok,
       `command="${env.command}" error=${JSON.stringify(env.error)}`,
@@ -70,10 +73,10 @@ describe('investigate commands (fixture backend)', () => {
 
   it('health: returns healthy + signals', async () => {
     await runHealth(flags);
-    const data = expectOk('health') as {
+    const data = expectOk<{
       healthy: boolean;
       signals: { traces: string; metrics: string; logs: string };
-    };
+    }>('health');
     expect(data.healthy).toBe(true);
     expect(data.signals.traces).toBe('available');
   });
@@ -87,69 +90,68 @@ describe('investigate commands (fixture backend)', () => {
 
   it('capabilities: returns signal availability', async () => {
     await runCapabilities(flags);
-    const data = expectOk('capabilities') as { traces: string };
+    const data = expectOk<{ traces: string }>('capabilities');
     expect(data.traces).toBe('available');
   });
 
   it('discover services: returns count + services array', async () => {
     await runDiscoverServices(flags);
-    const data = expectOk('discover services') as {
+    const data = expectOk<{
       count: number;
       services: unknown[];
-    };
+    }>('discover services');
     expect(data.count).toBeGreaterThan(0);
     expect(Array.isArray(data.services)).toBe(true);
   });
 
   it('query traces: returns items array', async () => {
     await runQueryTraces({ ...flags, limit: 5 });
-    const data = expectOk('query traces') as { items: unknown[] };
+    const data = expectOk<{ items: unknown[] }>('query traces');
     expect(Array.isArray(data.items)).toBe(true);
   });
 
   it('query spans: returns items array', async () => {
     await runQuerySpans({ ...flags, limit: 5 });
-    const data = expectOk('query spans') as { items: unknown[] };
+    const data = expectOk<{ items: unknown[] }>('query spans');
     expect(Array.isArray(data.items)).toBe(true);
   });
 
   it('query metrics: returns items array', async () => {
     await runQueryMetrics({ ...flags });
-    const data = expectOk('query metrics') as { items: unknown[] };
+    const data = expectOk<{ items: unknown[] }>('query metrics');
     expect(Array.isArray(data.items)).toBe(true);
   });
 
   it('query logs: returns items array', async () => {
     await runQueryLogs({ ...flags });
-    const data = expectOk('query logs') as { items: unknown[] };
+    const data = expectOk<{ items: unknown[] }>('query logs');
     expect(Array.isArray(data.items)).toBe(true);
   });
 
   it('topology services: returns services array', async () => {
     await runListServices(flags);
-    const data = expectOk('topology services') as { services: unknown[] };
+    const data = expectOk<{ services: unknown[] }>('topology services');
     expect(Array.isArray(data.services)).toBe(true);
   });
 
   it('topology operations: returns operations for a service', async () => {
     // First grab a service name from the fixture.
     await runListServices(flags);
-    const svcs = (
-      capturedEnvelope().data as { services: Array<{ name: string }> }
-    ).services;
+    const svcs = capturedEnvelope<{ services: Array<{ name: string }> }>().data
+      .services;
     expect(svcs.length).toBeGreaterThan(0);
     stdoutChunks = [];
     await runListOperations({ ...flags, serviceName: svcs[0]!.name });
-    const data = expectOk('topology operations') as { operations: unknown[] };
+    const data = expectOk<{ operations: unknown[] }>('topology operations');
     expect(Array.isArray(data.operations)).toBe(true);
   });
 
   it('topology map: returns nodes + edges', async () => {
     await runServiceMap({ ...flags });
-    const data = expectOk('topology map') as {
+    const data = expectOk<{
       nodes: unknown[];
       edges: unknown[];
-    };
+    }>('topology map');
     expect(Array.isArray(data.nodes)).toBe(true);
     expect(Array.isArray(data.edges)).toBe(true);
   });
@@ -164,32 +166,31 @@ describe('investigate commands (fixture backend)', () => {
 
   it('diagnose errors: returns totalTraces + groups', async () => {
     await runDiagnoseErrors(flags);
-    const data = expectOk('diagnose errors') as {
+    const data = expectOk<{
       totalTraces: number;
       groups: unknown[];
-    };
+    }>('diagnose errors');
     expect(data.totalTraces).toBeTypeOf('number');
     expect(Array.isArray(data.groups)).toBe(true);
   });
 
   it('trace get: returns the trace by ID', async () => {
     await runQueryTraces({ ...flags, limit: 1 });
-    const traceItems = (
-      capturedEnvelope().data as { items: Array<{ traceId: string }> }
-    ).items;
+    const traceItems = capturedEnvelope<{ items: Array<{ traceId: string }> }>()
+      .data.items;
     expect(traceItems.length).toBeGreaterThan(0);
     const traceId = traceItems[0]!.traceId;
     stdoutChunks = [];
     await runTraceGet({ ...flags, traceId });
-    const data = expectOk('trace get') as { traceId: string };
+    const data = expectOk<{ traceId: string }>('trace get');
     expect(data.traceId).toBe(traceId);
   });
 
   it('correlate trace: returns correlated signals envelope', async () => {
     await runQueryTraces({ ...flags, limit: 1 });
-    const correlateItems = (
-      capturedEnvelope().data as { items: Array<{ traceId: string }> }
-    ).items;
+    const correlateItems = capturedEnvelope<{
+      items: Array<{ traceId: string }>;
+    }>().data.items;
     expect(correlateItems.length).toBeGreaterThan(0);
     const traceId = correlateItems[0]!.traceId;
     stdoutChunks = [];
@@ -202,11 +203,11 @@ describe('investigate commands (fixture backend)', () => {
 
   it('llm usage: returns summary + byModel + byService', async () => {
     await runLlmUsage(flags);
-    const data = expectOk('llm usage') as {
+    const data = expectOk<{
       summary: { totalRequests: number };
       byModel: unknown;
       byService: unknown;
-    };
+    }>('llm usage');
     expect(data.summary.totalRequests).toBeTypeOf('number');
     expect(data.byModel).toBeDefined();
     expect(data.byService).toBeDefined();
@@ -214,7 +215,7 @@ describe('investigate commands (fixture backend)', () => {
 
   it('score explain: returns guide (no backend)', async () => {
     await runScoreExplain({});
-    const data = expectOk('score explain') as { guide: string };
+    const data = expectOk<{ guide: string }>('score explain');
     expect(data.guide).toBeTypeOf('string');
     expect(data.guide.length).toBeGreaterThan(0);
   });

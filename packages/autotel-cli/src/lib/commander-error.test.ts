@@ -2,6 +2,13 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { commanderErrorToAutotel } from './commander-error';
 import { AutotelError } from './errors';
 
+const EXITED = 'process.exit';
+
+/** Stands in for process.exit: it never returns, so neither does this. */
+function stopExit(): never {
+  throw new Error(EXITED);
+}
+
 describe('commanderErrorToAutotel', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -42,26 +49,26 @@ describe('commanderErrorToAutotel', () => {
   });
 
   it('exits 0 when commander signals help was printed', () => {
-    const exitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((() => 0) as never);
-    commanderErrorToAutotel({
-      code: 'commander.helpDisplayed',
-      message: '(help)',
-      exitCode: 0,
-    });
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(stopExit);
+    expect(() =>
+      commanderErrorToAutotel({
+        code: 'commander.helpDisplayed',
+        message: '(help)',
+        exitCode: 0,
+      }),
+    ).toThrow(EXITED);
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
   it('exits cleanly when commander signals version was printed', () => {
-    const exitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((() => 0) as never);
-    commanderErrorToAutotel({
-      code: 'commander.version',
-      message: '0.0.0',
-      exitCode: 0,
-    });
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(stopExit);
+    expect(() =>
+      commanderErrorToAutotel({
+        code: 'commander.version',
+        message: '0.0.0',
+        exitCode: 0,
+      }),
+    ).toThrow(EXITED);
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 });

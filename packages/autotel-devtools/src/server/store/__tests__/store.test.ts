@@ -9,7 +9,7 @@
  * fail here.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -836,5 +836,33 @@ describe('DevtoolsStore — cohort rows', () => {
   it('reports a query it cannot parse rather than returning an empty cohort', () => {
     // Silently comparing against nothing would read as "no difference found".
     expect(() => store.cohortRows({ query: 'duration > >' })).toThrow();
+  });
+});
+
+describe('DevtoolsStore: a span that cannot be stored', () => {
+  it('is set aside alone, and a trace left with no spans is not kept', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // JSON cannot carry a BigInt, so these attributes cannot be written.
+    const unstorable = span({ attributes: { n: 1n as never } });
+    const kept = trace();
+    store.ingestTraces([trace({ spans: [unstorable] }), kept]);
+
+    expect(store.getTrace(unstorable.traceId)).toBeNull();
+    expect(store.getTrace(kept.traceId)?.spans).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/Dropped 1 span .*BigInt/),
+    );
+    warn.mockRestore();
+  });
+  it('marks the trace partial when its root is the span set aside', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const root = span({ attributes: { n: 1n as never } });
+    const child = span({ traceId: root.traceId, parentSpanId: root.spanId });
+    store.ingestTraces([trace({ spans: [root, child] })]);
+
+    const stored = store.getTrace(root.traceId);
+    expect(stored?.spans.map((s) => s.spanId)).toEqual([child.spanId]);
+    expect(stored?.partial).toBe(true);
+    warn.mockRestore();
   });
 });

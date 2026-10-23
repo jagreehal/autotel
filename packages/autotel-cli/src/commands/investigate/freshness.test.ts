@@ -1,28 +1,28 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { TelemetryBackend } from 'autotel-mcp';
 import {
   buildProbeSpan,
   encodeProbe,
   measureFreshness,
   otlpHeadersFromEnv,
+  type FreshnessOptions,
+  type ProbeReader,
   resolveOtlpTraceUrl,
   sendOtlpTrace,
 } from './freshness';
 
+type ProbeSend = NonNullable<FreshnessOptions['send']>;
+
 /** A backend that starts empty and serves the probe from the Nth read onward. */
-function backendVisibleFromRead(n: number): {
-  backend: TelemetryBackend;
-  reads: () => number;
-} {
+function backendVisibleFromRead(n: number) {
   let reads = 0;
-  const backend = {
+  const backend: ProbeReader = {
     searchTraces: async () => {
       reads++;
       return reads >= n
         ? { items: [{ traceId: 'probe' }], totalCount: 1 }
         : { items: [], totalCount: 0 };
     },
-  } as unknown as TelemetryBackend;
+  };
   return { backend, reads: () => reads };
 }
 
@@ -58,7 +58,7 @@ describe('measureFreshness', () => {
 
   it('writes the probe under the service name it then polls for', async () => {
     const { backend } = backendVisibleFromRead(1);
-    const send = vi.fn(async () => {});
+    const send = vi.fn<ProbeSend>(async () => {});
     const result = await measureFreshness({
       backend,
       otlpEndpoint: 'http://localhost:4318',
@@ -66,18 +66,15 @@ describe('measureFreshness', () => {
       send,
     });
 
-    const [endpoint, span] = send.mock.calls[0] as unknown as [
-      string,
-      ReturnType<typeof buildProbeSpan>,
-    ];
+    const [endpoint, span] = send.mock.calls[0]!;
     expect(endpoint).toBe('http://localhost:4318');
     expect(span.resource.attributes['service.name']).toBe(result.probeService);
   });
 
   it('gives up at the timeout instead of polling forever', async () => {
-    const neverVisible = {
+    const neverVisible: ProbeReader = {
       searchTraces: async () => ({ items: [], totalCount: 0 }),
-    } as unknown as TelemetryBackend;
+    };
 
     const result = await measureFreshness({
       backend: neverVisible,
@@ -94,11 +91,11 @@ describe('measureFreshness', () => {
   });
 
   it('surfaces backend read failures instead of disguising them as stale data', async () => {
-    const unauthorized = {
+    const unauthorized: ProbeReader = {
       searchTraces: async () => {
         throw new Error('401 Unauthorized');
       },
-    } as unknown as TelemetryBackend;
+    };
 
     await expect(
       measureFreshness({
@@ -111,9 +108,9 @@ describe('measureFreshness', () => {
   });
 
   it('bounds a backend read that never settles', async () => {
-    const hanging = {
-      searchTraces: async () => new Promise(() => {}),
-    } as unknown as TelemetryBackend;
+    const hanging: ProbeReader = {
+      searchTraces: () => new Promise(() => {}),
+    };
 
     const result = await measureFreshness({
       backend: hanging,
@@ -179,7 +176,7 @@ describe('otlpHeadersFromEnv', () => {
 describe('probe authentication', () => {
   it('sends the configured headers with the probe write', async () => {
     const { backend } = backendVisibleFromRead(1);
-    const send = vi.fn(async () => {});
+    const send = vi.fn<ProbeSend>(async () => {});
     await measureFreshness({
       backend,
       otlpEndpoint: 'https://logfire-eu.pydantic.dev',
@@ -188,11 +185,7 @@ describe('probe authentication', () => {
       send,
     });
 
-    const call = send.mock.calls[0] as unknown as [
-      string,
-      unknown,
-      Record<string, string>,
-    ];
+    const call = send.mock.calls[0]!;
     expect(call[2]).toEqual({ Authorization: 'write-token' });
   });
 });

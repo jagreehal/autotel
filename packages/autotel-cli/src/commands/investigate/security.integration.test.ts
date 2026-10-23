@@ -18,8 +18,8 @@ describe('security commands (fixture backend)', () => {
     stdoutChunks = [];
     writeSpy = vi
       .spyOn(process.stdout, 'write')
-      .mockImplementation((chunk: unknown) => {
-        stdoutChunks.push(typeof chunk === 'string' ? chunk : String(chunk));
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stdoutChunks.push(String(chunk));
         return true;
       });
   });
@@ -30,12 +30,13 @@ describe('security commands (fixture backend)', () => {
 
   const flags = { backend: 'fixture' as const, fixturePath: FIXTURE };
 
-  function capturedEnvelope(): {
+  /** The JSON envelope a command printed, with `data` typed by the test. */
+  function capturedEnvelope<TData>(): {
     ok: boolean;
     command: string;
-    data: unknown;
+    data: TData;
   } {
-    return JSON.parse(stdoutChunks.join('')) as never;
+    return JSON.parse(stdoutChunks.join(''));
   }
 
   it('security summary: aggregates events, suspicious requests, denied responses', async () => {
@@ -46,11 +47,7 @@ describe('security commands (fixture backend)', () => {
       to: '1970-01-01T01:00:00.000Z',
     });
 
-    const env = capturedEnvelope();
-    expect(env.ok).toBe(true);
-    expect(env.command).toBe('security summary');
-
-    const data = env.data as {
+    const env = capturedEnvelope<{
       securityEvents: {
         total: number;
         bySeverity: Record<string, number>;
@@ -67,7 +64,11 @@ describe('security commands (fixture backend)', () => {
         byStatus: Record<string, number>;
         topClients: Array<{ value: string; count: number }>;
       };
-    };
+    }>();
+    expect(env.ok).toBe(true);
+    expect(env.command).toBe('security summary');
+
+    const data = env.data;
 
     expect(data.securityEvents.total).toBe(2);
     expect(data.securityEvents.bySeverity).toEqual({
@@ -106,11 +107,18 @@ describe('security commands (fixture backend)', () => {
       to: '1970-01-01T01:00:00.000Z',
     });
 
-    const env = capturedEnvelope();
+    const env = capturedEnvelope<{
+      items: Array<{
+        event: string;
+        category: string;
+        severity: string;
+        traceId: string;
+      }>;
+    }>();
     expect(env.ok).toBe(true);
     expect(env.command).toBe('security events');
 
-    const data = env.data as { items: Array<Record<string, unknown>> };
+    const data = env.data;
     expect(data.items).toHaveLength(2);
     expect(data.items[0]).toMatchObject({
       event: expect.any(String),
@@ -128,9 +136,9 @@ describe('security commands (fixture backend)', () => {
       severity: 'critical',
     });
 
-    const data = capturedEnvelope().data as {
+    const data = capturedEnvelope<{
       items: Array<{ event: string }>;
-    };
+    }>().data;
     expect(data.items).toHaveLength(1);
     expect(data.items[0]?.event).toBe('access.denied');
   });
@@ -143,9 +151,9 @@ describe('security commands (fixture backend)', () => {
       category: 'authentication',
     });
 
-    const data = capturedEnvelope().data as {
+    const data = capturedEnvelope<{
       items: Array<{ event: string }>;
-    };
+    }>().data;
     expect(data.items).toHaveLength(1);
     expect(data.items[0]?.event).toBe('auth.login.failed');
   });
@@ -157,11 +165,7 @@ describe('security commands (fixture backend)', () => {
       to: '1970-01-01T01:00:00.000Z',
     });
 
-    const env = capturedEnvelope();
-    expect(env.ok).toBe(true);
-    expect(env.command).toBe('security mcp');
-
-    const data = env.data as {
+    const env = capturedEnvelope<{
       injection: {
         scanned: number;
         suspected: number;
@@ -175,7 +179,11 @@ describe('security commands (fixture backend)', () => {
         byTool: Array<{ value: string; count: number }>;
       };
       untrustedContent: { toolCalls: number };
-    };
+    }>();
+    expect(env.ok).toBe(true);
+    expect(env.command).toBe('security mcp');
+
+    const data = env.data;
 
     // Two tool calls carried a verdict; one was non-clean (malicious).
     expect(data.injection.scanned).toBe(2);

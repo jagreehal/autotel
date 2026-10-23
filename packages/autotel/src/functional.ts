@@ -255,7 +255,8 @@ function createCtxProxy(resolve: () => TraceContext | null): TraceContext {
 
     ownKeys() {
       const ctxValue = resolve();
-      return Object.keys(ctxValue ?? INACTIVE_CTX_METHODS);
+      // Symbols too, so a spread copy keeps the context's span marker.
+      return Reflect.ownKeys(ctxValue ?? INACTIVE_CTX_METHODS);
     },
 
     getOwnPropertyDescriptor(_target, prop) {

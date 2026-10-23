@@ -5,6 +5,7 @@ import { countSuppressed } from './exemptions';
 import { collectProjectFacts, type ProjectFacts } from './project-facts';
 import { getRule, runRules, unreadableResults } from './rules';
 import {
+  checkEntries,
   classifyRouteObservability,
   gradeFromScore,
   scoreGlobal,
@@ -13,7 +14,6 @@ import {
 import { classifySensitivity } from './sensitivity';
 import type {
   CheckId,
-  CheckResult,
   Framework,
   MapFile,
   ProjectSuggestion,
@@ -144,20 +144,18 @@ function hoistProjectSuggestions(
   const hoisted = new Map<CheckId, ProjectSuggestion>();
 
   for (const route of routes) {
-    for (const [id, result] of Object.entries(route.suggestions) as [
-      CheckId,
-      CheckResult,
-    ][]) {
+    for (const [id, result] of checkEntries(route.suggestions)) {
       const rule = getRule(id);
       if (rule?.category !== 'opportunity' || rule.scope !== 'project')
         continue;
       delete route.suggestions[id];
       if (hoisted.has(id) || result.status !== 'fail') continue;
-      hoisted.set(id, {
+      const suggestion: ProjectSuggestion = {
         id,
         message: result.message ?? rule.question,
-        ...(result.evidence ? { evidence: result.evidence } : {}),
-      });
+      };
+      if (result.evidence) suggestion.evidence = result.evidence;
+      hoisted.set(id, suggestion);
     }
   }
 

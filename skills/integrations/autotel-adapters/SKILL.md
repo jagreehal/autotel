@@ -138,6 +138,8 @@ Register `autotelMiddleware()` before your routes; it opens a span per request a
 binds the logger to `AsyncLocalStorage`, so `useLogger()` (no argument) resolves
 inside any downstream handler.
 
+Hono served from Next.js: keep `autotel-adapters` and `hono` on the same side of `serverExternalPackages` (bundle both, or list both). With two copies of Hono, the adapter names the route from the request and warns once.
+
 For SSE, NDJSON, and AI response streams the handler returns before the work
 finishes. `autotelMiddleware()` holds the snapshot until the body closes, errors,
 or is cancelled, so `log.set()` calls made during streaming still land. The

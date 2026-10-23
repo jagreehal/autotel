@@ -100,21 +100,18 @@ export class AutotelError extends Error {
   }
 
   toEnvelope(command?: string): AutotelErrorEnvelope {
-    return {
-      ok: false,
-      ...(command !== undefined ? { command } : {}),
-      error: {
-        type: this.type,
-        code: this.code,
-        message: this.message,
-        retryable: this.retryable,
-        ...(this.fix !== undefined ? { fix: this.fix } : {}),
-        ...(this.expected !== undefined ? { expected: this.expected } : {}),
-        ...(this.suggestions !== undefined
-          ? { suggestions: this.suggestions }
-          : {}),
-      },
+    const error: AutotelErrorEnvelope['error'] = {
+      type: this.type,
+      code: this.code,
+      message: this.message,
+      retryable: this.retryable,
     };
+    if (this.fix !== undefined) error.fix = this.fix;
+    if (this.expected !== undefined) error.expected = this.expected;
+    if (this.suggestions !== undefined) error.suggestions = this.suggestions;
+    return command === undefined
+      ? { ok: false, error }
+      : { ok: false, command, error };
   }
 }
 
@@ -134,9 +131,9 @@ export function exitCodeForError(err: AutotelError): 1 | 2 {
 /**
  * Wrap an unknown thrown value in an AutotelError envelope.
  */
-export function toAutotelError(value: unknown): AutotelError {
-  if (value instanceof AutotelError) return value;
-  const message = value instanceof Error ? value.message : String(value);
+export function toAutotelError(cause: unknown): AutotelError {
+  if (cause instanceof AutotelError) return cause;
+  const message = cause instanceof Error ? cause.message : String(cause);
   return new AutotelError({
     type: 'runtime',
     code: AutotelErrorCodes.E_UNKNOWN,

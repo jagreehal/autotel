@@ -2,6 +2,16 @@ import { isExemptRoute } from './exemptions';
 import { getRule, REQUIREMENTS } from './rules';
 import type { CheckId, CheckResult, Grade, RouteEntry } from './types';
 
+/** The results a check map holds, keyed by the check that produced them. */
+export function checkEntries(
+  checks: Partial<Record<CheckId, CheckResult>>,
+): [CheckId, CheckResult][] {
+  // SAFETY: the map's type says every key is a CheckId; Object.entries only
+  // widens it to string. runRules() assigns a result to each key it sets, so
+  // no value is undefined.
+  return Object.entries(checks) as [CheckId, CheckResult][];
+}
+
 /** Fallback weight for a rule id that is not in the registry. */
 const UNKNOWN_WEIGHT = 10;
 
@@ -15,10 +25,7 @@ export function scoreRoute(
   checks: Partial<Record<CheckId, CheckResult>>,
 ): number {
   let score = 100;
-  for (const [id, result] of Object.entries(checks) as [
-    CheckId,
-    CheckResult,
-  ][]) {
+  for (const [id, result] of checkEntries(checks)) {
     if (result.status !== 'fail') continue;
     const rule = getRule(id);
     if (rule && rule.category !== 'requirement') continue;
@@ -92,9 +99,9 @@ export function classifyRouteObservability(
 
 /** Compact per-rule status for the matrix view, e.g. "span ✓ context ✗". */
 export function routeCheckChips(route: RouteEntry): string | null {
-  const relevant = (
-    Object.entries(route.checks) as [CheckId, CheckResult][]
-  ).filter(([, result]) => result.status !== 'n/a');
+  const relevant = checkEntries(route.checks).filter(
+    ([, result]) => result.status !== 'n/a',
+  );
   if (relevant.length === 0) return null;
 
   return relevant

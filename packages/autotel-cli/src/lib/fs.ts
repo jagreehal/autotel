@@ -131,6 +131,8 @@ export function readJsonSafe<T>(filePath: string): T | null {
     return null;
   }
   try {
+    // SAFETY: T is the caller's claim about the file it reads (package.json,
+    // whose fields are all optional); JSON.parse is untyped.
     return JSON.parse(content) as T;
   } catch {
     return null;

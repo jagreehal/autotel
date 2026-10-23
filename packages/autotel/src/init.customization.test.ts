@@ -5,6 +5,7 @@ import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { mock, mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import { NeverSampler } from './sampling';
+import { safeRequire } from './node-require';
 
 /** The options a constructor was called with, as this harness records them. */
 type SdkOptions = AutotelSdkOptions;
@@ -135,6 +136,12 @@ async function loadInitWithMocks() {
   // above are registered; a static import would bind the unmocked module.
   // eslint-disable-next-line eslint-js/no-restricted-syntax
   const mod = await import('./init');
+  // Run as an app without OpenFeature, which this workspace has installed:
+  // finding it turns log export on.
+  mod._setOptionalRequireForTesting(((id: string) =>
+    id === '@openfeature/server-sdk'
+      ? undefined
+      : safeRequire(id)) as typeof safeRequire);
 
   return {
     init: mod.init,

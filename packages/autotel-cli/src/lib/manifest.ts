@@ -536,10 +536,9 @@ function investigateCmd(
     static?: boolean;
   } = {},
 ): CommandSpec {
-  return {
+  const spec: CommandSpec = {
     name,
     description,
-    ...(extras.args ? { args: extras.args } : {}),
     flags: [
       ...(extras.static ? STATIC_FLAGS : INVESTIGATE_FLAGS),
       ...(extras.flags ?? []),
@@ -552,6 +551,8 @@ function investigateCmd(
     mayReadEnv: false,
     supportsJson: true,
   };
+  if (extras.args) spec.args = extras.args;
+  return spec;
 }
 
 const traceIdArg: NonNullable<CommandSpec['args']> = [

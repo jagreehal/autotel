@@ -6,6 +6,7 @@ import {
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
 import { setEventSink } from 'autotel-web';
+import { recordFeatureFlag } from 'autotel/feature-flags';
 import { posthogCompatibility } from './compatibility';
 
 const emitted: { name: string; attributes: Record<string, unknown> }[] = [];
@@ -15,7 +16,11 @@ beforeEach(() => {
   setEventSink((name, attributes) => emitted.push({ name, attributes }));
 });
 
-function runEnricher(featureFlags: string[], flags: Record<string, unknown>) {
+function runEnricher(
+  featureFlags: string[],
+  flags: Record<string, unknown>,
+  inSpan?: (span: never) => void,
+) {
   const exporter = new InMemorySpanExporter();
   const processor = posthogCompatibility({
     posthog: {
@@ -28,7 +33,9 @@ function runEnricher(featureFlags: string[], flags: Record<string, unknown>) {
   const provider = new BasicTracerProvider({
     spanProcessors: [processor, new SimpleSpanProcessor(exporter)],
   });
-  provider.getTracer('t').startSpan('work').end();
+  const work = provider.getTracer('t').startSpan('work');
+  inSpan?.(work as never);
+  work.end();
   const [span] = exporter.getFinishedSpans();
   if (!span) throw new Error('no span was exported');
   return span;
@@ -40,7 +47,7 @@ describe('feature flags on spans', () => {
     // flags and none of them ship a panel that reads it.
     const span = runEnricher(['new-checkout'], { 'new-checkout': 'treatment' });
     expect(span.attributes['feature_flag.key']).toBe('new-checkout');
-    expect(span.attributes['feature_flag.result.value']).toBe('treatment');
+    expect(span.attributes['feature_flag.result.variant']).toBe('treatment');
     expect(span.attributes['feature_flag.provider.name']).toBe('posthog');
     expect(span.attributes['feature_flag.new-checkout']).toBeUndefined();
   });
@@ -56,9 +63,27 @@ describe('feature flags on spans', () => {
       'a',
       'b',
     ]);
-    expect(events.at(-1)?.attributes['feature_flag.result.value']).toBe(
+    expect(events.at(-1)?.attributes['feature_flag.result.variant']).toBe(
       'variant-2',
     );
+  });
+
+  it('keeps the first flag whole on the span when several are read', () => {
+    const span = runEnricher(['a', 'b'], { a: true, b: 'treatment' });
+    expect(span.attributes['feature_flag.key']).toBe('a');
+    expect(span.attributes['feature_flag.result.value']).toBe(true);
+    expect(span.attributes['feature_flag.result.variant']).toBeUndefined();
+  });
+
+  it("keeps the enricher's flag whole when the app records another on the span", () => {
+    const span = runEnricher(
+      ['new-checkout'],
+      { 'new-checkout': 'b' },
+      (work) => recordFeatureFlag(work, { key: 'beta', value: true }),
+    );
+    expect(span.attributes['feature_flag.key']).toBe('new-checkout');
+    expect(span.attributes['feature_flag.result.variant']).toBe('b');
+    expect(span.attributes['feature_flag.result.value']).toBeUndefined();
   });
 
   it('skips a flag PostHog has no answer for', () => {
