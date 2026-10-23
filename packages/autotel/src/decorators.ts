@@ -26,7 +26,7 @@
 import type { TracingOptions, TraceContext } from './functional';
 import { getConfig } from './config';
 import { SpanStatusCode } from '@opentelemetry/api';
-import { createTraceContext } from './trace-context';
+import { createTraceContext, markSpanOk } from './trace-context';
 import { splitNameOrOptions } from './values';
 
 /**
@@ -154,7 +154,7 @@ export function Trace(
           try {
             this.ctx = ctx;
             const result = await originalMethod.apply(this, args);
-            span.setStatus({ code: SpanStatusCode.OK });
+            markSpanOk(span);
             return result;
           } finally {
             // Restore original ctx

@@ -33,6 +33,7 @@
  */
 
 import { trace, context, SpanStatusCode } from '@opentelemetry/api';
+import { markSpanOk } from './trace-context';
 import type { Span, Tracer, Context } from '@opentelemetry/api';
 import { requireModule } from './node-require';
 import {
@@ -371,7 +372,7 @@ export function runWithSpan<T>(span: Span, fn: () => T): T {
  *
  * This is a convenience function that:
  * - Records exceptions if an error is provided
- * - Sets span status to ERROR if error exists, OK otherwise
+ * - Sets span status to ERROR if error exists, otherwise OK unless the code chose a status
  * - Ends the span
  *
  * @param span - The span to finalize
@@ -435,7 +436,7 @@ export function finalizeSpan(span: Span, cause?: unknown): void {
     span.recordException(toError(cause));
     span.setStatus({ code: SpanStatusCode.ERROR });
   } else {
-    span.setStatus({ code: SpanStatusCode.OK });
+    markSpanOk(span);
   }
   span.end();
 }

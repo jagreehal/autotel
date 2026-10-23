@@ -15,6 +15,7 @@ import type {
   PresetSlug,
 } from './dep-detector';
 import { AutotelError, AutotelErrorCodes } from './errors';
+import { asRecord } from './values';
 
 export interface InitPlanDetection {
   packages: DetectedPackage[];
@@ -59,7 +60,8 @@ export interface InitPlan {
  * caller for now.
  */
 export function parsePlan(input: unknown): InitPlan {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+  const obj = asRecord(input);
+  if (obj === undefined) {
     throw new AutotelError({
       type: 'validation',
       code: AutotelErrorCodes.E_INVALID_PLAN,
@@ -67,7 +69,6 @@ export function parsePlan(input: unknown): InitPlan {
       expected: { v: 1, presets: 'string[]' },
     });
   }
-  const obj = input as Record<string, unknown>;
   if (obj['v'] !== 1) {
     throw new AutotelError({
       type: 'validation',
@@ -84,12 +85,11 @@ export function parsePlan(input: unknown): InitPlan {
       message: 'plan.presets must be an array of preset slugs',
     });
   }
-  const pkgs = obj['packagesToInstall'];
+  const pkgs = asRecord(obj['packagesToInstall']);
   if (
-    typeof pkgs !== 'object' ||
-    pkgs === null ||
-    !Array.isArray((pkgs as Record<string, unknown>)['prod']) ||
-    !Array.isArray((pkgs as Record<string, unknown>)['dev'])
+    pkgs === undefined ||
+    !Array.isArray(pkgs['prod']) ||
+    !Array.isArray(pkgs['dev'])
   ) {
     throw new AutotelError({
       type: 'validation',
@@ -98,5 +98,7 @@ export function parsePlan(input: unknown): InitPlan {
         'plan.packagesToInstall must be { prod: string[], dev: string[] }',
     });
   }
-  return obj as unknown as InitPlan;
+  // SAFETY: input is the object checked above (v, presets, packagesToInstall);
+  // the remaining fields are trusted, as the doc comment says.
+  return input as InitPlan;
 }

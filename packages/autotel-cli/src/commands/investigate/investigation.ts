@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import {
   toTraceSearchQuery,
   toSpanSearchQuery,
@@ -13,7 +13,9 @@ import {
   intArg,
 } from './cli-helpers';
 import { runQueryMetrics, runQueryLogs } from './signals';
-import { boolOpt, numberOpt, stringOpt } from '../../lib/opts.js';
+import { boolOpt, enumOpt, numberOpt, stringOpt } from '../../lib/opts.js';
+
+const STATUS_CODES = ['OK', 'ERROR', 'UNSET'] as const;
 
 export type QueryTracesFlags = InvestigateFlags & TraceQueryInput;
 export type QuerySpansFlags = InvestigateFlags & SpanQueryInput;
@@ -54,7 +56,11 @@ export function registerQueryCommands(program: Command): void {
   const tracesCmd = addTimeWindowFlags(new Command('traces'))
     .description('Search traces by service, op, status, tags, time, error')
     .option('--error-only', 'Only traces with errors')
-    .option('--status-code <code>', 'OK | ERROR | UNSET')
+    .addOption(
+      new Option('--status-code <code>', 'OK | ERROR | UNSET').choices(
+        STATUS_CODES,
+      ),
+    )
     .option('--min-duration-ms <n>', 'Minimum duration', intArg)
     .option('--max-duration-ms <n>', 'Maximum duration', intArg)
     .option('--gen-ai-system <name>', 'gen_ai.system')
@@ -71,7 +77,7 @@ export function registerQueryCommands(program: Command): void {
         to: stringOpt(o, 'to'),
         limit: numberOpt(o, 'limit'),
         errorOnly: boolOpt(o, 'errorOnly'),
-        statusCode: o.statusCode as 'OK' | 'ERROR' | 'UNSET' | undefined,
+        statusCode: enumOpt(o, 'statusCode', STATUS_CODES),
         minDurationMs: numberOpt(o, 'minDurationMs'),
         maxDurationMs: numberOpt(o, 'maxDurationMs'),
         genAiSystem: stringOpt(o, 'genAiSystem'),
@@ -83,7 +89,11 @@ export function registerQueryCommands(program: Command): void {
   const spansCmd = addTimeWindowFlags(new Command('spans'))
     .description('Search individual spans by service/op/status/tags/duration')
     .option('--error-only', 'Only spans with errors')
-    .option('--status-code <code>', 'OK | ERROR | UNSET')
+    .addOption(
+      new Option('--status-code <code>', 'OK | ERROR | UNSET').choices(
+        STATUS_CODES,
+      ),
+    )
     .option('--min-duration-ms <n>', 'Minimum span duration', intArg)
     .option('--max-duration-ms <n>', 'Maximum span duration', intArg)
     .action(async function (this: Command) {
@@ -97,7 +107,7 @@ export function registerQueryCommands(program: Command): void {
         to: stringOpt(o, 'to'),
         limit: numberOpt(o, 'limit'),
         errorOnly: boolOpt(o, 'errorOnly'),
-        statusCode: o.statusCode as 'OK' | 'ERROR' | 'UNSET' | undefined,
+        statusCode: enumOpt(o, 'statusCode', STATUS_CODES),
         minDurationMs: numberOpt(o, 'minDurationMs'),
         maxDurationMs: numberOpt(o, 'maxDurationMs'),
       });

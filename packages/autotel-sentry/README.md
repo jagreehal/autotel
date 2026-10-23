@@ -2,7 +2,7 @@
 
 Parses a Sentry DSN into the OTLP endpoint and auth headers that Autotel's `init()` expects, so autotel exports traces and logs straight to Sentry.
 
-That is the whole package. Errors link to traces on their own: `@sentry/node` reads the active OpenTelemetry span when it builds an event, so a captured error already carries the right `trace_id` and `span_id`.
+That is the whole package. To put captured errors on the active trace, call `Sentry.setOpenTelemetryContextAsyncContextStrategy()` after `Sentry.init()`: `@sentry/node` then reads the active OpenTelemetry span when it builds an event, so each error carries that span's `trace_id` and `span_id`.
 
 ## Prerequisites
 
@@ -26,10 +26,12 @@ import { sentryOtlpConfig } from 'autotel-sentry';
 
 const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
-// 1. Initialize Sentry — tell it not to register its own OTel SDK
+// 1. Initialize Sentry: tell it not to register its own OTel SDK
 Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+// Sentry reads trace ids from the active OpenTelemetry span
+Sentry.setOpenTelemetryContextAsyncContextStrategy();
 
-// 2. Initialize Autotel — it owns OTel and exports traces to Sentry's OTLP endpoint
+// 2. Initialize Autotel: it owns OTel and exports traces to Sentry's OTLP endpoint
 init({ service: 'my-app', endpoint: config.endpoint, headers: config.headers });
 ```
 
@@ -45,9 +47,9 @@ Parses a Sentry DSN and returns the three values needed to wire Autotel to Sentr
 const config = sentryOtlpConfig(
   'https://<key>@o<org>.ingest.sentry.io/<project>',
 );
-// config.dsn      — normalized DSN string (pass to Sentry.init)
-// config.endpoint — OTLP base URL (pass to Autotel init as `endpoint`)
-// config.headers  — auth headers (pass to Autotel init as `headers`)
+// config.dsn: normalized DSN string (pass to Sentry.init)
+// config.endpoint: OTLP base URL (pass to Autotel init as `endpoint`)
+// config.headers: auth headers (pass to Autotel init as `headers`)
 ```
 
 Throws if the DSN is missing or cannot be parsed.
@@ -131,9 +133,8 @@ before you rely on a signal being there.
 
 ## Migration
 
-**From `linkSentryErrors`.** Delete the call and its import. `@sentry/node`
-reads the active OpenTelemetry span when it builds an event, so errors keep
-landing on the right trace without it.
+**From `linkSentryErrors`.** Delete the call and its import, and call
+`Sentry.setOpenTelemetryContextAsyncContextStrategy()` once after `Sentry.init()`.
 
 **From the SpanProcessor approach.** Earlier versions shipped a
 `SentrySpanProcessor` / `SentryPropagator` bridge over deprecated Sentry Hub

@@ -20,6 +20,7 @@ describe('canonical feature flag names', () => {
       VERSION: 'feature_flag.version',
       // `feature_flag.evaluation.error.message` is deprecated in favour of this.
       ERROR_MESSAGE: 'feature_flag.error.message',
+      ERROR_TYPE: 'error.type',
     });
     expect(FEATURE_FLAG_EVALUATION_EVENT).toBe('feature_flag.evaluation');
   });
@@ -38,14 +39,22 @@ describe('featureFlagAttributes', () => {
       }),
     ).toEqual({
       'feature_flag.key': 'new-checkout',
-      // Typed, not stringified: the attribute permits a boolean, and turning
-      // one into "true" makes it uncomparable with a numeric or boolean flag.
-      'feature_flag.result.value': true,
       'feature_flag.result.variant': 'treatment',
       'feature_flag.result.reason': 'targeting_match',
       'feature_flag.provider.name': 'posthog',
       'feature_flag.context.id': 'user-42',
     });
+  });
+
+  it('records the value beside a variant only when asked', () => {
+    // Typed, not stringified: the attribute permits a boolean, and turning
+    // one into "true" makes it uncomparable with a numeric or boolean flag.
+    expect(
+      featureFlagAttributes(
+        { key: 'k', value: true, variant: 'on' },
+        { includeValue: true },
+      )['feature_flag.result.value'],
+    ).toBe(true);
   });
 
   it('keeps numbers as numbers', () => {
@@ -78,7 +87,20 @@ describe('featureFlagAttributes', () => {
         value: false,
         errorMessage: 'timeout',
       }),
-    ).toMatchObject({ 'feature_flag.error.message': 'timeout' });
+    ).toMatchObject({
+      'feature_flag.error.message': 'timeout',
+      'error.type': 'general',
+    });
+  });
+
+  it('lower-cases an error type to the registry spelling', () => {
+    expect(
+      featureFlagAttributes({
+        key: 'k',
+        value: false,
+        errorType: 'FLAG_NOT_FOUND',
+      })['error.type'],
+    ).toBe('flag_not_found');
   });
 });
 
@@ -157,17 +179,36 @@ describe('recordFeatureFlag', () => {
   });
 });
 
+describe('the span projection', () => {
+  const rawSpan = (spanId: string) => ({
+    setAttributes: vi.fn(),
+    spanContext: () => ({ traceId: 't', spanId }),
+  });
+
+  it('keeps a long-running span unmixed however many others record flags', () => {
+    const longRunning = rawSpan('long');
+    recordFeatureFlag(longRunning, { key: 'first', value: 'x' });
+    for (let index = 0; index < 10_001; index++) {
+      recordFeatureFlag(rawSpan(`busy-${index}`), { key: 'k', value: true });
+    }
+    recordFeatureFlag(longRunning, { key: 'second', value: 'y' });
+
+    expect(longRunning.setAttributes).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('autotelOpenFeatureHook', () => {
-  const hookContext = {
+  // OpenFeature merges a fresh evaluation context for every evaluation.
+  const hookContext = () => ({
     flagKey: 'new-checkout',
     defaultValue: false,
     context: { targetingKey: 'user-42' },
     providerMetadata: { name: 'posthog' },
-  };
+  });
 
   it('records an evaluation onto the active span', () => {
     const span = { setAttributes: vi.fn(), track: vi.fn() };
-    autotelOpenFeatureHook({ getSpan: () => span }).after?.(hookContext, {
+    autotelOpenFeatureHook({ getSpan: () => span }).after?.(hookContext(), {
       value: true,
       variant: 'treatment',
       reason: 'TARGETING_MATCH',
@@ -176,7 +217,6 @@ describe('autotelOpenFeatureHook', () => {
     expect(span.setAttributes).toHaveBeenCalledWith(
       expect.objectContaining({
         'feature_flag.key': 'new-checkout',
-        'feature_flag.result.value': true,
         'feature_flag.result.variant': 'treatment',
         'feature_flag.result.reason': 'targeting_match',
         'feature_flag.provider.name': 'posthog',
@@ -190,7 +230,7 @@ describe('autotelOpenFeatureHook', () => {
     // worth recording — the failure is the reason, not the result.
     const span = { setAttributes: vi.fn(), track: vi.fn() };
     autotelOpenFeatureHook({ getSpan: () => span }).error?.(
-      hookContext,
+      hookContext(),
       new Error('provider timeout'),
     );
 
@@ -201,16 +241,82 @@ describe('autotelOpenFeatureHook', () => {
         'feature_flag.error.message': 'provider timeout',
       }),
     );
+    expect(span.track).toHaveBeenCalledWith(
+      'feature_flag.evaluation',
+      expect.objectContaining({ 'error.type': 'general' }),
+    );
   });
 
-  it('carries the flag set id when the provider reports one', () => {
+  it("records OpenFeature's error code as error.type", () => {
     const span = { setAttributes: vi.fn(), track: vi.fn() };
-    autotelOpenFeatureHook({ getSpan: () => span }).after?.(
-      { ...hookContext, clientMetadata: { name: 'checkout-service' } },
-      { value: true },
+    const error = Object.assign(new Error('no such flag'), {
+      code: 'FLAG_NOT_FOUND',
+    });
+    autotelOpenFeatureHook({ getSpan: () => span }).error?.(
+      hookContext(),
+      error,
+    );
+    // On the event only: on the span, `error.type` would say the span's own
+    // operation failed.
+    expect(span.track).toHaveBeenCalledWith(
+      'feature_flag.evaluation',
+      expect.objectContaining({ 'error.type': 'flag_not_found' }),
+    );
+    expect(span.setAttributes.mock.calls[0]?.[0]).not.toHaveProperty(
+      'error.type',
+    );
+  });
+
+  it('keeps the first evaluation on the span, unmixed, and every one as an event', () => {
+    const span = { setAttributes: vi.fn(), track: vi.fn() };
+    const hook = autotelOpenFeatureHook({ getSpan: () => span });
+    hook.after?.(hookContext(), { value: 'blue' });
+    hook.after?.(
+      { ...hookContext(), flagKey: 'other' },
+      { value: 'red', variant: 'treatment' },
+    );
+
+    expect(span.setAttributes).toHaveBeenCalledTimes(1);
+    expect(span.setAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'feature_flag.key': 'new-checkout',
+        'feature_flag.result.value': 'blue',
+      }),
+    );
+    expect(span.track.mock.calls.map((call) => call[1])).toEqual([
+      expect.objectContaining({ 'feature_flag.key': 'new-checkout' }),
+      expect.objectContaining({
+        'feature_flag.key': 'other',
+        'feature_flag.result.variant': 'treatment',
+      }),
+    ]);
+    expect(span.track.mock.calls[1]?.[1]).not.toHaveProperty(
+      'feature_flag.result.value',
+    );
+  });
+
+  it('keeps the value beside a variant when includeValue is set', () => {
+    const span = { setAttributes: vi.fn(), track: vi.fn() };
+    autotelOpenFeatureHook({ getSpan: () => span, includeValue: true }).after?.(
+      hookContext(),
+      { value: 'blue', variant: 'treatment' },
     );
     expect(span.setAttributes).toHaveBeenCalledWith(
-      expect.objectContaining({ 'feature_flag.set.id': 'checkout-service' }),
+      expect.objectContaining({ 'feature_flag.result.value': 'blue' }),
+    );
+  });
+
+  it('reads the flag set id and version from flag metadata', () => {
+    const span = { setAttributes: vi.fn(), track: vi.fn() };
+    autotelOpenFeatureHook({ getSpan: () => span }).after?.(hookContext(), {
+      value: true,
+      flagMetadata: { flagSetId: 'proj-1', version: 3 },
+    });
+    expect(span.setAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'feature_flag.set.id': 'proj-1',
+        'feature_flag.version': '3',
+      }),
     );
   });
 
@@ -218,14 +324,14 @@ describe('autotelOpenFeatureHook', () => {
     // The default path, with nothing active to record onto — which is the real
     // shape of the problem: a flag read outside any span is legitimate.
     const hook = autotelOpenFeatureHook();
-    expect(() => hook.after?.(hookContext, { value: true })).not.toThrow();
-    expect(() => hook.error?.(hookContext, new Error('x'))).not.toThrow();
+    expect(() => hook.after?.(hookContext(), { value: true })).not.toThrow();
+    expect(() => hook.error?.(hookContext(), new Error('x'))).not.toThrow();
   });
 
   it('reads the targeting key from a context that has no targetingKey', () => {
     const span = { setAttributes: vi.fn(), track: vi.fn() };
     autotelOpenFeatureHook({ getSpan: () => span }).after?.(
-      { ...hookContext, context: {} },
+      { ...hookContext(), context: {} },
       { value: true },
     );
     const attrs = span.setAttributes.mock.calls[0]?.[0] ?? {};

@@ -63,9 +63,8 @@ export function findSourceFiles(packageRoot: string): string[] {
   );
 
   for (const dir of dirsToCheck) {
-    const files = fs.readdirSync(dir, { recursive: true });
+    const files = fs.readdirSync(dir, { encoding: 'utf8', recursive: true });
     for (const file of files) {
-      if (typeof file !== 'string') continue;
       const filePath = path.join(dir, file);
       try {
         if (

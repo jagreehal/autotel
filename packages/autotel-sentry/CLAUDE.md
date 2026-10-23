@@ -18,7 +18,7 @@ You are working on the Sentry OTLP integration package. You understand Sentry DS
 
 - **OTLP Configuration**: `sentryOtlpConfig(dsn)` parses a Sentry DSN into `{ dsn, endpoint, headers }` so Autotel's `init()` can export traces directly to Sentry's OTLP endpoint. No custom span processor is needed.
 - **Ownership Split**: Autotel owns OTel setup and trace export. Sentry SDK handles error capture only. `skipOpenTelemetrySetup: true` is required in `Sentry.init()` so the Sentry SDK does not register a second OTel SDK.
-- **Error linking is Sentry's job**: `@sentry/node` bundles `@sentry/opentelemetry` and reads the active OTel span when building an event's trace context, so errors carry the right ids with no help from us. `skipOpenTelemetrySetup: true` does not change this. A `linkSentryErrors()` export used to duplicate it and was removed in 0.7.0. Do not reintroduce it.
+- **Error linking is one Sentry call**: with `skipOpenTelemetrySetup: true`, `@sentry/node` keeps its own scope trace ids, so a captured error starts a trace of its own. `Sentry.setOpenTelemetryContextAsyncContextStrategy()` after `Sentry.init()` makes it read the active OTel span instead (checked against `@sentry/node` 11.8 and a live Sentry project). It is Sentry's public API, so it stays a line in user code: a `linkSentryErrors()` export was removed in 0.7.0. Do not reintroduce it.
 - **Overlap with Sentry**: `otlpIntegration` (`@sentry/node-core/light/otlp`, since 10.47.0) does both jobs. It defaults to installing its own exporter, which double-exports when autotel already exports. Pair it with `setupOtlpTracesExporter: false` or use this package, never both.
 
 ## Entry Points
@@ -77,6 +77,7 @@ export function sentryOtlpConfig(dsn: string): SentryOtlpConfig {
 1. `@sentry/node` must be installed (by the user; this package does not depend on it)
 2. Call `sentryOtlpConfig(dsn)` before either `Sentry.init()` or `init()`
 3. Pass `skipOpenTelemetrySetup: true` to `Sentry.init()` (required: Sentry SDK v8+ registers its own OTel SDK otherwise)
+4. Call `Sentry.setOpenTelemetryContextAsyncContextStrategy()` after `Sentry.init()` so captured errors join the active trace
 
 **Minimal setup:**
 
@@ -88,6 +89,7 @@ import { sentryOtlpConfig } from 'autotel-sentry';
 const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
 Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+Sentry.setOpenTelemetryContextAsyncContextStrategy();
 init({ service: 'my-app', endpoint: config.endpoint, headers: config.headers });
 ```
 

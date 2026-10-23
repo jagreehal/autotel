@@ -706,6 +706,13 @@ export class DevtoolsStore {
       'INSERT INTO span_links (trace_id, span_id, idx, linked_trace_id, linked_span_id) VALUES (?, ?, ?, ?, ?)',
     );
 
+    const dropped: Dropped = { count: 0 };
+    const removeEmptyTrace = this.db.prepare(
+      'DELETE FROM traces WHERE trace_id = ? AND NOT EXISTS (SELECT 1 FROM spans WHERE trace_id = ?)',
+    );
+    const unsetMissingRoot = this.db.prepare(
+      'UPDATE traces SET root_span_id = NULL, partial = 1 WHERE trace_id = ? AND root_span_id = ? AND NOT EXISTS (SELECT 1 FROM spans WHERE trace_id = ? AND span_id = ?)',
+    );
     this.db.exec('BEGIN');
     try {
       for (const trace of traces) {
@@ -721,60 +728,73 @@ export class DevtoolsStore {
           trace.partial ? 1 : 0,
         );
 
+        const droppedBefore = dropped.count;
         for (const span of trace.spans ?? []) {
-          upsertSpan.run(
-            span.spanId,
-            span.traceId,
-            span.parentSpanId ?? null,
-            span.name,
-            span.kind,
-            spanService(span, trace.service),
-            span.startTime,
-            span.endTime,
-            span.duration,
-            span.status?.code ?? 'UNSET',
-            span.status?.message ?? null,
-            JSON.stringify(span.attributes ?? {}),
-            span.events?.length ? JSON.stringify(span.events) : null,
-            span.links?.length ? JSON.stringify(span.links) : null,
-            span.scope ? JSON.stringify(span.scope) : null,
-          );
-          const entityId = `${span.traceId}:${span.spanId}`;
-          clearOccurrences.run(entityId);
-          this.indexAttributes(
-            upsertAttribute,
-            upsertOccurrence,
-            'traces',
-            entityId,
-            span.attributes ?? {},
-            span.startTime,
-          );
+          this.storeRecord(dropped, () => {
+            upsertSpan.run(
+              span.spanId,
+              span.traceId,
+              span.parentSpanId ?? null,
+              span.name,
+              span.kind,
+              spanService(span, trace.service),
+              span.startTime,
+              span.endTime,
+              span.duration,
+              span.status?.code ?? 'UNSET',
+              span.status?.message ?? null,
+              JSON.stringify(span.attributes ?? {}),
+              span.events?.length ? JSON.stringify(span.events) : null,
+              span.links?.length ? JSON.stringify(span.links) : null,
+              span.scope ? JSON.stringify(span.scope) : null,
+            );
+            const entityId = `${span.traceId}:${span.spanId}`;
+            clearOccurrences.run(entityId);
+            this.indexAttributes(
+              upsertAttribute,
+              upsertOccurrence,
+              'traces',
+              entityId,
+              span.attributes ?? {},
+              span.startTime,
+            );
 
-          clearEvents.run(span.traceId, span.spanId);
-          span.events?.forEach((event, index) => {
-            insertEvent.run(
-              span.traceId,
-              span.spanId,
-              index,
-              event.name,
-              event.timestamp ?? null,
-            );
+            clearEvents.run(span.traceId, span.spanId);
+            span.events?.forEach((event, index) => {
+              insertEvent.run(
+                span.traceId,
+                span.spanId,
+                index,
+                event.name,
+                event.timestamp ?? null,
+              );
+            });
+            clearLinks.run(span.traceId, span.spanId);
+            span.links?.forEach((link, index) => {
+              insertLink.run(
+                span.traceId,
+                span.spanId,
+                index,
+                link.traceId,
+                link.spanId,
+              );
+            });
           });
-          clearLinks.run(span.traceId, span.spanId);
-          span.links?.forEach((link, index) => {
-            insertLink.run(
-              span.traceId,
-              span.spanId,
-              index,
-              link.traceId,
-              link.spanId,
-            );
-          });
+        }
+        // A trace whose every span was set aside has nothing to show.
+        const spanCount = trace.spans?.length ?? 0;
+        if (spanCount > 0 && dropped.count - droppedBefore === spanCount) {
+          removeEmptyTrace.run(trace.traceId, trace.traceId);
+        } else if (trace.rootSpan && dropped.count > droppedBefore) {
+          // A root set aside leaves the trace partial, like a root still in flight.
+          const root = trace.rootSpan.spanId;
+          unsetMissingRoot.run(trace.traceId, root, trace.traceId, root);
         }
       }
       this.db.exec('COMMIT');
+      warnDropped(dropped, 'span');
     } catch (error) {
-      this.db.exec('ROLLBACK');
+      this.rollback();
       throw error;
     }
   }
@@ -857,36 +877,40 @@ export class DevtoolsStore {
     const upsertAttribute = this.attributeUpsert();
     const upsertOccurrence = this.attributeOccurrenceUpsert();
 
+    const dropped: Dropped = { count: 0 };
     this.db.exec('BEGIN');
     try {
       for (const log of logs) {
-        const structured = typeof log.body === 'object' && log.body !== null;
-        const inserted = upsert.run(
-          log.id,
-          log.timestamp,
-          log.resourceName ?? null,
-          log.severityText ?? null,
-          log.severityNumber ?? null,
-          log.traceId ?? null,
-          log.spanId ?? null,
-          structured ? JSON.stringify(log.body) : String(log.body ?? ''),
-          structured ? JSON.stringify(log.body) : null,
-          JSON.stringify(log.attributes ?? {}),
-          log.resource ? JSON.stringify(log.resource) : null,
-        );
-        if (Number(inserted.changes) === 0) continue;
-        this.indexAttributes(
-          upsertAttribute,
-          upsertOccurrence,
-          'logs',
-          log.id,
-          log.attributes ?? {},
-          log.timestamp,
-        );
+        this.storeRecord(dropped, () => {
+          const structured = typeof log.body === 'object' && log.body !== null;
+          const inserted = upsert.run(
+            log.id,
+            log.timestamp,
+            log.resourceName ?? null,
+            log.severityText ?? null,
+            log.severityNumber ?? null,
+            log.traceId ?? null,
+            log.spanId ?? null,
+            structured ? JSON.stringify(log.body) : String(log.body ?? ''),
+            structured ? JSON.stringify(log.body) : null,
+            JSON.stringify(log.attributes ?? {}),
+            log.resource ? JSON.stringify(log.resource) : null,
+          );
+          if (Number(inserted.changes) === 0) return;
+          this.indexAttributes(
+            upsertAttribute,
+            upsertOccurrence,
+            'logs',
+            log.id,
+            log.attributes ?? {},
+            log.timestamp,
+          );
+        });
       }
       this.db.exec('COMMIT');
+      warnDropped(dropped, 'log record');
     } catch (error) {
-      this.db.exec('ROLLBACK');
+      this.rollback();
       throw error;
     }
   }
@@ -1000,49 +1024,55 @@ export class DevtoolsStore {
         exemplars       = excluded.exemplars
     `);
 
+    const dropped: Dropped = { count: 0 };
     this.db.exec('BEGIN');
     try {
       for (const stream of streams) {
         for (const point of stream.points) {
-          const seriesId = seriesIdentity(stream, point.attributes);
-          upsertSeries.run(
-            seriesId,
-            stream.name,
-            stream.unit ?? null,
-            stream.description ?? null,
-            stream.kind,
-            stream.temporality ?? null,
-            stream.monotonic === undefined ? null : stream.monotonic ? 1 : 0,
-            stream.service,
-            stream.scope?.name ?? null,
-            stream.scope?.version ?? null,
-            stableJson(stream.resource),
-            stableJson(point.attributes),
-          );
-          upsertPoint.run(
-            seriesId,
-            point.timestamp,
-            point.startTimestamp ?? null,
-            point.value ?? null,
-            point.count ?? null,
-            point.sum ?? null,
-            point.min ?? null,
-            point.max ?? null,
-            point.bucketCounts ? JSON.stringify(point.bucketCounts) : null,
-            point.explicitBounds ? JSON.stringify(point.explicitBounds) : null,
-            point.scale ?? null,
-            point.zeroCount ?? null,
-            point.zeroThreshold ?? null,
-            point.positive ? JSON.stringify(point.positive) : null,
-            point.negative ? JSON.stringify(point.negative) : null,
-            point.quantiles ? JSON.stringify(point.quantiles) : null,
-            point.exemplars ? JSON.stringify(point.exemplars) : null,
-          );
+          this.storeRecord(dropped, () => {
+            const seriesId = seriesIdentity(stream, point.attributes);
+            upsertSeries.run(
+              seriesId,
+              stream.name,
+              stream.unit ?? null,
+              stream.description ?? null,
+              stream.kind,
+              stream.temporality ?? null,
+              stream.monotonic === undefined ? null : stream.monotonic ? 1 : 0,
+              stream.service,
+              stream.scope?.name ?? null,
+              stream.scope?.version ?? null,
+              stableJson(stream.resource),
+              stableJson(point.attributes),
+            );
+            upsertPoint.run(
+              seriesId,
+              point.timestamp,
+              point.startTimestamp ?? null,
+              point.value ?? null,
+              point.count ?? null,
+              point.sum ?? null,
+              point.min ?? null,
+              point.max ?? null,
+              point.bucketCounts ? JSON.stringify(point.bucketCounts) : null,
+              point.explicitBounds
+                ? JSON.stringify(point.explicitBounds)
+                : null,
+              point.scale ?? null,
+              point.zeroCount ?? null,
+              point.zeroThreshold ?? null,
+              point.positive ? JSON.stringify(point.positive) : null,
+              point.negative ? JSON.stringify(point.negative) : null,
+              point.quantiles ? JSON.stringify(point.quantiles) : null,
+              point.exemplars ? JSON.stringify(point.exemplars) : null,
+            );
+          });
         }
       }
       this.db.exec('COMMIT');
+      warnDropped(dropped, 'metric point');
     } catch (error) {
-      this.db.exec('ROLLBACK');
+      this.rollback();
       throw error;
     }
   }
@@ -1446,6 +1476,39 @@ export class DevtoolsStore {
     }));
   }
 
+  /**
+   * One record's writes, inside the batch's transaction. A record that cannot
+   * be stored rolls back alone and the batch carries on: an exporter treats a
+   * rejected batch as lost, so one bad record would cost all of them.
+   */
+  private storeRecord(dropped: Dropped, write: () => void): void {
+    this.db.exec('SAVEPOINT record');
+    try {
+      write();
+      this.db.exec('RELEASE record');
+    } catch (error) {
+      try {
+        this.db.exec('ROLLBACK TO record');
+        this.db.exec('RELEASE record');
+      } catch {
+        // SQLite already ended the transaction (a full disk, say): the failure
+        // is the batch's, so it surfaces as it was.
+        throw error;
+      }
+      dropped.count++;
+      dropped.first ??= error;
+    }
+  }
+
+  /** End a failed batch, keeping its own error if SQLite already ended it. */
+  private rollback(): void {
+    try {
+      this.db.exec('ROLLBACK');
+    } catch {
+      // No transaction left to roll back.
+    }
+  }
+
   private attributeUpsert() {
     return this.db.prepare(`
       INSERT INTO attribute_values (signal, key, value_json, value_text, last_seen)
@@ -1474,6 +1537,8 @@ export class DevtoolsStore {
   ): void {
     for (const [key, value] of indexedLeaves(attributes)) {
       const encoded = JSON.stringify(value);
+      // Nothing to index for a value JSON drops (undefined, a function).
+      if (encoded === undefined) continue;
       statement.run(signal, key, encoded, String(value), timestamp);
       occurrence.run(signal, entityId, key, encoded);
     }
@@ -2127,4 +2192,18 @@ function* indexedLeaves(
       yield [`${prefix}${key}`, value];
     }
   }
+}
+
+/** Records a batch set aside, and the first reason why. */
+interface Dropped {
+  count: number;
+  first?: unknown;
+}
+
+function warnDropped({ count, first }: Dropped, what: string): void {
+  if (count === 0) return;
+  const reason = first instanceof Error ? first.message : String(first);
+  console.warn(
+    `[autotel-devtools] Dropped ${count} ${what}${count === 1 ? '' : 's'} that could not be stored (${reason}); kept the rest of the batch.`,
+  );
 }

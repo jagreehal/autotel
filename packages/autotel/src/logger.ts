@@ -104,6 +104,7 @@
  */
 
 import { SpanStatusCode } from '@opentelemetry/api';
+import { markSpanOk } from './trace-context';
 import { getConfig } from './config';
 
 // ============================================================================
@@ -275,7 +276,7 @@ export function LoggedOperation(
             'Operation completed',
           );
 
-          span.setStatus({ code: SpanStatusCode.OK });
+          markSpanOk(span);
           span.setAttributes({
             'operation.name': operationName,
             'operation.method': methodName,

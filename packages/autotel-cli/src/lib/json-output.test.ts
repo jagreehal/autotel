@@ -18,26 +18,25 @@ describe('redact', () => {
       POSTHOG_TOKEN: 'tok',
       SENTRY_DSN: 'https://x@y/1',
       nested: { MY_SECRET: 's', visible: 'hi' },
-    }) as Record<string, unknown>;
-    expect(out['DATADOG_API_KEY']).toBe('[REDACTED]');
-    expect(out['POSTHOG_TOKEN']).toBe('[REDACTED]');
-    expect(out['SENTRY_DSN']).toBe('[REDACTED]');
-    const nested = out['nested'] as Record<string, unknown>;
-    expect(nested['MY_SECRET']).toBe('[REDACTED]');
-    expect(nested['visible']).toBe('hi');
+    });
+    expect(out).toEqual({
+      DATADOG_API_KEY: '[REDACTED]',
+      POSTHOG_TOKEN: '[REDACTED]',
+      SENTRY_DSN: '[REDACTED]',
+      nested: { MY_SECRET: '[REDACTED]', visible: 'hi' },
+    });
   });
 
   it('redacts long alphanumeric values', () => {
     const longSecret = 'A'.repeat(48);
-    const out = redact({ random: longSecret }) as Record<string, unknown>;
+    const out = redact({ random: longSecret });
     // Key doesn't match secret pattern, but value is long+alphanum -> redacted
-    expect(out['random']).toBe('[REDACTED]');
+    expect(out).toEqual({ random: '[REDACTED]' });
   });
 
   it('leaves short non-secret values alone', () => {
-    const out = redact({ name: 'jag', port: 3000 }) as Record<string, unknown>;
-    expect(out['name']).toBe('jag');
-    expect(out['port']).toBe(3000);
+    const out = redact({ name: 'jag', port: 3000 });
+    expect(out).toEqual({ name: 'jag', port: 3000 });
   });
 
   it('handles arrays', () => {

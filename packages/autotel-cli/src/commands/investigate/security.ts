@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { toSpanSearchQuery, type SpanRecord, type TagValue } from 'autotel-mcp';
+import { toSpanSearchQuery, type SpanRecord } from 'autotel-mcp';
 import { runInvestigate, type InvestigateFlags } from './runtime';
 import {
   addBackendFlags,
@@ -39,7 +39,7 @@ const DEFAULT_LIMIT = 500;
 const DEFAULT_DENIED_STATUSES = [401, 403, 429];
 const SAMPLE_TRACE_IDS = 10;
 
-function countBy(spans: SpanRecord[], tagKey: string): Record<string, number> {
+function countBy(spans: SpanRecord[], tagKey: string) {
   const counts: Record<string, number> = {};
   for (const span of spans) {
     const value = span.tags[tagKey];
@@ -83,7 +83,7 @@ function dedupeSpans(...lists: SpanRecord[][]): SpanRecord[] {
   return merged;
 }
 
-function countByService(spans: SpanRecord[]): Record<string, number> {
+function countByService(spans: SpanRecord[]) {
   const counts: Record<string, number> = {};
   for (const span of spans) {
     counts[span.serviceName] = (counts[span.serviceName] ?? 0) + 1;
@@ -96,12 +96,10 @@ function readStatus(span: SpanRecord): number | undefined {
   // HTTP_STATUS_ATTRIBUTES in `autotel/security-schema`.
   const value =
     span.tags['http.response.status_code'] ?? span.tags['http.status_code'];
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    const parsed = Number.parseInt(value, 10);
-    if (!Number.isNaN(parsed)) return parsed;
-  }
-  return undefined;
+  // Status codes are integers, numeric or string-typed; a boolean or a missing
+  // tag parses to NaN.
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isNaN(parsed) ? undefined : parsed;
 }
 
 export async function runSecuritySummary(
@@ -118,7 +116,6 @@ export async function runSecuritySummary(
       limit,
     });
 
-    const statusValues = deniedStatuses as TagValue[];
     const [events, suspicious, deniedNew, deniedLegacy] = await Promise.all([
       backend.searchSpans({
         ...base,
@@ -134,7 +131,7 @@ export async function runSecuritySummary(
           {
             field: 'http.response.status_code',
             operator: 'in',
-            value: statusValues,
+            value: deniedStatuses,
             valueType: 'number',
           },
         ],
@@ -145,7 +142,7 @@ export async function runSecuritySummary(
           {
             field: 'http.status_code',
             operator: 'in',
-            value: statusValues,
+            value: deniedStatuses,
             valueType: 'number',
           },
         ],
@@ -347,6 +344,8 @@ export function registerSecurityCommands(program: Command): void {
       await runSecuritySummary({
         ...backendFlagsFromOpts(o),
         ...windowFlagsFromOpts(o),
+        // SAFETY: csvIntArg is this option's parser, so a present value is the
+        // number[] it returned.
         deniedStatuses: o.deniedStatuses as number[] | undefined,
       });
     });

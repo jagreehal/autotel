@@ -3214,7 +3214,7 @@ Always use try/catch with `finalizeSpan` to ensure spans are properly closed:
 ```typescript
 try {
   const result = await runWithSpan(span, () => operation());
-  finalizeSpan(span); // Sets OK status and ends span
+  finalizeSpan(span); // Sets OK unless the code chose a status, then ends span
   return result;
 } catch (error) {
   finalizeSpan(span, error); // Records exception, sets ERROR status, ends span

@@ -28,26 +28,18 @@ import type { TelemetryBackend } from 'autotel-mcp';
 /** OTLP/HTTP payload encodings. */
 export type OtlpEncoding = 'protobuf' | 'json';
 
-/** Enough of a ReadableSpan for the OTLP serializers. */
-export interface ProbeSpan {
-  name: string;
-  kind: number;
-  spanContext: () => { traceId: string; spanId: string; traceFlags: number };
-  parentSpanContext: undefined;
-  startTime: [number, number];
-  endTime: [number, number];
-  duration: [number, number];
-  status: { code: number };
-  attributes: Record<string, never>;
-  links: never[];
-  events: never[];
-  ended: true;
-  resource: { attributes: Record<string, string> };
-  instrumentationScope: { name: string };
-  droppedAttributesCount: number;
-  droppedEventsCount: number;
-  droppedLinksCount: number;
-}
+/** The ReadableSpan the OTLP serializers take. */
+type SerializedSpan = Parameters<
+  typeof ProtobufTraceSerializer.serializeRequest
+>[0][number];
+
+/**
+ * Enough of a ReadableSpan for the OTLP serializers: every field, but only the
+ * resource's data, not the SDK's Resource methods.
+ */
+export type ProbeSpan = Omit<SerializedSpan, 'resource'> & {
+  resource: Pick<SerializedSpan['resource'], 'attributes' | 'schemaUrl'>;
+};
 
 const PROBE_SPAN_NAME = 'autotel.freshness.probe';
 const PROBE_SCOPE = 'autotel-cli/freshness';
@@ -108,11 +100,9 @@ export function encodeProbe(
   span: ProbeSpan,
   encoding: OtlpEncoding,
 ): EncodeProbeResult {
-  // The serializers type their input as ReadableSpan; the probe carries every
-  // field they read, but not the SDK's internal ones.
-  const spans = [span] as unknown as Parameters<
-    typeof ProtobufTraceSerializer.serializeRequest
-  >[0];
+  // SAFETY: ProbeSpan is ReadableSpan minus the Resource methods, which the
+  // serializers never call; they read only its attributes and schemaUrl.
+  const spans = [span] as SerializedSpan[];
   return encoding === 'json'
     ? {
         body: JsonTraceSerializer.serializeRequest(spans) ?? new Uint8Array(),
@@ -132,9 +122,7 @@ export function encodeProbe(
  * users already set for their exporters — so the probe reads the same one
  * rather than inventing a flag that would put a token in argv.
  */
-export function otlpHeadersFromEnv(
-  raw: string | undefined,
-): Record<string, string> {
+export function otlpHeadersFromEnv(raw: string | undefined) {
   const headers: Record<string, string> = {};
   for (const pair of (raw ?? '').split(',')) {
     const separator = pair.indexOf('=');
@@ -180,8 +168,18 @@ export function resolveOtlpTraceUrl(endpoint: string): string {
   return url.toString();
 }
 
+/** The one read the probe needs. Every TelemetryBackend has it. */
+export interface ProbeReader {
+  searchTraces: (
+    query: Pick<
+      Parameters<TelemetryBackend['searchTraces']>[0],
+      'service' | 'limit'
+    >,
+  ) => Promise<{ items?: readonly object[] }>;
+}
+
 export interface FreshnessOptions {
-  backend: TelemetryBackend;
+  backend: ProbeReader;
   /** Base OTLP/HTTP URL to write the probe to, e.g. `http://localhost:4318`. */
   otlpEndpoint: string;
   /** Payload encoding. Defaults to protobuf, which every OTLP receiver accepts. */

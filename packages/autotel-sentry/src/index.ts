@@ -6,10 +6,11 @@
  *
  *   const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
  *   Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+ *   Sentry.setOpenTelemetryContextAsyncContextStrategy();
  *   init({ service: 'my-app', endpoint: config.endpoint, headers: config.headers });
  *
- * Sentry links captured errors to the active OpenTelemetry span by itself, so
- * there is nothing here for that.
+ * `Sentry.setOpenTelemetryContextAsyncContextStrategy()` makes Sentry read trace ids
+ * from the active OpenTelemetry span, so captured errors join the trace.
  */
 export { sentryOtlpConfig } from './config';
 export type { SentryOtlpConfig } from './types';

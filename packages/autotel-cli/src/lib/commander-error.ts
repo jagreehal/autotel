@@ -1,4 +1,5 @@
 import { AutotelError } from './errors';
+import { asNumber, asString, readProperty } from './values';
 
 /**
  * Commander raises `CommanderError` (with a `.code` like
@@ -15,29 +16,23 @@ import { AutotelError } from './errors';
  * aren't really errors — commander already printed the requested output and
  * we just exit cleanly.
  */
-export function commanderErrorToAutotel(error: unknown): AutotelError | null {
-  if (
-    error === null ||
-    typeof error !== 'object' ||
-    !('code' in error) ||
-    typeof (error as { code: unknown }).code !== 'string' ||
-    !(error as { code: string }).code.startsWith('commander.')
-  ) {
+export function commanderErrorToAutotel(cause: unknown): AutotelError | null {
+  const code = asString(readProperty(cause, 'code'));
+  if (code === undefined || !code.startsWith('commander.')) {
     return null;
   }
-  const ce = error as { code: string; message: string; exitCode?: number };
   if (
-    ce.code === 'commander.help' ||
-    ce.code === 'commander.helpDisplayed' ||
-    ce.code === 'commander.version'
+    code === 'commander.help' ||
+    code === 'commander.helpDisplayed' ||
+    code === 'commander.version'
   ) {
-    process.exit(ce.exitCode ?? 0);
+    process.exit(asNumber(readProperty(cause, 'exitCode')) ?? 0);
   }
   return new AutotelError({
     type: 'validation',
     code: 'AUTOTEL_E_INVALID_FLAG',
-    message: ce.message,
+    message: asString(readProperty(cause, 'message')) ?? '',
     retryable: false,
-    expected: { commanderCode: ce.code },
+    expected: { commanderCode: code },
   });
 }
