@@ -70,7 +70,7 @@ initFull({ service: 'web', endpoint, spanEnrichers: [posthogCompatibility()] });
 | `session.id`         | `posthog.get_session_id()`                                | Every span                    |
 | `user.id`            | `posthog.get_distinct_id()`                               | Every span                    |
 | `session.replay.url` | `posthog.get_session_replay_url({ withTimestamp: true })` | Spans that recorded an error  |
-| `feature_flag.*`     | `posthog.getFeatureFlag(key)`                             | Every span, for keys you name |
+| `feature_flag.*`     | `posthog.getFeatureFlag(key, { send_event: false })`      | Every span, for keys you name |
 
 Identity is read when the span **starts**. PostHog rotates a session after 30 minutes idle and `identify()` can land mid-request, so a long span asking at the end would be filed under whoever the visitor had become. The replay link is decided at the end, because only the end knows whether the span failed, and it is withheld if the session rotated in between.
 
@@ -87,8 +87,10 @@ Every flag is another attribute on every span. Naming them keeps an analytics co
 Flags are recorded under the **canonical** OpenTelemetry convention —
 `feature_flag.key`, `feature_flag.result.value`, `feature_flag.result.variant`,
 `feature_flag.provider.name`, `feature_flag.context.id` — plus one
-`feature_flag.evaluation` event per flag. Values keep their type: a boolean flag
-records `true`, not `"true"`. Never suggest `feature_flag.<key>`:
+`feature_flag.evaluation` event per flag. A multivariate answer goes on as
+`feature_flag.result.variant`; a boolean flag records `true`, not `"true"`, as
+the value. Flags are read with `send_event: false`, so the enricher never counts
+as an experiment exposure. Never suggest `feature_flag.<key>`:
 keyed by flag name it cannot be grouped across flags, and no backend ships a
 panel that reads it. Span attributes hold one flag (a second overwrites the
 first), which is why the events carry the rest.

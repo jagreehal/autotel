@@ -31,7 +31,7 @@ export async function promptRuntime(): Promise<RuntimeSelection> {
  * Prompt for backend selection
  */
 export async function promptBackend(
-  backends: Map<string, Preset>,
+  backends: ReadonlyMap<string, Preset>,
 ): Promise<string> {
   const choices = [
     { value: 'local', name: 'Local/Console (development only)' },
@@ -52,14 +52,14 @@ export async function promptBackend(
  * Prompt for logging framework
  */
 export async function promptLogging(): Promise<string | null> {
-  return await select({
+  return await select<string | null>({
     message: 'Which logging framework do you use?',
     choices: [
-      { value: null as unknown as string, name: 'None / Not sure' },
+      { value: null, name: 'None / Not sure' },
       { value: 'pino', name: 'Pino' },
       { value: 'winston', name: 'Winston' },
     ],
-    default: null as unknown as string,
+    default: null,
   });
 }
 
@@ -67,7 +67,7 @@ export async function promptLogging(): Promise<string | null> {
  * Prompt for database/ORM selection (multi-select)
  */
 export async function promptDatabases(
-  plugins: Map<string, Preset>,
+  plugins: ReadonlyMap<string, Preset>,
 ): Promise<string[]> {
   const choices = [...plugins.entries()]
     .filter(([, preset]) => preset.type === 'plugin')
@@ -91,7 +91,7 @@ export async function promptDatabases(
  * Prompt for event subscribers (multi-select)
  */
 export async function promptSubscribers(
-  subscribers: Map<string, Preset>,
+  subscribers: ReadonlyMap<string, Preset>,
 ): Promise<string[]> {
   const choices = [...subscribers.entries()].map(([slug, preset]) => ({
     value: slug,
@@ -212,7 +212,7 @@ export async function promptInput(
  */
 export async function promptPresetFromType(
   type: PresetType,
-  presets: Map<string, Preset>,
+  presets: ReadonlyMap<string, Preset>,
 ): Promise<string | null> {
   const filtered = [...presets.entries()].filter(
     ([, preset]) => preset.type === type,
@@ -222,17 +222,17 @@ export async function promptPresetFromType(
     return null;
   }
 
-  const choices = [
-    { value: null as unknown as string, name: 'None' },
+  const choices: { value: string | null; name: string }[] = [
+    { value: null, name: 'None' },
     ...filtered.map(([slug, preset]) => ({
       value: slug,
       name: `${preset.name} - ${preset.description}`,
     })),
   ];
 
-  return await select({
+  return await select<string | null>({
     message: `Select ${type}:`,
     choices,
-    default: null as unknown as string,
+    default: null,
   });
 }

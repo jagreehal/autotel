@@ -25,8 +25,12 @@ import { otlpEnvelope } from './otlp-types.js';
 import { asString } from '../widget/attrs.js';
 import { asObject } from '../widget/utils/json-fields.js';
 
+/**
+ * An OTLP `AnyValue` as a plain value. An empty one (what a `null` field in a
+ * pino log becomes) is valid OTLP and reads as `null`.
+ */
 function resolveOtlpValue(v?: OtlpAnyValue): AttributeValue {
-  if (!v) return undefined;
+  if (!v) return null;
   if (v.stringValue !== undefined) return v.stringValue;
   if (v.boolValue !== undefined) return v.boolValue;
   // intValue is a string in OTLP/JSON (int64 does not survive JSON) and a
@@ -36,7 +40,7 @@ function resolveOtlpValue(v?: OtlpAnyValue): AttributeValue {
   if (v.bytesValue !== undefined) return v.bytesValue;
   if (v.arrayValue?.values) return v.arrayValue.values.map(resolveOtlpValue);
   if (v.kvlistValue?.values) return flattenAttributes(v.kvlistValue.values);
-  return undefined;
+  return null;
 }
 
 export function flattenAttributes(attrs?: OtlpKeyValue[]): SpanAttributes {

@@ -3,7 +3,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AutotelError, AutotelErrorCodes } from '../errors';
 import { atomicWrite } from '../fs';
-import { classifyRouteObservability, scoreGlobal } from './score';
+import { asRecord, readProperty } from '../values';
+import { checkEntries, classifyRouteObservability, scoreGlobal } from './score';
 import type { CheckId, MapFile, RouteEntry } from './types';
 
 /** Committed alongside the code, so the score can be tracked over time. */
@@ -109,15 +110,17 @@ function parseMapFile(raw: string, label: string): MapFile {
   } catch {
     throw baselineError(label, 'is not valid JSON');
   }
-  const map = parsed as Partial<MapFile>;
+  const map = asRecord(parsed);
   if (
     map?.version !== 1 ||
     !Array.isArray(map.routes) ||
-    typeof map.score !== 'number'
+    !Number.isFinite(map.score)
   ) {
     throw baselineError(label, `is not an ${MAP_FILE_NAME} (version 1)`);
   }
-  return map as MapFile;
+  // SAFETY: version, routes and score are checked above; the rest of the file
+  // is this CLI's own output.
+  return parsed as MapFile;
 }
 
 /** What loadBaseline() answers with. */
@@ -167,7 +170,7 @@ export function loadBaseline(
   try {
     raw = fs.readFileSync(path.resolve(projectRoot, MAP_FILE_NAME), 'utf8');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+    if (readProperty(error, 'code') !== 'ENOENT') {
       throw baselineError(MAP_FILE_NAME, 'could not be read');
     }
     /* Run twice in a row, the second scan would otherwise compare against the
@@ -216,8 +219,7 @@ export function compareToBaseline(
       continue;
     }
 
-    for (const id of Object.keys(before.checks) as CheckId[]) {
-      const was = before.checks[id];
+    for (const [id, was] of checkEntries(before.checks)) {
       const now = after.checks[id];
       if (!was || !now) continue;
 

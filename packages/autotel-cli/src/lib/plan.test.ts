@@ -23,7 +23,7 @@ describe('parsePlan', () => {
       thrown = error;
     }
     expect(thrown).toBeInstanceOf(AutotelError);
-    expect((thrown as AutotelError).code).toBe('AUTOTEL_E_INVALID_PLAN');
+    expect(thrown).toHaveProperty('code', 'AUTOTEL_E_INVALID_PLAN');
   });
 
   it('throws for unsupported version', () => {

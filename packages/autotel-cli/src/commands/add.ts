@@ -11,7 +11,10 @@ import { createSpinner } from '../ui/spinner';
 /**
  * Format preset list for output
  */
-function formatPresetList(presets: Map<string, Preset>, json: boolean): void {
+function formatPresetList(
+  presets: ReadonlyMap<string, Preset>,
+  json: boolean,
+): void {
   if (json) {
     const list = [...presets.entries()].map(([slug, preset]) => ({
       slug,
@@ -91,10 +94,7 @@ function parsePresetType(type: string): PresetType | null {
     'plugin',
     'platform',
   ];
-  if (validTypes.includes(type as PresetType)) {
-    return type as PresetType;
-  }
-  return null;
+  return validTypes.find((valid) => valid === type) ?? null;
 }
 
 /**

@@ -1,6 +1,7 @@
 import type { AppConfig, BackendHandle, TelemetryBackend } from 'autotel-mcp';
 import { AutotelError, AutotelErrorCodes } from '../../lib/errors';
 import { configureJsonOutput, printJson } from '../../lib/json-output';
+import { asRecord, asString, readProperty } from '../../lib/values.js';
 
 /**
  * Common flags accepted by every `autotel investigate*` subcommand. Mirrors
@@ -130,39 +131,26 @@ export async function runInvestigate<T>(
 
 export function toInvestigateError(
   command: string,
-  error: unknown,
+  cause: unknown,
 ): AutotelError {
-  if (error instanceof AutotelError) return error;
+  if (cause instanceof AutotelError) return cause;
   // ZodError surfaces from `loadConfig()` (bad --backend value) and from any
   // shared query schema. Detect by shape (`error.issues` array) so we don't
   // need a runtime zod dependency in CLI-land.
-  if (
-    error !== null &&
-    typeof error === 'object' &&
-    'issues' in error &&
-    Array.isArray((error as { issues: unknown[] }).issues)
-  ) {
-    const issues = (
-      error as {
-        issues: Array<{
-          path?: unknown[];
-          message: string;
-          code?: string;
-          values?: unknown[];
-        }>;
-      }
-    ).issues;
-    const first = issues[0];
-    const path = first?.path?.join('.') ?? '';
+  const issues = readProperty(cause, 'issues');
+  if (Array.isArray(issues)) {
+    const first = asRecord(issues[0]);
+    const issuePath = first?.path;
+    const path = Array.isArray(issuePath) ? issuePath.join('.') : '';
     return new AutotelError({
       type: 'validation',
       code: 'AUTOTEL_E_INVALID_INPUT',
-      message: `autotel ${command}: invalid input${path ? ` for "${path}"` : ''} — ${first?.message ?? 'validation failed'}`,
+      message: `autotel ${command}: invalid input${path ? ` for "${path}"` : ''} — ${asString(first?.message) ?? 'validation failed'}`,
       retryable: false,
       expected: { issues },
     });
   }
-  const message = error instanceof Error ? error.message : String(error);
+  const message = cause instanceof Error ? cause.message : String(cause);
 
   // Hosted vendor read APIs rate-limit aggressively — Logfire allows roughly ten
   // queries a minute. The shared HTTP layer already rides out a short 429, so

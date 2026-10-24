@@ -98,6 +98,11 @@ import { resolveConfigFromEnv } from './env-config';
 import { loadYamlConfig } from './yaml-config';
 import { safeRequire } from './node-require';
 import {
+  findOpenFeature,
+  installOpenFeatureHook,
+  type OpenFeatureApi,
+} from './feature-flags';
+import {
   asFunction,
   isFunction,
   readProperty,
@@ -424,8 +429,16 @@ export function init(cfg: AutotelConfig): void {
   // export request. Wire the endpoint's log exporter unless `logs: false` (or
   // AUTOTEL_LOGS=off) says not to; otherwise `otel: true` writes to a no-op
   // provider and nothing reaches Grafana/Loki.
+  // The OpenFeature hook records each evaluation as a `feature_flag.evaluation`
+  // log event, so finding OpenFeature is a log export request too.
+  const openFeature = resolveOpenFeature(mergedConfig.openFeature);
+  // `'auto'` is the unset default spelled out, so it follows the same rule.
   const logsEnabled = resolveLogsFlag(
-    mergedConfig.logs ?? (canonicalUsesOtel ? true : 'auto'),
+    mergedConfig.logs === undefined || mergedConfig.logs === 'auto'
+      ? canonicalUsesOtel || openFeature
+        ? true
+        : 'auto'
+      : mergedConfig.logs,
   );
 
   // The embedded server runs in this process; its port is kept out of tracing.
@@ -1092,6 +1105,10 @@ export function init(cfg: AutotelConfig): void {
     }
   }
 
+  if (openFeature && mergedConfig.openFeature !== false) {
+    installOpenFeatureHook(openFeature, mergedConfig.openFeature);
+  }
+
   initialized = true;
   installConsoleSignals({
     captureConsoleErrors: mergedConfig.captureConsoleErrors,
@@ -1223,6 +1240,22 @@ export function getConfiguredSampler(): Sampler | undefined {
  */
 export function getStringRedactor(): StringRedactor | null {
   return _stringRedactor;
+}
+
+/**
+ * OpenFeature's API when the app has it and `openFeature` is not `false`.
+ * Never throws: an SDK that fails to load turns off flag recording, not `init()`.
+ */
+function resolveOpenFeature(
+  setting: AutotelConfig['openFeature'],
+): OpenFeatureApi | undefined {
+  if (setting === false) return undefined;
+  try {
+    return findOpenFeature((id) => _optionalRequire(id));
+  } catch (error) {
+    logger.warn({ err: error }, '[autotel] Could not load OpenFeature.');
+    return undefined;
+  }
 }
 
 /**

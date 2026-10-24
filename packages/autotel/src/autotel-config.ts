@@ -23,6 +23,7 @@ import type { EventsConfig } from './events-config';
 import type { AutotelDevtoolsConfig } from './devtools';
 import type { ProcessHandlersConfig } from './process-handlers';
 import type { SpanFilterPredicate } from './filtering-span-processor';
+import type { FeatureFlagRecordOptions } from './feature-flags';
 import type { Policy } from './policy';
 import type { SpanNameNormalizerConfig } from './span-name-normalizer';
 import type {
@@ -505,8 +506,9 @@ export interface AutotelConfig {
   /**
    * OTLP logs configuration
    * - true: auto-configure OTLP log exporter from endpoint
-   * - false: disabled (default)
-   * - 'auto': same as false (opt-in only)
+   * - false: disabled
+   * - 'auto' or unset: disabled, unless `canonicalLogLines` writes through the
+   *   Logs API or OpenFeature is installed (its evaluations are log events)
    *
    * When enabled and an endpoint is configured, autotel will automatically
    * create a BatchLogRecordProcessor with an OTLPLogExporter - no manual
@@ -1040,6 +1042,18 @@ export interface AutotelConfig {
     enabled: boolean;
     options?: Record<string, unknown>;
   };
+
+  /**
+   * Record every OpenFeature evaluation under the `feature_flag.*` convention.
+   * When `@openfeature/server-sdk` is installed, `init()` registers
+   * `autotelOpenFeatureHook()` for you, and turns on log export unless `logs`
+   * is `false`: each evaluation is a `feature_flag.evaluation` log event. Pass
+   * `{ includeValue: true }` to keep `feature_flag.result.value` beside a
+   * variant, or `false` to register nothing.
+   *
+   * @default {} (registered when OpenFeature is installed)
+   */
+  openFeature?: false | FeatureFlagRecordOptions;
 
   /** Emit completed spans as canonical wide-event logs. */
   canonicalLogLines?: CanonicalLogLinesConfig;

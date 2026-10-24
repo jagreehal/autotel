@@ -164,22 +164,34 @@ export function posthogCompatibility(
       const distinctId = readDistinctId(posthog);
       fill('user.id', distinctId);
 
+      // One sink for the span: the projection keys on it, so the span keeps
+      // its first flag whole rather than a mix of every flag's fields.
+      const sink = {
+        // The span this sink writes to, so `recordFeatureFlag()` elsewhere in
+        // the request sees the same span and keeps it unmixed.
+        [Symbol.for('autotel.traceContext.span')]: span,
+        setAttributes: (
+          attributes: Record<string, string | number | boolean>,
+        ) => span.setAttributes(attributes),
+        // A span processor holds a span, not a trace context, so it brings
+        // its own correlated-log seam rather than reaching for
+        // `Span.addEvent`. One event per flag carries every evaluation.
+        track: emitEvent,
+      };
       for (const key of options.featureFlags ?? []) {
         const value = readFeatureFlag(posthog, key);
         // A flag PostHog cannot answer for is not an evaluation. Recording it
         // as `false` would make "off" and "unknown" the same reading.
         if (value === undefined) continue;
-        recordFeatureFlag(
-          {
-            setAttributes: (attributes) => span.setAttributes(attributes),
-            // A span processor holds a span, not a trace context, so it brings
-            // its own correlated-log seam rather than reaching for
-            // `Span.addEvent`. One event per flag: attributes hold a single
-            // evaluation and the second would overwrite the first.
-            track: emitEvent,
-          },
-          { key, value, provider: 'posthog', contextId: distinctId },
-        );
+        recordFeatureFlag(sink, {
+          key,
+          value,
+          // A multivariate flag answers with its variant's name, which is
+          // the identifier the convention records; a boolean is the value.
+          variant: typeof value === 'string' ? value : undefined,
+          provider: 'posthog',
+          contextId: distinctId,
+        });
       }
     },
 

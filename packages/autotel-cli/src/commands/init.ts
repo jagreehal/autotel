@@ -16,7 +16,11 @@ import {
 } from '../lib/code-builder';
 import { generateEnvExample } from '../lib/env-generator';
 import { atomicWrite, fileExists, readFileSafe } from '../lib/fs';
-import { detectInProject, envFilesRequireConsent } from '../lib/dep-detector';
+import {
+  detectInProject,
+  envFilesRequireConsent,
+  type PresetSlug,
+} from '../lib/dep-detector';
 import { buildPlanFromDetection } from '../lib/plan-builder';
 import { parsePlan, type InitPlan } from '../lib/plan';
 import {
@@ -36,11 +40,11 @@ import { isCI } from '../ui/spinner';
  * Detected deps whose auto-instrumentation goes by another name. `next` and
  * `fastify` have none in auto-instrumentations-node; http covers them.
  */
-const DEP_INSTRUMENTATION: Record<string, string[]> = {
-  '@aws-sdk/client-s3': ['aws-sdk'],
-  next: [],
-  fastify: [],
-};
+const DEP_INSTRUMENTATION = new Map([
+  ['@aws-sdk/client-s3', ['aws-sdk']],
+  ['next', []],
+  ['fastify', []],
+]);
 
 /**
  * Run the init command.
@@ -243,15 +247,17 @@ function planFromQuickPreset(
   if (quick.subscribers) presets.push(...quick.subscribers);
   if (quick.plugins) presets.push(...quick.plugins);
 
+  // SAFETY: every slug in the quickPresets table (presets/index.ts) names a
+  // registered preset, and buildPlanFromDetection skips any it cannot find.
   const { plan } = buildPlanFromDetection({
     project,
     detection: {
       packages: [],
-      presets: presets as ReturnType<typeof detectInProject>['presets'],
+      presets: presets as PresetSlug[],
       primaryLogger: quick.logging === 'pino' ? 'pino' : null,
       autoInstrumentLoggers: [],
       autoInstrumentedDeps: [],
-      backend: { slug: quick.backend as never, source: 'default' },
+      backend: { slug: quick.backend as PresetSlug, source: 'default' },
       platform: null,
     },
   });
@@ -339,7 +345,7 @@ function applyPlan(args: {
     for (const name of [
       'http',
       ...loggers,
-      ...deps.flatMap((dep) => DEP_INSTRUMENTATION[dep] ?? [dep]),
+      ...deps.flatMap((dep) => DEP_INSTRUMENTATION.get(dep) ?? [dep]),
     ]) {
       addAutoInstrumentation(codeFile, name);
     }

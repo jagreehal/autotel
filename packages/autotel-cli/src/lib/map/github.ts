@@ -2,7 +2,8 @@ import * as path from 'node:path';
 import { hasRegressed, type BaselineComparison } from './baseline';
 import { fixFirst } from './report';
 import { getRule } from './rules';
-import type { CheckId, CheckResult, RouteEntry, ScanResult } from './types';
+import { checkEntries } from './score';
+import type { CheckId, RouteEntry, ScanResult } from './types';
 
 /** One check to point at, with where it points. */
 interface Finding {
@@ -43,10 +44,7 @@ function rebase(file: string, location: AnnotationLocation): string {
 /** The failing requirements of one entry point, at the evidence line when a check has one. */
 function failures(route: RouteEntry): Finding[] {
   const out: Finding[] = [];
-  for (const [check, result] of Object.entries(route.checks) as [
-    CheckId,
-    CheckResult,
-  ][]) {
+  for (const [check, result] of checkEntries(route.checks)) {
     if (result.status !== 'fail') continue;
     out.push({
       file: result.evidence?.file ?? route.file,

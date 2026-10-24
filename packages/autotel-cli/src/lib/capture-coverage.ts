@@ -43,29 +43,35 @@ type Deps = Record<string, string | undefined>;
  * produces. Adding a rule here is how a surface stops being reported as a blind
  * spot, so an omission understates coverage rather than overstating it.
  */
-const OBSERVED_BY: Partial<Record<CaptureSurface, readonly string[]>> = {
-  llm_calls: ['autotel-genai'],
-  tool_calls: ['autotel-genai', 'autotel-mcp-instrumentation'],
-  user_prompts: ['autotel-agents'],
+const OBSERVED_BY = new Map<CaptureSurface, readonly string[]>([
+  ['llm_calls', ['autotel-genai']],
+  ['tool_calls', ['autotel-genai', 'autotel-mcp-instrumentation']],
+  ['user_prompts', ['autotel-agents']],
   // `auto-instrumentations-node` bundles `instrumentation-fs`, so a project
   // with either can see file reads and writes.
-  file_io: [
-    '@opentelemetry/instrumentation-fs',
-    '@opentelemetry/auto-instrumentations-node',
+  [
+    'file_io',
+    [
+      '@opentelemetry/instrumentation-fs',
+      '@opentelemetry/auto-instrumentations-node',
+    ],
   ],
-  network: [
-    '@opentelemetry/instrumentation-http',
-    '@opentelemetry/instrumentation-undici',
-    '@opentelemetry/auto-instrumentations-node',
+  [
+    'network',
+    [
+      '@opentelemetry/instrumentation-http',
+      '@opentelemetry/instrumentation-undici',
+      '@opentelemetry/auto-instrumentations-node',
+    ],
   ],
-};
+]);
 
 export function assessCaptureCoverage(deps: Deps): CaptureCoverage {
   const observed: CaptureSurface[] = [];
   const unobserved: CaptureSurface[] = [];
 
   for (const surface of CAPTURE_SURFACES) {
-    const sources = OBSERVED_BY[surface] ?? [];
+    const sources = OBSERVED_BY.get(surface) ?? [];
     if (sources.some((pkg) => deps[pkg] !== undefined)) {
       observed.push(surface);
     } else {
@@ -79,7 +85,7 @@ export function assessCaptureCoverage(deps: Deps): CaptureCoverage {
 const NO_SOURCE = 'nothing in the autotel toolchain observes this';
 
 function sourceHint(surface: CaptureSurface): string {
-  const sources = OBSERVED_BY[surface];
+  const sources = OBSERVED_BY.get(surface);
   return sources ? `install one of: ${sources.join(', ')}` : NO_SOURCE;
 }
 

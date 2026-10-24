@@ -9,7 +9,7 @@
  * above) is the query you want and string comparison cannot express it.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -234,6 +234,28 @@ describe('querying', () => {
     store.ingestLogs([log({ body: { kind: 'audit', actor: 'admin' } })]);
     const { logs } = store.queryLogs({ query: 'admin' });
     expect(logs).toHaveLength(1);
+  });
+});
+
+describe('a record that cannot be stored', () => {
+  it('is dropped alone, and the rest of the batch is kept', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    store.ingestLogs([
+      log({ body: 'before' }),
+      // JSON cannot carry a BigInt, so this record's attributes cannot be
+      // written.
+      log({ body: 'unstorable', attributes: { n: 1n as never } }),
+      log({ body: 'after' }),
+    ]);
+
+    expect(store.queryLogs({ query: '' }).logs.map((l) => l.body)).toEqual([
+      'after',
+      'before',
+    ]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Dropped 1 log record'),
+    );
+    warn.mockRestore();
   });
 });
 

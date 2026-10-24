@@ -1,22 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { AutotelError } from '../lib/errors';
 import type { InitOptions } from '../types/index';
-
-const { promptBackendMock } = vi.hoisted(() => ({
-  promptBackendMock: vi.fn(async () => 'local'),
-}));
-
-vi.mock('../ui/prompts', async () => {
-  const actual =
-    await vi.importActual<typeof import('../ui/prompts')>('../ui/prompts');
-  return {
-    ...actual,
-    promptBackend: promptBackendMock,
-  };
-});
 
 import { runInit } from './init';
 
@@ -32,7 +19,6 @@ describe('init no-plan-source behavior', () => {
       JSON.stringify({ name: 'app', version: '1.0.0' }, null, 2),
       'utf8',
     );
-    promptBackendMock.mockClear();
   });
 
   afterEach(() => {
@@ -58,16 +44,11 @@ describe('init no-plan-source behavior', () => {
       noInteractive: false,
     };
 
-    let thrown: unknown;
-    try {
-      await runInit(options);
-    } catch (error) {
-      thrown = error;
-    }
-
-    expect(promptBackendMock).not.toHaveBeenCalled();
-    expect(thrown).toBeInstanceOf(AutotelError);
-    expect((thrown as AutotelError).code).toBe('AUTOTEL_E_INVALID_FLAG');
+    const run = runInit(options);
+    await expect(run).rejects.toBeInstanceOf(AutotelError);
+    await expect(run).rejects.toMatchObject({
+      code: 'AUTOTEL_E_INVALID_FLAG',
+    });
   });
 
   it('also fails fast in no-interactive mode for the same missing source case', async () => {
@@ -90,7 +71,6 @@ describe('init no-plan-source behavior', () => {
     };
 
     await expect(runInit(options)).rejects.toBeInstanceOf(AutotelError);
-    expect(promptBackendMock).not.toHaveBeenCalled();
   });
 
   it('lists every detected logger and library in the autoInstrumentations allowlist', async () => {

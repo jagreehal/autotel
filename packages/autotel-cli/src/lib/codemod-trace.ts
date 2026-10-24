@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { Project, type SourceFile, type Node, SyntaxKind } from 'ts-morph';
+import { Node, Project, type SourceFile, SyntaxKind } from 'ts-morph';
 
 export interface TransformResult {
   modified: string;
@@ -92,11 +92,11 @@ function isGenerator(method: { isGenerator(): boolean }): boolean {
 function isInsideTraceCall(node: Node): boolean {
   let current: Node | undefined = node.getParent();
   while (current) {
-    if (current.getKind() === SyntaxKind.CallExpression) {
-      const expr = (
-        current as Node & { getExpression(): Node }
-      ).getExpression?.();
-      if (expr?.getText() === 'trace') return true;
+    if (
+      Node.isCallExpression(current) &&
+      current.getExpression().getText() === 'trace'
+    ) {
+      return true;
     }
     current = current.getParent();
   }
@@ -127,11 +127,11 @@ export function transformFile(
 
   // Default export function: ts-morph exposes it via getExportedDeclarations("default"), not getExportAssignment
   const defaultDecls = sourceFile.getExportedDeclarations().get('default');
+  const firstDefault = defaultDecls?.[0];
   const defaultFn =
-    defaultDecls?.[0] &&
-    (defaultDecls[0].getKind() === SyntaxKind.FunctionDeclaration ||
-      defaultDecls[0].getKind() === SyntaxKind.FunctionExpression)
-      ? defaultDecls[0]
+    Node.isFunctionDeclaration(firstDefault) ||
+    Node.isFunctionExpression(firstDefault)
+      ? firstDefault
       : undefined;
   const allFns = sourceFile.getFunctions().filter((f) => !f.isOverload());
   const onlyDefaultExportFn =
@@ -181,7 +181,7 @@ export function transformFile(
 
   // 2. Default export function (export default function name() {})
   if (defaultFn) {
-    const name = (defaultFn as { getName?: () => string }).getName?.();
+    const name = defaultFn.getName();
     if (!name) {
       skip('(default export)', 'anonymous default export');
     } else {
@@ -189,13 +189,9 @@ export function transformFile(
       if (shouldSkipName(spanName, options)) {
         skip(spanName, 'name match');
       } else {
-        const fn = defaultFn as Node & {
-          getParameters(): Node[];
-          getBody(): Node | undefined;
-        };
-        const params = fn.getParameters?.() ?? [];
+        const params = defaultFn.getParameters();
         const paramsText = params.map((p) => p.getText()).join(', ');
-        const body = fn.getBody?.();
+        const body = defaultFn.getBody();
         const bodyText = body?.getText() ?? '{}';
         const decl = `const ${name} = trace('${spanName}', function ${name}(${paramsText}) ${bodyText});`;
         const full = decl + '\nexport default ' + name + ';';
@@ -220,17 +216,13 @@ export function transformFile(
           .getExpression()
           .getText();
         if (exprText === 'trace') {
-          const name = decl.getName();
-          if (typeof name === 'string') {
-            const spanName = getSpanName(name, filePath, options);
-            skipped.push({ name: spanName, reason: 'already wrapped' });
-          }
+          const spanName = getSpanName(decl.getName(), filePath, options);
+          skipped.push({ name: spanName, reason: 'already wrapped' });
           continue;
         }
       }
       if (!isArrow && !isFnExpr) continue;
       const name = decl.getName();
-      if (typeof name !== 'string') continue; // array/object binding
       const spanName = getSpanName(name, filePath, options);
       if (shouldSkipName(spanName, options)) {
         skip(spanName, 'name match');
@@ -299,19 +291,15 @@ export function transformFile(
         continue;
       const obj = init.asKindOrThrow(SyntaxKind.ObjectLiteralExpression);
       for (const prop of obj.getProperties()) {
-        if (prop.getKind() !== SyntaxKind.MethodDeclaration) continue;
-        const method = prop as Node & {
-          getName(): string;
-          getBody(): Node;
-          isGenerator?(): boolean;
-        };
+        if (!Node.isMethodDeclaration(prop)) continue;
+        const method = prop;
         const methodName = method.getName();
         const spanName = getSpanName(methodName, filePath, options);
         if (shouldSkipName(spanName, options)) {
           skip(spanName, 'name match');
           continue;
         }
-        if (method.isGenerator?.()) {
+        if (method.isGenerator()) {
           skip(spanName, 'generator');
           continue;
         }

@@ -181,7 +181,7 @@ export function runMapScan(options: MapOptions): MapResult {
   const baselineMap = options.baseline
     ? loadBaseline(
         projectRoot,
-        typeof options.baseline === 'string' ? options.baseline : undefined,
+        options.baseline === true ? undefined : options.baseline,
       )
     : null;
 
@@ -254,9 +254,7 @@ export function formatMapResult(
 /** `autotel map` — static observability map of every entry point. */
 export function runMap(options: MapOptions): void {
   configureJsonOutput({
-    ...(options.outputFile !== undefined
-      ? { outputFile: options.outputFile }
-      : {}),
+    outputFile: options.outputFile,
     outputRoot: options.cwd,
   });
 
@@ -271,8 +269,8 @@ export function runMap(options: MapOptions): void {
   const human = () =>
     formatMapResult(result, {
       all: options.all,
-      ...(options.entry !== undefined ? { entry: options.entry } : {}),
-      ...(minScore !== undefined ? { minScore } : {}),
+      entry: options.entry,
+      minScore,
     });
 
   if (format === 'github') {
@@ -284,11 +282,9 @@ export function runMap(options: MapOptions): void {
         result.baseline,
         {
           projectRoot: result.projectRoot,
-          ...(process.env.GITHUB_WORKSPACE
-            ? { workspace: process.env.GITHUB_WORKSPACE }
-            : {}),
+          workspace: process.env.GITHUB_WORKSPACE,
         },
-        { limit, ...(minScore !== undefined ? { minScore } : {}) },
+        { limit, minScore },
       )}\n`,
     );
     process.stderr.write(`${human()}\n`);
@@ -303,7 +299,8 @@ export function runMap(options: MapOptions): void {
       summary: result.scan.summary,
       suggestions: result.scan.suggestions,
       warnings: [...result.frameworkWarnings, ...result.scan.warnings],
-      ...(result.baseline ? { baseline: result.baseline } : {}),
+      // undefined, not null, so JSON.stringify leaves the key out
+      baseline: result.baseline ?? undefined,
       map: result.scan.map,
     });
   } else {

@@ -10,14 +10,17 @@ import {
   enumerateWorkspacePackages,
   envFilesRequireConsent,
 } from './dep-detector';
-import type { ProjectContext } from '../types/index';
+import type { PackageJson, ProjectContext } from '../types/index';
 
-function makeProject(packageRoot: string, packageJson: object): ProjectContext {
+function makeProject(
+  packageRoot: string,
+  packageJson: PackageJson,
+): ProjectContext {
   return {
     cwd: packageRoot,
     packageRoot,
     packageJsonPath: path.join(packageRoot, 'package.json'),
-    packageJson: packageJson as ProjectContext['packageJson'],
+    packageJson,
     packageManager: 'pnpm',
     lockfilePath: null,
     workspace: {

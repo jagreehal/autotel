@@ -71,7 +71,7 @@ async function discoverFields(
   backend: TelemetryBackend,
   flags: DiscoverFieldsFlags,
   signal: 'traces' | 'logs',
-): Promise<unknown> {
+) {
   const sampleSize = flags.sampleSize ?? 200;
   if (signal === 'traces') {
     const traces = await backend

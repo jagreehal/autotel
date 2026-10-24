@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import { Command, type OptionValues } from 'commander';
 import type { InvestigateFlags } from './runtime';
 import { numberOpt, stringOpt } from '../../lib/opts.js';
 
@@ -71,10 +71,10 @@ export function addStaticFlags(cmd: Command): Command {
     .option('--no-secrets-in-output', 'Redact secret-shaped values');
 }
 
-export function backendFlagsFromOpts(
-  opts: Record<string, unknown>,
-): InvestigateFlags {
+export function backendFlagsFromOpts(opts: OptionValues): InvestigateFlags {
   return {
+    // SAFETY: unchecked here on purpose; loadConfig() parses AUTOTEL_BACKEND and
+    // turns a bad --backend into a validation envelope.
     backend: opts.backend as InvestigateFlags['backend'],
     jaegerBaseUrl: stringOpt(opts, 'jaegerBaseUrl'),
     tempoBaseUrl: stringOpt(opts, 'tempoBaseUrl'),
@@ -91,9 +91,7 @@ export function backendFlagsFromOpts(
   };
 }
 
-export function staticFlagsFromOpts(
-  opts: Record<string, unknown>,
-): InvestigateFlags {
+export function staticFlagsFromOpts(opts: OptionValues): InvestigateFlags {
   return {
     outputFile: stringOpt(opts, 'outputFile'),
     noSecrets: opts.secretsInOutput === false,
@@ -123,9 +121,7 @@ export type TimeWindowFlags = {
   limit?: number;
 };
 
-export function windowFlagsFromOpts(
-  opts: Record<string, unknown>,
-): TimeWindowFlags {
+export function windowFlagsFromOpts(opts: OptionValues): TimeWindowFlags {
   return {
     serviceName: stringOpt(opts, 'serviceName'),
     operationName: stringOpt(opts, 'operationName'),

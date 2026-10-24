@@ -39,34 +39,6 @@ export function createSpinner(text?: string): SpinnerInstance {
 }
 
 /**
- * Run async function with spinner
- */
-export async function withSpinner<T>(
-  text: string,
-  fn: () => Promise<T>,
-  options?: {
-    successText?: string | ((result: T) => string);
-    failText?: string;
-  },
-): Promise<T> {
-  const spinner = createSpinner(text);
-  spinner.start();
-
-  try {
-    const result = await fn();
-    const successText =
-      typeof options?.successText === 'function'
-        ? options.successText(result)
-        : options?.successText;
-    spinner.succeed(successText);
-    return result;
-  } catch (error) {
-    spinner.fail(options?.failText ?? `Failed: ${text}`);
-    throw error;
-  }
-}
-
-/**
  * No-op spinner for quiet mode or CI
  */
 export function createNoopSpinner(): SpinnerInstance {
