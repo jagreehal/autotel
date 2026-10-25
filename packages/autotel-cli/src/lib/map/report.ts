@@ -5,12 +5,12 @@ import { classifyRouteObservability, topIssue } from './score';
 import { sensitivityLabel } from './sensitivity';
 import type { Grade, RouteEntry, ScanResult } from './types';
 
-const GRADE_COLOUR: Record<Grade, (text: string) => string> = {
+const GRADE_COLOUR = {
   excellent: chalk.green,
   good: chalk.green,
   'needs-work': chalk.yellow,
   'at-risk': chalk.red,
-};
+} satisfies Record<Grade, (text: string) => string>;
 
 /** Entry-point label without colour — the one width calculations can trust. */
 function plainLabel(route: RouteEntry): string {

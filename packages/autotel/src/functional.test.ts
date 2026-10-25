@@ -134,6 +134,23 @@ describe('Functional API', () => {
       expect(names).toContain('shorthand.recorded');
     });
 
+    it('keeps an error status the callback set', async () => {
+      const collector = createTraceCollector();
+      span('sync.chosen', () => {
+        getActiveTraceContext()?.setStatus({ code: SpanStatusCode.ERROR });
+      });
+      await span('async.chosen', async (raw) => {
+        raw.setStatus({ code: SpanStatusCode.ERROR });
+      });
+      await span('async.unset', async () => {});
+
+      const status = (name: string) =>
+        collector.getSpansByName(name)[0]?.status.code;
+      expect(status('sync.chosen')).toBe(SpanStatusCode.ERROR);
+      expect(status('async.chosen')).toBe(SpanStatusCode.ERROR);
+      expect(status('async.unset')).toBe(SpanStatusCode.OK);
+    });
+
     it('applies spanKind from options', () => {
       const collector = createTraceCollector();
       span({ name: 'client.operation', spanKind: SpanKind.CLIENT }, () => {});

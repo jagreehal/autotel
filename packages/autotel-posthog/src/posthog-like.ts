@@ -129,6 +129,10 @@ export function readReplayUrl(posthog: PostHogLike): string | undefined {
  * boolean so a query can ask for it. Only `undefined`, meaning PostHog has no
  * opinion yet, is dropped: an attribute that says nothing is worse than an
  * absent one.
+ *
+ * Read with `send_event: false`. A plain `getFeatureFlag()` sends
+ * `$feature_flag_called`, which PostHog experiments count as an exposure, and
+ * reading a flag to label a span is not the code branching on it.
  */
 export function readFeatureFlag(
   posthog: PostHogLike,
@@ -137,7 +141,7 @@ export function readFeatureFlag(
   const fn = posthog.getFeatureFlag;
   if (typeof fn !== 'function') return undefined;
   try {
-    const value = fn.call(posthog, key);
+    const value = fn.call(posthog, key, { send_event: false });
     if (value === undefined) return undefined;
     // `true`/`false` for a boolean flag, the variant name for a multivariate one.
     return typeof value === 'boolean' ? value : String(value);

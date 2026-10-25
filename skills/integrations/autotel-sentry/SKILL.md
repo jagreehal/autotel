@@ -1,14 +1,14 @@
 ---
 name: autotel-sentry
 description: >
-  Use this skill when sending autotel/OpenTelemetry traces to Sentry — sentryOtlpConfig(dsn) turns a Sentry DSN into the OTLP endpoint and auth header autotel's init() needs, while @sentry/node keeps capturing errors linked to the active span.
+  Use this skill when sending autotel/OpenTelemetry traces to Sentry. sentryOtlpConfig(dsn) turns a Sentry DSN into the OTLP endpoint and auth header autotel's init() needs, while @sentry/node captures errors on the active span once Sentry.setOpenTelemetryContextAsyncContextStrategy() runs after Sentry.init().
 ---
 
 # autotel-sentry
 
 Parses a Sentry DSN into the OTLP endpoint and auth headers autotel's `init()` expects, so autotel exports traces straight to Sentry's OTLP ingestion. That is the whole package: one function, `sentryOtlpConfig`, and its return type `SentryOtlpConfig`. It calls no Sentry API and has no dependency on `@sentry/node`.
 
-Errors link to traces on their own: `@sentry/node` reads the active OpenTelemetry span when it builds an event, so a captured error already carries the right `trace_id` and `span_id`.
+To put captured errors on the active trace, call `Sentry.setOpenTelemetryContextAsyncContextStrategy()` after `Sentry.init()`. `@sentry/node` then reads the active OpenTelemetry span when it builds an event, so each error carries that span's `trace_id` and `span_id`.
 
 ## Setup
 
@@ -25,6 +25,8 @@ const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
 // 1. Sentry captures errors; it must not register its own OTel SDK
 Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+// Sentry reads trace ids from the active OpenTelemetry span
+Sentry.setOpenTelemetryContextAsyncContextStrategy();
 
 // 2. autotel owns OTel and exports to Sentry's OTLP endpoint
 init({ service: 'my-app', endpoint: config.endpoint, headers: config.headers });
@@ -78,6 +80,10 @@ Sentry.init({ dsn: config.dsn });
 // Correct
 Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
 ```
+
+### HIGH: Leaving out `Sentry.setOpenTelemetryContextAsyncContextStrategy()`
+
+With `skipOpenTelemetrySetup: true`, `@sentry/node` keeps its own scope trace ids, so a captured error starts a trace of its own. Call it once after `Sentry.init()`.
 
 ### HIGH: Using the old bridge API
 

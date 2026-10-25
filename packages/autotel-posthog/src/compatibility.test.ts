@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AttributeValue, Attributes } from '@opentelemetry/api';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import { posthogCompatibility } from './compatibility';
@@ -270,7 +270,25 @@ describe('feature flags', () => {
     // Canonical keys, not `feature_flag.<key>`: a per-key attribute cannot be
     // grouped across flags and no backend ships a panel that reads it.
     expect(span.attributes['feature_flag.key']).toBe('new-checkout');
-    expect(span.attributes['feature_flag.result.value']).toBe('variant-b');
+    // A multivariate answer is the variant's name, recorded as the variant.
+    expect(span.attributes['feature_flag.result.variant']).toBe('variant-b');
+    expect(span.attributes['feature_flag.result.value']).toBeUndefined();
+  });
+
+  it('reads flags without sending an exposure event', () => {
+    // `$feature_flag_called` is what PostHog experiments count as exposure;
+    // labelling a span is not the code branching on the flag.
+    const getFeatureFlag = vi.fn(() => 'variant-b');
+    run(
+      posthogCompatibility({
+        posthog: { ...flagged, getFeatureFlag },
+        featureFlags: ['new-checkout'],
+      }),
+      spanWith(),
+    );
+    expect(getFeatureFlag).toHaveBeenCalledWith('new-checkout', {
+      send_event: false,
+    });
   });
 
   it('keeps a flag that evaluated to false', () => {

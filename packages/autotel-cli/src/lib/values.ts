@@ -29,6 +29,11 @@ export function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/** The number the value carries, or undefined when it carries anything else. */
+export function asNumber(value: unknown): number | undefined {
+  return typeof value === 'number' ? value : undefined;
+}
+
 /** One field of a value, when the value is an object at all. */
 export function readProperty(source: unknown, key: string): unknown {
   return asRecord(source)?.[key];

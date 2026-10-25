@@ -20,6 +20,7 @@
  */
 
 import { SpanStatusCode } from '@opentelemetry/api';
+import { markSpanOk } from './trace-context';
 import { getConfig } from './config';
 import {
   asFunction,
@@ -67,7 +68,7 @@ export async function tracebQuery<T>(
       const result = await fn();
 
       const duration = performance.now() - startTime;
-      span.setStatus({ code: SpanStatusCode.OK });
+      markSpanOk(span);
       span.setAttribute('db.duration_ms', duration);
 
       if (Array.isArray(result)) {
@@ -314,7 +315,7 @@ export function instrumentDatabase<T extends object>(
 
           const duration = performance.now() - startTime;
 
-          span.setStatus({ code: SpanStatusCode.OK });
+          markSpanOk(span);
           span.setAttributes({
             'db.duration_ms': duration,
           });

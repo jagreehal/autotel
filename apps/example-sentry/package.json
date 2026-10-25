@@ -5,13 +5,14 @@
   "type": "module",
   "description": "Example: Autotel + Sentry via OTLP with autotel-sentry helpers",
   "scripts": {
-    "start": "tsx src/index.ts"
+    "start": "tsx --import autotel/register src/index.ts"
   },
   "dependencies": {
     "@sentry/node": "^11.8.0",
     "autotel": "workspace:*",
     "autotel-sentry": "workspace:*",
-    "dotenv": "^18.0.8"
+    "dotenv": "^18.0.8",
+    "pino": "^10.4.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

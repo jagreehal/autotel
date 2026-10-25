@@ -173,16 +173,18 @@ export function getPreset(type: PresetType, slug: string): Preset | undefined {
 /**
  * Get all presets of a type
  */
-export function getPresetsByType(type: PresetType): Map<string, Preset> {
+export function getPresetsByType(
+  type: PresetType,
+): ReadonlyMap<string, Preset> {
   switch (type) {
     case 'backend':
-      return backends as Map<string, Preset>;
+      return backends;
     case 'subscriber':
-      return subscribers as Map<string, Preset>;
+      return subscribers;
     case 'plugin':
-      return plugins as Map<string, Preset>;
+      return plugins;
     case 'platform':
-      return platforms as Map<string, Preset>;
+      return platforms;
   }
 }
 

@@ -36,6 +36,13 @@ export function explicitSpanStatus(span: Span): SpanStatusCode | undefined {
     : recorded;
 }
 
+/** Mark a span that finished without throwing as OK, keeping a status the code chose. */
+export function markSpanOk(span: Span): void {
+  if (explicitSpanStatus(span) === undefined) {
+    span.setStatus({ code: SpanStatusCode.OK });
+  }
+}
+
 type AsyncLocalBox<T> = {
   value: T;
 };
@@ -307,6 +314,9 @@ export type TraceContext<
   TBaggage extends UnknownRecord | undefined = undefined,
 > = TraceContextBase & SpanMethods & BaggageMethods<TBaggage>;
 
+/** Key under which a `TraceContext` carries its span. */
+const TRACE_CONTEXT_SPAN = Symbol.for('autotel.traceContext.span');
+
 /**
  * Create a TraceContext from an OpenTelemetry Span
  *
@@ -508,6 +518,10 @@ export function createTraceContext<
       track(event, data);
     },
     ...baggageHelpers,
+    // The span itself, for code that must tell spans apart through wrappers:
+    // the ambient `ctx` and every `getActiveTraceContext()` view forward it.
+    // A symbol, so spreads copy it and serialisers skip it.
+    [TRACE_CONTEXT_SPAN]: span,
   } as unknown as TraceContext<TBaggage>;
 
   return traceCtx;

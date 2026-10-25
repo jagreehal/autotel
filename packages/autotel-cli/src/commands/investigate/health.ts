@@ -4,7 +4,9 @@ import { runInvestigate } from './runtime';
 import { addBackendFlags, backendFlagsFromOpts } from './cli-helpers';
 import type { OtlpEncoding } from './freshness';
 import { measureFreshness } from './freshness';
-import { numberOpt, stringOpt } from '../../lib/opts.js';
+
+const OTLP_ENCODINGS: readonly OtlpEncoding[] = ['protobuf', 'json'];
+import { enumOpt, numberOpt, stringOpt } from '../../lib/opts.js';
 
 export interface HealthFlags extends InvestigateFlags {
   /** Also measure ingest-to-queryable lag by writing a probe span here. */
@@ -72,7 +74,7 @@ export function registerHealthCommands(program: Command): void {
         ...backendFlagsFromOpts(opts),
         otlpEndpoint: stringOpt(opts, 'otlpEndpoint'),
         freshnessTimeoutMs: numberOpt(opts, 'freshnessTimeoutMs'),
-        otlpEncoding: opts.otlpEncoding as OtlpEncoding | undefined,
+        otlpEncoding: enumOpt(opts, 'otlpEncoding', OTLP_ENCODINGS),
       });
     });
   addBackendFlags(healthCmd);

@@ -2,8 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runMap } from './map';
-import type { MapFile } from '../lib/map/types';
+import { runMap, runMapScan } from './map';
 import type { MapOptions } from '../types/index';
 
 const roots: string[] = [];
@@ -44,14 +43,8 @@ function project(source = SOURCE): string {
   return root;
 }
 
-function run(cwd: string, flags: Partial<MapOptions> = {}): string[] {
-  const out: string[] = [];
-  vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string) => {
-    out.push(chunk);
-    return true;
-  }) as typeof process.stdout.write);
-  vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-  runMap({
+function options(cwd: string, flags: Partial<MapOptions> = {}): MapOptions {
+  return {
     cwd,
     dryRun: false,
     noInstall: false,
@@ -63,7 +56,19 @@ function run(cwd: string, flags: Partial<MapOptions> = {}): string[] {
     write: false,
     json: false,
     ...flags,
-  });
+  };
+}
+
+function run(cwd: string, flags: Partial<MapOptions> = {}): string[] {
+  const out: string[] = [];
+  vi.spyOn(process.stdout, 'write').mockImplementation(
+    (chunk: string | Uint8Array) => {
+      out.push(String(chunk));
+      return true;
+    },
+  );
+  vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  runMap(options(cwd, flags));
   vi.restoreAllMocks();
   return out.join('').trim().split('\n');
 }
@@ -99,8 +104,7 @@ describe('map --format github', () => {
 
   it('emits only the regressions, as errors, against a baseline', () => {
     const cwd = project();
-    const json = run(cwd, { json: true }).join('\n');
-    const current = (JSON.parse(json) as { map: MapFile }).map;
+    const current = runMapScan(options(cwd)).scan.map;
     /* A baseline in which /orders passed trace: the scan now fails it. */
     const orders = current.routes.find((route) => route.path === '/orders')!;
     orders.checks.trace = { status: 'pass' };

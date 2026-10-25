@@ -15,11 +15,11 @@
  *
  * ## Attributes and events both
  *
- * Span attributes hold one flag: a second call overwrites the first. A request
- * that branched on three flags needs one event each, which is what the
- * `feature_flag.evaluation` event is for. Both are recorded — attributes so a
- * single-flag span is filterable without unpacking events, events so a
- * many-flag span keeps them all.
+ * Span attributes hold one flag, and cannot be removed, so the span keeps the
+ * first evaluation it saw. A request that branched on three flags needs one
+ * event each, which is what the `feature_flag.evaluation` event is for: the
+ * events are the complete record, the attributes let a single-flag span be
+ * filtered without unpacking them.
  *
  * ## Record what you branched on
  *
@@ -47,6 +47,8 @@ export const FEATURE_FLAG = {
    * would double the cardinality to no benefit.
    */
   ERROR_MESSAGE: 'feature_flag.error.message',
+  /** The class of error an evaluation ended with, e.g. `flag_not_found`. */
+  ERROR_TYPE: 'error.type',
 } as const;
 
 /** Canonical event name for one evaluation. */
@@ -91,8 +93,24 @@ export interface FeatureFlagEvaluation {
   setId?: string;
   /** Version of the flag definition that produced this value. */
   version?: string;
+  /**
+   * The class of error the evaluation ended with, e.g. `flag_not_found` or
+   * OpenFeature's `FLAG_NOT_FOUND`, lower-cased to the registry's spelling.
+   * Defaults to `general` when only `errorMessage` is given.
+   */
+  errorType?: string;
   /** Why the evaluation failed, when it did. */
   errorMessage?: string;
+}
+
+export interface FeatureFlagRecordOptions {
+  /**
+   * Record `feature_flag.result.value` even when a variant names the result.
+   * Off by default, as the convention asks: a value can be large or private,
+   * and the variant already identifies it. A flag with no variant always
+   * records its value.
+   */
+  includeValue?: boolean;
 }
 
 /** What an attribute can hold without being flattened to text. */
@@ -141,14 +159,23 @@ function asAttributeValue(value: unknown): FeatureFlagAttributeValue {
   }
 }
 
-/** Canonical attributes for one evaluation. Absent fields are omitted. */
+/**
+ * Canonical attributes for one evaluation. Absent fields are omitted, and the
+ * value goes only when no variant names it, unless `includeValue` asks.
+ */
 export function featureFlagAttributes(
   evaluation: FeatureFlagEvaluation,
+  options: FeatureFlagRecordOptions = {},
 ): Record<string, FeatureFlagAttributeValue> {
   const attributes: Record<string, FeatureFlagAttributeValue> = {
     [FEATURE_FLAG.KEY]: evaluation.key,
-    [FEATURE_FLAG.RESULT_VALUE]: asAttributeValue(evaluation.value),
   };
+  if (evaluation.variant === undefined || options.includeValue) {
+    attributes[FEATURE_FLAG.RESULT_VALUE] = asAttributeValue(evaluation.value);
+  }
+  const errorType =
+    evaluation.errorType?.toLowerCase() ??
+    (evaluation.errorMessage === undefined ? undefined : 'general');
   const optional: [string, string | undefined][] = [
     [FEATURE_FLAG.RESULT_VARIANT, evaluation.variant],
     [
@@ -162,6 +189,7 @@ export function featureFlagAttributes(
     [FEATURE_FLAG.SET_ID, evaluation.setId],
     [FEATURE_FLAG.VERSION, evaluation.version],
     [FEATURE_FLAG.ERROR_MESSAGE, evaluation.errorMessage],
+    [FEATURE_FLAG.ERROR_TYPE, errorType],
   ];
   for (const [key, value] of optional) {
     if (value !== undefined) attributes[key] = value;
@@ -170,20 +198,114 @@ export function featureFlagAttributes(
 }
 
 /**
- * Record a flag evaluation on `sink` — as attributes and as a
- * `feature_flag.evaluation` event.
+ * Record a flag evaluation as attributes and a `feature_flag.evaluation`
+ * event.
  *
- * A missing sink is a no-op: instrumentation must never be the reason a branch
- * throws, and a flag read outside any span is a legitimate thing to do.
+ * Without a sink it records onto the active span and emits the event as a log
+ * record, as the OpenFeature hook does:
+ *
+ * ```ts
+ * recordFeatureFlag({ key: 'new-checkout', value: enabled });
+ * ```
+ *
+ * With one (`ctx` inside `trace()`) it records there. An explicit `undefined`
+ * sink is a no-op: instrumentation must never be the reason a branch throws,
+ * and a flag read outside any span is a legitimate thing to do.
  */
+export function recordFeatureFlag(
+  evaluation: FeatureFlagEvaluation,
+  options?: FeatureFlagRecordOptions,
+): void;
 export function recordFeatureFlag(
   sink: FeatureFlagSink | undefined,
   evaluation: FeatureFlagEvaluation,
+  options?: FeatureFlagRecordOptions,
+): void;
+export function recordFeatureFlag(
+  first: FeatureFlagSink | FeatureFlagEvaluation | undefined,
+  second?: FeatureFlagEvaluation | FeatureFlagRecordOptions,
+  third?: FeatureFlagRecordOptions,
 ): void {
-  if (!sink) return;
-  const attributes = featureFlagAttributes(evaluation);
-  sink.setAttributes(attributes);
-  sink.track?.(FEATURE_FLAG_EVALUATION_EVENT, attributes);
+  if (first !== undefined && !('setAttributes' in first)) {
+    record(
+      activeSpan(),
+      featureFlagAttributes(first, second as FeatureFlagRecordOptions),
+      emitEvaluationRecord,
+    );
+    return;
+  }
+  if (!first) return;
+  const attributes = featureFlagAttributes(
+    second as FeatureFlagEvaluation,
+    third,
+  );
+  record(first, attributes, emitEvaluationRecord);
+}
+
+/**
+ * Spans that already carry an evaluation's attributes. Weakly held, so a span
+ * is remembered for exactly as long as it exists.
+ */
+const projected = new WeakSet<object>();
+
+/** Where a `TraceContext` keeps its span (see `trace-context.ts`). */
+const TRACE_CONTEXT_SPAN = Symbol.for('autotel.traceContext.span');
+
+/**
+ * The span a sink writes to. A `TraceContext` carries it, however it is
+ * reached: the ambient `ctx`, a fresh `getActiveTraceContext()`, or a parent's
+ * context saved and used under a child span. A raw span, or any other sink,
+ * is its own.
+ */
+function spanOf(sink: FeatureFlagSink): object {
+  const span = (sink as unknown as Record<symbol, unknown>)[TRACE_CONTEXT_SPAN];
+  return typeof span === 'object' && span !== null ? span : sink;
+}
+
+/** Whether this is the first evaluation recorded on the sink's span. */
+function firstOnSpan(sink: FeatureFlagSink): boolean {
+  const span = spanOf(sink);
+  if (projected.has(span)) return false;
+  projected.add(span);
+  return true;
+}
+
+/**
+ * The span's own copy of an evaluation, for filtering a single-flag span
+ * without unpacking events. The first evaluation on a span keeps it: span
+ * attributes cannot be removed, so a second would mix its fields with the
+ * first's. Every evaluation, the first included, is a complete event.
+ * `error.type` stays on the event, since on a span it describes the span's
+ * own outcome.
+ */
+function projectOntoSpan(
+  sink: FeatureFlagSink,
+  attributes: Record<string, FeatureFlagAttributeValue>,
+): void {
+  if (!firstOnSpan(sink)) return;
+  const { [FEATURE_FLAG.ERROR_TYPE]: _errorType, ...onSpan } = attributes;
+  sink.setAttributes(onSpan);
+}
+
+function activeSpan(): FeatureFlagSink | undefined {
+  return trace.getActiveSpan() as (Span & FeatureFlagSink) | undefined;
+}
+
+/**
+ * Attributes onto the span that branched, and the event wherever the sink
+ * says. A sink with no `track` of its own gets a log record, including when
+ * there is no span at all, because the evaluation still happened.
+ */
+function record(
+  sink: FeatureFlagSink | undefined,
+  attributes: Record<string, FeatureFlagAttributeValue>,
+  emitLogRecord: (
+    attributes: Record<string, FeatureFlagAttributeValue>,
+  ) => void,
+): void {
+  if (sink) projectOntoSpan(sink, attributes);
+  if (sink?.track) sink.track(FEATURE_FLAG_EVALUATION_EVENT, attributes);
+  else emitLogRecord(attributes);
 }
 
 /**
@@ -198,7 +320,6 @@ export interface OpenFeatureHookContext {
   defaultValue: unknown;
   context?: { targetingKey?: string };
   providerMetadata?: { name?: string };
-  clientMetadata?: { name?: string };
 }
 
 /** The evaluation result an OpenFeature hook receives. */
@@ -206,6 +327,12 @@ export interface OpenFeatureEvaluationDetails {
   value: unknown;
   variant?: string;
   reason?: string;
+  /**
+   * What the provider reports about the flag. OpenFeature names `flagSetId`
+   * and `version` here for OpenTelemetry's `feature_flag.set.id` and
+   * `feature_flag.version`.
+   */
+  flagMetadata?: Readonly<Record<string, string | number | boolean>>;
 }
 
 /** Just enough of an OpenFeature hook to be registered as one. */
@@ -217,7 +344,7 @@ export interface OpenFeatureHook {
   error?(hookContext: OpenFeatureHookContext, error: unknown): void;
 }
 
-export interface OpenFeatureHookOptions {
+export interface OpenFeatureHookOptions extends FeatureFlagRecordOptions {
   /**
    * Where to record. Defaults to the active span, which is what you want:
    * the span that branched on the flag is the one whose latency and errors the
@@ -255,6 +382,21 @@ function emitEvaluationRecord(
   });
 }
 
+function metadataText(
+  value: string | number | boolean | undefined,
+): string | undefined {
+  return value === undefined ? undefined : String(value);
+}
+
+/**
+ * OpenFeature's error code (`FLAG_NOT_FOUND`, `TYPE_MISMATCH`, …), which
+ * lower-cases to the convention's `error.type` value. `general` otherwise.
+ */
+function errorCode(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && code !== '' ? code : 'general';
+}
+
 function evaluationFrom(
   hookContext: OpenFeatureHookContext,
   value: unknown,
@@ -265,10 +407,18 @@ function evaluationFrom(
     value,
     provider: hookContext.providerMetadata?.name,
     contextId: hookContext.context?.targetingKey,
-    setId: hookContext.clientMetadata?.name,
     ...extra,
   };
 }
+
+/**
+ * Evaluations already recorded, by the result object OpenFeature hands every
+ * hook in one evaluation (`details`, or the error), and a new one each time.
+ */
+const recordedEvaluations = new WeakSet<object>();
+
+/** Marks a hook as this one, so `init()` does not register a second. */
+const AUTOTEL_HOOK = Symbol.for('autotel.openfeature.hook');
 
 /**
  * An OpenFeature hook that records every evaluation under the canonical
@@ -287,46 +437,111 @@ function evaluationFrom(
  * ```
  *
  * A failed evaluation is still recorded, with the default value the code
- * actually used and `reason: 'ERROR'`. The default is what the request behaved
- * as; the failure is why.
+ * used, `reason: 'error'` and OpenFeature's error code as
+ * `error.type`. The default is what the request behaved as; the failure is
+ * why. A flag set id and version the provider reports in `flagMetadata` go on
+ * as `feature_flag.set.id` and `feature_flag.version`.
  */
 export function autotelOpenFeatureHook(
   options: OpenFeatureHookOptions = {},
 ): OpenFeatureHook {
-  const getSpan =
-    options.getSpan ??
-    (() => trace.getActiveSpan() as Span & FeatureFlagSink as FeatureFlagSink);
+  const getSpan = options.getSpan ?? activeSpan;
   const emitLogRecord = options.emitLogRecord ?? emitEvaluationRecord;
 
-  /**
-   * Attributes onto the span that branched, and the event wherever the sink
-   * says. A sink with no `track` of its own gets a log record — including when
-   * there is no span at all, because the evaluation still happened.
-   */
-  const record = (evaluation: FeatureFlagEvaluation): void => {
-    const sink = getSpan();
-    const attributes = featureFlagAttributes(evaluation);
-    sink?.setAttributes(attributes);
-    if (sink?.track) sink.track(FEATURE_FLAG_EVALUATION_EVENT, attributes);
-    else emitLogRecord(attributes);
+  const recordOnce = (
+    result: unknown,
+    evaluation: FeatureFlagEvaluation,
+  ): void => {
+    // A second copy of this hook (one from `init()`, one added by hand) sees
+    // the same result object and records nothing.
+    if (typeof result === 'object' && result !== null) {
+      if (recordedEvaluations.has(result)) return;
+      recordedEvaluations.add(result);
+    }
+    record(
+      getSpan(),
+      featureFlagAttributes(evaluation, options),
+      emitLogRecord,
+    );
   };
 
-  return {
+  const hook: OpenFeatureHook = {
     after(hookContext, details) {
-      record(
+      recordOnce(
+        details,
         evaluationFrom(hookContext, details.value, {
           variant: details.variant,
           reason: details.reason,
+          setId: metadataText(details.flagMetadata?.flagSetId),
+          version: metadataText(details.flagMetadata?.version),
         }),
       );
     },
     error(hookContext, error) {
-      record(
+      recordOnce(
+        error,
         evaluationFrom(hookContext, hookContext.defaultValue, {
           reason: 'error',
+          errorType: errorCode(error),
           errorMessage: error instanceof Error ? error.message : String(error),
         }),
       );
     },
   };
+  return Object.assign(hook, { [AUTOTEL_HOOK]: true });
+}
+
+/** Where OpenFeature keeps its API singleton, shared by its CJS and ESM builds. */
+const OPENFEATURE_API = Symbol.for('@openfeature/js-sdk/api');
+
+/** @internal The slice of OpenFeature's API singleton `init()` uses. */
+export interface OpenFeatureApi {
+  addHooks(...hooks: OpenFeatureHook[]): unknown;
+  getHooks(): readonly unknown[];
+}
+
+function asOpenFeatureApi(value: unknown): OpenFeatureApi | undefined {
+  const api = value as Partial<OpenFeatureApi> | undefined;
+  return typeof api?.addHooks === 'function' &&
+    typeof api.getHooks === 'function'
+    ? (api as OpenFeatureApi)
+    : undefined;
+}
+
+/**
+ * The OpenFeature API the app uses: the singleton it already loaded, or the
+ * server SDK loaded with `load`. Undefined when OpenFeature is not installed.
+ *
+ * @internal
+ */
+export function findOpenFeature(
+  load: (id: string) => unknown,
+): OpenFeatureApi | undefined {
+  return (
+    asOpenFeatureApi(
+      (globalThis as Record<symbol, unknown>)[OPENFEATURE_API],
+    ) ??
+    asOpenFeatureApi(
+      (load('@openfeature/server-sdk') as { OpenFeature?: unknown } | undefined)
+        ?.OpenFeature,
+    )
+  );
+}
+
+/**
+ * Register {@link autotelOpenFeatureHook} with OpenFeature, once. `init()` calls
+ * this, so an app with `@openfeature/server-sdk` installed records every
+ * evaluation without registering anything. A hook the app registered itself
+ * counts.
+ *
+ * @internal
+ */
+export function installOpenFeatureHook(
+  api: OpenFeatureApi,
+  options: OpenFeatureHookOptions = {},
+): void {
+  const registered = api
+    .getHooks()
+    .some((hook) => (hook as Record<symbol, unknown>)?.[AUTOTEL_HOOK]);
+  if (!registered) api.addHooks(autotelOpenFeatureHook(options));
 }

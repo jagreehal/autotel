@@ -139,6 +139,11 @@ workspace package's dependency in a monorepo. `withAutotelConfig` fails the
 build instead. `autotel-adapters/next-config` has no runtime dependency, so
 `next.config.ts` can import it.
 
+Hono inside Next follows the same rule: keep `autotel-adapters` and `hono` on
+the same side of that line. Bundle both with the app, or list both in
+`serverExternalPackages`. When they resolve different copies, the Hono adapter
+names the route through the request instead and warns once.
+
 ## Nitro
 
 ```ts

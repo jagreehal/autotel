@@ -1,18 +1,19 @@
 # example-sentry
 
-Demonstrates Autotel exporting OpenTelemetry traces and logs directly to Sentry's OTLP ingestion endpoint, with captured errors landing on the active trace.
+Demonstrates Autotel exporting OpenTelemetry traces and pino logs to Sentry's OTLP ingestion endpoint, with captured errors landing on the active trace.
 
 ## How it works
 
 ```
-Autotel (OTel SDK) ──OTLP──> Sentry (traces + logs)
+Autotel (OTel SDK) ──OTLP──> Sentry (traces + pino logs)
 Sentry SDK ─────────────────> Sentry (errors, on the active trace)
 ```
 
 1. `sentryOtlpConfig(dsn)` parses your Sentry DSN into an OTLP endpoint and auth headers
 2. Sentry SDK is initialized with `skipOpenTelemetrySetup: true` so Autotel owns the OTel setup
-3. Autotel exports traces via OTLP to Sentry's ingestion endpoint
-4. `@sentry/node` reads the active OTel span when it builds an event, so captured errors carry the right `trace_id` and `span_id` with no extra wiring
+3. `Sentry.setOpenTelemetryContextAsyncContextStrategy()` makes Sentry read the active OTel span, so captured errors carry its `trace_id` and `span_id`
+4. Autotel exports traces via OTLP to Sentry's ingestion endpoint
+5. Pino is auto-instrumented (`autoInstrumentations: ['pino']`, `logs: true`), so each log line also goes to Sentry as a log on its trace
 
 ## Setup
 
@@ -39,10 +40,10 @@ pnpm install
 ### 3. Run
 
 ```bash
-# Basic run — sends a trace with a child span
+# Basic run: sends a trace with a child span
 pnpm start
 
-# With error capture — also sends a linked error to Sentry
+# With error capture: also sends a linked error to Sentry
 THROW_FOR_DEMO=1 pnpm start
 
 # With debug logging
@@ -54,15 +55,16 @@ AUTOTEL_DEBUG=1 pnpm start
 ### Console output
 
 ```
-{"level":"info","service":"example-sentry","msg":"trace started","demo":true,"traceId":"...","spanId":"..."}
-{"level":"info","service":"example-sentry","msg":"data fetched","source":"mock-api","traceId":"...","spanId":"..."}
-{"level":"info","service":"example-sentry","msg":"trace finished","demo":true,"traceId":"...","spanId":"..."}
+{"level":30,"name":"example-sentry","demo":true,"trace_id":"...","span_id":"...","trace_flags":"01","msg":"trace started"}
+{"level":30,"name":"example-sentry","source":"mock-api","trace_id":"...","span_id":"...","trace_flags":"01","msg":"data fetched"}
+{"level":30,"name":"example-sentry","demo":true,"trace_id":"...","span_id":"...","trace_flags":"01","msg":"trace finished"}
 ```
 
 ### In Sentry
 
 - **Traces**: An `example-sentry-demo` transaction with a `fetch-data` child span
-- **Errors** (with `THROW_FOR_DEMO=1`): A "Demo error for Sentry" error linked to the trace via matching `trace_id`
+- **Logs**: the three pino lines, each on the trace
+- **Errors** (with `THROW_FOR_DEMO=1`): A "Demo error for Sentry" error on the same trace, and the root span marked as failed
 
 ## Environment variables
 
@@ -80,10 +82,13 @@ import { sentryOtlpConfig } from 'autotel-sentry';
 const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
 Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+Sentry.setOpenTelemetryContextAsyncContextStrategy();
 init({
   service: 'example-sentry',
   endpoint: config.endpoint,
   headers: config.headers,
+  autoInstrumentations: ['pino'],
+  logs: true,
 });
 ```
 

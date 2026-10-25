@@ -47,6 +47,7 @@ import {
   createTraceContext,
   getActiveContextWithBaggage,
   getContextStorage,
+  markSpanOk,
 } from './trace-context';
 import { runInOperationContext } from './operation-context';
 import { flattenToAttributes } from './flatten-attributes';
@@ -255,7 +256,8 @@ function createCtxProxy(resolve: () => TraceContext | null): TraceContext {
 
     ownKeys() {
       const ctxValue = resolve();
-      return Object.keys(ctxValue ?? INACTIVE_CTX_METHODS);
+      // Symbols too, so a spread copy keeps the context's span marker.
+      return Reflect.ownKeys(ctxValue ?? INACTIVE_CTX_METHODS);
     },
 
     getOwnPropertyDescriptor(_target, prop) {
@@ -826,7 +828,7 @@ export function span<T = unknown>(
         if (resultPromise) {
           return resultPromise
             .then((resolved) => {
-              span.setStatus({ code: SpanStatusCode.OK });
+              markSpanOk(span);
               span.end();
               return resolved;
             })
@@ -850,7 +852,7 @@ export function span<T = unknown>(
             });
         } else {
           // Synchronous function
-          span.setStatus({ code: SpanStatusCode.OK });
+          markSpanOk(span);
           span.end();
           return result;
         }
@@ -933,7 +935,7 @@ export async function withNewContext<T = unknown>(
   return tracer.startActiveSpan('root', { root: true }, async (span) => {
     try {
       const result = await fn();
-      span.setStatus({ code: SpanStatusCode.OK });
+      markSpanOk(span);
       return result;
     } catch (error) {
       span.recordException(

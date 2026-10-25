@@ -6,9 +6,10 @@ description: Send Autotel (OpenTelemetry) traces to Sentry over OTLP.
 `autotel-sentry` sends Autotel traces to Sentry over OTLP. It parses a Sentry
 DSN into the OTLP endpoint and auth headers that Autotel's `init()` expects.
 
-That is the whole package. Errors line up with traces on their own:
-`@sentry/node` reads the active OpenTelemetry span when it builds an event, so
-a captured error already carries the right `trace_id` and `span_id`.
+That is the whole package. To put captured errors on the active trace, call
+`Sentry.setOpenTelemetryContextAsyncContextStrategy()` after `Sentry.init()`: `@sentry/node`
+then reads the active OpenTelemetry span when it builds an event, so each error
+carries that span's `trace_id` and `span_id`.
 
 > [!NOTE]
 > Earlier versions used a `SentrySpanProcessor` / `SentryPropagator` bridge built
@@ -40,6 +41,8 @@ const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
 // 1. Initialize Sentry. Tell it not to register its own OTel SDK.
 Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+// Sentry reads trace ids from the active OpenTelemetry span
+Sentry.setOpenTelemetryContextAsyncContextStrategy();
 
 // 2. Initialize Autotel. It owns OTel and exports traces to Sentry's OTLP endpoint.
 init({ service: 'my-app', endpoint: config.endpoint, headers: config.headers });
@@ -100,10 +103,9 @@ order; otherwise `fetch` and XHR can land in different traces.
 
 ## Migrating from `linkSentryErrors`
 
-Removed in 0.7.0. Delete the call and its import; nothing replaces it.
-`@sentry/node` reads the active OpenTelemetry span when it builds an event, so
-errors keep landing on the right trace without it. The `SentryLinkable` type is
-gone too.
+Removed in 0.7.0. Delete the call and its import, and call
+`Sentry.setOpenTelemetryContextAsyncContextStrategy()` once after `Sentry.init()`. The
+`SentryLinkable` type is gone too.
 
 ## Examples
 

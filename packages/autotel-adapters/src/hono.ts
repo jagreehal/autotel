@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import type { RouterRoute } from 'hono/types';
 import { matchedRoutes } from 'hono/route';
 import {
   createDrainPipeline,
@@ -80,12 +81,12 @@ export function autotelMiddleware(options: HonoWithAutotelOptions = {}) {
          that never ran (`get('*')` after `/users/:id`). Otherwise the handler
          that ran names the route, and under `use('*')` alone it is `/*`. */
       const matchedRoute = () => {
-        const routes = matchedRoutes(c);
+        const routes = routesOf(c);
         const ran = c.req.routeIndex;
         const endpoint = routes
-          .slice(ran + 1)
+          ?.slice(ran + 1)
           .findLast((route) => !route.path.endsWith('*'));
-        const path = (endpoint ?? routes[ran] ?? routes.at(-1))?.path;
+        const path = (endpoint ?? routes?.[ran] ?? routes?.at(-1))?.path;
         return !path || path === '*' ? '/*' : path;
       };
 
@@ -116,6 +117,37 @@ export function autotelMiddleware(options: HonoWithAutotelOptions = {}) {
       }
     });
   };
+}
+
+let warnedOtherHono = false;
+
+/**
+ * The routes the request matched. `hono/route` reads them through a symbol
+ * private to the copy of Hono this module loaded, so when the app runs another
+ * copy (a bundled app beside an externalised adapter) it finds nothing. The
+ * request's own getter is the app's copy answering, so it is the fallback.
+ * Naming a span is best effort: a lookup that fails names it `/*` and never
+ * fails the request.
+ */
+function routesOf(c: Context): RouterRoute[] | undefined {
+  try {
+    return matchedRoutes(c);
+  } catch {
+    if (!warnedOtherHono) {
+      warnedOtherHono = true;
+      console.warn(
+        '[autotel-adapters/hono] Could not read the matched route through hono/route, ' +
+          'most likely because the app and autotel-adapters loaded different copies of Hono. ' +
+          'Bundle autotel-adapters with the app, or externalise hono too.',
+      );
+    }
+  }
+  try {
+    const routes = (c.req as { matchedRoutes?: unknown }).matchedRoutes;
+    return Array.isArray(routes) ? (routes as RouterRoute[]) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Alias for {@link useLogger} inside autotelMiddleware. */

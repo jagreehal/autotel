@@ -3,37 +3,17 @@
  *
  * Demonstrates:
  * - sentryOtlpConfig() builds OTLP endpoint/headers from DSN
- * - Autotel exports traces directly to Sentry's OTLP endpoint
+ * - Autotel exports traces and pino logs to Sentry's OTLP endpoint
+ * - Captured errors land on the active trace
  *
  * Run: pnpm start
  * Run with error: THROW_FOR_DEMO=1 pnpm start
  */
 
-import 'dotenv/config';
+import './telemetry'; // first: runs init() before pino loads
 import * as Sentry from '@sentry/node';
-import { init, shutdown, span, getActiveTraceContext } from 'autotel';
-import { createBuiltinLogger } from 'autotel/logger';
-import { sentryOtlpConfig } from 'autotel-sentry';
-
-// Build OTLP config from DSN — extracts endpoint and auth headers.
-const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
-const log = createBuiltinLogger('example-sentry');
-
-// Sentry handles errors only — let Autotel own the OTel setup. Sentry reads
-// the active OTel span itself, so captured errors land on the right trace.
-Sentry.init({
-  dsn: config.dsn,
-  skipOpenTelemetrySetup: true,
-});
-
-// Autotel exports traces via OTLP directly to Sentry.
-init({
-  service: 'example-sentry',
-  endpoint: config.endpoint,
-  headers: config.headers,
-  logs: true,
-  debug: !!process.env.AUTOTEL_DEBUG,
-});
+import { shutdown, span, getActiveTraceContext } from 'autotel';
+import { log } from './logger';
 
 async function main() {
   await span('example-sentry-demo', async () => {

@@ -70,6 +70,8 @@ export const POST = withAutotel(async (request: Request) => {
 });
 ```
 
+Serving Hono from a Next.js catch-all? Keep `autotel-adapters` and `hono` on the same side of `serverExternalPackages`: bundle both with the app, or list both. If they resolve different copies, the Hono adapter names the route from the request and warns once.
+
 ## Span names and attributes
 
 Request spans follow the OpenTelemetry HTTP conventions. `http.route` holds the matched route template (`/users/:id`), the span is named `{METHOD} {route}` (or `{METHOD}` when no route matched), and `url.path` holds the raw path. A 5xx response ends the span with status ERROR.

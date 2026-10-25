@@ -55,12 +55,22 @@ Package uses explicit exports (check `package.json` exports field) for tree-shak
   `feature_flag.*` convention, plus the `feature_flag.evaluation` event.
   `recordFeatureFlag()` records both: attributes so a single-flag span is
   filterable without unpacking events, and one event per flag because
-  attributes hold only one — a second call overwrites the first. Record where
+  attributes hold only one, so the span keeps the first. Record where
   the code _reads_ a flag, not where it is fetched: a flag evaluated and
   ignored explains nothing. Never invent `feature_flag.<key>`; keyed by flag
   name it cannot be grouped across flags and no backend reads it.
-  `autotelOpenFeatureHook()` is the zero-config path — structurally typed
-  against the hook shape, so no `@openfeature/*` dependency reaches a bundle.
+  `init()` registers `autotelOpenFeatureHook()` when `@openfeature/server-sdk`
+  is installed (an optional peer; `openFeature: false` opts out), through the
+  API singleton OpenFeature keeps on `globalThis`, once. The hook is
+  structurally typed against the hook shape, so no `@openfeature/*` dependency
+  reaches a bundle, and two copies record one evaluation once.
+  `recordFeatureFlag(evaluation)` without a sink records onto the active span.
+  `feature_flag.result.value` beside a variant is opt-in (`includeValue`), and
+  a failure's event records `error.type` from OpenFeature's error code. Finding
+  OpenFeature turns on log export (as `canonicalLogLines` with `otel` does),
+  since the events are the complete record; `logs: false` wins. The span keeps
+  the first evaluation only (attributes cannot be removed, so later ones would
+  mix fields) and never `error.type`.
   The event goes through `track` (correlated log) and **only** `track` — there
   is no `Span.addEvent` fallback, because a fallback is how the Logs API
   direction quietly becomes optional; a caller holding a raw span passes its

@@ -48,7 +48,7 @@ describe('toInvestigateError', () => {
     expect(out.message).toContain('"backend"');
     expect(out.message).toContain('Invalid option');
     expect(out.expected).toBeDefined();
-    expect((out.expected as { issues: unknown[] }).issues).toHaveLength(1);
+    expect(out.expected?.issues).toHaveLength(1);
   });
 
   it('handles ZodError with nested path', () => {

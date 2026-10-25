@@ -104,6 +104,8 @@ const sentry = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
 // Keep Sentry for errors, but let autotel own OpenTelemetry
 Sentry.init({ dsn: sentry.dsn, skipOpenTelemetrySetup: true });
+// Sentry reads trace ids from the active OpenTelemetry span
+Sentry.setOpenTelemetryContextAsyncContextStrategy();
 
 init({ service: 'my-app', endpoint: sentry.endpoint, headers: sentry.headers });
 ```

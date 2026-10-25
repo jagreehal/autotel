@@ -16,23 +16,13 @@ const FIXTURES_DIR = path.join(__dirname, '../__fixtures__/codemod-trace');
  * and the byte-comparison fixtures happily asserted the broken output.
  */
 function parseErrors(code: string, fileName: string): string[] {
-  const scriptKind = fileName.endsWith('.tsx')
-    ? ts.ScriptKind.TSX
-    : fileName.endsWith('.jsx')
-      ? ts.ScriptKind.JSX
-      : fileName.endsWith('.js')
-        ? ts.ScriptKind.JS
-        : ts.ScriptKind.TS;
-  const sourceFile = ts.createSourceFile(
+  // transpileModule reports syntactic diagnostics only, picking the script
+  // kind from the file extension.
+  const { diagnostics = [] } = ts.transpileModule(code, {
     fileName,
-    code,
-    ts.ScriptTarget.ES2022,
-    true,
-    scriptKind,
-  );
-  const diagnostics =
-    (sourceFile as unknown as { parseDiagnostics?: ts.Diagnostic[] })
-      .parseDiagnostics ?? [];
+    reportDiagnostics: true,
+    compilerOptions: { jsx: ts.JsxEmit.Preserve },
+  });
   return diagnostics.map((d) =>
     ts.flattenDiagnosticMessageText(d.messageText, ' '),
   );

@@ -216,3 +216,36 @@ describe('POST /api/query/logs', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('POST /v1/logs with empty values', () => {
+  // An empty AnyValue is what a `null` field in a pino log becomes. It is valid
+  // OTLP, and an exporter treats a rejected batch as lost, so one null field
+  // must not cost the records beside it.
+  it('stores an empty value as null, at the top level and inside a kvlist', async () => {
+    const port = await start();
+    await postLogs(port, [
+      {
+        timeUnixNano: nano(T0 + 1000),
+        body: { stringValue: 'cancelled' },
+        attributes: [
+          { key: 'reason', value: {} },
+          {
+            key: 'order',
+            value: { kvlistValue: { values: [{ key: 'coupon', value: {} }] } },
+          },
+        ],
+      },
+      { timeUnixNano: nano(T0 + 2000), body: { stringValue: 'next' } },
+    ]);
+
+    const { body } = await query(port, { query: '' });
+    expect(body.logs).toHaveLength(2);
+    const cancelled = (
+      body.logs as Array<{ body: unknown; attributes?: unknown }>
+    ).find((log) => log.body === 'cancelled');
+    expect(cancelled?.attributes).toEqual({
+      reason: null,
+      order: { coupon: null },
+    });
+  });
+});

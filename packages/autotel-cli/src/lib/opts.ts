@@ -7,25 +7,24 @@
  * the read surfaces here rather than as a wrong value deep in a query.
  */
 import type { OptionValues } from 'commander';
+import { asNumber, asString } from './values';
 
 /** A flag declared without an argument parser: Commander yields its string. */
 export function stringOpt(o: OptionValues, key: string): string | undefined {
-  const value = o[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  const value = asString(o[key]);
+  return value !== undefined && value.length > 0 ? value : undefined;
 }
 
 /** A flag declared with `intArg` or another numeric parser. */
 export function numberOpt(o: OptionValues, key: string): number | undefined {
-  const value = o[key];
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value
-    : undefined;
+  const value = asNumber(o[key]);
+  return value !== undefined && Number.isFinite(value) ? value : undefined;
 }
 
 /** A boolean flag: present or absent. */
 export function boolOpt(o: OptionValues, key: string): boolean | undefined {
   const value = o[key];
-  return typeof value === 'boolean' ? value : undefined;
+  return value === true || value === false ? value : undefined;
 }
 
 /** A flag whose value must be one of a fixed set. */

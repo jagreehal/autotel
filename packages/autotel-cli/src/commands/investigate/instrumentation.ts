@@ -9,6 +9,7 @@ import { addStaticFlags, staticFlagsFromOpts } from './cli-helpers';
 import { AutotelError } from '../../lib/errors';
 import * as fs from 'node:fs';
 import { stringOpt } from '../../lib/opts.js';
+import { asRecord, asString } from '../../lib/values.js';
 
 interface SpanInput {
   operationName: string;
@@ -24,12 +25,16 @@ function readSpanFromStdinOrFile(spanFile?: string): SpanInput {
   } else {
     raw = fs.readFileSync(0, 'utf8');
   }
-  const parsed = JSON.parse(raw) as Partial<SpanInput>;
+  const parsed = asRecord(JSON.parse(raw));
+  const operationName = asString(parsed?.operationName);
+  const serviceName = asString(parsed?.serviceName);
+  const tags = asRecord(parsed?.tags);
+  const hasError = parsed?.hasError;
   if (
-    typeof parsed.operationName !== 'string' ||
-    typeof parsed.serviceName !== 'string' ||
-    typeof parsed.tags !== 'object' ||
-    typeof parsed.hasError !== 'boolean'
+    operationName === undefined ||
+    serviceName === undefined ||
+    tags === undefined ||
+    (hasError !== true && hasError !== false)
   ) {
     throw new AutotelError({
       type: 'validation',
@@ -38,16 +43,21 @@ function readSpanFromStdinOrFile(spanFile?: string): SpanInput {
         'score expects JSON with operationName, serviceName, tags, hasError',
       retryable: false,
       expected: {
-        shape: {
-          operationName: 'string',
-          serviceName: 'string',
-          tags: 'Record<string, string | number | boolean>',
-          hasError: 'boolean',
-        },
+        operationName: 'string',
+        serviceName: 'string',
+        tags: 'Record<string, string | number | boolean>',
+        hasError: 'boolean',
       },
     });
   }
-  return parsed as SpanInput;
+  // SAFETY: tags is checked to be an object above; scoreSpan only tests
+  // which keys are present, never the values.
+  return {
+    operationName,
+    serviceName,
+    tags: tags as SpanInput['tags'],
+    hasError,
+  };
 }
 
 export async function runScoreSpan(

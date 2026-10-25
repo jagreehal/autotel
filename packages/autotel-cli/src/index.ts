@@ -12,9 +12,9 @@ function jsonModeRequested(): boolean {
   return process.argv.includes('--json');
 }
 
-run().catch((error: unknown) => {
+function exitWithError(cause: unknown): never {
   const err: AutotelError =
-    commanderErrorToAutotel(error) ?? toAutotelError(error);
+    commanderErrorToAutotel(cause) ?? toAutotelError(cause);
   const isJson =
     jsonModeRequested() ||
     // schema/commands/examples/version + investigate commands are JSON-only
@@ -31,4 +31,6 @@ run().catch((error: unknown) => {
     );
   }
   process.exit(exitCodeForError(err));
-});
+}
+
+run().catch(exitWithError);
