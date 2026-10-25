@@ -1,5 +1,12 @@
 # autotel-message-contract
 
+## 20.0.12
+
+### Patch Changes
+
+- Updated dependencies [d62deb1]
+  - autotel@8.6.0
+
 ## 20.0.11
 
 ### Patch Changes

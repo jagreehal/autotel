@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.19
+
+### Patch Changes
+
+- Updated dependencies [d62deb1]
+  - autotel@8.6.0
+
 ## 0.5.18
 
 ### Patch Changes

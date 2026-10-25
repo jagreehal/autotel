@@ -1,5 +1,13 @@
 # autotel-hono
 
+## 0.6.3
+
+### Patch Changes
+
+- Updated dependencies [d62deb1]
+  - autotel@8.6.0
+  - autotel-adapters@3.0.1
+
 ## 0.6.2
 
 ### Patch Changes
