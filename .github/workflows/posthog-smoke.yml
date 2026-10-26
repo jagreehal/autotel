@@ -52,8 +52,9 @@ jobs:
       - name: Build the packages under test
         run: pnpm --filter autotel --filter autotel-web --filter autotel-posthog build
 
-      - name: Install Playwright browsers
-        run: pnpm --filter @jagreehal/example-posthog exec playwright install --with-deps chromium
+      # No `playwright install --with-deps`: its apt step stalls on the runner's
+      # mirror often enough to blow the timeout. The smoke drives the Google
+      # Chrome the runner image already ships (`channel: 'chrome'` under CI).
 
       # Skips itself, green, when POSTHOG_KEY is absent — which is what a fork
       # sees. Point it at a throwaway project: it writes real events.
