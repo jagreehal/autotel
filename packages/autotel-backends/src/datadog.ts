@@ -175,6 +175,8 @@ export interface DatadogPresetConfig {
  *   - Direct: https://otlp.{site} → SDK appends /v1/traces, /v1/metrics, /v1/logs
  *   - Agent: http://localhost:4318 (default)
  * - Datadog API key authentication headers (direct ingestion only)
+ * - Delta metric temporality (direct ingestion only). Set
+ *   OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE to override.
  * - Agent Observability routing for GenAI spans (`dd-otlp-source: llmobs`)
  * - Unified service tagging (service, env, version)
  * - Resource attribute best practices
@@ -294,6 +296,12 @@ export function createDatadogConfig(
     endpoint: otlpEndpoint,
     headers: authHeaders,
   };
+
+  // Datadog's OTLP intake keeps delta monotonic sums. The OTLP metric exporter
+  // reads this when init() builds it.
+  if (!process.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE) {
+    process.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE = 'delta';
+  }
 
   // Add log export if enabled
   if (enableLogs) {

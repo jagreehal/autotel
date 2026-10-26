@@ -535,6 +535,8 @@ DD_HOSTNAME=my-host         # Sets hostname
 DD_AGENT_HOST=localhost     # Sets Agent host
 ```
 
+For direct ingestion the preset also sets `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` when it is unset, since Datadog's OTLP intake keeps delta monotonic sums only. Set the variable yourself to choose another value. Agent mode leaves it unset because the Agent converts cumulative metrics.
+
 ### Examples
 
 **Serverless (Lambda)**:

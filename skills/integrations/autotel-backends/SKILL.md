@@ -127,6 +127,8 @@ as well, so a service that is not LLM-shaped loses nothing by sending it; pass
 `llmobs: false` to send only the API key. In `useAgent` mode the Agent decides
 the routing, so the option does not apply.
 
+**Direct ingestion exports metrics as delta.** Datadog's OTLP intake only keeps delta monotonic sums, so the preset sets `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` when it is unset. Set it yourself to override. In `useAgent` mode the Agent converts cumulative metrics, so the preset leaves it alone.
+
 When `enableLogs: true`, the preset auto-sets `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL`, and `OTEL_EXPORTER_OTLP_LOGS_HEADERS` environment variables (only if not already set), enabling `pino-opentelemetry-transport` without extra configuration.
 
 ### Google Cloud

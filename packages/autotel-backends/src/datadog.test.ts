@@ -100,6 +100,36 @@ describe('createDatadogConfig()', () => {
     });
   });
 
+  describe('metric temporality', () => {
+    const key = 'OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE';
+    const original = process.env[key];
+
+    beforeEach(() => {
+      delete process.env[key];
+    });
+
+    afterEach(() => {
+      if (original === undefined) delete process.env[key];
+      else process.env[key] = original;
+    });
+
+    it('prefers delta for direct ingestion', () => {
+      createDatadogConfig({ apiKey: 'k', service: 's' });
+      expect(process.env[key]).toBe('delta');
+    });
+
+    it('keeps an explicit preference', () => {
+      process.env[key] = 'cumulative';
+      createDatadogConfig({ apiKey: 'k', service: 's' });
+      expect(process.env[key]).toBe('cumulative');
+    });
+
+    it('leaves agent mode unset', () => {
+      createDatadogConfig({ service: 's', useAgent: true });
+      expect(process.env[key]).toBeUndefined();
+    });
+  });
+
   describe('enableLogs env var configuration', () => {
     const originalEnv = { ...process.env };
 
