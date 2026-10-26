@@ -1,5 +1,12 @@
 # autotel-audit
 
+## 1.2.12
+
+### Patch Changes
+
+- Updated dependencies [e27fe95]
+  - autotel@8.6.1
+
 ## 1.2.11
 
 ### Patch Changes
