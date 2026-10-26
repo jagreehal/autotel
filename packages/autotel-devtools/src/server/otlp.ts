@@ -398,6 +398,9 @@ export function parseOtlpAgentEvents(payload: unknown): AgentRawEvent[] {
   return events;
 }
 
+/** The client sent something the route cannot use: answered 400, never 500. */
+export class BadRequest extends Error {}
+
 export async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -406,7 +409,7 @@ export async function readJsonBody(req: IncomingMessage): Promise<unknown> {
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString()));
       } catch {
-        reject(new Error('Invalid JSON'));
+        reject(new BadRequest('Invalid JSON'));
       }
     });
     req.on('error', reject);

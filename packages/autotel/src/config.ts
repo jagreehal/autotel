@@ -82,6 +82,8 @@ export interface RuntimeConfig {
 class Config {
   /** Set when a caller passes a Meter instance, which then wins over the name. */
   private customMeter = false;
+  /** Set when a caller passes a Tracer instance, which then wins over the name. */
+  private customTracer = false;
 
   private config: Required<RuntimeConfig> = {
     tracerName: 'app',
@@ -111,6 +113,7 @@ class Config {
     }
     if (options.tracer) {
       this.config.tracer = options.tracer;
+      this.customTracer = true;
     }
     if (options.meter) {
       this.config.meter = options.meter;
@@ -131,6 +134,13 @@ class Config {
     if (!this.customMeter) {
       this.config.meter = metrics.getMeter(this.config.meterName);
     }
+    // The same for the tracer, for a different reason: the API's proxy tracer
+    // binds to the first provider it sees and keeps it. A second init(), or
+    // init() after shutdown(), registers a new provider, and a tracer resolved
+    // before that would keep recording into the pipeline that was shut down.
+    if (!this.customTracer) {
+      this.config.tracer = getAutotelTracer(this.config.tracerName);
+    }
     return this.config;
   }
 
@@ -139,6 +149,7 @@ class Config {
    */
   reset(): void {
     this.customMeter = false;
+    this.customTracer = false;
     this.config = {
       tracerName: 'app',
       meterName: 'app',

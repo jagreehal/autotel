@@ -89,11 +89,28 @@ test('creates user', async () => {
 
 The fixture is `auto: true`, so every test gets a parent span automatically.
 
+### Or: change no test file
+
+List `autotel-vitest/setup` after your own setup file and every test gets the
+same span through Vitest's `aroundEach`, with tests still importing `test` from
+`vitest`:
+
+```ts
+// vitest.config.ts
+export default defineConfig({
+  test: {
+    setupFiles: ['./vitest.setup.ts', 'autotel-vitest/setup'],
+  },
+});
+```
+
+Use one or the other: with both, every test gets two spans.
+
 ## What You Get
 
 - One span per test named `test:${task.name}`
 - Span attributes: `test.name`, `test.file`, `test.suite`
-- If a test throws, the span is marked as error and records the exception
+- If a test fails, the span is marked as error and records the test's errors
 - Any `trace()` / `span()` calls in the test flow become children of the active test span
 - An `otel-trace` annotation on every test, holding the trace URL (from `OTEL_TRACE_URL_TEMPLATE`) or the raw trace id, so reporters — including the browser trace view's step list — link back to the trace
 - The test's spans on `task.meta.otelSpans`, which
@@ -173,10 +190,53 @@ test('traces user creation', async () => {
 });
 ```
 
+## Packages imported with `import` are not auto-instrumented
+
+`trace()`, `span()` and anything instrumented through a global hook (Prisma,
+for one) join the test span. A package that auto-instrumentation patches when
+it is loaded (pino, for one) is patched under Vitest only when it is loaded
+with `require`, even with `--import autotel/register` in the worker's
+`execArgv`.
+
+Vitest imports an external package by its absolute file path
+(`import('/…/node_modules/pino/pino.js')`), and import-in-the-middle only
+patches a package's entry point when the import specifier names the package.
+`require('pino')` goes through require-in-the-middle, which has no such check.
+
+Until that changes, alias the package to a shim that `require`s it:
+
+```ts
+// test/pino.ts
+import { createRequire } from 'node:module';
+
+const pino = createRequire(import.meta.url)('pino');
+export default pino;
+```
+
+```ts
+// vitest.config.ts
+export default defineConfig({
+  resolve: {
+    // A regex, not the string 'pino': a string alias also rewrites
+    // 'pino/file' and every other subpath.
+    alias: [
+      {
+        find: /^pino$/,
+        replacement: new URL('./test/pino.ts', import.meta.url).pathname,
+      },
+    ],
+  },
+});
+```
+
+Re-export the named exports your code uses alongside the default.
+
 ## Troubleshooting
 
 - No spans exported: verify `init()` runs in a `setupFiles` entry, not `globalSetup`, and that it is passed a processor wrapping `otelTestCollector`.
-- No child spans under test span: ensure your test imports `test` from `autotel-vitest`, not `vitest`.
+- No child spans under test span: ensure your test imports `test` from `autotel-vitest`, not `vitest`, or that `autotel-vitest/setup` is in `setupFiles`.
+- Logs or spans from one library missing their trace: see [Packages imported with `import` are not auto-instrumented](#packages-imported-with-import-are-not-auto-instrumented).
+- `[autotel-vitest] Could not flush test spans`: an exporter is configured but no collector acknowledged the export. Tests still pass or fail on their own. The warning is printed once, and the worker stops flushing after it, so a missing collector costs one flush timeout rather than one per test. Spans are still attached to `task.meta.otelSpans`.
 - Reporter not running: ensure `reporters` includes `'autotel-vitest/reporter'`.
 - Reporter spans missing: the reporter needs `init()` in a `globalSetup` file (main process); `setupFiles` only configures workers.
 - `task.meta.otelSpans` empty: a span is only in the collector after it is exported, which is asynchronous. The fixture flushes before it drains; if you read spans inside the test body, `await flush()` first.
@@ -184,6 +244,7 @@ test('traces user creation', async () => {
 ## API
 
 - `test`: extended Vitest `test` with auto per-test span fixture
+- `autotel-vitest/setup`: the same span for every test through `aroundEach`; list it in `setupFiles` instead of importing `test`
 - `otelTestCollector`: the collector the fixture drains onto `task.meta.otelSpans`; pass it to `init()` (see Quick Start)
 - `expect`, `describe`, `beforeEach`, `afterEach`, `beforeAll`, `afterAll`: re-exported from `vitest`
 - `autotel/testing` helpers listed above: re-exported from this package

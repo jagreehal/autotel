@@ -3,7 +3,13 @@
  */
 
 import { logs } from '@opentelemetry/api-logs';
-import { getSdk, getLogger, getConfig, _closeEmbeddedDevtools } from './init';
+import {
+  getSdk,
+  getLogger,
+  getConfig,
+  _closeEmbeddedDevtools,
+  _releaseSdk,
+} from './init';
 import { getEventQueue, resetEventQueue } from './track';
 import { resetEvents } from './event';
 import { resetMetrics } from './metric';
@@ -202,9 +208,9 @@ export async function shutdown(): Promise<void> {
   }
 
   // Always shutdown SDK and clean up resources
+  const sdk = getSdk();
   try {
     // Shutdown OpenTelemetry SDK
-    const sdk = getSdk();
     if (sdk) {
       await sdk.shutdown();
     }
@@ -223,6 +229,8 @@ export async function shutdown(): Promise<void> {
       logger.error({ err }, '[autotel] SDK shutdown failed');
     }
   } finally {
+    // Free the globals, or a later init() registers nothing.
+    if (sdk) _releaseSdk(sdk);
     uninstallProcessHandlers();
     await _closeEmbeddedDevtools();
 

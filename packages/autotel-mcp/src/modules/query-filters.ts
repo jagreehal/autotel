@@ -322,8 +322,10 @@ export function getSpanFieldValues(
   if (normalized === 'span_id') values.push(span.spanId);
   if (normalized === 'parent_span_id' && span.parentSpanId)
     values.push(span.parentSpanId);
-  if (normalized === 'service_name') values.push(span.serviceName);
+  if (normalized === 'service' || normalized === 'service_name')
+    values.push(span.serviceName);
   if (
+    normalized === 'operation' ||
     normalized === 'operation_name' ||
     normalized === 'span_name' ||
     normalized === 'name'
@@ -352,8 +354,34 @@ export function getSpanFieldValues(
   ) as TagValue[];
 }
 
+/**
+ * One spelling per field, whichever an agent sent: `operationName` (the tool
+ * input's own key), `operation.name` and `operation_name` all read the same.
+ */
 function normalizeField(field: string): string {
-  return field.replace(/\./g, '_').toLowerCase();
+  return field
+    .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+    .replace(/\./g, '_')
+    .toLowerCase();
+}
+
+/**
+ * The filter fields no item resolves, in the order given. A filter on one of
+ * these matches nothing, which an empty result alone cannot tell from a quiet
+ * window. `not_exists` is left out: on a missing field it matches everything.
+ */
+export function unresolvedFilterFields(
+  items: ReadonlyArray<SpanRecord | TraceRecord>,
+  filters: readonly QueryFilter[],
+): string[] {
+  const fields = new Set(
+    filters
+      .filter((filter) => filter.operator !== 'not_exists')
+      .map((filter) => filter.field),
+  );
+  return [...fields].filter(
+    (field) => !items.some((item) => getValuesForField(item, field).length > 0),
+  );
 }
 
 function isLLMSpan(span: SpanRecord): boolean {

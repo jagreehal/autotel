@@ -14,6 +14,7 @@ import {
   traceMatchesQuery,
 } from '../src/modules/query-filters';
 import { buildServiceMap } from '../src/modules/service-map';
+import { unresolvedFilterHint } from '../src/tools/shared';
 import { summarizeTrace } from '../src/modules/trace-summary';
 import type { TraceRecord } from '../src/types';
 
@@ -352,5 +353,33 @@ describe('trace and service summaries', () => {
         ],
       }),
     ).toBe(true);
+  });
+});
+
+describe('unresolvedFilterHint', () => {
+  const filters = [
+    {
+      field: 'http.route',
+      operator: 'equals' as const,
+      valueType: 'string' as const,
+      value: '/nope',
+    },
+  ];
+
+  it('reads a fixed sample, not the caller limit', async () => {
+    const limits: Array<number | undefined> = [];
+    await unresolvedFilterHint({ filters, limit: 5 }, 0, async (query) => {
+      limits.push(query.limit);
+      return { items: [] };
+    });
+    expect(limits).toEqual([100]);
+  });
+
+  it('adds no hint when the check itself fails', async () => {
+    await expect(
+      unresolvedFilterHint({ filters }, 0, async () => {
+        throw new Error('backend down');
+      }),
+    ).resolves.toEqual({});
   });
 });

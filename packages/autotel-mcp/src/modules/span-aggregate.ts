@@ -28,10 +28,8 @@ export interface SpanAggregateRow extends LatencyStats {
   buckets?: Array<{ startUnixMs: number } & LatencyStats>;
 }
 
-/** Shorthands an agent reaches for first; anything else is a tag or field. */
+/** Grouped by the same field names a filter takes, plus `version`. */
 export function spanGroupValue(span: SpanRecord, field: string): string {
-  if (field === 'service') return span.serviceName;
-  if (field === 'operation') return span.operationName;
   if (field === 'version') return spanVersion(span) ?? '(none)';
   const value = getSpanFieldValues(span, field)[0];
   return value === undefined ? '(none)' : String(value);

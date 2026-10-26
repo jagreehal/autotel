@@ -10,6 +10,7 @@ import {
   type SpanQueryInput,
   READ_ONLY,
   limitHint,
+  unresolvedFilterHint,
   TRUNCATED_TRACE_HINT,
 } from './shared';
 import {
@@ -38,11 +39,20 @@ export function registerInvestigationTools(
     async (input: TraceQueryInput & { includeSpans: boolean }) =>
       respondSafe(async () => {
         const limit = input.limit ?? 20;
-        const result = compactTraceResult(
-          await backend.searchTraces({ ...toTraceSearchQuery(input), limit }),
-          { includeSpans: input.includeSpans, traceUrl },
-        );
-        return { ...result, ...limitHint(result.items.length, limit) };
+        const query = { ...toTraceSearchQuery(input), limit };
+        const result = compactTraceResult(await backend.searchTraces(query), {
+          includeSpans: input.includeSpans,
+          traceUrl,
+        });
+        return {
+          ...result,
+          ...limitHint(result.items.length, limit),
+          ...(await unresolvedFilterHint(
+            query,
+            result.items.length,
+            (unfiltered) => backend.searchTraces(unfiltered),
+          )),
+        };
       }, 'search_traces'),
   );
 
@@ -60,14 +70,17 @@ export function registerInvestigationTools(
     async (input: SpanQueryInput) =>
       respondSafe(async () => {
         const limit = input.limit ?? 50;
-        const found = await backend.searchSpans({
-          ...toSpanSearchQuery(input),
-          limit,
-        });
+        const query = { ...toSpanSearchQuery(input), limit };
+        const found = await backend.searchSpans(query);
         const result = compactSpans(found);
         return {
           ...result,
           ...limitHint(result.items.length, limit, 100, found.truncated),
+          ...(await unresolvedFilterHint(
+            query,
+            result.items.length,
+            (unfiltered) => backend.searchSpans(unfiltered),
+          )),
         };
       }, 'search_spans'),
   );

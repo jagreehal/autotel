@@ -1,5 +1,5 @@
 // src/server/__tests__/http.test.ts
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createServer } from 'node:http';
 import { DevtoolsServer } from '../server';
 import { attachDevtoolsRoutes } from '../http';
@@ -128,6 +128,46 @@ describe('HTTP server', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
+  });
+
+  // The 'request' listener is async: a rejection escaping it is unhandled and
+  // takes the whole devtools process down with every span it holds.
+  it('answers a body that is not JSON with 400 and keeps serving', async () => {
+    httpServer = createServer();
+    wsServer = new DevtoolsServer({ server: httpServer });
+    attachDevtoolsRoutes(httpServer, wsServer);
+    await new Promise<void>((r) => httpServer.listen(0, '127.0.0.1', r));
+    const port = httpServer.address().port;
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/traces`, {
+      method: 'DELETE',
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'Invalid JSON' });
+    const health = await fetch(`http://127.0.0.1:${port}/healthz`);
+    expect(health.status).toBe(200);
+  });
+
+  it('answers a route that throws with 500 and keeps serving', async () => {
+    httpServer = createServer();
+    wsServer = new DevtoolsServer({ server: httpServer });
+    wsServer.getStoreStats = () => {
+      throw new Error('store unavailable');
+    };
+    attachDevtoolsRoutes(httpServer, wsServer);
+    await new Promise<void>((r) => httpServer.listen(0, '127.0.0.1', r));
+    const port = httpServer.address().port;
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/stats`);
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'store unavailable' });
+    expect(logged).toHaveBeenCalledOnce();
+    logged.mockRestore();
+    const health = await fetch(`http://127.0.0.1:${port}/healthz`);
+    expect(health.status).toBe(200);
   });
 
   it('returns 404 for unknown routes', async () => {

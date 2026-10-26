@@ -6,6 +6,7 @@ import {
 } from '@opentelemetry/sdk-trace-base';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AiSdkEvaluationAnswer } from './ai-sdk-evaluate.js';
+import { TestContextManager } from './test-context-manager.js';
 import {
   createSignals,
   defineSignal,
@@ -52,9 +53,13 @@ function setup(
     spanProcessors: [signals, new SimpleSpanProcessor(exporter)],
   });
   trace.setGlobalTracerProvider(provider);
+  // The evaluation span has to parent under the signals span, as it does in an
+  // app, or signals would read it as a new request and judge it too.
+  context.setGlobalContextManager(new TestContextManager());
   const tracer = provider.getTracer('test');
   const request = (attributes: Attributes, name = 'POST /checkout') => {
-    const span = tracer.startSpan(name, { attributes });
+    // A request is a local root, wherever the test starts it.
+    const span = tracer.startSpan(name, { attributes, root: true });
     span.end();
     return span;
   };
@@ -65,7 +70,10 @@ function setup(
   return { signals, model, tracer, request, spans };
 }
 
-afterEach(() => trace.disable());
+afterEach(() => {
+  trace.disable();
+  context.disable();
+});
 
 describe('defineSignal', () => {
   it('rejects bad definitions', () => {

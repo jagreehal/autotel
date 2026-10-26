@@ -6,9 +6,18 @@ import {
   hrTimeToMs,
   type PrettyConsoleExporterOptions,
 } from './pretty-console-exporter';
-import { SpanStatusCode } from '@opentelemetry/api';
+import {
+  SpanStatusCode,
+  context,
+  trace as otelTrace,
+  type Span,
+} from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import {
+  BasicTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
 import { readableSpanDouble } from './testing/doubles';
 
 /**
@@ -462,6 +471,114 @@ describe('PrettyConsoleExporter', () => {
       expect(consoleLogs.some((log) => log.includes('trace: trace-b'))).toBe(
         true,
       );
+    });
+  });
+
+  // `debug: 'pretty'` puts this exporter behind a SimpleSpanProcessor, which
+  // exports each span alone as it ends: children first, root last.
+  describe('behind a SimpleSpanProcessor', () => {
+    let consoleLogs: string[];
+    let originalConsoleLog: typeof console.log;
+
+    beforeEach(() => {
+      consoleLogs = [];
+      originalConsoleLog = console.log;
+      console.log = (...args: unknown[]) => {
+        consoleLogs.push(args.map(String).join(' '));
+      };
+    });
+
+    afterEach(() => {
+      console.log = originalConsoleLog;
+    });
+
+    // No context manager is registered here, so parents are passed explicitly.
+    function tracerWith(exporter: PrettyConsoleExporter) {
+      const tracer = new BasicTracerProvider({
+        spanProcessors: [new SimpleSpanProcessor(exporter)],
+      }).getTracer('test');
+      return (name: string, parent?: Span) =>
+        tracer.startSpan(
+          name,
+          {},
+          parent ? otelTrace.setSpan(context.active(), parent) : undefined,
+        );
+    }
+
+    it('prints one tree when the local root ends', async () => {
+      const exporter = new PrettyConsoleExporter({
+        colors: false,
+        showAttributes: false,
+        showScope: false,
+      });
+      const start = tracerWith(exporter);
+
+      const root = start('root');
+      const a = start('a', root);
+      start('a.1', a).end();
+      a.end();
+      start('b', root).end();
+      expect(consoleLogs).toEqual([]);
+      root.end();
+
+      expect(
+        consoleLogs.map((line) => line.replace(/\s+[\d.]+(µs|ms|s)$/, '')),
+      ).toEqual(['✓ root', '├─ ✓ a', '│  └─ ✓ a.1', '└─ ✓ b', '']);
+    });
+
+    it('prints a span that ends after its root was printed', () => {
+      const exporter = new PrettyConsoleExporter({ colors: false });
+      const start = tracerWith(exporter);
+
+      const root = start('root');
+      const late = start('fire-and-forget', root);
+      root.end();
+      consoleLogs.length = 0;
+      late.end();
+
+      expect(consoleLogs[0]).toContain('✓ fire-and-forget');
+    });
+
+    // A spanFilter (ignoreRoutes, for one) drops the parent, so it never
+    // exports and the child's tree has no top span to wait for.
+    it('prints a trace whose parent never arrives once it goes idle', () => {
+      const exporter = new PrettyConsoleExporter({ colors: false });
+      const start = tracerWith(exporter);
+
+      start('health-db-query', start('filtered-out')).end();
+      exporter.sweep(Date.now());
+      expect(consoleLogs).toEqual([]);
+      exporter.sweep(Date.now() + 2000);
+
+      expect(consoleLogs[0]).toContain('✓ health-db-query');
+      void exporter.shutdown();
+    });
+
+    it('holds every child of an open root and prints them under it', () => {
+      const exporter = new PrettyConsoleExporter({ colors: false });
+      const start = tracerWith(exporter);
+      const root = start('job');
+
+      for (let i = 0; i < 5000; i++) start('step', root).end();
+      expect(consoleLogs).toEqual([]);
+      root.end();
+
+      expect(
+        consoleLogs.filter((line) => line.includes('✓ step')),
+      ).toHaveLength(5000);
+    });
+
+    it('prints a tree whose root is still open on flush', async () => {
+      const exporter = new PrettyConsoleExporter({ colors: false });
+      const start = tracerWith(exporter);
+
+      const root = start('root');
+      start('child', root).end();
+      expect(consoleLogs).toEqual([]);
+      await exporter.forceFlush();
+
+      expect(consoleLogs[0]).toContain('✓ child');
+      root.end();
     });
   });
 
