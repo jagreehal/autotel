@@ -65,7 +65,10 @@ try {
     serverLog.match(/PostHog: \w+/)?.[0],
   );
 
-  browser = await chromium.launch();
+  // CI uses the runner's preinstalled Chrome, so no browser or apt install.
+  browser = await chromium.launch({
+    channel: process.env.CI ? 'chrome' : undefined,
+  });
   const page = await browser.newPage();
   const problems = [];
   page.on('pageerror', (error) => problems.push(error.message));
