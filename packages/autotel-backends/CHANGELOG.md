@@ -1,5 +1,11 @@
 # autotel-backends
 
+## 2.14.18
+
+### Patch Changes
+
+- 19faa95: `createDatadogConfig()` now exports metrics with delta temporality for direct ingestion, so counters, histograms and instrumentation metrics such as `http.client.request.duration` show up in Datadog. Agent mode is unchanged, and an explicit `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` still takes precedence.
+
 ## 2.14.17
 
 ### Patch Changes
