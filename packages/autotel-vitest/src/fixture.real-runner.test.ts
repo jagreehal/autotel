@@ -10,7 +10,14 @@
  * mocked harness still passes.
  */
 import { expect } from 'vitest';
-import { context as otelContext, flush, init, otelTrace, trace } from 'autotel';
+import {
+  context as otelContext,
+  flush,
+  init,
+  otelTrace,
+  SpanStatusCode,
+  trace,
+} from 'autotel';
 import { createMemoryExporter } from 'autotel/testing';
 
 import { test } from './index';
@@ -44,4 +51,16 @@ test('instrumented code in the test body joins the test trace', async () => {
   // that test's trace, so a run is filterable by test in the backend.
   expect(work!.traceId).toBe(testTraceId);
   expect(work!.parentSpanId).toBeDefined();
+});
+
+// Vitest does not reject `use()` when a test fails, so the outcome has to be
+// read from the task. `fails` keeps the run green while the test still throws.
+test.fails('a failing test', () => {
+  throw new Error('boom');
+});
+
+test('a failed test leaves an error span', () => {
+  expect(exporter.findSpan('test:a failing test')?.status.code).toBe(
+    SpanStatusCode.ERROR,
+  );
 });

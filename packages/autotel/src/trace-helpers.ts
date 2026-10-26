@@ -34,7 +34,7 @@
 
 import { trace, context, SpanStatusCode } from '@opentelemetry/api';
 import { markSpanOk } from './trace-context';
-import type { Span, Tracer, Context } from '@opentelemetry/api';
+import type { Span, SpanOptions, Tracer, Context } from '@opentelemetry/api';
 import { requireModule } from './node-require';
 import {
   asBoolean,
@@ -243,7 +243,56 @@ export function isTracing(): boolean {
  * ```
  */
 export function getTracer(name: string, version?: string): Tracer {
-  return trace.getTracer(name, version);
+  return new CurrentTracer(name, version);
+}
+
+/**
+ * A tracer that resolves the registered provider's tracer on every span, so
+ * one held in a module constant follows a second `init()` (or `init()` after
+ * `shutdown()`). OpenTelemetry's ProxyTracer cannot: it keeps the first real
+ * tracer it resolved, and the API swaps in a new proxy when a provider is
+ * unregistered, so its spans go to the pipeline that was shut down.
+ */
+class CurrentTracer implements Tracer {
+  constructor(
+    private readonly name: string,
+    private readonly version: string | undefined,
+  ) {}
+
+  private get current(): Tracer {
+    return trace.getTracer(this.name, this.version);
+  }
+
+  startSpan(name: string, options?: SpanOptions, ctx?: Context): Span {
+    return this.current.startSpan(name, options, ctx);
+  }
+
+  startActiveSpan<F extends (span: Span) => unknown>(
+    name: string,
+    fn: F,
+  ): ReturnType<F>;
+  startActiveSpan<F extends (span: Span) => unknown>(
+    name: string,
+    options: SpanOptions,
+    fn: F,
+  ): ReturnType<F>;
+  startActiveSpan<F extends (span: Span) => unknown>(
+    name: string,
+    options: SpanOptions,
+    ctx: Context,
+    fn: F,
+  ): ReturnType<F>;
+  startActiveSpan<F extends (span: Span) => unknown>(
+    name: string,
+    ...rest: [F] | [SpanOptions, F] | [SpanOptions, Context, F]
+  ): ReturnType<F> {
+    const tracer = this.current;
+    if (rest.length === 1) return tracer.startActiveSpan(name, rest[0]);
+    if (rest.length === 2) {
+      return tracer.startActiveSpan(name, rest[0], rest[1]);
+    }
+    return tracer.startActiveSpan(name, rest[0], rest[1], rest[2]);
+  }
 }
 
 /**

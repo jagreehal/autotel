@@ -61,7 +61,7 @@ init({
 - **`sampling`**: set it. Without `sampling` or `sampler`, wrapped functions keep every span. See `tune-sampling`.
 - **`logs`**: off by default. `logs: true` (or `AUTOTEL_LOGS=on`) exports OTel log records to the same endpoint; the HTTP/JSON log exporter ships with autotel.
 - **Shutdown**: `await flush()` exports what is buffered (2s timeout by default); `await shutdown()` flushes and stops the SDK. Both come from `autotel`.
-- **`init()` throws** on an unknown `sampling` preset, an invalid `attributeRedactor` config, `devtools: { embedded: true, port: 0 }`, and an `sdkFactory` that returns nothing. Calling `init()` again warns and the last config wins; `lockLogger()` makes later calls no-ops.
+- **`init()` throws** on an unknown `sampling` preset, an invalid `attributeRedactor` config, `devtools: { embedded: true, port: 0 }`, and an `sdkFactory` that returns nothing. Calling `init()` again warns, shuts the previous pipeline down and starts the new config; `trace()` wrappers, tracers from `getTracer()` and the earlier call's instrumentations follow it. `init()` after `shutdown()` starts a fresh pipeline without a warning. `lockLogger()` makes later calls no-ops.
 
 ## Setup
 

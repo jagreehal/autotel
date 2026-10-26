@@ -1,12 +1,8 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   context as otelContext,
-  ROOT_CONTEXT,
   SpanKind,
   SpanStatusCode,
   trace as otelTrace,
-  type Context,
-  type ContextManager,
   type Tracer,
 } from '@opentelemetry/api';
 import {
@@ -16,39 +12,9 @@ import {
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { TestContextManager } from '../test-context-manager.js';
 import { createGenAiObserver } from './observer.js';
 import type { GenAiObserverEvent } from './types.js';
-
-/**
- * The API's default context manager is a no-op, so `context.with()` would not
- * propagate and every ambient-parent assertion below would pass vacuously.
- * Twelve lines of AsyncLocalStorage is cheaper than a dependency on
- * `@opentelemetry/context-async-hooks` for one test file.
- */
-class TestContextManager implements ContextManager {
-  private readonly storage = new AsyncLocalStorage<Context>();
-  active(): Context {
-    return this.storage.getStore() ?? ROOT_CONTEXT;
-  }
-  with<A extends unknown[], F extends (...args: A) => ReturnType<F>>(
-    activeContext: Context,
-    fn: F,
-    thisArg?: ThisParameterType<F>,
-    ...args: A
-  ): ReturnType<F> {
-    return this.storage.run(activeContext, () => fn.call(thisArg, ...args));
-  }
-  bind<T>(_context: Context, target: T): T {
-    return target;
-  }
-  enable(): this {
-    return this;
-  }
-  disable(): this {
-    this.storage.disable();
-    return this;
-  }
-}
 
 let exporter: InMemorySpanExporter;
 let provider: BasicTracerProvider;

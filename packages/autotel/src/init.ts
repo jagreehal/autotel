@@ -5,7 +5,14 @@
  * Replaces initInstrumentation() and separate events config.
  */
 
-import { AutotelSdk, type AutotelSdkLike, type AutotelSdkOptions } from './sdk';
+import type { Instrumentation } from '@opentelemetry/instrumentation';
+import {
+  AutotelSdk,
+  adoptInstrumentations,
+  releaseOtelGlobals,
+  type AutotelSdkLike,
+  type AutotelSdkOptions,
+} from './sdk';
 import {
   BatchSpanProcessor,
   type SpanProcessor,
@@ -242,6 +249,8 @@ let initialized = false;
 let locked = false;
 let config: AutotelConfig | null = null;
 let sdk: AutotelSdkLike | null = null;
+/** Every instrumentation any init() registered; they stay patched. */
+let instrumentationsInUse: Instrumentation[] = [];
 let warnedOnce = false;
 let logger: Logger = silentLogger; // Silent by default - no spam
 let validationConfig: Partial<ValidationConfig> | null = null;
@@ -399,11 +408,12 @@ export function init(cfg: AutotelConfig): void {
     else if (!silent) console.warn(msg);
   };
 
-  // Warn if re-initializing (same behavior in all environments)
-  if (initialized) {
-    logger.warn(
-      {},
-      '[autotel] init() called again - last config wins. This may cause unexpected behavior.',
+  // A running pipeline is replaced, not stacked. It is retired just before
+  // the new SDK starts, so a config that throws leaves it running.
+  const previous = sdk;
+  if (previous) {
+    setupWarn(
+      '[autotel] init() called again: the previous pipeline is shut down and this config replaces it. Call init() once per process; two setup files that each call it is the usual cause.',
     );
   }
 
@@ -1052,15 +1062,31 @@ export function init(cfg: AutotelConfig): void {
     sdkOptions.logRecordProcessors = [];
   }
 
-  sdk = mergedConfig.sdkFactory
+  const next = mergedConfig.sdkFactory
     ? mergedConfig.sdkFactory(sdkOptions)
     : new AutotelSdk(sdkOptions);
 
-  if (!sdk) {
+  if (!next) {
     throw new Error('[autotel] sdkFactory must return an SDK instance');
   }
 
+  if (previous) {
+    releaseGlobals(previous);
+    // Its exports fail the way any export does, and init() cannot await
+    // them. Chained so a factory SDK that throws synchronously is caught too.
+    Promise.resolve()
+      .then(() => previous.shutdown())
+      .catch(() => {});
+  }
+  sdk = next;
   sdk.start();
+  const instrumentations = (finalInstrumentations ?? []).flat();
+  adoptInstrumentations(
+    instrumentationsInUse.filter((i) => !instrumentations.includes(i)),
+  );
+  instrumentationsInUse = [
+    ...new Set([...instrumentationsInUse, ...instrumentations]),
+  ];
 
   // Initialize OpenLLMetry if enabled (after SDK starts to reuse tracer provider)
   if (mergedConfig.openllmetry?.enabled) {
@@ -1297,4 +1323,20 @@ export function _getEmbeddedDevtoolsCloseForTesting():
  */
 export function getSdk(): AutotelSdkLike | null {
   return sdk;
+}
+
+/**
+ * Forget `released` and free the OpenTelemetry globals it registered, so the
+ * next `init()` can register its own. A no-op when a newer `init()` already
+ * replaced it, since the globals are that pipeline's now.
+ */
+export function _releaseSdk(released: AutotelSdkLike): void {
+  if (sdk !== released) return;
+  sdk = null;
+  releaseGlobals(released);
+}
+
+function releaseGlobals(target: AutotelSdkLike): void {
+  if (target.releaseGlobals) target.releaseGlobals();
+  else releaseOtelGlobals();
 }

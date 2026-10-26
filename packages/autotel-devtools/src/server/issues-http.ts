@@ -12,7 +12,7 @@ import {
   type IssueStatus,
 } from '../issues';
 import { allowSensitiveRequest } from './origin-guard';
-import { readJsonBody, sendJson } from './otlp';
+import { BadRequest, readJsonBody, sendJson } from './otlp';
 import type { DevtoolsServer } from './server';
 
 const DAY = 86_400_000;
@@ -28,8 +28,6 @@ const REQUIRED: Record<Destination['type'], string[]> = {
   pagerduty: ['routingKey'],
 };
 const SECRET_FIELDS = ['secret', 'token', 'authorization', 'routingKey', 'url'];
-
-class BadRequest extends Error {}
 
 function isRedacted(value: string): boolean {
   try {

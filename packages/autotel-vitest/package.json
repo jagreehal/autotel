@@ -6,7 +6,10 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/setup.js",
+    "./dist/setup.cjs"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -17,6 +20,11 @@
       "types": "./dist/reporter.d.ts",
       "import": "./dist/reporter.js",
       "require": "./dist/reporter.cjs"
+    },
+    "./setup": {
+      "types": "./dist/setup.d.ts",
+      "import": "./dist/setup.js",
+      "require": "./dist/setup.cjs"
     }
   },
   "files": [
@@ -40,7 +48,7 @@
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "vitest": ">=5.0.5"
+    "vitest": ">=5.0.0"
   },
   "peerDependenciesMeta": {
     "vitest": {

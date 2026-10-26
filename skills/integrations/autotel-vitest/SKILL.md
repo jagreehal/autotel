@@ -70,6 +70,21 @@ test('creates user', async () => {
 
 The fixture is `auto: true`. Every test gets a parent span automatically with no extra code.
 
+### Or: leave test files alone
+
+List `autotel-vitest/setup` after your own setup file. Every test gets the same span through Vitest's `aroundEach` while tests keep importing `test` from `vitest`:
+
+```typescript
+// vitest.config.ts
+export default defineConfig({
+  test: {
+    setupFiles: ['./vitest.setup.ts', 'autotel-vitest/setup'],
+  },
+});
+```
+
+Use the setup entry or the `test` import, not both: with both, every test gets two spans.
+
 ## Configuration / Core Patterns
 
 ### Per-test span attributes
@@ -80,9 +95,15 @@ Each test span is named `test:${task.name}` and carries these attributes automat
 - `test.file`: file path from `task.file.name`
 - `test.suite`: suite name from `task.suite.name` (if in a describe block)
 
-If a test throws, the span is marked `ERROR` and records the exception.
+If a test fails, the span is marked `ERROR` and records the test's errors.
 
 After each test the fixture flushes, drains that test's spans from `otelTestCollector`, and stores them on `task.meta.otelSpans` (rendered by executable-stories as a waterfall). Reading spans inside the test body? `await flush()` first; export is asynchronous.
+
+A flush that no collector acknowledges never fails a test. The fixture warns once and stops flushing in that worker, so a stopped collector costs one flush timeout, and `task.meta.otelSpans` still fills from the in-memory collector.
+
+### Packages loaded with `import`
+
+Vitest imports external packages by absolute file path, and import-in-the-middle patches a package only when the import specifier names it. A package that auto-instrumentation patches on load (pino, for one) is patched only when loaded with `require`. Alias it in `vitest.config.ts` to a shim that `require`s it, with a regex such as `/^pino$/` so subpaths keep resolving. The package README has the full example.
 
 ### Finding the trace from a test run
 

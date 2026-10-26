@@ -6,7 +6,11 @@ import type {
   SpanSearchQuery,
   MetricSearchQuery,
   LogSearchQuery,
+  QueryFilter,
+  SpanRecord,
+  TraceRecord,
 } from '../types';
+import { unresolvedFilterFields } from '../modules/query-filters';
 import {
   errorEnvelope,
   okEnvelope,
@@ -72,6 +76,41 @@ export function limitHint(
   return {
     hint: `Returned ${returned} from a full page; there are probably more. Narrow the time window or add a filter${raise}.`,
   };
+}
+
+/** How many unfiltered results the filter-field check reads. */
+const FILTER_CHECK_SAMPLE = 100;
+
+/**
+ * Names the filter fields none of a sample of the window's results carries,
+ * so an agent can check the name before concluding there was no traffic.
+ * Costs one more query, the same one without its filters, and only when the
+ * result came back empty. A failed check adds no hint and keeps the result.
+ */
+export async function unresolvedFilterHint<
+  TQuery extends { filters?: QueryFilter[]; limit?: number },
+>(
+  query: TQuery,
+  found: number,
+  fetchUnfiltered: (
+    query: Omit<TQuery, 'filters'>,
+  ) => Promise<{ items: ReadonlyArray<SpanRecord | TraceRecord> }>,
+): Promise<{ hint: string } | Record<string, never>> {
+  const { filters, ...unfiltered } = query;
+  if (found > 0 || !filters?.length) return {};
+  try {
+    const { items } = await fetchUnfiltered({
+      ...unfiltered,
+      limit: FILTER_CHECK_SAMPLE,
+    });
+    const fields = unresolvedFilterFields(items, filters);
+    if (items.length === 0 || fields.length === 0) return {};
+    return {
+      hint: `None of ${items.length} results from this window, read without the filters, has ${fields.map((field) => `"${field}"`).join(' or ')}. Check the field name: filters take service, operation, trace_id, span_id, parent_span_id, duration_ms, status_code, has_error, or a span attribute key such as http.route.`,
+    };
+  } catch {
+    return {};
+  }
 }
 
 export const TRUNCATED_TRACE_HINT = {

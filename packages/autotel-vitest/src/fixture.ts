@@ -15,7 +15,7 @@ import {
 } from 'autotel/test-span-collector';
 import { SimpleSpanProcessor } from 'autotel/processors';
 
-import type { TaskMeta } from 'vitest';
+import type { RunnerTaskResult, TaskMeta, TestAnnotation } from 'vitest';
 
 declare module 'vitest' {
   interface TaskMeta {
@@ -108,71 +108,127 @@ function ensureCollector(): TestSpanCollector {
   return otelTestCollector;
 }
 
-export type OtelFixtureFn = (
-  args: {
-    task: {
-      name: string;
-      file?: { name: string };
-      suite?: { name: string };
-      meta: TaskMeta;
-    };
-    /** Vitest's test-context annotate; absent on versions without it. */
-    annotate?: (message: string, type?: string) => Promise<void>;
-  },
-  use: (span: Span) => Promise<void>,
-) => Promise<void>;
+/** The parts of a Vitest test task the span reads and writes. */
+export interface OtelTestTask {
+  name: string;
+  file?: { name: string };
+  suite?: { name: string };
+  meta: TaskMeta;
+  result?: Pick<RunnerTaskResult, 'state' | 'errors'>;
+}
 
-export const otelTestSpanFixture: [OtelFixtureFn, { auto: true }] = [
-  async ({ task, annotate }, use) => {
-    ensureCollector();
-    const tracer = getTracer(TRACER_NAME, TRACER_VERSION);
-    const span = tracer.startSpan(`test:${task.name}`, {
+/** Vitest's test-context annotate; absent on versions without it. */
+type Annotate = (
+  message: string,
+  type?: string,
+) => Promise<TestAnnotation | void>;
+
+export interface StartedTestSpan {
+  span: Span;
+  /** The active context with `span` set on it. */
+  ctx: Context;
+}
+
+/**
+ * Start the test's span. Synchronous, so a caller can enter its context before
+ * awaiting anything.
+ */
+export function startTestSpan(task: OtelTestTask): StartedTestSpan {
+  ensureCollector();
+  const span = getTracer(TRACER_NAME, TRACER_VERSION).startSpan(
+    `test:${task.name}`,
+    {
       attributes: {
         'test.name': task.name,
         'test.file': task.file?.name ?? '',
         'test.suite': task.suite?.name ?? '',
       },
-    });
-    const ctx = otelTrace.setSpan(otelContext.active(), span);
+    },
+  );
+  return { span, ctx: otelTrace.setSpan(otelContext.active(), span) };
+}
+
+/**
+ * Set by the first flush that fails. Every later flush would wait out the same
+ * timeout for the same missing collector, once per test, so they are skipped:
+ * one timeout per worker, not per test.
+ */
+let flushUnavailable = false;
+
+/**
+ * Run the test under its span, then end the span and drain its trace onto
+ * `task.meta.otelSpans`. Shared by the fixture and the `autotel-vitest/setup`
+ * hook, which differ only in how `run` makes the span's context active.
+ */
+export async function runInTestSpan(
+  task: OtelTestTask,
+  span: Span,
+  annotate: Annotate | undefined,
+  run: () => Promise<void>,
+): Promise<void> {
+  // Reporters - and the browser trace view's step list - render annotations,
+  // so the test report links back to this trace. A decoration must never fail
+  // a test, hence the swallowed rejection.
+  if (annotate) {
+    const traceId = span.spanContext().traceId;
+    await annotate(
+      resolveTraceUrl(undefined, traceId) ?? traceId,
+      'otel-trace',
+    ).catch(() => {});
+  }
+
+  try {
+    await run();
+  } finally {
+    // A failed test does not reject `use()` or `runTest()`: Vitest catches the
+    // error and records it on the task before handing control back, so the
+    // outcome is read from there.
+    if (task.result?.state === 'fail') {
+      span.setStatus({ code: SpanStatusCode.ERROR });
+      for (const error of task.result.errors ?? []) span.recordException(error);
+    }
+    span.end();
+    // Export is asynchronous even through SimpleSpanProcessor, so the spans
+    // are not in the collector yet on the line after end(). Telemetry must
+    // never fail a test, so a collector that is not listening costs one
+    // warning and one timeout. The in-memory collector is not what timed out,
+    // so the drain below still finds the spans.
+    if (!flushUnavailable) {
+      try {
+        await flush();
+      } catch (error) {
+        flushUnavailable = true;
+        console.warn(
+          `[autotel-vitest] Could not flush test spans, so no later test in this worker flushes either; test results are unaffected. ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    const { traceId, spanId } = span.spanContext();
+    const spans = otelTestCollector.drainTrace(traceId, spanId);
+    if (spans.length > 0) {
+      task.meta.otelSpans = spans;
+    }
+  }
+}
+
+export type OtelFixtureFn = (
+  args: { task: OtelTestTask; annotate?: Annotate },
+  use: (span: Span) => Promise<void>,
+) => Promise<void>;
+
+export const otelTestSpanFixture: [OtelFixtureFn, { auto: true }] = [
+  async ({ task, annotate }, use) => {
+    const { span, ctx } = startTestSpan(task);
     // Before awaiting anything at all: `enterWith` binds to the async resource
     // this fixture shares with the runner, and an await ahead of it detaches
     // the entry onto a continuation the test body never inherits.
     const entered = enterContext(ctx);
-
-    // Reporters - and the browser trace view's step list - render annotations,
-    // so the test report links back to this trace. A decoration must never fail
-    // a test, hence the swallowed rejection.
-    if (annotate) {
-      const traceId = span.spanContext().traceId;
-      await annotate(
-        resolveTraceUrl(undefined, traceId) ?? traceId,
-        'otel-trace',
-      ).catch(() => {});
-    }
-
-    try {
-      // enterContext reaches the test body; context.with does not. It only
-      // fails on a context manager with no AsyncLocalStorage behind it, where
-      // context.with is still the correct call.
-      await (entered ? use(span) : otelContext.with(ctx, () => use(span)));
-    } catch (error) {
-      span.setStatus({ code: SpanStatusCode.ERROR });
-      span.recordException(
-        error instanceof Error ? error : new Error(String(error)),
-      );
-      throw error;
-    } finally {
-      span.end();
-      // Export is asynchronous even through SimpleSpanProcessor, so the spans
-      // are not in the collector yet on the line after end().
-      await flush();
-      const traceId = span.spanContext().traceId;
-      const rootSpanId = span.spanContext().spanId;
-      const spans = otelTestCollector.drainTrace(traceId, rootSpanId);
-      if (spans.length > 0) {
-        task.meta.otelSpans = spans;
-      }
-    }
+    // enterContext reaches the test body; context.with does not. It only fails
+    // on a context manager with no AsyncLocalStorage behind it, where
+    // context.with is still the correct call.
+    await runInTestSpan(task, span, annotate, () =>
+      entered ? use(span) : otelContext.with(ctx, () => use(span)),
+    );
   },
   { auto: true },
 ];

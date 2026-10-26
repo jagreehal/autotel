@@ -185,31 +185,50 @@ describe('autotel-vitest fixture', () => {
     expect(createdSpans[0].end).toHaveBeenCalledTimes(1);
   });
 
-  it('sets error status when the test throws', async () => {
+  it('sets error status from the failed task result', async () => {
     const { fixtureFn } = await getFixture();
+    const error = { name: 'Error', message: 'test failure' };
+    const task: Parameters<typeof fixtureFn>[0]['task'] = {
+      name: 'failing test',
+      file: { name: 'fail.test.ts' },
+      suite: { name: '' },
+      meta: {},
+    };
 
-    const err = new Error('test failure');
-
-    await expect(
-      fixtureFn(
-        {
-          task: {
-            name: 'failing test',
-            file: { name: 'fail.test.ts' },
-            suite: { name: '' },
-            meta: {},
-          },
-        },
-        async () => {
-          throw err;
-        },
-      ),
-    ).rejects.toThrow('test failure');
+    // What vitest does with a failing test: catch the error, record it on the
+    // task, and resolve use().
+    await fixtureFn({ task }, async () => {
+      task.result = { state: 'fail', errors: [error] };
+    });
 
     const span = createdSpans[0];
     expect(span.setStatus).toHaveBeenCalledWith({ code: 2 });
-    expect(span.recordException).toHaveBeenCalledWith(err);
+    expect(span.recordException).toHaveBeenCalledWith(error);
     expect(span.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('never fails a test when the flush rejects, warns once and stops flushing', async () => {
+    const { flush } = await import('autotel');
+    vi.mocked(flush).mockRejectedValue(new Error('Flush timeout'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockDrainResult = [{ spanId: 'span-1' }];
+    const { fixtureFn } = await getFixture();
+    const meta: TaskMeta = {};
+
+    for (const name of ['first', 'second']) {
+      await expect(
+        fixtureFn({ task: { name, meta } }, async () => {}),
+      ).resolves.toBeUndefined();
+    }
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('Flush timeout');
+    // A missing collector costs one timeout, not one per test.
+    expect(flush).toHaveBeenCalledTimes(1);
+    // Whatever did reach the collector is still drained.
+    expect(meta.otelSpans).toEqual([{ spanId: 'span-1' }]);
+    warn.mockRestore();
+    vi.mocked(flush).mockResolvedValue(undefined);
   });
 
   it('attaches otelSpans to task.meta when collector returns spans', async () => {

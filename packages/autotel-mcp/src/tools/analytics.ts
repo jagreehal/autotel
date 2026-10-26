@@ -8,6 +8,7 @@ import {
   toLogSearchQuery,
   toSpanSearchQuery,
   traceQuerySchema,
+  unresolvedFilterHint,
   type TraceQueryInput,
 } from './shared';
 import {
@@ -161,13 +162,24 @@ function registerSpanAnalytics(
     ) =>
       respondSafe(async () => {
         const query = toSpanSearchQuery(input);
+        const filterHint = (found: number) =>
+          unresolvedFilterHint(query, found, (unfiltered) =>
+            backend.searchSpans(unfiltered),
+          );
         if (backend.aggregateSpans && input.bucketMinutes === undefined) {
           const rows = await backend.aggregateSpans({
             ...query,
             groupBy: input.groupBy,
             limit: input.limit,
           });
-          if (rows) return { source: 'backend', groupBy: input.groupBy, rows };
+          if (rows) {
+            return {
+              source: 'backend',
+              groupBy: input.groupBy,
+              rows,
+              ...(await filterHint(rows.length)),
+            };
+          }
         }
         const sample = await sampleSpans(backend, query);
         const rows = aggregateSpans(sample.items, {
@@ -180,6 +192,7 @@ function registerSpanAnalytics(
           groupBy: input.groupBy,
           rows,
           ...(sample.capped ? { hint: SAMPLE_HINT } : {}),
+          ...(await filterHint(sample.items.length)),
         };
       }, 'aggregate_spans'),
   );

@@ -96,6 +96,8 @@ export interface AutotelSdkOptions {
 export interface AutotelSdkLike {
   start(): void;
   shutdown(): Promise<void>;
+  /** Undo what start() registered, so another SDK can register. */
+  releaseGlobals?(): void;
   getTracerProvider?(): BasicTracerProvider | undefined;
 }
 
@@ -143,11 +145,44 @@ function defaultPropagator(): TextMapPropagator {
   });
 }
 
+/**
+ * Unregister every OpenTelemetry global. The API refuses a second registration
+ * of each, so a pipeline started after another (a second `init()`, or `init()`
+ * after `shutdown()`) needs them free. Used for an `sdkFactory` SDK, which
+ * cannot say what it registered; `AutotelSdk.releaseGlobals()` frees only its
+ * own.
+ */
+export function releaseOtelGlobals(): void {
+  trace.disable();
+  context.disable();
+  propagation.disable();
+  metrics.disable();
+  logs.disable();
+}
+
+/**
+ * Point instrumentations at the providers registered now. A replaced
+ * pipeline's instrumentations stay patched, and a module loaded before the
+ * replacement is patched only by them: OpenTelemetry patches a module once,
+ * when it loads, so a new instance never reaches it.
+ */
+export function adoptInstrumentations(
+  instrumentations: readonly Instrumentation[],
+): void {
+  for (const instrumentation of instrumentations) {
+    instrumentation.setTracerProvider(trace.getTracerProvider());
+    instrumentation.setMeterProvider(metrics.getMeterProvider());
+    instrumentation.setLoggerProvider?.(logs.getLoggerProvider());
+  }
+}
+
 export class AutotelSdk implements AutotelSdkLike {
   private readonly disabled: boolean;
   private tracerProvider: BasicTracerProvider | undefined;
   private meterProvider: MeterProvider | undefined;
   private loggerProvider: LoggerProvider | undefined;
+  /** One undo per global start() registered. */
+  private readonly registered: Array<() => void> = [];
 
   constructor(private readonly options: AutotelSdkOptions = {}) {
     this.disabled = envFlag('OTEL_SDK_DISABLED');
@@ -165,14 +200,23 @@ export class AutotelSdk implements AutotelSdkLike {
     const instrumentations = (o.instrumentations ?? []).flat();
     registerInstrumentations({ instrumentations });
 
-    context.setGlobalContextManager(
-      new AsyncLocalStorageContextManager().enable(),
-    );
+    // Each global is undone only if this SDK set it: a provider or propagator
+    // the application registered itself stays.
+    if (
+      context.setGlobalContextManager(
+        new AsyncLocalStorageContextManager().enable(),
+      )
+    ) {
+      this.registered.push(() => context.disable());
+    }
 
-    if (o.textMapPropagator !== null) {
+    if (
+      o.textMapPropagator !== null &&
       propagation.setGlobalPropagator(
         o.textMapPropagator ?? propagatorFromEnv() ?? defaultPropagator(),
-      );
+      )
+    ) {
+      this.registered.push(() => propagation.disable());
     }
 
     const resource = this.resolveResource();
@@ -182,7 +226,9 @@ export class AutotelSdk implements AutotelSdkLike {
         resource,
         readers: o.metricReaders,
       });
-      metrics.setGlobalMeterProvider(this.meterProvider);
+      if (metrics.setGlobalMeterProvider(this.meterProvider)) {
+        this.registered.push(() => metrics.disable());
+      }
       // Instrumentations registered before the meter provider existed would
       // otherwise drop every metric (opentelemetry-js#3609).
       for (const instrumentation of instrumentations) {
@@ -200,7 +246,9 @@ export class AutotelSdk implements AutotelSdkLike {
       spanProcessors: o.spanProcessors ?? [],
       ...(o.sampler && { sampler: o.sampler }),
     });
-    trace.setGlobalTracerProvider(this.tracerProvider);
+    if (trace.setGlobalTracerProvider(this.tracerProvider)) {
+      this.registered.push(() => trace.disable());
+    }
 
     // Prisma's instrumentation publishes the provider it holds when enable()
     // runs, first in its constructor, before this provider existed. Bundled
@@ -219,8 +267,18 @@ export class AutotelSdk implements AutotelSdkLike {
         resource,
         processors: logProcessors,
       });
-      logs.setGlobalLoggerProvider(this.loggerProvider);
+      // The logs API returns the provider it kept, not a success flag.
+      if (
+        logs.setGlobalLoggerProvider(this.loggerProvider) ===
+        this.loggerProvider
+      ) {
+        this.registered.push(() => logs.disable());
+      }
     }
+  }
+
+  releaseGlobals(): void {
+    for (const undo of this.registered.splice(0)) undo();
   }
 
   getTracerProvider(): BasicTracerProvider | undefined {

@@ -57,7 +57,7 @@ init({
 });
 ```
 
-If you see the span in stdout, the code and sampler are fine. Skip to "exporter / network". If you don't, keep reading.
+The pretty exporter prints one tree per trace when the trace's root span ends; a trace whose root never exports prints after two idle seconds, and `flush()` prints anything still waiting. If you see the span in stdout, the code and sampler are fine. Skip to "exporter / network". If you don't, keep reading.
 
 ## Step 1: Is the SDK actually initialised?
 

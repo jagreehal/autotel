@@ -189,6 +189,64 @@ describe('agent guard rails', () => {
     await client.close();
   });
 
+  it('filters spans on the field names its own inputs and groupBy use', async () => {
+    const client = await connect();
+    const window = { from: '1970-01-01T00:00:00Z', to: '1970-01-01T00:01:00Z' };
+    for (const field of ['operation', 'operationName', 'operation.name']) {
+      const body = (await callJson(client, 'aggregate_spans', {
+        ...window,
+        groupBy: ['operation'],
+        filters: [
+          {
+            field,
+            operator: 'starts_with',
+            valueType: 'string',
+            value: 'checkout.',
+          },
+        ],
+      })) as { data: { rows: { group: { operation: string } }[] } };
+      expect(
+        body.data.rows.map((row) => row.group.operation).sort(),
+        field,
+      ).toEqual(['checkout.payment', 'checkout.request']);
+    }
+    await client.close();
+  });
+
+  it('says so when a filter names a field nothing carries', async () => {
+    const client = await connect();
+    const body = (await callJson(client, 'aggregate_spans', {
+      from: '1970-01-01T00:00:00Z',
+      to: '1970-01-01T00:01:00Z',
+      filters: [
+        { field: 'no.such.field', operator: 'exists', valueType: 'string' },
+      ],
+    })) as { data: { rows: unknown[]; hint?: string } };
+    expect(body.data.rows).toEqual([]);
+    expect(body.data.hint).toContain('"no.such.field"');
+    await client.close();
+  });
+
+  it('does not blame a not_exists filter, which a missing field satisfies', async () => {
+    const client = await connect();
+    const body = (await callJson(client, 'aggregate_spans', {
+      from: '1970-01-01T00:00:00Z',
+      to: '1970-01-01T00:01:00Z',
+      filters: [
+        { field: 'missing', operator: 'not_exists', valueType: 'string' },
+        {
+          field: 'operation',
+          operator: 'equals',
+          valueType: 'string',
+          value: 'no-such-operation',
+        },
+      ],
+    })) as { data: { rows: unknown[]; hint?: string } };
+    expect(body.data.rows).toEqual([]);
+    expect(body.data.hint ?? '').not.toContain('"missing"');
+    await client.close();
+  });
+
   it('reports version changes and unversioned services', async () => {
     const client = await connect();
     const body = (await callJson(client, 'what_changed', {

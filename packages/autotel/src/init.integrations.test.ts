@@ -177,6 +177,8 @@ async function loadInitWithMocks() {
 
   vi.doMock('./sdk', () => ({
     AutotelSdk: MockSdk,
+    releaseOtelGlobals: vi.fn(),
+    adoptInstrumentations: vi.fn(),
   }));
 
   vi.doMock('@opentelemetry/exporter-trace-otlp-http', () => ({

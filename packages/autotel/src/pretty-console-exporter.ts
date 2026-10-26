@@ -104,6 +104,20 @@ export interface PrettyConsoleExporterOptions {
   showTraceId?: boolean;
 }
 
+/** Spans held across waiting traces; past this the oldest prints as it stands. */
+const MAX_PENDING_SPANS = 10_000;
+
+/**
+ * A trace with no new span for this long prints as it stands. Its top span
+ * may never arrive: a parent a `spanFilter` dropped is never exported.
+ */
+const IDLE_MS = 2000;
+
+interface PendingTrace {
+  spans: ReadableSpan[];
+  lastSpanAt: number;
+}
+
 /**
  * Internal node structure for building span trees
  */
@@ -124,6 +138,12 @@ interface SpanNode {
  */
 export class PrettyConsoleExporter implements SpanExporter {
   private readonly options: Required<PrettyConsoleExporterOptions>;
+  /** Ended spans by trace id, the trace touched least recently first. */
+  private readonly pending = new Map<string, PendingTrace>();
+  private pendingCount = 0;
+  /** Span ids already printed, so a span that ends after them still prints. */
+  private readonly printed = new Set<string>();
+  private sweeper?: ReturnType<typeof setInterval>;
 
   constructor(options: PrettyConsoleExporterOptions = {}) {
     this.options = {
@@ -137,75 +157,127 @@ export class PrettyConsoleExporter implements SpanExporter {
   }
 
   /**
-   * Export spans with pretty formatting
+   * Buffer spans until their tree is whole, then print it.
+   *
+   * A `SimpleSpanProcessor` (what `debug: 'pretty'` uses) exports each span
+   * alone as it ends, children first, and a batch can split a trace, so a
+   * trace's tree is drawn when its top span arrives: a local root, or a span
+   * ending after its parent was printed. Holding a span costs O(1); the tree
+   * is only built when such a span arrives.
    */
   export(
     spans: ReadableSpan[],
     resultCallback: (result: ExportResult) => void,
   ): void {
-    if (spans.length === 0) {
-      resultCallback({ code: ExportResultCode.SUCCESS });
-      return;
-    }
-
     try {
-      // Group spans by trace ID
-      const traceGroups = this.groupByTrace(spans);
-
-      // Print each trace group
-      for (const [traceId, traceSpans] of traceGroups) {
-        this.printTrace(traceId, traceSpans);
+      const ready = new Set<string>();
+      for (const span of spans) {
+        const traceId = this.hold(span);
+        if (this.isTop(span)) ready.add(traceId);
       }
-
-      resultCallback({ code: ExportResultCode.SUCCESS });
+      for (const traceId of ready) this.printTrace(traceId, false);
+      while (this.pendingCount > MAX_PENDING_SPANS) {
+        this.printTrace(this.pending.keys().next().value!, true);
+      }
     } catch {
-      // Fail-open: don't crash the app if formatting fails
-      resultCallback({ code: ExportResultCode.SUCCESS });
+      // Fail-open: a formatting fault must not fail the export.
+      this.pending.clear();
+      this.pendingCount = 0;
     }
+    resultCallback({ code: ExportResultCode.SUCCESS });
   }
 
   /**
-   * Group spans by their trace ID
+   * Print every trace that has had no new span for `IDLE_MS`. Exposed for
+   * tests; the exporter runs it itself while anything is held.
    */
-  private groupByTrace(spans: ReadableSpan[]): Map<string, ReadableSpan[]> {
-    const groups = new Map<string, ReadableSpan[]>();
-
-    for (const span of spans) {
-      const traceId = span.spanContext().traceId;
-      const group = groups.get(traceId) ?? [];
-      group.push(span);
-      groups.set(traceId, group);
+  sweep(now = Date.now()): void {
+    for (const [traceId, trace] of this.pending) {
+      if (now - trace.lastSpanAt < IDLE_MS) break;
+      this.printTrace(traceId, true);
     }
+    if (this.pending.size === 0) this.stopSweeper();
+  }
 
-    return groups;
+  /** Hold `span` under its trace and return the trace id. */
+  private hold(span: ReadableSpan): string {
+    const traceId = span.spanContext().traceId;
+    const trace = this.pending.get(traceId) ?? { spans: [], lastSpanAt: 0 };
+    // Re-inserted so the map stays ordered by when each trace last grew.
+    this.pending.delete(traceId);
+    trace.spans.push(span);
+    trace.lastSpanAt = Date.now();
+    this.pending.set(traceId, trace);
+    this.pendingCount++;
+    this.startSweeper();
+    return traceId;
   }
 
   /**
-   * Print a single trace with all its spans as a tree
+   * Print the trace's trees whose top span has arrived, or all of them when
+   * `all` is set, and stop holding what was printed.
    */
-  private printTrace(traceId: string, spans: ReadableSpan[]): void {
-    // Sort by start time
-    const sorted = [...spans].toSorted((a, b) => {
-      const aTime = hrTimeToMs(a.startTime);
-      const bTime = hrTimeToMs(b.startTime);
-      return aTime - bTime;
-    });
+  private printTrace(traceId: string, all: boolean): void {
+    const trace = this.pending.get(traceId);
+    if (!trace) return;
+    const sorted = trace.spans.toSorted(
+      (a, b) => hrTimeToMs(a.startTime) - hrTimeToMs(b.startTime),
+    );
+    const ready = this.buildSpanTree(sorted).filter(
+      (node) => all || this.isTop(node.span),
+    );
+    if (ready.length === 0) return;
 
-    // Build tree structure
-    const tree = this.buildSpanTree(sorted);
-
-    // Print trace ID header if enabled
-    if (this.options.showTraceId && tree.length > 0) {
+    if (this.options.showTraceId) {
       console.log(this.color(`trace: ${traceId}`, 'gray'));
     }
-
-    // Print each root span and its children
-    for (const node of tree) {
-      this.printNode(node, 0, false);
+    const done = new Set<ReadableSpan>();
+    for (const node of ready) {
+      this.printNode(node, '', '');
+      this.markPrinted(node, done);
     }
-
-    // Add blank line between traces
+    // Blank line between traces
     console.log('');
+
+    const rest = trace.spans.filter((span) => !done.has(span));
+    this.pendingCount -= trace.spans.length - rest.length;
+    if (rest.length > 0) trace.spans = rest;
+    else this.pending.delete(traceId);
+  }
+
+  /** Nothing above this span is still coming. */
+  private isTop(span: ReadableSpan): boolean {
+    const parent = span.parentSpanContext;
+    return (
+      !parent || parent.isRemote === true || this.printed.has(parent.spanId)
+    );
+  }
+
+  private markPrinted(node: SpanNode, done: Set<ReadableSpan>): void {
+    done.add(node.span);
+    this.printed.add(node.span.spanContext().spanId);
+    if (this.printed.size > MAX_PENDING_SPANS) {
+      this.printed.delete(this.printed.values().next().value!);
+    }
+    for (const child of node.children) this.markPrinted(child, done);
+  }
+
+  private startSweeper(): void {
+    if (this.sweeper) return;
+    this.sweeper = setInterval(() => {
+      try {
+        this.sweep();
+      } catch {
+        this.pending.clear();
+        this.pendingCount = 0;
+      }
+    }, IDLE_MS / 2);
+    this.sweeper.unref?.();
+  }
+
+  private stopSweeper(): void {
+    clearInterval(this.sweeper);
+    this.sweeper = undefined;
   }
 
   /**
@@ -240,14 +312,12 @@ export class PrettyConsoleExporter implements SpanExporter {
   }
 
   /**
-   * Print a span node with indentation and tree characters
+   * Print a span node and its children. `prefix` is drawn before this span's
+   * own line; `indent` before every line beneath it, carrying the `│` guide of
+   * each ancestor that has more children to come.
    */
-  private printNode(node: SpanNode, depth: number, isLast: boolean): void {
+  private printNode(node: SpanNode, prefix: string, indent: string): void {
     const { span } = node;
-
-    // Build tree prefix
-    const prefix =
-      depth === 0 ? '' : '  '.repeat(depth - 1) + (isLast ? '└─ ' : '├─ ');
 
     // Status indicator
     const isError = span.status.code === SpanStatusCode.ERROR;
@@ -276,30 +346,34 @@ export class PrettyConsoleExporter implements SpanExporter {
 
     console.log(line);
 
+    // Detail lines sit under the span's name, inside its children's guide.
+    const detailIndent =
+      indent + (node.children.length > 0 ? '│ ' : '  ') + ' ';
+
     // Print attributes on next line (indented)
     if (this.options.showAttributes) {
       const attrs = this.formatAttributes(span);
       if (attrs) {
-        const attrIndent = '  '.repeat(depth) + '     ';
-        console.log(this.color(`${attrIndent}${attrs}`, 'dim'));
+        console.log(this.color(`${detailIndent}${attrs}`, 'dim'));
       }
     }
 
     // Print error message if present
     if (isError && span.status.message) {
-      const errorIndent = '  '.repeat(depth) + '     ';
       console.log(
-        this.color(`${errorIndent}Error: ${span.status.message}`, 'red'),
+        this.color(`${detailIndent}Error: ${span.status.message}`, 'red'),
       );
     }
 
     // Print children
-    const childCount = node.children.length;
-    let index = 0;
-    for (const child of node.children) {
-      this.printNode(child, depth + 1, index === childCount - 1);
-      index++;
-    }
+    node.children.forEach((child, index) => {
+      const last = index === node.children.length - 1;
+      this.printNode(
+        child,
+        indent + (last ? '└─ ' : '├─ '),
+        indent + (last ? '   ' : '│  '),
+      );
+    });
   }
 
   /**
@@ -359,17 +433,26 @@ export class PrettyConsoleExporter implements SpanExporter {
     return `${ANSI[color]}${text}${ANSI.reset}`;
   }
 
-  /**
-   * Shutdown (no-op for console exporter)
-   */
+  /** Print whatever is still held: nothing more is coming. */
   shutdown(): Promise<void> {
-    return Promise.resolve();
+    const flushed = this.forceFlush();
+    this.stopSweeper();
+    return flushed;
   }
 
   /**
-   * Force flush (no-op for console exporter)
+   * Print every held tree, finished or not. `flush()` is the caller asking
+   * to see what has ended.
    */
   forceFlush(): Promise<void> {
+    try {
+      for (const traceId of this.pending.keys()) {
+        this.printTrace(traceId, true);
+      }
+    } catch {
+      this.pending.clear();
+      this.pendingCount = 0;
+    }
     return Promise.resolve();
   }
 }

@@ -87,6 +87,8 @@ Tools are registered per backend capability. Agents only see tools the backend c
 
 Report `agent_usage` totals with their completeness: `partial` is a lower bound and `unknown` is not zero.
 
+Span `filters` take the names the tools use: `service`, `operation` (or `operationName`, `operation_name`), `trace_id`, `duration_ms`, `status_code`, `has_error`, or any span attribute key. camelCase and dotted spellings resolve to the same field. When a filtered query returns nothing and a filter's field exists on no span, the response's `hint` names it.
+
 Start triage with `list_issues` (grouped failures with status, count, trend, versions and affected users), then `get_issue` for the stack, latest trace and nearby logs.
 
 ## Resources
