@@ -137,6 +137,7 @@ init(
 - Multi-region support (US1, US3, US5, EU, AP1, FedRAMP)
 - Unified service tagging (service, env, version)
 - Optional log export via OTLP
+- Delta metric temporality for direct ingestion; `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` overrides it
 - Kubernetes-friendly agent configuration
 
 [View full Datadog configuration options →](./src/datadog.ts)
