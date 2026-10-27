@@ -16,6 +16,7 @@ import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import type { AutotelSdkLike, AutotelSdkOptions } from './sdk';
 import type { Resource } from '@opentelemetry/resources';
 import type { Sampler, SamplingPreset } from './sampling';
+import type { TailSamplingSpanProcessorOptions } from './tail-sampling-processor';
 import type { EventSubscriber } from './event-subscriber';
 import type { Logger } from './logger';
 import type { ValidationConfig } from './validation';
@@ -44,6 +45,11 @@ export interface AutotelConfig {
    * and on fatal errors, bounded by a 2s shutdown timeout. Pass a config
    * object to override individual defaults. Omit (or pass `false`) to leave
    * process lifecycle management to the application.
+   *
+   * Before shutting down, the handlers end every span still running as
+   * failed (`error.type` is the signal, or the error's class), so a job killed
+   * mid-run (a timeout, a deploy) exports its whole trace, root included,
+   * and the tail sampler keeps it as an error.
    */
   processHandlers?: boolean | ProcessHandlersConfig;
 
@@ -65,6 +71,14 @@ export interface AutotelConfig {
    * autotel added no listener.
    */
   flushOnExit?: boolean;
+
+  /**
+   * How long `shutdown()` waits for the SDK to finish (exporting anything a
+   * tail sampler still holds) before it logs a warning, cleans up and
+   * resolves. Default 10,000. Raise it for a process that exports a large
+   * buffered trace at exit; `shutdown({ timeout })` overrides it per call.
+   */
+  shutdownTimeoutMs?: number;
 
   /**
    * Record `console.error(...)` calls made inside a span as an exception on
@@ -559,7 +573,44 @@ export interface AutotelConfig {
    */
   sampling?: SamplingPreset;
 
-  /** Service version (default: auto-detect from package.json or '1.0.0') */
+  /**
+   * Buffer limits for the tail sampler autotel builds around each exporter.
+   * Ignored with `spanProcessors`, which bring their own.
+   *
+   * Defaults suit request handlers: 30s and 20,000 spans. A process that runs
+   * one long job (a batch worker, a cron) raises `traceTimeoutMs` above its
+   * longest run, so the whole job is decided on its outcome at `shutdown()`,
+   * and `maxBufferedSpans` above its largest span count.
+   *
+   * @example
+   * ```typescript
+   * init({
+   *   service: 'nightly-import',
+   *   sampling: 'production',
+   *   tailSampling: { traceTimeoutMs: 6 * 60 * 60 * 1000, maxBufferedSpans: 50_000 },
+   * });
+   * ```
+   */
+  tailSampling?: Pick<
+    TailSamplingSpanProcessorOptions,
+    'traceTimeoutMs' | 'maxBufferedSpans'
+  >;
+
+  /**
+   * Continue the trace a parent process passed in `TRACEPARENT` (with
+   * `TRACESTATE` and `BAGGAGE`), OpenTelemetry's environment-variable
+   * carrier. The roots `trace()` and `span()` start with nothing active become
+   * children of that span. Default `true`; set `false` for a process that
+   * inherits a `TRACEPARENT` it should not join (a server started from a
+   * traced CI step).
+   */
+  traceContextFromEnv?: boolean;
+
+  /**
+   * Service version. Default: `SERVICE_VERSION`, `DD_VERSION` or `APP_VERSION`,
+   * else the deployed commit (`COMMIT_SHA`, `GIT_SHA`, `GITHUB_SHA` and the
+   * hosts' own variables), else package.json, else '1.0.0'.
+   */
   version?: string;
 
   /** Environment (default: process.env.NODE_ENV || 'development') */

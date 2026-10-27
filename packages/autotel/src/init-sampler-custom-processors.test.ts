@@ -130,6 +130,40 @@ describe('a tail sampler with custom spanProcessors', () => {
   });
 });
 
+describe('tailSampling limits', () => {
+  // A root that never ends holds its trace until traceTimeoutMs, then it is
+  // exported as it stands.
+  async function run(tailSampling?: { traceTimeoutMs: number }) {
+    const { init, flush, shutdown } = await load();
+    const exporter = new InMemorySpanExporter();
+    init({
+      service: 'long-job',
+      sampling: 'errors-only',
+      spanExporters: [exporter],
+      tailSampling,
+    });
+    const tracer = otelTrace.getTracer('job');
+    const root = tracer.startSpan('job');
+    tracer
+      .startSpan('step', {}, otelTrace.setSpan(context.active(), root))
+      .end();
+    // Past the 20ms timeout and its sweep; the flush drains the batch queue.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await flush();
+    const names = exporter.getFinishedSpans().map((s) => s.name);
+    await shutdown();
+    return names;
+  }
+
+  it('passes traceTimeoutMs to the tail sampler it builds', async () => {
+    expect(await run({ traceTimeoutMs: 20 })).toEqual(['step']);
+  });
+
+  it('holds the trace for the default 30s without it', async () => {
+    expect(await run()).toEqual([]);
+  });
+});
+
 describe('sampling applies to whole traces, auto-instrumented ones included', () => {
   it('drops sampled-out auto-instrumented roots and the children of dropped traces', async () => {
     const { init, trace, flush, shutdown } = await load();

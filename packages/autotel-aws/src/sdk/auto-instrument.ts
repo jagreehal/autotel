@@ -18,7 +18,9 @@
  * ```
  */
 
+import { readdirSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 // Type-only import from optional peer dependency
 // @ts-expect-error - Optional peer dependency, may not be installed
 import type { Client, Command } from '@aws-sdk/smithy-client';
@@ -29,11 +31,14 @@ import type { SDKInstrumentationConfig } from '../config';
 // packages/autotel/src/node-require.ts for the __filename / import.meta.url
 // fallback. Built on first use so importing this module stays side-effect-free.
 declare const __filename: string | undefined;
-function loadModule(id: string): any {
+function ownRequire(): NodeJS.Require {
   return createRequire(
     /* oxlint-disable-next-line anti-slop/no-runtime-typeof -- Probing which module format this build is running as. `__filename` is bound only in the CJS output; the presence of the binding is the fact being read. */
     typeof __filename === 'string' ? __filename : import.meta.url,
-  )(id);
+  );
+}
+function loadModule(id: string): any {
+  return ownRequire()(id);
 }
 
 // Symbol to mark clients as instrumented (prevents double-wrapping)
@@ -42,9 +47,8 @@ const INSTRUMENTED_SYMBOL = Symbol.for('autotel-aws.instrumented');
 // Track whether global auto-instrumentation is active
 let globalAutoInstrumentEnabled = false;
 
-// Store original send method for restoration
-let originalSmithyClientSend:
-  ((...args: unknown[]) => Promise<unknown>) | null = null;
+// Each patched base Client class and its original send, for restoration
+const patchedClients = new Map<any, (...args: unknown[]) => Promise<unknown>>();
 
 /**
  * Check if a client is already instrumented
@@ -186,7 +190,9 @@ export function createTracedClient<
  * - This function is idempotent - calling it multiple times has no effect
  * - Clients created before calling this function are NOT instrumented
  * - Use `instrumentSDK()` for clients created before auto-instrumentation
- * - Requires `@aws-sdk/smithy-client` to be installed (peer dependency)
+ * - Finds the SDK's base Client (`@smithy/core/client` in current SDKs,
+ *   `@smithy/smithy-client` or `@aws-sdk/smithy-client` in older ones) beside
+ *   each installed `@aws-sdk/client-*`, so isolated installs (pnpm) work
  *
  * @throws Error if AWS SDK is not installed
  */
@@ -196,30 +202,110 @@ export function autoInstrumentAWS(config?: SDKInstrumentationConfig): void {
     return;
   }
 
-  // Try to get the smithy-client module
+  const clients = findSmithyClients();
+  if (clients.size === 0) {
+    console.warn(
+      '[autotel-aws] autoInstrumentAWS() could not find the AWS SDK base Client (@smithy/core/client, @smithy/smithy-client or @aws-sdk/smithy-client). ' +
+        'Install an AWS SDK v3 client package (e.g., @aws-sdk/client-s3) or use instrumentSDK() directly.',
+    );
+    return;
+  }
+  for (const SmithyClient of clients) _patchClientClass(SmithyClient, config);
+}
 
-  let SmithyClient: any;
+const SMITHY_CLIENT_IDS = [
+  '@smithy/core/client',
+  '@smithy/smithy-client',
+  '@aws-sdk/smithy-client',
+];
+const AWS_CLIENT_FILE = /^(.*[\\/]@aws-sdk[\\/]client-[^\\/]+)[\\/]/;
+
+/**
+ * Every distinct SDK base Client class this process can reach. Smithy is a
+ * dependency of each AWS client, so under isolated installs (pnpm) it resolves
+ * from beside a client rather than from the app or this package. The lookup
+ * starts at the AWS clients the app has already loaded, then this package,
+ * then the nearest `node_modules/@aws-sdk/client-*` Node resolves from the
+ * app's entry script. Clients that pin different Smithy versions each get
+ * their own class, and each is patched.
+ *
+ * A bundle that inlines the SDK keeps no node_modules to search; use
+ * instrumentSDK() there.
+ */
+function findSmithyClients(): Set<any> {
+  const loaded = new Set<string>();
+  for (const file of Object.keys(ownRequire().cache)) {
+    const match = AWS_CLIENT_FILE.exec(file);
+    if (match) loaded.add(path.join(match[1], 'package.json'));
+  }
+  const installed = new Set<string>();
+  const entry = process.argv[1];
+  let searchPaths: string[] = [];
   try {
-    // Dynamic require to avoid bundling issues
-    SmithyClient = loadModule('@aws-sdk/smithy-client').Client;
-  } catch {
-    // Try the core package (newer SDK versions)
-    try {
-      SmithyClient = loadModule('@smithy/smithy-client').Client;
-    } catch {
-      console.warn(
-        '[autotel-aws] autoInstrumentAWS() requires @aws-sdk/smithy-client or @smithy/smithy-client. ' +
-          'Install an AWS SDK v3 client package (e.g., @aws-sdk/client-s3) or use instrumentSDK() directly.',
-      );
-      return;
+    if (entry) {
+      searchPaths =
+        createRequire(realpathSync(entry)).resolve.paths('@aws-sdk/x') ?? [];
     }
+  } catch {
+    // An entry Node did not load from disk (a REPL, `node -e`).
+  }
+  // The nearest node_modules holding AWS clients, as Node resolves them. A
+  // client counts only when its real path stays inside a node_modules Node
+  // searches from the entry (pnpm's store at the workspace root qualifies).
+  const inSearchPath = (file: string) =>
+    searchPaths.some((dir) => file.startsWith(dir + path.sep));
+  for (const dir of searchPaths) {
+    let names: string[];
+    try {
+      names = readdirSync(path.join(dir, '@aws-sdk'));
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (!name.startsWith('client-')) continue;
+      // Follow pnpm's symlink: Smithy sits beside the real package, and a
+      // require built on the link's path searches beside the link instead.
+      try {
+        const real = realpathSync(path.join(dir, '@aws-sdk', name));
+        if (inSearchPath(real)) installed.add(path.join(real, 'package.json'));
+      } catch {
+        // A dangling link; skip it.
+      }
+    }
+    break;
   }
 
-  // Store original send for potential restoration
-  originalSmithyClientSend = SmithyClient.prototype.send;
+  const found = new Set<any>();
+  const loaders = [
+    ...[...loaded].map((base) => createRequire(base)),
+    loadModule,
+    ...[...installed].map((base) => createRequire(base)),
+  ];
+  for (const load of loaders) {
+    for (const id of SMITHY_CLIENT_IDS) {
+      try {
+        const Client = load(id).Client;
+        if (Client?.prototype?.send) {
+          found.add(Client);
+          break;
+        }
+      } catch {
+        // Not reachable from here; try the next.
+      }
+    }
+  }
+  return found;
+}
 
-  // Patch the prototype's send method
+/** Patch `SmithyClient.prototype.send` to trace. Exported for tests. */
+export function _patchClientClass(
+  SmithyClient: any,
+  config?: SDKInstrumentationConfig,
+): void {
+  if (patchedClients.has(SmithyClient)) return;
   const originalSend = SmithyClient.prototype.send;
+  patchedClients.set(SmithyClient, originalSend);
+  globalAutoInstrumentEnabled = true;
 
   SmithyClient.prototype.send = function patchedSend(
     this: Client<unknown, unknown, unknown, unknown>,
@@ -230,18 +316,13 @@ export function autoInstrumentAWS(config?: SDKInstrumentationConfig): void {
     if (isInstrumented(this)) {
       return originalSend.call(this, command, ...args);
     }
-
-    // Create a one-time wrapped client for this call
-    // This is less efficient than pre-wrapping, but ensures all calls are traced
-    const wrappedClient = wrapSDKClient(
-      this as Client<unknown, unknown, unknown, unknown>,
-      config?.service,
+    // Trace through the original send. This client's own `send` is this
+    // patched function, so the wrapper calls the original instead.
+    const wrappedClient = wrapSDKClient(this, config?.service, (cmd, ...rest) =>
+      originalSend.call(this, cmd, ...rest),
     );
-
     return (wrappedClient as any).send(command, ...args);
   };
-
-  globalAutoInstrumentEnabled = true;
 }
 
 /**
@@ -262,24 +343,10 @@ export function autoInstrumentAWS(config?: SDKInstrumentationConfig): void {
  * ```
  */
 export function disableAutoInstrumentAWS(): void {
-  if (!globalAutoInstrumentEnabled || !originalSmithyClientSend) {
-    return;
+  for (const [SmithyClient, originalSend] of patchedClients) {
+    SmithyClient.prototype.send = originalSend;
   }
-
-  let SmithyClient: any;
-  try {
-    SmithyClient = loadModule('@aws-sdk/smithy-client').Client;
-  } catch {
-    try {
-      SmithyClient = loadModule('@smithy/smithy-client').Client;
-    } catch {
-      return;
-    }
-  }
-
-  // Restore original send
-  SmithyClient.prototype.send = originalSmithyClientSend;
-  originalSmithyClientSend = null;
+  patchedClients.clear();
   globalAutoInstrumentEnabled = false;
 }
 

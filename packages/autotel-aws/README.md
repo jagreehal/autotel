@@ -97,6 +97,8 @@ const s3 = new S3Client({ region: 'us-east-1' });
 const dynamodb = new DynamoDBClient({ region: 'us-east-1' });
 ```
 
+`autoInstrumentAWS()` finds the SDK's base Client beside each installed `@aws-sdk/client-*`, so it works with npm, Yarn and pnpm's isolated installs, and patches each Smithy version your clients use. A bundle that inlines the SDK keeps no `node_modules` to search; use `instrumentSDK(client)` there.
+
 ### Per-Client Instrumentation
 
 ```typescript

@@ -178,10 +178,14 @@ export interface SpanMethods {
   setAttributes(attrs: UnknownRecord): void;
   /** Set the status of the span */
   setStatus(status: { code: SpanStatusCode; message?: string }): void;
-  /** Add a link to another span */
-  addLink(link: Link): void;
-  /** Add multiple links to other spans */
-  addLinks(links: Link[]): void;
+  /**
+   * Add a link to another span. `null` and `undefined` are skipped, so the
+   * result of `createLinkFromHeaders()` (null without a traceparent) can be
+   * passed straight in.
+   */
+  addLink(link: Link | null | undefined): void;
+  /** Add multiple links to other spans, skipping `null` and `undefined` */
+  addLinks(links: ReadonlyArray<Link | null | undefined>): void;
   /** Update the span name dynamically */
   updateName(name: string): void;
   /** Check if the span is recording */
@@ -506,8 +510,13 @@ export function createTraceContext<
     },
     recordException: span.recordException.bind(span),
     addEvent: span.addEvent.bind(span),
-    addLink: span.addLink.bind(span),
-    addLinks: span.addLinks.bind(span),
+    addLink: (link: Link | null | undefined) => {
+      if (link) span.addLink(link);
+    },
+    addLinks: (links: ReadonlyArray<Link | null | undefined>) => {
+      const present = links.filter((link): link is Link => link != null);
+      if (present.length > 0) span.addLinks(present);
+    },
     updateName: span.updateName.bind(span),
     isRecording: span.isRecording.bind(span),
     recordError: (cause: unknown) => {

@@ -23,7 +23,8 @@ import type { AutotelConfig } from './autotel-config';
 /**
  * Resolve the effective attribute redactor. Explicit config wins (`false`
  * disables). Otherwise the `AUTOTEL_REDACT_PII` env var controls it, and as a
- * final default PII redaction is auto-enabled in production.
+ * final default PII redaction is auto-enabled in production (any case, so
+ * `Production` and `PRODUCTION` count).
  */
 export function resolveAttributeRedactor(
   explicit:
@@ -46,7 +47,9 @@ export function resolveAttributeRedactor(
     }
   }
 
-  return environment === 'production' ? 'default' : undefined;
+  return environment.trim().toLowerCase() === 'production'
+    ? 'default'
+    : undefined;
 }
 
 /**
@@ -62,15 +65,28 @@ export function readMillisEnv(name: string): number | undefined {
   return Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+/** The deployed commit, from the variables CI systems and hosts set. */
+function detectCommitSha(): string | undefined {
+  return (
+    process.env.COMMIT_SHA ||
+    process.env.GIT_SHA ||
+    process.env.GIT_COMMIT ||
+    process.env.GITHUB_SHA ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.CF_PAGES_COMMIT_SHA ||
+    process.env.RENDER_GIT_COMMIT ||
+    process.env.RAILWAY_GIT_COMMIT_SHA ||
+    process.env.HEROKU_SLUG_COMMIT ||
+    process.env.SOURCE_VERSION ||
+    undefined
+  );
+}
+
 export function detectEnvironmentAttributes(): Record<string, string> {
   const attrs: Record<string, string> = {};
 
   const commitSha =
-    process.env.COMMIT_SHA ||
-    process.env.GITHUB_SHA ||
-    process.env.VERCEL_GIT_COMMIT_SHA ||
-    process.env.CF_PAGES_COMMIT_SHA ||
-    process.env.AWS_CODEPIPELINE_EXECUTION_ID;
+    detectCommitSha() || process.env.AWS_CODEPIPELINE_EXECUTION_ID;
   if (commitSha) attrs['service.commit.sha'] = commitSha;
 
   const region =
@@ -207,9 +223,19 @@ export function destinationSupportsSignal(
 }
 
 /**
- * Auto-detect version from package.json
+ * Auto-detect the service version, for when `version` is not set. A deploy
+ * rarely bumps package.json, so a version a deploy does set wins: an explicit
+ * `SERVICE_VERSION`, `DD_VERSION` or `APP_VERSION`, then the commit the CI
+ * system or host reports, then package.json. `OTEL_RESOURCE_ATTRIBUTES` with
+ * `service.version` still overrides all of these.
  */
 export function detectVersion(): string {
+  const fromEnv =
+    process.env.SERVICE_VERSION ||
+    process.env.DD_VERSION ||
+    process.env.APP_VERSION ||
+    detectCommitSha();
+  if (fromEnv?.trim()) return fromEnv.trim();
   try {
     // Try to read package.json from cwd using fs
     const fs = requireModule<typeof import('node:fs')>('node:fs');

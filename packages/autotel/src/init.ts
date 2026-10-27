@@ -121,6 +121,8 @@ import {
 } from './processors/canonical-log-line-processor';
 import type { EventsConfig } from './events-config';
 import { resolveDevtoolsConfig } from './devtools';
+import { OpenSpanTracker } from './open-spans';
+import { setTraceContextFromEnv } from './env-trace-context';
 import {
   installExitFlush,
   installProcessHandlers,
@@ -152,6 +154,7 @@ import {
 import {
   createLogExporter,
   createMetricExporter,
+  metricTemporalityFor,
   createTraceExporter,
   formatEndpointUrl,
 } from './otlp-exporters';
@@ -418,6 +421,7 @@ export function init(cfg: AutotelConfig): void {
   }
 
   config = mergedConfig;
+  setTraceContextFromEnv(mergedConfig.traceContextFromEnv !== false);
   validationConfig = mergedConfig.validation || null;
   eventsConfig = mergedConfig.events || null;
 
@@ -599,6 +603,7 @@ export function init(cfg: AutotelConfig): void {
     for (const exporter of configuredSpanExporters) {
       spanProcessors.push(
         new TailSamplingSpanProcessor(new BatchSpanProcessor(exporter), {
+          ...mergedConfig.tailSampling,
           sampler: autotelSampler,
         }),
       );
@@ -618,6 +623,7 @@ export function init(cfg: AutotelConfig): void {
 
       spanProcessors.push(
         new TailSamplingSpanProcessor(new BatchSpanProcessor(traceExporter), {
+          ...mergedConfig.tailSampling,
           sampler: autotelSampler,
         }),
       );
@@ -823,6 +829,7 @@ export function init(cfg: AutotelConfig): void {
     for (const destination of otlpDestinations) {
       if (!destinationSupportsSignal(destination, 'metrics')) continue;
 
+      const temporalityPreference = metricTemporalityFor(destination.endpoint);
       const metricExporter = createMetricExporter(destination.protocol, {
         url: formatEndpointUrl(
           destination.endpoint,
@@ -830,6 +837,9 @@ export function init(cfg: AutotelConfig): void {
           destination.protocol,
         ),
         headers: destination.headers,
+        ...(temporalityPreference === undefined
+          ? {}
+          : { temporalityPreference }),
       });
 
       // PeriodicExportingMetricReader defaults to 60s and does not read these
@@ -1033,6 +1043,14 @@ export function init(cfg: AutotelConfig): void {
     );
   }
 
+  // With processHandlers, a stop or crash ends the spans still running, so a
+  // killed job's trace arrives whole and failed rather than rootless.
+  const openSpans =
+    mergedConfig.processHandlers && spanProcessors.length > 0
+      ? new OpenSpanTracker()
+      : undefined;
+  if (openSpans) spanProcessors.unshift(openSpans);
+
   const sdkOptions: AutotelSdkOptions = {
     resource,
     // The SDK runs resource detection after merging `resource`. Passing
@@ -1144,7 +1162,9 @@ export function init(cfg: AutotelConfig): void {
   const handlersConfig =
     processHandlers && processHandlers !== true ? processHandlers : {};
   if (processHandlers) {
-    installProcessHandlers(handlersConfig, shutdown);
+    installProcessHandlers(handlersConfig, shutdown, (reason) =>
+      openSpans?.endAll(reason),
+    );
   } else {
     uninstallProcessHandlers();
   }

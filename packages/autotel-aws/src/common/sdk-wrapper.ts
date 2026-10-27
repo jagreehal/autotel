@@ -17,11 +17,19 @@ import { trace } from 'autotel';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 /**
- * Wrap AWS SDK v3 client with OpenTelemetry instrumentation
+ * Wrap AWS SDK v3 client with OpenTelemetry instrumentation.
+ *
+ * `send` is the untraced send to call. It defaults to the client's own, and
+ * must be given when the client's `send` is itself the traced one (a patched
+ * prototype), or each call would wrap itself again.
  */
 export function wrapSDKClient<T extends Client<any, any, any, any>>(
   client: T,
   serviceName?: string,
+  send?: (
+    command: Command<any, any, any, any, any>,
+    ...args: unknown[]
+  ) => Promise<any>,
 ): T {
   const clientName = (client.constructor as { name: string }).name;
   const resolvedServiceName = serviceName || extractServiceName(clientName);
@@ -32,6 +40,7 @@ export function wrapSDKClient<T extends Client<any, any, any, any>>(
       if (prop === 'send') {
         return async function tracedSend(
           command: Command<any, any, any, any, any>,
+          ...args: unknown[]
         ) {
           const metadata = extractRequestMetadata(command, { clientName });
           const operationName = extractOperationName(metadata.commandName);
@@ -48,7 +57,9 @@ export function wrapSDKClient<T extends Client<any, any, any, any>>(
               );
 
               try {
-                const response = await target.send(command);
+                const response = await (send
+                  ? send(command, ...args)
+                  : target.send(command, ...args));
 
                 // Extract and set response metadata
                 const responseMetadata = extractResponseMetadata(response);

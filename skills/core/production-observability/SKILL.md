@@ -130,7 +130,9 @@ import { init } from 'autotel';
 
 init({
   service: process.env.OTEL_SERVICE_NAME ?? 'orders-api',
-  // version: from package.json; environment: from NODE_ENV
+  // version: SERVICE_VERSION, DD_VERSION or APP_VERSION, else the deployed
+  // commit (GIT_SHA, GITHUB_SHA, ...), else package.json
+  // environment: from NODE_ENV
   autoInstrumentations: ['http', 'undici', 'pg', 'pino'],
   logs: true, // off by default; OTLP over HTTP needs no extra install
   sampling: 'production', // errors, slow calls and 10% of the rest; unset keeps everything

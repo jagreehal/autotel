@@ -36,6 +36,8 @@ import {
   explicitSpanStatus,
   type TraceContext,
 } from './trace-context';
+import { withEnvParent } from './env-trace-context';
+import { withLocalRoot } from './request-attributes';
 import { setSpanName } from './trace-helpers';
 import { getForceFlushableProvider } from './tracer-provider';
 import { inferVariableNameFromCallStack } from './variable-name-inference';
@@ -496,7 +498,9 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
     return tracer.startActiveSpan(
       spanName,
       spanOptions,
-      getActiveContextWithBaggage(),
+      options.startNewRoot
+        ? getActiveContextWithBaggage()
+        : withEnvParent(getActiveContextWithBaggage()),
       (span) =>
         runInOperationContext(spanName, () =>
           runWithTraceContextStorage(() => {
@@ -582,8 +586,12 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
                 operation: spanName,
                 status: 'started',
               });
+              const spanContext = otelTrace.setSpan(
+                getActiveContextWithBaggage(),
+                span,
+              );
               const result = context.with(
-                otelTrace.setSpan(getActiveContextWithBaggage(), span),
+                isRootSpan ? withLocalRoot(spanContext, span) : spanContext,
                 () => fn.call(this, ...args),
               );
               // Anything thenable, not just native Promises.

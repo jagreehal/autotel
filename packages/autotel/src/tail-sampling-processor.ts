@@ -33,8 +33,10 @@
  * Otherwise it forwards each span as it ends, dropping only a span a
  * `trace()` wrapper's own sampler marked to drop.
  *
- * Fail-open: a trace whose root has not ended by `traceTimeoutMs`, or the
- * oldest trace once `maxBufferedSpans` is exceeded, is exported as it stands.
+ * A trace that hits `traceTimeoutMs`, or the oldest one once
+ * `maxBufferedSpans` is exceeded, is decided on what it has if its root
+ * ended, so a flood of clean traces is still sampled. Fail-open: one whose
+ * root has not ended is exported as it stands.
  * `forceFlush()` leaves traces with running children pending; `shutdown()`
  * decides everything.
  */
@@ -63,7 +65,8 @@ export interface TailSamplingSpanProcessorOptions {
   sampler?: Sampler;
   /**
    * Spans held across all undecided traces. Past this the oldest trace is
-   * exported as it stands (fail-open). Default 20,000.
+   * decided on what it has if its root ended, else exported as it stands
+   * (fail-open). Default 20,000.
    */
   maxBufferedSpans?: number;
   /**
@@ -214,7 +217,7 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
     }
     while (this.buffered > this.maxBufferedSpans) {
       const [oldestId, oldest] = this.pending.entries().next().value!;
-      this.decide(oldestId, oldest, true);
+      this.decide(oldestId, oldest, oldest.root ? undefined : true);
     }
   }
 

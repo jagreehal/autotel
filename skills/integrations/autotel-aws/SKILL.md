@@ -108,7 +108,7 @@ autoInstrumentAWS();
 const s3 = new S3Client({});
 ```
 
-Disable with `disableAutoInstrumentAWS()`. Check status with `isAutoInstrumentEnabled()`.
+It finds the SDK's base Client beside each installed `@aws-sdk/client-*`, which covers pnpm's isolated installs, and patches each Smithy copy it finds. A bundle that inlines the SDK keeps no `node_modules` to search, so use `instrumentSDK()` there. Disable with `disableAutoInstrumentAWS()`. Check status with `isAutoInstrumentEnabled()`.
 
 ### Service-specific semantic tracing helpers
 

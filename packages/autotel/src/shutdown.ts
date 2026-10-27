@@ -72,6 +72,8 @@ function isUnreachableEndpointError(cause: unknown, depth = 0): boolean {
     : false;
 }
 
+const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
+
 /**
  * Flush all pending telemetry
  *
@@ -178,6 +180,14 @@ export async function flush(options?: {
  * Always performs cleanup even if flush fails, preventing resource leaks
  * in serverless handlers or tests.
  *
+ * The SDK shutdown (which exports anything a tail sampler still holds) is
+ * bounded by `timeout`, else `init({ shutdownTimeoutMs })`, else 10s. Past it, shutdown logs a warning,
+ * cleans up and resolves, so an unreachable endpoint never holds the process
+ * open. A real shutdown error is still thrown after cleanup.
+ *
+ * @param options.timeout - Milliseconds to wait for the SDK; overrides
+ *   `shutdownTimeoutMs` from `init()` (default 10000)
+ *
  * @example Express server
  * ```typescript
  * const server = app.listen(3000)
@@ -189,7 +199,11 @@ export async function flush(options?: {
  * })
  * ```
  */
-export async function shutdown(): Promise<void> {
+export async function shutdown(options?: { timeout?: number }): Promise<void> {
+  const timeout =
+    options?.timeout ??
+    getConfig()?.shutdownTimeoutMs ??
+    DEFAULT_SHUTDOWN_TIMEOUT_MS;
   const logger = getLogger();
   let shutdownError: Error | null = null;
 
@@ -212,7 +226,20 @@ export async function shutdown(): Promise<void> {
   try {
     // Shutdown OpenTelemetry SDK
     if (sdk) {
-      await sdk.shutdown();
+      let timer: NodeJS.Timeout | undefined;
+      const timedOut = await Promise.race([
+        Promise.resolve(sdk.shutdown()).then(() => false),
+        new Promise<true>((resolve) => {
+          timer = setTimeout(() => resolve(true), timeout);
+          timer.unref();
+        }),
+      ]).finally(() => clearTimeout(timer));
+      if (timedOut) {
+        logger.warn(
+          {},
+          `[autotel] SDK shutdown did not finish within ${timeout}ms; continuing without it`,
+        );
+      }
     }
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));

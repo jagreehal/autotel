@@ -85,6 +85,8 @@ function reportFatalError(error: unknown, event: string): void {
 export function installProcessHandlers(
   config: ProcessHandlersConfig,
   shutdown: () => Promise<void>,
+  /** Runs once, before the shutdown: ends the spans the stop cut short. */
+  onStop?: (reason: { signal: string } | { error: unknown }) => void,
 ): void {
   uninstallProcessHandlers();
 
@@ -97,7 +99,11 @@ export function installProcessHandlers(
   // Exit once, after shutdown completes (or times out). A fatal error's code (1)
   // takes precedence over a signal's code, so a crash is never masked by a
   // concurrent SIGTERM/SIGINT arriving in the same shutdown window.
-  const shutdownAndExit = (exitCode: number, fatal: boolean): void => {
+  const shutdownAndExit = (
+    exitCode: number,
+    fatal: boolean,
+    reason: { signal: string } | { error: unknown },
+  ): void => {
     if (fatal) {
       if (!fatalLatched) {
         resolvedExitCode = exitCode;
@@ -111,6 +117,11 @@ export function installProcessHandlers(
       return;
     }
     exitScheduled = true;
+    try {
+      onStop?.(reason);
+    } catch {
+      // Never let telemetry stand between the process and its exit.
+    }
     void runShutdownOnce(shutdown, timeoutMs).then(() => {
       // eslint-disable-next-line unicorn/no-process-exit
       process.exit(resolvedExitCode);
@@ -119,7 +130,7 @@ export function installProcessHandlers(
 
   for (const signal of config.signals ?? DEFAULT_SIGNALS) {
     const listener = () => {
-      shutdownAndExit(signalExitCode(signal), false);
+      shutdownAndExit(signalExitCode(signal), false, { signal });
     };
     process.on(signal, listener);
     removeOwnedHandlers.push(() => {
@@ -130,11 +141,11 @@ export function installProcessHandlers(
   if (config.fatalErrors ?? true) {
     const uncaughtExceptionListener = (error: unknown) => {
       reportFatalError(error, 'uncaughtException');
-      shutdownAndExit(1, true);
+      shutdownAndExit(1, true, { error });
     };
     const unhandledRejectionListener = (reason: unknown) => {
       reportFatalError(reason, 'unhandledRejection');
-      shutdownAndExit(1, true);
+      shutdownAndExit(1, true, { error: reason });
     };
     process.on('uncaughtException', uncaughtExceptionListener);
     process.on('unhandledRejection', unhandledRejectionListener);

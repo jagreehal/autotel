@@ -17,6 +17,12 @@ describe('resolveAttributeRedactor', () => {
     expect(resolveAttributeRedactor(undefined, 'production')).toBe('default');
   });
 
+  it('matches production in any case', () => {
+    delete process.env.AUTOTEL_REDACT_PII;
+    expect(resolveAttributeRedactor(undefined, 'Production')).toBe('default');
+    expect(resolveAttributeRedactor(undefined, 'PRODUCTION')).toBe('default');
+  });
+
   it('stays off in non-production environments', () => {
     delete process.env.AUTOTEL_REDACT_PII;
     expect(resolveAttributeRedactor(undefined, 'development')).toBeUndefined();
