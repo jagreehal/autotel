@@ -8,7 +8,10 @@ import {
 } from '@opentelemetry/sdk-trace-base';
 import { parseConfig, setConfig } from './config';
 import { logTemplate, LOG_FLOOD_EXCEPTION } from './console-signals';
+import { getExecutionLogger } from '../execution-logger';
+import { createTraceContext } from './trace-context';
 import {
+  createNativeSpanShim,
   createNativeTraceContext,
   runWithNativeTraceContext,
   type NativeSpanHandle,
@@ -80,6 +83,96 @@ describe('console.error capture', () => {
       'once',
     ]);
   });
+
+  it('log.error() reaches console.error but records its exception once', () => {
+    const error = new Error('handled');
+    const span = inSpan(() => getExecutionLogger().error(error));
+    expect(exceptions(span)).toHaveLength(1);
+    expect(errorSpy).toHaveBeenCalledWith(error);
+  });
+
+  it('log.error() under native tracing records natively and writes no console line', () => {
+    const recorded: unknown[] = [];
+    const handle: NativeSpanHandle = {
+      isTraced: true,
+      setAttribute() {},
+      setAttributes() {},
+      setStatus: vi.fn(),
+      recordException: (e) => recorded.push(e),
+      updateName() {},
+    };
+    errorSpy.mockClear();
+    const error = new Error('handled natively');
+    runWithNativeTraceContext(
+      createNativeTraceContext(handle, 'handler', 'ray-1'),
+      () => getExecutionLogger().error(error),
+    );
+    expect(recorded).toEqual([error]);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('log.error() falls back to console.error on a native span without recordException', () => {
+    const attributes: Record<string, unknown> = {};
+    const handle: NativeSpanHandle = {
+      isTraced: true,
+      setAttribute: (key, value) => {
+        attributes[key] = value;
+      },
+    };
+    errorSpy.mockClear();
+    const error = new Error('older runtime');
+    runWithNativeTraceContext(
+      createNativeTraceContext(handle, 'handler', 'ray-1'),
+      () => getExecutionLogger().error(error),
+    );
+    expect(attributes['exception.message']).toBe('older runtime');
+    expect(errorSpy).toHaveBeenCalledExactlyOnceWith(error);
+  });
+
+  it('log.error() on an explicit non-native target still writes console.error under native tracing', () => {
+    const handle: NativeSpanHandle = {
+      isTraced: true,
+      setAttribute() {},
+      recordException: vi.fn(),
+    };
+    errorSpy.mockClear();
+    const error = new Error('explicit target');
+    const span = inSpan(() => {
+      const otelTarget = createTraceContext(trace.getActiveSpan()!);
+      runWithNativeTraceContext(
+        createNativeTraceContext(handle, 'handler', 'ray-1'),
+        () => getExecutionLogger(otelTarget).error(error),
+      );
+    });
+    expect(exceptions(span)).toHaveLength(1);
+    expect(handle.recordException).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledExactlyOnceWith(error);
+  });
+
+  it.each([
+    ['records natively and writes no console line', true],
+    ['falls back to console.error without native recordException', false],
+  ])(
+    'log.error() on the OTel span shim of a native span %s',
+    (_label, hasRecordException) => {
+      const recorded: unknown[] = [];
+      const handle: NativeSpanHandle = {
+        isTraced: true,
+        setAttribute() {},
+        ...(hasRecordException
+          ? { recordException: (e: unknown) => recorded.push(e) }
+          : {}),
+      };
+      errorSpy.mockClear();
+      const error = new Error('via the shim');
+      const shim = createNativeSpanShim(handle, 'ray-1');
+      context.with(trace.setSpan(context.active(), shim), () =>
+        getExecutionLogger().error(error),
+      );
+      expect(recorded).toEqual(hasRecordException ? [error] : []);
+      expect(errorSpy).toHaveBeenCalledTimes(hasRecordException ? 0 : 1);
+    },
+  );
 
   it('respects captureConsoleErrors: false', () => {
     const span = inSpan(() => console.error('quiet'), {

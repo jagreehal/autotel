@@ -240,6 +240,15 @@ export const POST = withAutotel(async (request) => {
 ```
 
 ```typescript
+// Next.js server action: withAutotel is for route handlers
+import { withAutotelAction, useLogger } from 'autotel-adapters/next';
+
+export const save = withAutotelAction('save', async (formData: FormData) => {
+  useLogger().set({ 'item.id': formData.get('id') });
+});
+```
+
+```typescript
 // Hono (with autotel-hono middleware already creating spans)
 import { useLogger } from 'autotel-adapters/hono';
 

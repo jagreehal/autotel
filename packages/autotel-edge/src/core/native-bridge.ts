@@ -12,7 +12,7 @@
  * with {@link withNativeTracer}, and the functional API reads it back with
  * {@link getActiveNativeTracer}.
  *
- * Native span surfaces are thinner than OTel (no span ids, events or links on
+ * Native span surfaces are thinner than OTel (no events or links on
  * Cloudflare), so the adapters below degrade autotel's
  * richer `TraceContext` / OTel `Span` API gracefully. See the degradation map
  * in `docs/CLOUDFLARE-NATIVE-TRACING.md`.
@@ -43,10 +43,10 @@ export interface NativeSpanHandle {
   readonly isTraced: boolean;
   /** Set a single primitive attribute. `undefined` is a no-op. */
   setAttribute(key: string, value: string | number | boolean | undefined): void;
-  // Optional: present on newer Cloudflare runtimes only, and `setStatus` /
-  // `updateName` are not in Cloudflare's documented custom-span API at all.
-  // Every adapter below checks before calling and degrades to attributes, so
-  // a missing method can never turn a successful span into a TypeError.
+  // Optional: Cloudflare documents all of these (setStatus, updateName and
+  // spanContext since Oct 2026), but older runtimes and other platforms lack
+  // some. Every adapter below checks before calling and degrades to
+  // attributes, so a missing method can never turn a span into a TypeError.
   setAttributes?(
     attributes: Record<string, string | number | boolean | undefined>,
   ): void;
@@ -54,11 +54,8 @@ export interface NativeSpanHandle {
     code: 'unset' | 'ok' | 'error';
     message?: string;
   }): void;
-  recordException?(exception: {
-    name?: string;
-    message?: string;
-    stack?: string;
-  }): void;
+  /** Accepts OpenTelemetry's `Exception`: an Error, a string, or `{ code | name | message }`. */
+  recordException?(exception: Exception): void;
   updateName?(name: string): void;
   /**
    * End the span. Only spans from {@link NativeTracer.startSpan} /
@@ -66,10 +63,9 @@ export interface NativeSpanHandle {
    */
   end?(): void;
   /**
-   * Optional — not provided by Cloudflare today, but reserved so autotel
-   * auto-upgrades to real trace/span ids the moment the platform exposes them,
-   * with no API change. When present and valid, its ids take precedence over
-   * the fallback correlation id.
+   * The platform's real trace/span ids. When present and non-zero they take
+   * precedence over the fallback correlation id. Cloudflare's `traceFlags`
+   * does not reflect head sampling, so it must not seed a `traceparent`.
    */
   spanContext?(): SpanContext;
 }
@@ -112,8 +108,9 @@ interface ResolveSpanIdsResult {
 }
 
 /**
- * Resolve trace ids for a native span. Prefers real ids from a (future)
- * `spanContext()`; otherwise falls back to the supplied correlation id.
+ * Resolve trace ids for a native span. Prefers real ids from `spanContext()`
+ * (all zeros when the platform has observability off); otherwise falls back
+ * to the supplied correlation id.
  */
 function resolveSpanIds(
   span: NativeSpanHandle,
@@ -297,19 +294,17 @@ export function nativeRecordException(
   span: NativeSpanHandle,
   exception: Exception,
 ): void {
-  const error =
-    exception instanceof Error ? exception : new Error(String(exception));
-  if (typeof span.recordException !== 'function') {
-    span.setAttribute('exception.type', error.name);
-    span.setAttribute('exception.message', error.message);
-    span.setAttribute('exception.stacktrace', error.stack);
+  // Cloudflare takes the same shapes as OpenTelemetry (Error, string,
+  // `{ code | name | message }`), so the exception passes through as is.
+  if (typeof span.recordException === 'function') {
+    span.recordException(exception);
     return;
   }
-  span.recordException({
-    name: error.name,
-    message: error.message,
-    stack: error.stack,
-  });
+  const error =
+    exception instanceof Error ? exception : new Error(String(exception));
+  span.setAttribute('exception.type', error.name);
+  span.setAttribute('exception.message', error.message);
+  span.setAttribute('exception.stacktrace', error.stack);
 }
 
 function nativeUpdateName(span: NativeSpanHandle, name: string): void {
@@ -338,8 +333,8 @@ function nativeAddEvent(
  * Build an autotel {@link TraceContext} backed by a native span.
  *
  * Degradation (native surface is thinner than OTel):
- * - `traceId`/`spanId` → real ids when the platform exposes `spanContext()`
- *   (auto-upgrades in future), otherwise `''`.
+ * - `traceId`/`spanId` → real ids when the platform exposes `spanContext()`,
+ *   otherwise `''`.
  * - `correlationId` → real-id-derived when available, else the supplied
  *   `correlationId` (e.g. Cloudflare `cf-ray`). Also written as a
  *   `correlation.id` span attribute so it is queryable in the backend.
@@ -356,7 +351,7 @@ export function createNativeTraceContext(
   if (ids.correlationId) {
     span.setAttribute('correlation.id', ids.correlationId);
   }
-  return {
+  const ctx: TraceContext = {
     traceId: ids.traceId,
     spanId: ids.spanId,
     correlationId: ids.correlationId,
@@ -373,6 +368,30 @@ export function createNativeTraceContext(
     updateName: (newName) => nativeUpdateName(span, newName),
     isRecording: () => span.isTraced,
   };
+  if (typeof span.recordException === 'function') {
+    nativeExceptionTargets.add(ctx);
+  }
+  return ctx;
+}
+
+// Contexts and OTel span shims whose `recordException` reaches the platform.
+const nativeExceptionTargets = new WeakSet<object>();
+
+/**
+ * Whether `recordException` on this context or span reaches the platform as a
+ * real exception. False for non-native targets and for native spans without
+ * `recordException`, where the exception degrades to attributes.
+ */
+export function recordsNativeExceptions(target: TraceContext | Span): boolean {
+  return nativeExceptionTargets.has(target);
+}
+
+/** Carry a native span's exception capability to a context built from it. */
+export function inheritNativeExceptions(
+  from: TraceContext | Span,
+  to: TraceContext,
+): void {
+  if (nativeExceptionTargets.has(from)) nativeExceptionTargets.add(to);
 }
 
 /**
@@ -392,8 +411,8 @@ export function createNativeSpanShim(
   if (ids.correlationId) {
     span.setAttribute('correlation.id', ids.correlationId);
   }
-  // Prefer the platform's real span context when it becomes available;
-  // otherwise expose an invalid context (Cloudflare has no spanContext yet).
+  // The platform's real span context when it has one (Cloudflare since Oct
+  // 2026); otherwise an invalid context.
   const spanContext: SpanContext = span.spanContext?.() ?? INVALID_SPAN_CONTEXT;
   // SAFETY: the one assertion for this shim. Every method OpenTelemetry's Span
   // declares is implemented below, forwarding to the platform's native span;
@@ -429,5 +448,8 @@ export function createNativeSpanShim(
     isRecording: () => span.isTraced,
     recordException: (exception) => nativeRecordException(span, exception),
   } as Span;
+  if (typeof span.recordException === 'function') {
+    nativeExceptionTargets.add(shim);
+  }
   return shim;
 }

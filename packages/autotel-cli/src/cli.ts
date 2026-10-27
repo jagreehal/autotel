@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { VERSION } from './version';
 import type {
   InitOptions,
   DoctorOptions,
@@ -55,7 +56,7 @@ export function createProgram(): Command {
     .description(
       'CLI for autotel - setup wizard, diagnostics, and incremental features',
     )
-    .version('0.1.0');
+    .version(VERSION);
 
   // Global options
   const addGlobalOptions = (cmd: Command): Command => {

@@ -9,6 +9,7 @@ import type {
   SpanStatusCode,
   TimeInput,
 } from '@opentelemetry/api';
+import { inheritNativeExceptions } from './native-bridge';
 
 /**
  * WeakMap to store span names for active spans.
@@ -76,7 +77,7 @@ export type TraceContext = TraceContextBase & SpanMethods;
  */
 export function createTraceContext(span: Span): TraceContext {
   const spanContext = span.spanContext();
-  return {
+  const ctx: TraceContext = {
     traceId: spanContext.traceId,
     spanId: spanContext.spanId,
     correlationId: spanContext.traceId.slice(0, 16),
@@ -94,6 +95,9 @@ export function createTraceContext(span: Span): TraceContext {
     updateName: span.updateName.bind(span),
     isRecording: span.isRecording.bind(span),
   };
+  // A span backed by a native one keeps its exceptions on the platform.
+  inheritNativeExceptions(span, ctx);
+  return ctx;
 }
 
 /**

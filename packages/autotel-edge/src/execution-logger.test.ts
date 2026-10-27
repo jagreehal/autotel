@@ -105,6 +105,32 @@ describe('getExecutionLogger', () => {
     });
   });
 
+  it('writes a handled error to console.error once, without re-recording it', () => {
+    const ctx = createMockContext();
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const error = new Error('payment processor unavailable');
+
+    getExecutionLogger(ctx).error(error);
+
+    expect(consoleError).toHaveBeenCalledExactlyOnceWith(error);
+    expect(ctx.recordException).toHaveBeenCalledTimes(1);
+    consoleError.mockRestore();
+  });
+
+  it('copies plain objects and never merges __proto__ into Object.prototype', () => {
+    const log = getExecutionLogger(createMockContext());
+    const user = { id: 1 };
+    log.set({ user });
+    log.set({ user: { plan: 'pro' } });
+    log.set(JSON.parse('{"__proto__":{"polluted":true}}'));
+
+    expect(user).toEqual({ id: 1 });
+    expect(log.getContext()).toEqual({ user: { id: 1, plan: 'pro' } });
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
   it('returns accumulated context via getContext()', () => {
     const ctx = createMockContext();
     const log = getExecutionLogger(ctx);

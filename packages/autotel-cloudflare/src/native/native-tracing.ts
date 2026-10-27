@@ -31,7 +31,8 @@ import {
 /**
  * Cloudflare's native custom-span surface. Declared locally so we don't depend
  * on `@cloudflare/workers-types`. Older runtimes only have `isTraced` +
- * `setAttribute`; the rest (Sept 2026+) are picked up by the bridge when present.
+ * `setAttribute`; the rest (startSpan/startActiveSpan Sept 2026, spanContext /
+ * setStatus / updateName Oct 2026) are picked up by the bridge when present.
  */
 type CloudflareSpan = NativeSpanHandle;
 
@@ -74,7 +75,8 @@ export function isNativeTracingAvailable(ctx: unknown): boolean {
  * @param correlationId Optional per-request id (e.g. the `cf-ray` header)
  * surfaced as `ctx.correlationId` and a `correlation.id` span attribute, so
  * logs, custom spans, and the Cloudflare dashboard share one queryable key
- * today — before Cloudflare exposes in-code trace/span ids.
+ * on runtimes without `span.spanContext()`. Where it exists, the real trace id
+ * takes over.
  */
 export function getNativeTracerFromCtx(
   ctx: unknown,

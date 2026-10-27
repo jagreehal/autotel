@@ -157,6 +157,51 @@ describe('post-emit warnings', () => {
   });
 });
 
+describe('set() merge ownership', () => {
+  let log: ReturnType<typeof getRequestLogger>;
+
+  beforeEach(() => {
+    log = getRequestLogger(createMockContext());
+  });
+
+  it("copies a plain object instead of merging into the caller's", () => {
+    const user = { id: 1 };
+    log.set({ user });
+    log.set({ user: { plan: 'pro' } });
+
+    expect(user).toEqual({ id: 1 });
+    expect(log.getContext()).toEqual({ user: { id: 1, plan: 'pro' } });
+  });
+
+  it('replaces a non-plain object rather than merging into it', () => {
+    const when = new Date(0);
+    log.set({ when });
+    log.set({ when: { x: 1 } });
+
+    expect(Object.keys(when)).toEqual([]);
+    expect(log.getContext()).toEqual({ when: { x: 1 } });
+  });
+
+  it('cuts a cycle but keeps an object shared by two keys', () => {
+    const shared = { a: 1 };
+    const cyclic: Record<string, unknown> = { shared, again: shared };
+    cyclic.self = cyclic;
+    log.set({ cyclic });
+
+    expect(log.getContext()).toEqual({
+      cyclic: { shared: { a: 1 }, again: { a: 1 } },
+    });
+  });
+
+  it('never merges a __proto__ key into Object.prototype', () => {
+    log.set(JSON.parse('{"__proto__":{"polluted":true}}'));
+    log.set(JSON.parse('{"x":{"__proto__":{"polluted":true}}}'));
+
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(log.getContext()).toEqual({ x: {} });
+  });
+});
+
 describe('array concatenation in set()', () => {
   let ctx: TraceContext;
   let log: ReturnType<typeof getRequestLogger>;

@@ -1,5 +1,9 @@
 import type { UnknownRecord } from './values';
-import { getActiveNativeTraceContext } from './core/native-bridge';
+import {
+  getActiveNativeTraceContext,
+  recordsNativeExceptions,
+} from './core/native-bridge';
+import { runInternal } from './core/console-signals';
 import {
   asFunction,
   asRecord,
@@ -24,21 +28,40 @@ function warnPostEmit(method: string, detail: string): void {
   );
 }
 
-function mergeInto(target: UnknownRecord, source: UnknownRecord): void {
+function isPlainObject(value: unknown): value is UnknownRecord {
+  if (typeof value !== 'object' || value === null) return false;
+  const proto: unknown = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+// Plain objects are copied into the context, so a later set() cannot write
+// into an object the caller still holds; anything else (Date, class instance)
+// replaces rather than merges. `ancestors` cuts cycles while still copying an
+// object shared by two keys. `__proto__` is skipped: an own key in parsed
+// JSON, it would otherwise merge into Object.prototype.
+function mergeInto(
+  target: UnknownRecord,
+  source: UnknownRecord,
+  ancestors = new Set<object>(),
+): void {
+  ancestors.add(source);
   for (const key in source) {
+    if (key === '__proto__') continue;
     const sourceVal = source[key];
     if (sourceVal === undefined) continue;
     const targetVal = target[key];
-    const sourceRecord = asRecord(sourceVal);
-    const targetRecord = asRecord(targetVal);
-    if (sourceRecord && targetRecord) {
-      mergeInto(targetRecord, sourceRecord);
+    if (isPlainObject(sourceVal)) {
+      if (ancestors.has(sourceVal)) continue;
+      const into: UnknownRecord = isPlainObject(targetVal) ? targetVal : {};
+      target[key] = into;
+      mergeInto(into, sourceVal, ancestors);
     } else if (Array.isArray(targetVal) && Array.isArray(sourceVal)) {
       target[key] = [...targetVal, ...sourceVal];
     } else {
       target[key] = sourceVal;
     }
   }
+  ancestors.delete(source);
 }
 
 function generateCorrelationId(): string {
@@ -298,6 +321,13 @@ export function getExecutionLogger(
       }
 
       activeContext.setAttribute('autotel.log.level', 'error');
+      // Workers Issues reads a native span's exception, or else a
+      // `console.error` with an Error. Write the console line only when the
+      // span could not record the exception natively, so one error is one
+      // issue. Internal, so the console hook records nothing extra.
+      if (!recordsNativeExceptions(activeContext)) {
+        runInternal(() => console.error(err));
+      }
     },
 
     getContext() {

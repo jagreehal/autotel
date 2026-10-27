@@ -33,6 +33,8 @@ export interface EnricherOptions {
 
 function mergeInto(target: UnknownRecord, source: UnknownRecord): void {
   for (const key in source) {
+    // An own key in parsed JSON; merging it would reach Object.prototype.
+    if (key === '__proto__') continue;
     const sourceVal = source[key];
     if (sourceVal === undefined) continue;
     const sourceRecord = asRecord(sourceVal);

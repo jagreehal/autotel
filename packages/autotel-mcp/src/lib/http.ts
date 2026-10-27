@@ -6,8 +6,10 @@
 // hosted vendor read APIs do so aggressively — on the order of ten queries a
 // minute — and an investigation naturally fires bursts. Retrying 429 here means
 // a rate limit shows up as a slightly slower answer rather than a failed
-// investigation. Nothing else is retried: a 500 or a 404 is the caller's to
-// report, and silently repeating a non-idempotent failure would be worse.
+// investigation. 408 is retried too: the server timed out waiting for the
+// request, so it never ran. Nothing else is retried: a 500 or a 404 is the
+// caller's to report, and silently repeating a non-idempotent failure would be
+// worse.
 
 const MAX_ATTEMPTS = 3;
 const BASE_BACKOFF_MS = 500;
@@ -43,7 +45,8 @@ async function fetchWithRetry(
   let response = await fetch(url, init);
   for (
     let attempt = 0;
-    response.status === 429 && attempt < MAX_ATTEMPTS - 1;
+    (response.status === 429 || response.status === 408) &&
+    attempt < MAX_ATTEMPTS - 1;
     attempt++
   ) {
     await sleep(retryDelayMs(response, attempt));

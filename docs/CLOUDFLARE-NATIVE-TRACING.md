@@ -69,7 +69,7 @@ See the package README.
 - One `trace()` / `span()` API that runs on Workers, Node, Deno, Bun and in
   tests, choosing native or OTLP per invocation.
 - The request logger / wide events, typed attributes, sampling, subscribers
-  (product events), and `correlation.id` (`cf-ray`) on every custom span.
+  (product events), and `correlation.id` on every custom span.
 - **Distributed traces.** Set `nativeTracing: 'off'` when a Worker joins
   traces with services outside Cloudflare. autotel's OTLP mode reads and writes
   `traceparent` itself. Checked 2026-10-04 on a `workers.dev` Worker: native
@@ -125,6 +125,33 @@ The token needs Account Analytics Read. Cloudflare writes `cloudflare.ray_id`
 on the root invocation span, and autotel writes the same value as
 `correlation.id` on custom spans.
 
+## Workers Issues
+
+[Workers Issues](https://developers.cloudflare.com/workers/observability/issues/)
+groups a Worker's failures without an SDK: uncaught exceptions, failed
+invocations, `5xx` responses, `console.error` lines carrying an `Error`, and
+(checked live on 2026-10-27) exceptions recorded on a native span. Turn it on
+with `observability.issues.enabled = true` in Wrangler (4.134.0+), and upload
+source maps (`upload_source_maps = true`) so stacks point at your source
+rather than the bundle. List what it found with
+`cf observability issues list --service <worker>`.
+
+autotel feeds it in two ways:
+
+- **Handled errors.** `log.error(err)` makes an error you catch and answer
+  with a fallback response an occurrence. Under native tracing the exception
+  it records on the span is enough. When the logger's span cannot record it
+  natively (OTLP mode, traces off, an older runtime without
+  `recordException`) it also writes `console.error(err)`, the only path in
+  there. It never does both, which would group one error as two issues.
+- **Application context.** Each occurrence shows the attributes on the active
+  span. `log.set({ 'user.id': ..., 'session.id': ... })` early in the handler
+  writes them there (`user.id` shows as the occurrence's user). Native tracing
+  must be on for this part. Issue data is sent to whatever destination an
+  automation names (chat, a coding agent).
+  Native spans skip autotel's processors, so nothing redacts them: keep
+  secrets and tokens out of attributes and error messages.
+
 ## Backends are fully configurable
 
 - **Native on** → backend is whatever you configure in `wrangler`
@@ -159,9 +186,9 @@ For a remote shared devtools instance, point `exporter` at the
 
 The bridge calls each span method only when the runtime has it.
 Cloudflare documents `setAttribute`, `setAttributes`, `recordException`,
-`isTraced` and `end`; some runtimes also expose `setStatus` and `updateName`.
-Anything missing degrades to attributes, so a span never throws for lack of
-a method:
+`isTraced` and `end`, plus `spanContext`, `setStatus` and `updateName` since
+26 October 2026. On an older runtime anything missing degrades to attributes,
+so a span never throws for lack of a method:
 
 | autotel API                | Native behaviour                                                                                                                           |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -169,21 +196,24 @@ a method:
 | `setAttributes` (bulk)     | native `setAttributes` (objects JSON-stringified); looped `setAttribute` when absent                                                       |
 | `isRecording()`            | native `isTraced`                                                                                                                          |
 | `setStatus` / thrown error | native `setStatus` when present, else `otel.status_code` / `error` attributes; the original error rethrows                                 |
-| `recordException(e)`       | native `recordException` (name, message, stack as a span event), else `exception.*` attributes                                             |
+| `recordException(e)`       | native `recordException` (an Error, a string or a `{ code, message }` object, as a span event), else `exception.*` attributes              |
 | `updateName`               | native `updateName` when present, else a no-op                                                                                             |
 | `addEvent(name, attrs)`    | `console.log(name, attrs)` (Cloudflare attributes console output to the span)                                                              |
-| `correlationId`            | the `cf-ray` id (fallback uuid for non-fetch triggers), also written as a `correlation.id` span attribute: a real, queryable key **today** |
-| `traceId` / `spanId`       | `''` until Cloudflare exposes `spanContext()`; **auto-upgrades** to real ids with no API change once it does                               |
+| `traceId` / `spanId`       | native `spanContext()` ids, the same ones Workers Observability and OTLP exports show; `''` on older runtimes or with observability off    |
+| `correlationId`            | the first 16 hex of the trace id; on older runtimes the `cf-ray` id (uuid for non-fetch triggers). Written as a `correlation.id` attribute |
 | `addLink` / `addLinks`     | no-op                                                                                                                                      |
 
-> **Correlation today, real ids tomorrow.** Cloudflare's actual trace/span ids
-> aren't readable in-code yet, so `ctx.traceId`/`spanId` are `''` under native.
-> But autotel surfaces `ctx.correlationId` from the `cf-ray` id and writes it as
-> a `correlation.id` attribute on every custom span: the same id the Workers
-> logger and the Cloudflare dashboard use: so you get queryable log↔trace
-> correlation right now. The bridge also reads `span.spanContext()` if the
-> platform ever provides it, so `traceId`/`spanId` light up automatically the
-> day Cloudflare ships span identifiers: no code change on your side.
+> **Real ids.** `ctx.traceId` / `ctx.spanId` come from `span.spanContext()`,
+> so you can log the trace id or return it to a client and find the same
+> trace in Workers Observability. The trace id also matches the invocation's
+> Workers Logs when traces are off or the request was not sampled (no spans
+> are stored then). Observability off returns zeros, and autotel falls back to
+> the `cf-ray` correlation id as it does on runtimes without `spanContext()`.
+>
+> Native mode still writes no `traceparent`: Cloudflare's `traceFlags` does not
+> say whether the request was sampled, and Cloudflare advises against building
+> a `traceparent` from it. Use `nativeTracing: 'off'` to join traces with
+> services outside Cloudflare.
 
 ## Architecture
 
