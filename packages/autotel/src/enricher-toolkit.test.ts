@@ -18,6 +18,17 @@ describe('defineEnricher', () => {
     expect(ctx.event).toEqual({ tenant: { id: 't_1', plan: 'pro' } });
   });
 
+  it('never merges a __proto__ key into Object.prototype', () => {
+    const enricher = defineEnricher({
+      name: 'parsed-enricher',
+      field: 'tenant',
+      compute: () => JSON.parse('{"__proto__":{"polluted":true}}'),
+    });
+
+    enricher({ event: { tenant: { id: 't_1' } } });
+    expect(({} as UnknownRecord).polluted).toBeUndefined();
+  });
+
   it('overwrites field when overwrite=true', () => {
     const enricher = defineEnricher(
       {

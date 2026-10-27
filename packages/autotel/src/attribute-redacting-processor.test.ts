@@ -701,6 +701,36 @@ describe('REDACTOR_PRESETS', () => {
   });
 });
 
+describe('built-in value masking', () => {
+  const redact = createAttributeRedactor('strict');
+
+  it('masks a spaced IBAN whole instead of as a card number', () => {
+    expect(redact('note', 'IBAN DE89 3704 0044 0532 0130 00')).toBe(
+      'IBAN DE89****000',
+    );
+  });
+
+  it('leaves a pnpm store path alone', () => {
+    const path = 'node_modules/.pnpm/foo@1.2.3/node_modules/foo';
+    expect(redact('code.filepath', path)).toBe(path);
+  });
+
+  it.each([
+    ['user@example.com_x', 'u***@***.com_x'],
+    ['user@example.com1', 'u***@***.com1'],
+    [`${'x'.repeat(80)}@example.com`, 'x***@***.com'],
+  ])('masks the whole address in %s', (input, masked) => {
+    expect(redact('note', input)).toBe(masked);
+  });
+
+  it('stays linear on long inputs that almost match', () => {
+    const started = performance.now();
+    redact('body', 'a'.repeat(50_000));
+    redact('body', 'eyJ-'.repeat(12_500));
+    expect(performance.now() - started).toBeLessThan(200);
+  });
+});
+
 describe('edge cases', () => {
   let mockProcessor: MockSpanProcessor;
 

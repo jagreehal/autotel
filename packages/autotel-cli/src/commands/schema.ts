@@ -1,6 +1,3 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { configureJsonOutput, printJson } from '../lib/json-output';
 import {
   COMMANDS,
@@ -9,6 +6,7 @@ import {
   type CommandSpec,
 } from '../lib/manifest';
 import { AutotelError, AutotelErrorCodes } from '../lib/errors';
+import { VERSION } from '../version';
 
 interface SchemaCommonOptions {
   outputFile?: string;
@@ -22,32 +20,13 @@ function configure(opts: SchemaCommonOptions): void {
   });
 }
 
-function readSelfVersion(): string {
-  try {
-    // dist/index.js → walks up to package root
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    let dir = here;
-    for (let i = 0; i < 5; i++) {
-      const candidate = path.join(dir, 'package.json');
-      if (fs.existsSync(candidate)) {
-        const pkg = JSON.parse(fs.readFileSync(candidate, 'utf8'));
-        if (pkg.name === 'autotel-cli') return String(pkg.version ?? '0.0.0');
-      }
-      dir = path.dirname(dir);
-    }
-  } catch {
-    // fall through
-  }
-  return '0.0.0';
-}
-
 /** `autotel schema [--json]` — full manifest. */
 export function runSchema(opts: SchemaCommonOptions): void {
   configure(opts);
   printJson({
     ok: true,
     command: 'autotel schema',
-    version: readSelfVersion(),
+    version: VERSION,
     commands: COMMANDS,
   });
 }
@@ -180,7 +159,7 @@ export function runVersion(opts: SchemaCommonOptions): void {
   printJson({
     ok: true,
     command: 'autotel version',
-    version: readSelfVersion(),
+    version: VERSION,
     node: process.version,
     platform: process.platform,
     arch: process.arch,

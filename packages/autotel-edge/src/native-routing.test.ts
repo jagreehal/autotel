@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getExecutionLogger } from './execution-logger';
 import { context as api_context } from '@opentelemetry/api';
-import type { Attributes } from '@opentelemetry/api';
+import type { Attributes, Exception } from '@opentelemetry/api';
 import {
   trace,
   withTracing,
@@ -21,7 +21,7 @@ interface RecordedSpan {
   name: string;
   attributes: Attributes;
   status?: { code: string; message?: string };
-  exceptions: { name?: string; message?: string }[];
+  exceptions: Exception[];
 }
 
 function recordingTracer(): NativeTracer & { spans: RecordedSpan[] } {

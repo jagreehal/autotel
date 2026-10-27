@@ -7,7 +7,7 @@ import { recordStructuredError } from './structured-error';
 import { flattenToAttributes } from './flatten-attributes';
 import { emitCorrelatedEvent } from './correlated-events';
 import type { UnknownRecord } from './values';
-import { asRecord, nonEmptyString, toError } from './values';
+import { nonEmptyString, toError } from './values';
 
 const POST_EMIT_FORK_HINT =
   "For intentional background work tied to this request, use log.fork('label', fn) when available.";
@@ -18,21 +18,40 @@ function warnPostEmit(method: string, detail: string): void {
   );
 }
 
-function mergeInto(target: UnknownRecord, source: UnknownRecord): void {
+function isPlainObject(value: unknown): value is UnknownRecord {
+  if (typeof value !== 'object' || value === null) return false;
+  const proto: unknown = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+// Plain objects are copied into the context, so a later set() cannot write
+// into an object the caller still holds; anything else (Date, class instance)
+// replaces rather than merges. `ancestors` cuts cycles while still copying an
+// object shared by two keys. `__proto__` is skipped: an own key in parsed
+// JSON, it would otherwise merge into Object.prototype.
+function mergeInto(
+  target: UnknownRecord,
+  source: UnknownRecord,
+  ancestors = new Set<object>(),
+): void {
+  ancestors.add(source);
   for (const key in source) {
+    if (key === '__proto__') continue;
     const sourceVal = source[key];
     if (sourceVal === undefined) continue;
     const targetVal = target[key];
-    const sourceRecord = asRecord(sourceVal);
-    const targetRecord = asRecord(targetVal);
-    if (sourceRecord && targetRecord) {
-      mergeInto(targetRecord, sourceRecord);
+    if (isPlainObject(sourceVal)) {
+      if (ancestors.has(sourceVal)) continue;
+      const into: UnknownRecord = isPlainObject(targetVal) ? targetVal : {};
+      target[key] = into;
+      mergeInto(into, sourceVal, ancestors);
     } else if (Array.isArray(targetVal) && Array.isArray(sourceVal)) {
       target[key] = [...targetVal, ...sourceVal];
     } else {
       target[key] = sourceVal;
     }
   }
+  ancestors.delete(source);
 }
 
 const requestContextStore =

@@ -152,9 +152,12 @@ export const REDACTOR_PATTERNS = {
     /^(password|passwd|pwd|secret|token|api[_-]?key|auth|credential|private[_-]?key|authorization)$/i,
 } as const;
 
+const MASK_FIRST = new Set<string>(['bearer', 'iban']);
+
 /**
  * Built-in PII detection patterns with smart masking.
  * Each builtin preserves just enough signal for debugging while scrubbing PII.
+ * They run on every string attribute, so each must stay linear in the input length.
  */
 export const builtinPatterns = {
   /** Credit card numbers → ****1111 (PCI DSS: last 4 allowed) */
@@ -164,7 +167,11 @@ export const builtinPatterns = {
   },
   /** Email addresses → a***@***.com */
   email: {
-    pattern: /[\w.+-]+@[\w-]+\.[\w.]+/g,
+    // A match starts only where a run of local-part characters starts, so no
+    // run is rescanned and an overlong local part masks whole. Letters-only
+    // TLD, so pnpm store segments like `name@1.2.3` are not addresses.
+    pattern:
+      /(?<![\w.+-])[\w.+-]+@[\w-]{1,63}(?:\.[\w-]{1,63})*\.[a-zA-Z]{2,63}(?![a-zA-Z])/g,
     mask: (m: string) => {
       const at = m.indexOf('@');
       if (at < 1) return '***@***';
@@ -207,7 +214,9 @@ export const builtinPatterns = {
   },
   /** JWT tokens → eyJ***.*** */
   jwt: {
-    pattern: /\beyJ[\w-]*\.[\w-]*\.[\w-]*\b/g,
+    // The header stops at the next `-eyJ`, where another match could start,
+    // so no start position rescans it.
+    pattern: /\beyJ(?:(?!-eyJ)[\w-])*\.[\w-]*\.[\w-]*\b/g,
     mask: () => 'eyJ***.***',
   },
   /** Bearer tokens → Bearer *** */
@@ -483,9 +492,14 @@ function createRedactorFromConfig(
   const customPatterns = config.patterns ?? [];
   const defaultReplacement = config.replacement ?? '[REDACTED]';
 
-  // Build masker list from valuePatterns that have mask functions
+  // Build masker list from valuePatterns that have mask functions. Bearer and
+  // IBAN mask first, whole, before the card and JWT patterns see parts of
+  // them. The sort is stable, so the rest keep their order.
   const maskers: [RegExp, MaskFn][] = valuePatterns
     .filter((vp) => vp.mask)
+    .toSorted(
+      (a, b) => Number(MASK_FIRST.has(b.name)) - Number(MASK_FIRST.has(a.name)),
+    )
     .map((vp) => [cloneRegex(vp.pattern), vp.mask!]);
 
   return (

@@ -112,9 +112,24 @@ export const POST = withAutotel(async (request: Request) => {
 });
 ```
 
+`withAutotel()` is for route handlers: it reads its first argument as the
+request. A server action has no request (its first argument is its form data
+or its own argument), so wrap it with `withAutotelAction()` instead. The span
+is `action.<name>`, the wide event carries no HTTP fields, and `useLogger()`
+works inside:
+
+```ts
+'use server';
+import { withAutotelAction, useLogger } from 'autotel-adapters/next';
+
+export const save = withAutotelAction('save', async (formData: FormData) => {
+  useLogger().set({ 'item.id': formData.get('id') });
+});
+```
+
 Navigation helpers such as `redirect()` and `notFound()` remain framework
-control flow: `withAutotel()` rethrows their signals without recording a
-phantom request error, including when a signal is wrapped in `cause`.
+control flow: both wrappers rethrow their signals without recording a
+phantom error, including when a signal is wrapped in `cause`.
 
 ### `next.config`: one `@opentelemetry/api`
 

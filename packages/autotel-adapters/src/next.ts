@@ -2,6 +2,8 @@ import {
   createDrainPipeline,
   parseError,
   createStructuredError,
+  getRequestLogger,
+  trace,
   type RequestLogger,
   type RequestLoggerOptions,
 } from 'autotel';
@@ -111,6 +113,18 @@ const integration = defineFrameworkIntegration<NextRequestLike | undefined>({
   attachLogger: () => {},
 });
 
+// A server action's first argument is its form data or its own argument, so
+// only something with a URL and headers is read as the request. FormData has
+// a `get()` too, and would otherwise answer the `x-request-id` lookup.
+function asRequest(value: unknown): NextRequestLike | undefined {
+  return typeof value === 'object' &&
+    value !== null &&
+    'url' in value &&
+    'headers' in value
+    ? (value as NextRequestLike)
+    : undefined;
+}
+
 function resolveSpanName(
   request: NextRequestLike | undefined,
   options?: NextWithAutotelOptions,
@@ -121,12 +135,16 @@ function resolveSpanName(
   return options?.spanName;
 }
 
+/**
+ * Trace a route handler. Its first argument is read as the request. For a
+ * server action use {@link withAutotelAction}: it has no request.
+ */
 export function withAutotel<TArgs extends unknown[], TReturn>(
   handler: (...args: TArgs) => TReturn | Promise<TReturn>,
   options?: NextWithAutotelOptions,
 ): (...args: TArgs) => Promise<TReturn> {
   return async (...args: TArgs): Promise<TReturn> => {
-    const request = args[0] as NextRequestLike | undefined;
+    const request = asRequest(args[0]);
     const tracedOptions = buildTracedOptions(
       options,
       resolveSpanName(request, options),
@@ -156,6 +174,47 @@ export function withAutotel<TArgs extends unknown[], TReturn>(
       { isError: isRealNextError },
     );
   };
+}
+
+/**
+ * Trace a server action: span `action.<name>`, no HTTP attributes (an action
+ * has no request of its own), `useLogger()` inside it, and one wide event
+ * when it settles. `redirect()` and `notFound()` pass through as non-errors.
+ *
+ * @example
+ * ```ts
+ * 'use server';
+ * export const save = withAutotelAction('save', async (formData: FormData) => {
+ *   useLogger().set({ 'item.id': formData.get('id') });
+ * });
+ * ```
+ */
+export function withAutotelAction<TArgs extends unknown[], TReturn>(
+  name: string,
+  action: (...args: TArgs) => TReturn | Promise<TReturn>,
+  options?: { requestLoggerOptions?: RequestLoggerOptions },
+): (...args: TArgs) => Promise<TReturn> {
+  return (...args: TArgs): Promise<TReturn> =>
+    trace.run(
+      { name: `action.${name}`, isError: isRealNextError },
+      async (ctx) => {
+        const log = getRequestLogger(ctx, options?.requestLoggerOptions);
+        const startedAt = Date.now();
+        try {
+          return await nextLoggerStorage.run(log, async () => action(...args));
+        } catch (error) {
+          const signal = findNextControlFlowSignal(error);
+          if (!signal) {
+            const err =
+              error instanceof Error ? error : new Error(String(error));
+            log.error(err, { error_message: err.message });
+          }
+          throw signal ?? error;
+        } finally {
+          log.emitNow({ duration_ms: Date.now() - startedAt });
+        }
+      },
+    );
 }
 
 export { parseError, createDrainPipeline, createStructuredError };

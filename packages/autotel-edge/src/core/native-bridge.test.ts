@@ -104,8 +104,7 @@ describe('native-bridge: createNativeTraceContext', () => {
     expect(span.attributes['correlation.id']).toBe('ray-abc123');
   });
 
-  it('auto-upgrades to real trace/span ids when the platform exposes spanContext()', () => {
-    // Forward-compat: simulate a future Cloudflare span exposing spanContext().
+  it('uses real trace/span ids when the platform exposes spanContext()', () => {
     const base = fakeSpan();
     const span = Object.assign(base, {
       spanContext: () => ({
@@ -119,6 +118,41 @@ describe('native-bridge: createNativeTraceContext', () => {
     expect(ctx.traceId).toBe('abcdef0123456789abcdef0123456789');
     expect(ctx.spanId).toBe('0123456789abcdef');
     expect(ctx.correlationId).toBe('abcdef0123456789'); // first 16 of traceId
+    expect(createNativeSpanShim(span).spanContext().spanId).toBe(
+      '0123456789abcdef',
+    );
+  });
+
+  it('falls back to the correlation id when spanContext() is all zeros', () => {
+    // Cloudflare returns zero ids when observability is off for the Worker.
+    const span = Object.assign(fakeSpan(), {
+      spanContext: () => ({
+        traceId: '00000000000000000000000000000000',
+        spanId: '0000000000000000',
+        traceFlags: 0,
+      }),
+    });
+    const ctx = createNativeTraceContext(span, 'work', 'ray-abc123');
+    expect(ctx.traceId).toBe('');
+    expect(ctx.correlationId).toBe('ray-abc123');
+  });
+
+  it('passes a string or a coded exception through to native recordException', () => {
+    const span = fakeSpan();
+    const shim = createNativeSpanShim(span);
+    shim.recordException('upstream returned an empty body');
+    shim.recordException({
+      code: 'RATE_LIMITED',
+      message: 'Too many requests',
+    });
+    expect(span.recordException).toHaveBeenNthCalledWith(
+      1,
+      'upstream returned an empty body',
+    );
+    expect(span.recordException).toHaveBeenNthCalledWith(2, {
+      code: 'RATE_LIMITED',
+      message: 'Too many requests',
+    });
   });
 
   it('mirrors isRecording from isTraced', () => {

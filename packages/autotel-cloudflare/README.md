@@ -38,7 +38,7 @@ Cloudflare Workers ship [native tracing](https://developers.cloudflare.com/worke
 enabled = true
 ```
 
-When native tracing is active, autotel **defers to the platform**: it does not proxy-instrument bindings (no duplicate spans) and does not run its own exporter. It routes your custom spans to `tracing.enterSpan()` and surfaces the `cf-ray` id as `ctx.correlationId` + a `correlation.id` span attribute. Controlled by `nativeTracing: 'auto' | 'on' | 'off'` (default `'auto'`).
+When native tracing is active, autotel **defers to the platform**: it does not proxy-instrument bindings (no duplicate spans) and does not run its own exporter. It routes your custom spans to `tracing.enterSpan()` and exposes Cloudflare's real trace and span ids as `ctx.traceId` / `ctx.spanId` (from `span.spanContext()`), with the `cf-ray` id as the `ctx.correlationId` fallback on older runtimes. Controlled by `nativeTracing: 'auto' | 'on' | 'off'` (default `'auto'`).
 
 In both modes autotel also records the issue signals Workers Issues derives from logs, as span exceptions: `console.error(...)` (status untouched, `captureConsoleErrors: false` to opt out), `autotel.LogFlood` for logging in a loop (`logFloodThreshold`, default `100`), and `autotel.RunawayAlarm` when a Durable Object's `alarm()` runs more than 10 times in 60s (`runawayAlarm: { maxRuns, windowMs }` or `false`).
 
