@@ -32,7 +32,7 @@ Event guidance: for new instrumentation, emit events as correlated logs (via req
 
 Request logger requires an active span. Wrap HTTP handlers with `trace()` or framework middleware that creates a span, then call `getRequestLogger()` inside.
 
-`processHandlers` is opt-in: importing `autotel` registers no signal or crash listeners. Pass `true` for the defaults (SIGTERM/SIGINT plus fatal errors, 2s shutdown timeout), or an object to override `signals`, `fatalErrors`, or `shutdownTimeoutMs`. Leave it off and call `shutdown()` from your own handler when the app already owns its lifecycle. Separately, `flushOnExit` (default `true`) flushes on `beforeExit`, so a script that ends on its own keeps its telemetry; it does not fire on `process.exit()` or a signal.
+`processHandlers` is opt-in: importing `autotel` registers no signal or crash listeners. Pass `true` for the defaults (SIGTERM/SIGINT plus fatal errors, 2s shutdown timeout), or an object to override `signals`, `fatalErrors`, or `shutdownTimeoutMs`. On a signal or crash, the handlers end the spans still running as failed (`error.type` is the signal or the error's class), so a stopped job exports its whole trace. Leave it off and call `shutdown()` from your own handler when the app already owns its lifecycle. Separately, `flushOnExit` (default `true`) flushes on `beforeExit`, so a script that ends on its own keeps its telemetry; it does not fire on `process.exit()` or a signal.
 
 Backend config rule of thumb: use `endpoint` for one OTLP destination, `destinations` for explicit OTLP fan-out, and `spanProcessors` / `spanExporters` only when you need full manual control.
 
@@ -60,7 +60,7 @@ init({
 - **`protocol`**: `'http'` (OTLP/HTTP with a JSON body, the default), `'http/protobuf'` or `'grpc'`. The last two need the matching `@opentelemetry/exporter-*-otlp-proto` / `-grpc` packages in your app. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL`.
 - **`sampling`**: set it. Without `sampling` or `sampler`, wrapped functions keep every span. See `tune-sampling`.
 - **`logs`**: off by default. `logs: true` (or `AUTOTEL_LOGS=on`) exports OTel log records to the same endpoint; the HTTP/JSON log exporter ships with autotel.
-- **Shutdown**: `await flush()` exports what is buffered (2s timeout by default); `await shutdown()` flushes and stops the SDK. Both come from `autotel`.
+- **Shutdown**: `await flush()` exports what is buffered (2s timeout by default); `await shutdown()` flushes and stops the SDK, waiting up to 10s (the top-level `init({ shutdownTimeoutMs })` or `shutdown({ timeout })` changes it). Both come from `autotel`.
 - **`init()` throws** on an unknown `sampling` preset, an invalid `attributeRedactor` config, `devtools: { embedded: true, port: 0 }`, and an `sdkFactory` that returns nothing. Calling `init()` again warns, shuts the previous pipeline down and starts the new config; `trace()` wrappers, tracers from `getTracer()` and the earlier call's instrumentations follow it. `init()` after `shutdown()` starts a fresh pipeline without a warning. `lockLogger()` makes later calls no-ops.
 
 ## Setup

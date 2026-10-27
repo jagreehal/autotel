@@ -352,6 +352,47 @@ describe('shutdown module', () => {
       await expect(shutdown()).resolves.toBeUndefined();
     });
 
+    it('stops waiting for an SDK shutdown that hangs, and still cleans up', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const sdkShutdown = vi.fn(() => new Promise<void>(() => {}));
+      init({
+        service: 'test-service',
+        subscribers: [mockAdapter],
+        sdkFactory: () =>
+          sdkDouble({
+            start: vi.fn(),
+            shutdown: sdkShutdown,
+            getTracerProvider: () => {},
+          }),
+      });
+
+      const started = Date.now();
+      await expect(shutdown({ timeout: 50 })).resolves.toBeUndefined();
+      expect(Date.now() - started).toBeLessThan(1000);
+      expect(sdkShutdown).toHaveBeenCalledOnce();
+      expect(getEventQueue()).toBeNull();
+      warn.mockRestore();
+    });
+
+    it('takes its time limit from init({ shutdownTimeoutMs })', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      init({
+        service: 'test-service',
+        shutdownTimeoutMs: 50,
+        sdkFactory: () =>
+          sdkDouble({
+            start: vi.fn(),
+            shutdown: () => new Promise<void>(() => {}),
+            getTracerProvider: () => {},
+          }),
+      });
+
+      const started = Date.now();
+      await expect(shutdown()).resolves.toBeUndefined();
+      expect(Date.now() - started).toBeLessThan(1000);
+      warn.mockRestore();
+    });
+
     it('should close embedded devtools during shutdown', async () => {
       const close = vi.fn().mockResolvedValue(undefined);
       _setOptionalRequireForTesting((id: string) => {

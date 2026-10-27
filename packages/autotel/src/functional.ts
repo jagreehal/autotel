@@ -51,9 +51,12 @@ import {
 } from './trace-context';
 import { runInOperationContext } from './operation-context';
 import { flattenToAttributes } from './flatten-attributes';
+import { withEnvParent } from './env-trace-context';
 import {
+  getLocalRootSpanIn,
   getRequestSpanIn,
   rememberRequestAttributes,
+  withLocalRoot,
 } from './request-attributes';
 import {
   FUNCTIONAL_ERROR_MESSAGE_LIMIT,
@@ -292,7 +295,9 @@ export const ctx = createCtxProxy(getCtxValue);
  * plan) belong on the request span, which is what a backend shows as the
  * resource and what a canonical log line is built from.
  *
- * Falls back to the active span outside a request, and no-ops when nothing is
+ * Outside a request (a batch job, a queue consumer, a cron) it aims at the
+ * local root `trace()` started, so a helper deep in the job tags the job span.
+ * Failing that it falls back to the active span, and no-ops when nothing is
  * active at all, exactly as `ctx` does.
  *
  * @example
@@ -304,7 +309,8 @@ export const ctx = createCtxProxy(getCtxValue);
  * ```
  */
 export const requestCtx: TraceContext = createCtxProxy(() => {
-  const span = getRequestSpanIn() ?? otelTrace.getActiveSpan();
+  const span =
+    getRequestSpanIn() ?? getLocalRootSpanIn() ?? otelTrace.getActiveSpan();
   if (!span) return null;
   const traceCtx = createTraceContext(span);
   // Also remembered for the spans started under it afterwards (see
@@ -878,7 +884,7 @@ export function span<T = unknown>(
     });
   };
 
-  const parentContext = getActiveContextWithBaggage();
+  const parentContext = withEnvParent(getActiveContextWithBaggage());
   const result = tracer.startActiveSpan(
     name,
     spanKind === undefined ? {} : { kind: spanKind },
@@ -934,7 +940,11 @@ export async function withNewContext<T = unknown>(
   // Start a new root span (breaks trace propagation)
   return tracer.startActiveSpan('root', { root: true }, async (span) => {
     try {
-      const result = await fn();
+      // The new trace's own root, so `requestCtx` inside it tags this trace.
+      const result = await context.with(
+        withLocalRoot(context.active(), span),
+        fn,
+      );
       markSpanOk(span);
       return result;
     } catch (error) {

@@ -14,6 +14,7 @@ import { OTLPMetricExporter as OTLPMetricExporterHTTP } from '@opentelemetry/exp
 import { OTLPTraceExporter as OTLPTraceExporterHTTP } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPLogExporter as OTLPLogExporterHTTP } from '@opentelemetry/exporter-logs-otlp-http';
 import { requireModule } from './node-require';
+import { AggregationTemporalityPreference } from '@opentelemetry/exporter-metrics-otlp-http';
 
 /** The shape every OTLP exporter constructor accepts. */
 export type OTLPExporterConfig = {
@@ -22,6 +23,27 @@ export type OTLPExporterConfig = {
   timeoutMillis?: number;
   concurrencyLimit?: number;
 };
+
+/**
+ * Delta for Datadog's direct OTLP intake, which drops cumulative sums and
+ * histograms, unless OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE says
+ * otherwise. Undefined (the exporter's own default) for every other endpoint,
+ * the Datadog Agent included.
+ */
+export function metricTemporalityFor(
+  endpoint: string,
+): AggregationTemporalityPreference | undefined {
+  if (process.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE) return;
+  let host: string;
+  try {
+    host = new URL(endpoint).hostname;
+  } catch {
+    return;
+  }
+  return /(^|\.)(datadoghq\.(com|eu)|ddog-gov\.com)$/.test(host)
+    ? AggregationTemporalityPreference.DELTA
+    : undefined;
+}
 
 export type OtlpSignal = 'traces' | 'metrics' | 'logs';
 
@@ -171,7 +193,9 @@ export function createTraceExporter(
  */
 export function createMetricExporter(
   protocol: AutotelProtocol,
-  config: OTLPExporterConfig,
+  config: OTLPExporterConfig & {
+    temporalityPreference?: AggregationTemporalityPreference;
+  },
 ): PushMetricExporter {
   if (protocol === 'grpc') {
     const Exporter = loadGRPCMetricExporter();

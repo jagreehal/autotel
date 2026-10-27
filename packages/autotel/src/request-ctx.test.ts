@@ -112,6 +112,45 @@ describe('requestCtx', () => {
     expect(spans[0]!.attributes['job.id']).toBe('j_1');
   });
 
+  it('writes to the job span a trace() root started, from a nested step', async () => {
+    const collector = createTraceCollector();
+
+    // A batch job: no request span, and the helper that knows the row count
+    // runs two spans deep.
+    await trace.run('job', async () => {
+      await trace.run('job.ingest', async () => {
+        await trace.run('job.ingest.parse', async () => {
+          requestCtx.setAttribute('file.lines', 120);
+        });
+      });
+    });
+
+    const byName = Object.fromEntries(
+      collector.getSpans().map((s) => [s.name, s.attributes]),
+    );
+    expect(byName['job']?.['file.lines']).toBe(120);
+    expect(byName['job.ingest.parse']?.['file.lines']).toBeUndefined();
+  });
+
+  it('skips a null or undefined link, so createLinkFromHeaders() passes straight in', async () => {
+    const collector = createTraceCollector();
+    const link = {
+      context: {
+        traceId: '0af7651916cd43dd8448eb211c80319c',
+        spanId: 'b7ad6b7169203331',
+        traceFlags: 1,
+      },
+    };
+
+    await trace.run('linked', async (ctx) => {
+      expect(() => ctx.addLink(null)).not.toThrow();
+      ctx.addLink(undefined);
+      ctx.addLinks([null, link, undefined]);
+    });
+
+    expect(collector.getSpans()[0]?.links).toEqual([link]);
+  });
+
   it('no-ops when nothing is active', () => {
     expect(() => requestCtx.setAttribute('user.id', 'u_1')).not.toThrow();
     expect(requestCtx.traceId).toBeUndefined();

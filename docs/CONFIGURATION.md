@@ -11,6 +11,12 @@ Autotel reads standard OpenTelemetry environment variables. You can change confi
 **Service Configuration:**
 
 - `OTEL_SERVICE_NAME` - Service name (maps to `service` in `init()`)
+- `SERVICE_VERSION`, `DD_VERSION` or `APP_VERSION` - Service version when `init()` sets no `version`
+- `COMMIT_SHA`, `GIT_SHA`, `GIT_COMMIT`, `GITHUB_SHA` and the commit variables Vercel, Cloudflare Pages, Render, Railway and Heroku set - The service version when none of the above is set, so each deploy reports its own version. `package.json` comes last.
+
+**Trace Context:**
+
+- `TRACEPARENT`, `TRACESTATE`, `BAGGAGE` - Trace context a parent process passes to a child. A process started with `TRACEPARENT` continues that trace: the root spans `trace()` and `span()` start become children of the parent's span. Set it when you spawn a job with `{ TRACEPARENT: injectTraceContext().traceparent }` from `autotel/http`. Turn it off with `init({ traceContextFromEnv: false })`.
 
 **Exporter Configuration:**
 
@@ -267,6 +273,44 @@ Enabled signals call `shutdown()` and exit with the conventional signal status
 `uncaughtException` and `unhandledRejection`, then exits with status `1`.
 Shutdown is attempted once and bounded by `shutdownTimeoutMs`, which defaults to
 2 seconds.
+
+Before shutting down, the handlers end each span still running with ERROR
+status and `error.type` set to the signal name or the error's class. A job
+stopped mid-run (a timeout, a deploy) exports its whole trace, root included,
+and the tail sampler keeps it as a failure.
+
+### Shutdown Timeout
+
+`shutdown()` waits up to 10 seconds for the SDK to export what it holds, then
+logs a warning, cleans up and resolves. Set the limit once with the top-level
+`shutdownTimeoutMs` in `init()`, or per call. `processHandlers.shutdownTimeoutMs`
+stays separate and bounds the exit the handlers run:
+
+```typescript
+init({ service: 'nightly-import', shutdownTimeoutMs: 60_000 });
+
+await shutdown({ timeout: 30_000 });
+```
+
+### Tail Sampling Limits
+
+The tail sampler holds each trace until its root and every span under it end,
+for up to 30 seconds and 20,000 spans across all traces. A process that runs one
+long job raises both, so `shutdown()` decides the whole job on its outcome:
+
+```typescript
+init({
+  service: 'nightly-import',
+  sampling: 'production',
+  tailSampling: {
+    traceTimeoutMs: 6 * 60 * 60 * 1000,
+    maxBufferedSpans: 50_000,
+  },
+});
+```
+
+When the buffer fills, the sampler decides the oldest trace on the spans it has
+if its root has ended, and exports a trace whose root is still open as it stands.
 
 Process handlers are opt-in because they make Autotel responsible for process
 exit semantics. Applications that already coordinate HTTP servers, database

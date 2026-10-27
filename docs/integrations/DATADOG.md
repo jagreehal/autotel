@@ -535,7 +535,7 @@ DD_HOSTNAME=my-host         # Sets hostname
 DD_AGENT_HOST=localhost     # Sets Agent host
 ```
 
-For direct ingestion the preset also sets `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` when it is unset, since Datadog's OTLP intake keeps delta monotonic sums only. Set the variable yourself to choose another value. Agent mode leaves it unset because the Agent converts cumulative metrics.
+For direct ingestion the preset also sets `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` when it is unset, since Datadog's OTLP intake keeps delta monotonic sums only. Set the variable yourself to choose another value. Agent mode leaves it unset because the Agent converts cumulative metrics. Plain `init()` does the same for any `endpoint` on a Datadog intake host (`*.datadoghq.com`, `*.datadoghq.eu`, `*.ddog-gov.com`), without touching the env var.
 
 ### Examples
 

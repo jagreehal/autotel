@@ -542,6 +542,21 @@ Currently unsupported and ignored with an error log:
 - `parentbased_jaeger_remote`
 - `xray`
 
+The tail sampler waits up to 30 seconds and holds up to 20,000 spans. A process
+that runs one long job raises both, so `shutdown()` decides the job on its
+outcome:
+
+```typescript
+init({
+  service: 'nightly-import',
+  sampling: 'production',
+  tailSampling: {
+    traceTimeoutMs: 6 * 60 * 60 * 1000,
+    maxBufferedSpans: 50_000,
+  },
+});
+```
+
 ### Tail-Sampling Attributes
 
 Autotel uses internal span attributes such as `autotel.sampling.tail.keep` and `autotel.sampling.tail.evaluated` to communicate tail-sampling decisions.
@@ -2751,6 +2766,14 @@ The `flush()` function:
 ```typescript
 await flush({ timeout: 5000 }); // 5 second timeout
 ```
+
+### Batch Jobs and Child Processes
+
+- **Stopped jobs:** with `processHandlers: true`, a SIGTERM, SIGINT or fatal error ends each span still running with ERROR status and `error.type` set to the signal or the error's class. The job exports its whole trace, root included.
+- **Shutdown timeout:** `shutdown()` waits up to 10 seconds for the SDK. Change it with `init({ shutdownTimeoutMs })` or `shutdown({ timeout })`.
+- **Job attributes:** `requestCtx.setAttribute()` from a nested step tags the job's root span, and spans the job starts afterwards inherit the attribute.
+- **Parent trace:** a process started with `TRACEPARENT` continues that trace. Pass `{ TRACEPARENT: injectTraceContext().traceparent }` from `autotel/http` in the child's environment.
+- **Links:** `ctx.addLink(createLinkFromHeaders(headers))` skips a `null` link, so a job without a stored traceparent needs no guard.
 
 ### Auto-Flush Spans (Opt-in)
 

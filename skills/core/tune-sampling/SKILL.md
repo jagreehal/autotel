@@ -94,7 +94,10 @@ There are no per-span-kind rates. Know these before you tune:
   (`maxBufferedSpans`), and a trace waits at most 30 s from its first span
   (`traceTimeoutMs`). A trace whose root ended is then decided on what it
   has; one whose root is still open (a long-lived connection) is exported as
-  it stands, as is the oldest trace when the span bound is hit.
+  it stands. When the span bound is hit, the oldest trace goes the same way.
+  A process that runs one long job raises both through
+  `init({ tailSampling: { traceTimeoutMs, maxBufferedSpans } })`, so the whole
+  job is decided on its outcome at `shutdown()`.
 - **The drop happens only where `init()` built the pipeline.** `endpoint`,
   `destinations` and `spanExporters` are wrapped in `TailSamplingSpanProcessor`
   for you. Your own `spanProcessors` are not, on purpose: they replace the

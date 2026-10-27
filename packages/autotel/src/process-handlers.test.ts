@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { returnsInstead, sdkDouble } from './testing/doubles.js';
 import { toError } from './values';
 import type { AutotelConfig } from './autotel-config';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
 // @types/node narrows signal listeners to per-signal overloads, so iterating a
 // `NodeJS.Signals` union needs a plain function type here.
@@ -152,6 +153,56 @@ describe('process handler lifecycle', () => {
       expect(sdk.shutdown).toHaveBeenCalledOnce();
       expect(exit).toHaveBeenCalledWith(143);
     });
+
+    exit.mockRestore();
+  });
+
+  it('ends the spans a SIGTERM cut short, so the stopped job is kept whole', async () => {
+    const exit = vi
+      .spyOn(process, 'exit')
+      // SAFETY: process.exit is declared to return `never`; a test that
+      .mockImplementation(returnsInstead);
+    // Records what reaches the exporter; InMemorySpanExporter forgets on shutdown.
+    const exported: Array<{ name: string; status: number; type: unknown }> = [];
+    const exporter = {
+      export(spans: ReadableSpan[], done: (result: { code: 0 }) => void) {
+        for (const s of spans) {
+          exported.push({
+            name: s.name,
+            status: s.status.code,
+            type: s.attributes['error.type'],
+          });
+        }
+        done({ code: 0 });
+      },
+      shutdown: () => Promise.resolve(),
+    };
+    const { init, trace } = await import('./index');
+
+    init({
+      service: 'stopped-job',
+      // Clean traces are dropped: only the failure verdict keeps this one.
+      sampling: 'errors-only',
+      spanExporters: [exporter],
+      processHandlers: { signals: ['SIGTERM'] },
+    });
+
+    // A job that is still running when the container is stopped.
+    void trace.run('job', async () => {
+      await trace.run('job.step', async () => {});
+      await new Promise(() => {});
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    process.emit('SIGTERM', 'SIGTERM');
+
+    await vi.waitFor(() => {
+      expect(exit).toHaveBeenCalledWith(143);
+    });
+    expect(exported).toEqual([
+      { name: 'job.step', status: 1, type: undefined },
+      { name: 'job', status: 2, type: 'SIGTERM' },
+    ]);
 
     exit.mockRestore();
   });

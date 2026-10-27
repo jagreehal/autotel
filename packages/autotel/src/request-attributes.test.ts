@@ -8,7 +8,7 @@ import {
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { requestCtx, span } from './functional';
+import { requestCtx, span, trace, withNewContext } from './functional';
 import { init } from './init';
 
 /** What `instrumentation-http` publishes the server span under. */
@@ -159,6 +159,90 @@ describe('requestCtx attributes on the spans a request starts', () => {
     for (const finished of exporter.getFinishedSpans()) {
       expect(finished.attributes.tenant).toBe(finished.name.split('.')[0]);
     }
+  });
+
+  it('tags a trace() job root from a nested step, and its later spans inherit it', async () => {
+    await trace.run('job', async () => {
+      await trace.run('job.parse', async () => {
+        requestCtx.setAttribute('file.lines', 120);
+      });
+      await trace.run('job.report', async () => {});
+    });
+    await expect.poll(() => exporter.getFinishedSpans().length).toBe(3);
+    const lines = Object.fromEntries(
+      exporter
+        .getFinishedSpans()
+        .map((s) => [s.name, s.attributes['file.lines']]),
+    );
+    expect(lines).toEqual({
+      job: 120,
+      'job.parse': undefined,
+      'job.report': 120,
+    });
+  });
+
+  describe('never crosses into a separate trace', () => {
+    const attrs = () =>
+      Object.fromEntries(
+        exporter.getFinishedSpans().map((s) => [s.name, s.attributes]),
+      );
+
+    it('withNewContext() inside a job: tags the new trace, not the job', async () => {
+      await trace.run('outer', async () => {
+        await withNewContext({
+          fn: () =>
+            trace.run('inner', async () => {
+              requestCtx.setAttribute('mark', 'inner');
+            }),
+        });
+      });
+      await expect.poll(() => exporter.getFinishedSpans().length).toBe(3);
+      const byName = attrs();
+      expect(byName['outer']?.['mark']).toBeUndefined();
+      // withNewContext's own span is that trace's root.
+      expect(byName['root']?.['mark']).toBe('inner');
+    });
+
+    it('a raw root: true span inside a job: tags its own trace', async () => {
+      await trace.run('outer', async () => {
+        await otelTrace
+          .getTracer('raw')
+          .startActiveSpan('detached', { root: true }, async (detached) => {
+            await trace.run('inner', async () => {
+              requestCtx.setAttribute('mark', 'inner');
+            });
+            detached.end();
+          });
+      });
+      await expect.poll(() => exporter.getFinishedSpans().length).toBe(3);
+      const byName = attrs();
+      expect(byName['outer']?.['mark']).toBeUndefined();
+      expect(byName['inner']?.['mark']).toBe('inner');
+    });
+
+    it('withNewContext() inside a request: neither writes to nor inherits from the request', async () => {
+      await span({ name: 'GET /hooks' }, async () => {
+        const active = context.active().setValue(RPC_METADATA_KEY, {
+          type: 'http',
+          span: otelTrace.getActiveSpan(),
+        });
+        await context.with(active, async () => {
+          requestCtx.setAttribute('tenant', 't_1');
+          await withNewContext({
+            fn: () =>
+              span({ name: 'webhook.process' }, async () => {
+                requestCtx.setAttribute('mark', 'webhook');
+              }),
+          });
+        });
+      });
+      await expect.poll(() => exporter.getFinishedSpans().length).toBe(3);
+      const byName = attrs();
+      expect(byName['GET /hooks']?.['tenant']).toBe('t_1');
+      expect(byName['GET /hooks']?.['mark']).toBeUndefined();
+      expect(byName['webhook.process']?.['tenant']).toBeUndefined();
+      expect(byName['root']?.['tenant']).toBeUndefined();
+    });
   });
 
   it('carries onto spans started afterwards, at any depth', async () => {

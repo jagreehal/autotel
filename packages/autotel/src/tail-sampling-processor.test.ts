@@ -496,6 +496,23 @@ describe('TailSamplingSpanProcessor', () => {
       expect(mockProcessor.endedSpans).toEqual([orphan]);
     });
 
+    it('decides an evicted trace on what it has once the root ended', () => {
+      const processor = new TailSamplingSpanProcessor(mockProcessor, {
+        sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
+        maxBufferedSpans: 10,
+      });
+      // A flood of clean traces whose roots ended but a child is still running.
+      for (let i = 0; i < 100; i++) {
+        const root = createMockSpan({}, { traceId: `flood${i}` });
+        start(processor, root);
+        start(processor, childOf(root), root);
+        processor.onEnd(root);
+      }
+      // Overflow judged them (clean, baseline 0) instead of exporting them.
+      expect(mockProcessor.endedSpans).toHaveLength(0);
+      void processor.shutdown();
+    });
+
     it('decides on timeout: on what it has once the root ended, fail-open before', () => {
       const processor = new TailSamplingSpanProcessor(mockProcessor, {
         sampler: new AdaptiveSampler({ baselineSampleRate: 0 }),
