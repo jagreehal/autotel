@@ -4,7 +4,7 @@ import type { PluginPreset } from '../../types/index';
  * Sentry preset: wires Sentry as the OTLP destination.
  *
  * Uses `sentryOtlpConfig(DSN)` to build endpoint/headers from the user's DSN.
- * Sentry's own OpenTelemetry setup is skipped (`skipOpenTelemetrySetup: true`)
+ * Sentry's own OpenTelemetry setup stays off (`@sentry/node` 11's default)
  * and autotel owns the OTel side. `setOpenTelemetryContextAsyncContextStrategy()`
  * makes Sentry read trace ids from the active span, so captured errors join it.
  */
@@ -45,7 +45,7 @@ export const sentry: PluginPreset = {
     type: 'plugin',
     code: `// Sentry OTLP setup
 const sentryConfig = sentryOtlpConfig(process.env.SENTRY_DSN!);
-Sentry.init({ dsn: sentryConfig.dsn, skipOpenTelemetrySetup: true });
+Sentry.init({ dsn: sentryConfig.dsn });
 Sentry.setOpenTelemetryContextAsyncContextStrategy();`,
     section: 'PLUGIN_INIT',
   },

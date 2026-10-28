@@ -1,12 +1,14 @@
 ---
 title: Sentry
-description: Send Autotel (OpenTelemetry) traces to Sentry over OTLP.
+description: Send Autotel (OpenTelemetry) traces to Sentry over OTLP, and link the Sentry browser SDK's errors and replays to autotel-web traces.
 ---
 
 `autotel-sentry` sends Autotel traces to Sentry over OTLP. It parses a Sentry
 DSN into the OTLP endpoint and auth headers that Autotel's `init()` expects.
+In the browser, `autotel-sentry/browser` links the Sentry SDK you already run
+to autotel-web's traces: see [Browser](#browser-autotel-traces-sentry-errors).
 
-That is the whole package. To put captured errors on the active trace, call
+On the server, to put captured errors on the active trace, call
 `Sentry.setOpenTelemetryContextAsyncContextStrategy()` after `Sentry.init()`: `@sentry/node`
 then reads the active OpenTelemetry span when it builds an event, so each error
 carries that span's `trace_id` and `span_id`.
@@ -39,8 +41,8 @@ import { sentryOtlpConfig } from 'autotel-sentry';
 
 const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
-// 1. Initialize Sentry. Tell it not to register its own OTel SDK.
-Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+// 1. Initialize Sentry. It leaves OpenTelemetry to autotel.
+Sentry.init({ dsn: config.dsn });
 // Sentry reads trace ids from the active OpenTelemetry span
 Sentry.setOpenTelemetryContextAsyncContextStrategy();
 
@@ -48,9 +50,7 @@ Sentry.setOpenTelemetryContextAsyncContextStrategy();
 init({ service: 'my-app', endpoint: config.endpoint, headers: config.headers });
 ```
 
-`skipOpenTelemetrySetup: true` is required. Sentry SDK v8+ registers its own OTel
-SDK internally, and Autotel owns OTel setup. Without the flag you get duplicate
-span processors and broken traces.
+`@sentry/node` 11 leaves OpenTelemetry to autotel by default (`enableOpenTelemetrySetup` is `false`). On 8–10, pass `skipOpenTelemetrySetup: true` instead: those versions register their own OTel SDK otherwise, and you get duplicate span processors and broken traces.
 
 ## API
 
@@ -68,7 +68,114 @@ const config = sentryOtlpConfig(
 // config.headers  auth headers (pass to Autotel init as `headers`)
 ```
 
-## Linking a Sentry browser SDK
+## Browser: autotel traces, Sentry errors
+
+Keep Sentry for what it already does on your page (errors, replays) and let
+`autotel-web` trace. `joinSentry` links the two both ways:
+
+- every Sentry error carries the autotel trace it happened in, so the issue
+  opens that trace;
+- every span carries the Sentry user's `user.id` and, while replay records the
+  session, `sentry.replay_id`, which Sentry's trace view uses to open the
+  replay.
+
+```bash
+npm install autotel-web autotel-sentry @sentry/browser
+```
+
+```typescript
+import * as Sentry from '@sentry/browser'; // or @sentry/react, @sentry/vue…
+import { initFull } from 'autotel-web/full';
+import { joinSentry, sentryOtlpConfig } from 'autotel-sentry/browser';
+
+const sentry = sentryOtlpConfig(import.meta.env.VITE_SENTRY_DSN);
+
+Sentry.init({
+  dsn: sentry.dsn,
+  // No browserTracingIntegration: autotel traces.
+  integrations: [Sentry.replayIntegration()],
+  replaysSessionSampleRate: 0.1,
+});
+
+initFull({
+  service: 'web',
+  // Straight to Sentry's OTLP endpoint, from the browser.
+  endpoint: sentry.browserEndpoint,
+  spanEnrichers: [joinSentry(Sentry)],
+});
+```
+
+`browserEndpoint` is Sentry's OTLP endpoint with the DSN's public key as
+`?sentry_key=`. The browser exporter sends no custom headers, and the beacon
+that flushes on page unload cannot carry any, so the key goes in the URL. It is
+the same public key the Sentry SDK already puts in every page. Sentry's OTLP
+endpoint accepts cross-origin requests, so no collector is needed. To send
+spans somewhere else instead, point `endpoint` there and pass `traceUrl` (see
+below).
+
+The error links even when it is captured after an `await`, where the browser
+has already lost the active span:
+
+```typescript
+await span('checkout.click', async () => {
+  const response = await fetch('/checkout', { method: 'POST' });
+  // No active span here any more. The Sentry event still carries the
+  // checkout.click trace.
+  if (!response.ok) Sentry.captureException(new Error('Checkout failed'));
+});
+```
+
+If two traces are in flight at that moment (two overlapping clicks), the error
+keeps Sentry's own trace id rather than risk linking the wrong one. To be
+explicit, read the ids before the `await` and pass them; a trace you pass is
+always kept:
+
+````typescript
+const ids = trace.getActiveSpan()?.spanContext();
+await fetch('/checkout', { method: 'POST' });
+Sentry.captureException(error, {
+  contexts: { trace: { trace_id: ids?.traceId, span_id: ids?.spanId } },
+});
+``` See
+[Join any frontend SDK](/autotel/integrations/join/#spans--vendor-currentspancontext)
+for how to pass the trace explicitly then.
+
+### Options
+
+```typescript
+joinSentry(Sentry, {
+  // Spans exported somewhere other than Sentry: link the issue to them.
+  // Written to the event's `autotel` context as `trace_url`.
+  traceUrl: ({ traceId }) =>
+    `https://grafana.example.com/explore?trace=${traceId}`,
+  // Failed spans get `session.replay.url`, so other backends can open the replay.
+  replayUrl: (id) => `https://my-org.sentry.io/replays/${id}/`,
+});
+````
+
+`sentry.replay_id` and `session.replay.url` are added only while replay
+records the whole session (`replaysSessionSampleRate`). A buffered replay
+(`replaysOnErrorSampleRate`) is uploaded only when Sentry captures an error, so
+a link from a span that failed without one would open nothing. Sentry follows
+the same rule for its own `replay_id`.
+
+`debug` (on in development, off in production) explains in the console, once
+per reason, why a link did not happen.
+
+### What it does not do
+
+- **It does not trace with Sentry.** With `browserTracingIntegration` also on,
+  two tracers would put two trace headers on each request, and `joinSentry`
+  leaves an error on Sentry's span whenever Sentry has one. It warns once in
+  development if it finds that integration.
+- **It imports no Sentry package.** It reads the SDK object you pass in, so
+  `@sentry/browser`, `@sentry/react`, `@sentry/nextjs` and the CDN bundle all
+  work, and your page keeps one copy of Sentry.
+
+`joinSentry` is built from [`autotel-web/join`](/autotel/integrations/join/),
+the same building blocks you can use for any other frontend SDK.
+
+## Alternative: let Sentry trace the browser
 
 A Sentry SDK in the browser or a mobile app generates its own trace ids and does
 not send W3C `traceparent` by default, so your frontend and your Autotel backend
@@ -111,6 +218,8 @@ Removed in 0.7.0. Delete the call and its import, and call
 
 - [`example-sentry`](https://github.com/jagreehal/autotel/tree/main/apps/example-sentry):
   traces and logs over OTLP, with captured errors on the active trace.
+  `pnpm web` runs the browser join: a failed checkout whose Sentry error,
+  browser spans, server span and replay share one trace.
 
 ## See also
 

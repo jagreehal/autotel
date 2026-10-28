@@ -1,1 +1,1 @@
-export { setBaggage, clearBaggage } from './baggage';
+export { setBaggage, clearBaggage, getBaggageEntries } from './baggage';

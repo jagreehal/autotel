@@ -540,6 +540,105 @@ init(
 );
 ```
 
+## Browser: frontend errors and traces
+
+There are two ways to get frontend errors into Datadog with autotel, and they
+combine.
+
+### Without RUM: autotel's own error capture
+
+`autotel-web/full` records every uncaught error and unhandled rejection as an
+exception on a span (`captureErrors`, on by default). Datadog's OTLP intake
+maps that exception to `error.type`, `error.message` and `error.stack`, and
+Error Tracking groups it as an issue on the trace track, under the browser's
+`service`. No Datadog SDK on the page.
+
+The page cannot hold your API key, and Datadog's OTLP intake does not accept
+browser requests, so the page exports to its own origin and your server adds
+the key:
+
+```typescript
+// server: Hono here; any framework that speaks Request/Response works
+import { otlpRelay } from 'autotel-backends/relay';
+import { createDatadogConfig } from 'autotel-backends/datadog';
+
+const relay = otlpRelay(
+  createDatadogConfig({
+    apiKey: process.env.DATADOG_API_KEY!,
+    site: 'datadoghq.eu',
+    service: 'web',
+  }),
+);
+app.post('/otel/v1/*', (c) => relay(c.req.raw));
+```
+
+```typescript
+// browser
+import { initFull } from 'autotel-web/full';
+
+initFull({
+  service: 'web',
+  version: '1.4.2', // Error Tracking's first-seen and regression version
+  environment: 'production', // Datadog's env
+  endpoint: '/otel',
+});
+```
+
+`otlpRelay` forwards only `/v1/traces` and `/v1/logs`, only from the page's own
+origin (add others with `allowedOrigins`), only bodies up to 1 MiB, and only
+the content headers. Cookies and everything else stay behind. It returns the
+backend's status, not its body.
+
+### With RUM: `autotel-datadog`
+
+If Datadog RUM is already on the page, keep it as the error tracker and join it
+to autotel's traces with [`autotel-datadog`](https://github.com/jagreehal/autotel/tree/main/packages/autotel-datadog):
+
+```typescript
+import { datadogRum } from '@datadog/browser-rum';
+import { initFull } from 'autotel-web/full';
+import { joinDatadog } from 'autotel-datadog';
+
+const datadog = joinDatadog(datadogRum, {
+  traceUrl: ({ traceId }) => `https://app.datadoghq.eu/apm/trace/${traceId}`,
+});
+
+datadogRum.init({
+  applicationId,
+  clientToken,
+  site: 'datadoghq.eu',
+  service: 'web',
+  env: 'production',
+  version: '1.4.2',
+  // No allowedTracingUrls: autotel traces the requests.
+  beforeSend: datadog.beforeSend,
+});
+
+initFull({
+  service: 'web',
+  version: '1.4.2',
+  environment: 'production',
+  endpoint: '/otel',
+  captureErrors: false, // RUM is the error tracker; avoids two issues per error
+  spanEnrichers: [datadog],
+});
+```
+
+- **RUM errors carry the trace**, including errors captured after an `await`:
+  `context.trace_id` (128-bit hex, the form APM stores OpenTelemetry trace ids
+  in), `context.span_id` (decimal, as APM shows it) and `context.trace_url`.
+  Search `@context.trace_id:<id>` in RUM, or open the link.
+- **Spans carry the RUM session**: `session.id` (also sent to your server as
+  baggage, so server spans can carry it with `init({ baggage: '' })`),
+  `user.id` from `setUser`, and on failed spans `session.replay.url` when
+  replay is recording.
+
+RUM's own "view trace" link reads `_dd.trace_id`, which RUM's `beforeSend`
+does not let anything change. That is why the join writes `context.*`.
+
+The example [`apps/example-datadog`](https://github.com/jagreehal/autotel/tree/main/apps/example-datadog)
+runs both: `pnpm web`, and `pnpm smoke:web` to check them against your org.
+
 ## Querying Datadog Back
 
 Everything above sends telemetry to Datadog. Reading it back, from

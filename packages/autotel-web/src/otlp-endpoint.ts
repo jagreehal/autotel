@@ -9,9 +9,26 @@
 const TRACES_PATH = '/v1/traces';
 const LOGS_PATH = '/v1/logs';
 
+/**
+ * The endpoint's path and its query string, apart. A query is how a backend
+ * that authenticates browsers takes its key (Sentry's `?sentry_key=`): headers
+ * cannot ride on `sendBeacon`, so the key has to be in the URL. The signal path
+ * goes before it, never after.
+ */
+function splitQuery(endpoint: string): [path: string, query: string] {
+  const at = endpoint.indexOf('?');
+  return at === -1
+    ? [endpoint, '']
+    : [endpoint.slice(0, at), endpoint.slice(at)];
+}
+
 export function normaliseOtlpEndpoint(endpoint: string): string {
-  const trimmed = endpoint.replace(/\/+$/, '');
-  return trimmed.endsWith(TRACES_PATH) ? trimmed : `${trimmed}${TRACES_PATH}`;
+  const [path, query] = splitQuery(endpoint);
+  const trimmed = path.replace(/\/+$/, '');
+  const traces = trimmed.endsWith(TRACES_PATH)
+    ? trimmed
+    : `${trimmed}${TRACES_PATH}`;
+  return `${traces}${query}`;
 }
 
 /** OTLP signals this package exports. */
@@ -23,8 +40,53 @@ export type OtlpSignal = 'traces' | 'logs';
  * appended, so `https://host/v1/traces` still yields `https://host/v1/logs`.
  */
 export function otlpEndpointFor(endpoint: string, signal: OtlpSignal): string {
-  const base = normaliseOtlpEndpoint(endpoint).slice(0, -TRACES_PATH.length);
-  return `${base}${signal === 'logs' ? LOGS_PATH : TRACES_PATH}`;
+  const [path, query] = splitQuery(endpoint);
+  const base = normaliseOtlpEndpoint(path).slice(0, -TRACES_PATH.length);
+  return `${base}${signal === 'logs' ? LOGS_PATH : TRACES_PATH}${query}`;
+}
+
+/**
+ * Where other telemetry SDKs upload: Datadog RUM and browser logs, Sentry,
+ * PostHog Cloud, New Relic browser. Never traced, for the same reason as our
+ * own collector: a span per upload is noise in every trace search, the URLs
+ * carry the vendor's client key, and each upload is one more trace in flight,
+ * which makes `currentSpanContext()` refuse to guess for an error that has a
+ * perfectly good answer.
+ */
+export const VENDOR_TELEMETRY_URLS: readonly RegExp[] = [
+  /^https:\/\/browser-intake-[^/?#]+[/?#]/i,
+  /^https:\/\/[^/?#]*\bingest\.(?:[a-z]+\.)?sentry\.io[/?#]/i,
+  /^https:\/\/[^/?#]*\bi\.posthog\.com[/?#]/i,
+  /^https:\/\/bam(?:-cell)?\.(?:eu01\.)?nr-data\.net[/?#]/i,
+];
+
+/**
+ * The app's own exclusions as patterns. A RegExp is used as given, minus
+ * the `g` and `y` flags: those make `.test()` stateful through `lastIndex`,
+ * so the same URL would match on one call and not the next, and an ignored
+ * request would be traced or get baggage every other time. A string is a URL
+ * prefix, resolved against the page, so `'/rum-proxy'` covers a vendor SDK
+ * proxied through the app's own origin.
+ */
+export function ignoreUrlPatterns(
+  ignoreUrls: readonly (string | RegExp)[] | undefined,
+  pageOrigin: string | undefined,
+): RegExp[] {
+  return (ignoreUrls ?? []).map((entry) => {
+    if (entry instanceof RegExp) {
+      // A copy, so the caller's own RegExp is never touched.
+      return /[gy]/.test(entry.flags)
+        ? new RegExp(entry.source, entry.flags.replace(/[gy]/g, ''))
+        : entry;
+    }
+    let prefix = entry;
+    try {
+      prefix = new URL(entry, pageOrigin || undefined).href;
+    } catch {
+      // A relative prefix with no page to resolve against: match as written.
+    }
+    return new RegExp(`^${escapeRegExp(prefix)}`, 'i');
+  });
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
@@ -91,7 +153,8 @@ export function selfInstrumentationIgnoreUrls(
   // some other host's, and closed at a query or fragment rather than at the
   // end of the string, since the exporter may append neither or both.
   const otlpPaths = (['traces', 'logs'] as const).map((signal) => {
-    const path = otlpEndpointFor(endpoint, signal);
+    // The path alone: the regex already allows any query after it.
+    const path = otlpEndpointFor(splitQuery(endpoint)[0], signal);
     try {
       const resolved = new URL(path, pageOrigin || undefined).href;
       return new RegExp(`^${escapeRegExp(resolved)}(?:[?#]|$)`, 'i');

@@ -7,9 +7,17 @@
  * Bundle size: ~2-5KB gzipped
  */
 
+import {
+  releaseResourceAttributes,
+  type ReleaseConfig,
+} from './browser-context';
 import { createTraceparent, parseTraceparent } from './traceparent';
 import { isPropagationAllowed } from './propagate';
-import { isSelfTelemetryUrl } from './otlp-endpoint';
+import {
+  ignoreUrlPatterns,
+  isSelfTelemetryUrl,
+  VENDOR_TELEMETRY_URLS,
+} from './otlp-endpoint';
 import { PrivacyManager, PrivacyConfig, getDenialReason } from './privacy';
 import { setEventSink } from './emit-event';
 import {
@@ -34,7 +42,7 @@ import {
   resetBaggageForTesting,
 } from './baggage';
 
-export interface AutotelWebConfig {
+export interface AutotelWebConfig extends ReleaseConfig {
   /**
    * Service name for the browser application
    * Used only for logging/debugging - not sent in headers
@@ -122,6 +130,15 @@ export interface AutotelWebConfig {
    * @default false
    */
   collectorOwnsOrigin?: boolean;
+
+  /**
+   * Requests never to trace or propagate on, besides the collector's own and
+   * the known telemetry vendors' uploads (Datadog, Sentry, PostHog Cloud, New
+   * Relic), which are always excluded. A RegExp is matched against the full
+   * URL; a string is a URL prefix, resolved against the page, so
+   * `'/rum-proxy'` covers a vendor SDK proxied through your own origin.
+   */
+  ignoreUrls?: (string | RegExp)[];
 
   /**
    * Privacy controls for traceparent header injection
@@ -321,6 +338,7 @@ export function init(userConfig: AutotelWebConfig): void {
     setRawFetch(window.fetch.bind(window));
     configureExporter(config.service, config.endpoint, config.debug, {
       ...(config.sampleRate != null && { sampleRate: config.sampleRate }),
+      resource: releaseResourceAttributes(config),
     });
     // Browser events are log records, so they need the exporter's log half.
     setEventSink(recordEvent);
@@ -431,12 +449,26 @@ function shouldSendHeaders(url: string): boolean {
  * write another trace to the list.
  */
 function isSelfTelemetry(url: string): boolean {
-  return isSelfTelemetryUrl(
-    url,
-    config?.endpoint,
-    window.location?.origin ?? '',
-    config?.collectorOwnsOrigin,
-  );
+  if (
+    isSelfTelemetryUrl(
+      url,
+      config?.endpoint,
+      window.location?.origin ?? '',
+      config?.collectorOwnsOrigin,
+    )
+  ) {
+    return true;
+  }
+  let absolute = url;
+  try {
+    absolute = new URL(url, window.location?.origin || undefined).href;
+  } catch {
+    // Matched as written.
+  }
+  return [
+    ...VENDOR_TELEMETRY_URLS,
+    ...ignoreUrlPatterns(config?.ignoreUrls, window.location?.origin),
+  ].some((pattern) => pattern.test(absolute));
 }
 
 /** Why `shouldSendHeaders` said no, for the debug log. */

@@ -1,0 +1,200 @@
+---
+title: Join any frontend SDK
+description: Link autotel-web traces to the error tracker, session recorder or analytics SDK already on your page, in a few lines, with no package from us.
+---
+
+Every frontend SDK worth joining to a trace knows something a tracer cannot
+work out for itself: which recorded session a page view belongs to, which
+person is behind it. And every one of them captures events (errors, analytics)
+that a trace explains. The join is the same two links whatever the vendor:
+
+- **vendor → spans**: the session id, the user id, and a replay link on spans
+  that failed;
+- **spans → vendor**: the trace id on the vendor's error or event.
+
+`autotel-web/join` gives you those two links as building blocks.
+[`autotel-posthog`](/autotel/integrations/posthog/),
+[`autotel-sentry/browser`](/autotel/integrations/sentry/#browser-autotel-traces-sentry-errors)
+and [`autotel-datadog`](/autotel/integrations/datadog/#with-rum-autotel-datadog)
+are built from them. For any other SDK you compose them yourself, without
+waiting for a package.
+
+```bash
+npm install autotel-web
+```
+
+`autotel-web/join` depends on nothing beyond `@opentelemetry/api`, which
+`autotel-web/full` already ships. Your page pays for the join it composes and
+nothing else.
+
+## Vendor → spans: `enrichSpans()`
+
+```typescript
+import { initFull } from 'autotel-web/full';
+import { enrichSpans } from 'autotel-web/join';
+
+initFull({
+  service: 'web',
+  endpoint: 'https://collector.example.com',
+  spanEnrichers: [
+    enrichSpans({
+      name: 'vendor',
+      // The id the vendor keys its recordings on.
+      session: () => vendor.getSessionId(),
+      // Facts about when the span started.
+      onStart: () => ({ 'user.id': vendor.getUserId() }),
+      // Only for spans that failed.
+      onFailure: () => {
+        const url = vendor.getReplayUrl();
+        return url ? { 'session.replay.url': url } : 'replay is not recording.';
+      },
+    }),
+  ],
+});
+```
+
+Replace the `vendor.*` calls with your SDK's own. What `enrichSpans` does with
+them:
+
+| Option      | Becomes                                                                                                                                                                                                                                                                                   |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session`   | `session.id`, **assigned**: the recorder's id outranks the one autotel minted, because a replay can be opened by it. Also sent as W3C `baggage` on same-origin fetches, so the server span carries it (`propagateSession: false` to turn that off). An empty string counts as no session. |
+| `onStart`   | Attributes **filled** when the span starts: a value the span already set is never overwritten.                                                                                                                                                                                            |
+| `onFailure` | Attributes filled when a span ends with an error status or a recorded exception, and never on a healthy span. Skipped if `session` changed while the span ran, because the link would open a different recording. Return a string to say why there is nothing to add.                     |
+
+Every callback is guarded. An SDK that throws, or that is still the loader
+snippet's stub, costs the span an attribute and never the span itself.
+
+Put it in `spanEnrichers`, not `spanProcessor`. `spanProcessor` replaces the
+export pipeline, so the spans would stop leaving the page.
+
+## Spans → vendor: `currentSpanContext()`
+
+Put the trace id on the vendor's events from whatever hook the SDK gives you
+(`beforeSend`, an event processor, an `onError` callback):
+
+```typescript
+import { currentSpanContext } from 'autotel-web/join';
+
+vendor.beforeSend((event) => {
+  const span = currentSpanContext();
+  if (span) event.metadata.trace_id = span.traceId;
+  return event;
+});
+```
+
+The browser has no AsyncLocalStorage, so after the first `await` the active
+span is gone, and that is exactly where errors and analytics calls fire.
+`currentSpanContext()` returns the active span when there is one. Otherwise it
+falls back to the newest span still in flight, as seen by any `enrichSpans()`
+on the page. So at least one join must be registered for the fallback to work.
+
+It returns `undefined` when more than one trace is in flight. Two overlapping
+clicks each start their own trace, so "the newest" would be the wrong trace,
+and no id is better than one that links an unrelated request. For that case,
+read the span before the first `await` and pass it along yourself:
+
+```typescript
+import { trace } from '@opentelemetry/api';
+
+await span('checkout.click', async () => {
+  const ids = trace.getActiveSpan()?.spanContext();
+  await fetch('/checkout', { method: 'POST' });
+  vendor.track('checkout_failed', { trace_id: ids?.traceId });
+});
+```
+
+### Errors from failed requests
+
+A failed request is usually reported after its span has ended: a TanStack
+Query `onError`, a `catch` after `await`. Pass the error, and the request it
+came from decides the trace:
+
+```typescript
+vendor.beforeSend((event, original) => {
+  const span = currentSpanContext({ error: original.error });
+  // ...
+});
+```
+
+`autotel-web/full` records which span each XHR and fetch `Response` belonged
+to, and `spanContextOf(error)` reads it back from where HTTP clients put it:
+`error.request` (axios, the XHR), `error.response` (ky, ofetch),
+`error.cause` (`new Error(msg, { cause: response })`). `joinSentry` and
+`joinDatadog` already pass the original error. `captureException(error)`
+records the exception under that request's span, in the same trace as the
+server's.
+
+## Other SDKs' uploads are never traced
+
+The requests Datadog RUM, Sentry, PostHog Cloud and New Relic make to upload
+their own data are excluded from tracing, the way autotel's own exporter is.
+Otherwise every upload is a span with the vendor's client key in its URL, and
+one more trace in flight for `currentSpanContext()` to refuse over. For an SDK
+proxied through your own origin, add its path:
+`initFull({ ignoreUrls: ['/rum-proxy'] })`.
+
+## Diagnostics
+
+In development, both functions say once, in the console, why a join did not
+happen: no SDK on the page, a session that rotated, a recorder that is not
+recording, two traces in flight. In production they are silent. Set
+`debug: true` or `debug: false` to override. Development means a bundler set
+`process.env.NODE_ENV` to something other than `production`, or, with no
+bundler, a localhost page.
+
+## Composing several
+
+Joins compose, and each one is optional. A typical stack is layered:
+
+```typescript
+initFull({
+  service: 'web',
+  endpoint: '/otel', // traces: your backend (Datadog APM through a relay)
+  captureErrors: false, // errors: PostHog owns them, below
+  spanEnrichers: [
+    joinPostHog(posthog, { traceUrl }), // first: owns session.id
+    joinDatadog(datadogRum), // RUM sessions and replay, as an add-on
+  ],
+});
+```
+
+- **Tracing is the base.** Spans go wherever `endpoint` points, whatever else
+  is on the page.
+- **Each recorder adds its session.** The first join created owns
+  `session.id` and the `session.id` baggage. Every other join records its
+  own id as `<name>.session.id` (`datadog.session.id`, `posthog.session.id`),
+  so each recording stays one search away and the header never flips between
+  them. The owner's session is also the `session.id` on every log and event
+  (clicks, web vitals, console output), not only on spans; records from the
+  moment before its SDK has a session wait briefly and are filed under it. Create the error tracker's join first: its session is the one you
+  open from an error.
+- **One tool owns errors.** Pick it, and keep the others quiet so one error is
+  one issue. autotel's own capture: `captureErrors`. RUM: drop `error`
+  events in its `beforeSend`, as Datadog documents. PostHog: its
+  `capture_exceptions` option. Sentry: leave it out of the page.
+- **Every join reads the trace the same way**, so the owner's errors link to
+  the trace whichever tool it is: `currentSpanContext({ error })`, or
+  `traceProperties(error)` for PostHog, whose `before_send` never sees the
+  error object.
+
+All joins share one page-wide list of spans in flight, however many you
+register and however often a framework re-runs the setup.
+
+The example [`apps/example-datadog-react-express`](https://github.com/jagreehal/autotel/tree/main/apps/example-datadog-react-express)
+runs every combination of Datadog traces, Datadog RUM and PostHog, with errors
+owned by autotel, RUM or PostHog, from environment variables alone.
+
+## Error capture
+
+`autotel-web`'s own error tracking (`captureErrors`) records uncaught errors as
+exceptions on spans. It stands down when PostHog is on the page. Otherwise it
+keeps running, and what that means depends on the backend:
+
+- **Sentry**: the exception span lands on the trace, and Sentry's issue is a
+  separate event that `joinSentry` links to the same trace. One issue.
+- **Datadog**: Datadog Error Tracking also groups exception spans as issues. So
+  with RUM on the page each uncaught error becomes two issues, one from RUM
+  and one from the span. If RUM is your error tracker, set
+  `captureErrors: false`. Without RUM, the span is how browser errors reach
+  Error Tracking at all.

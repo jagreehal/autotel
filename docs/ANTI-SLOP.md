@@ -74,7 +74,8 @@ module formats. Kept.
 
 ### Union discrimination in a boundary parser — `no-runtime-typeof`
 
-`normalizeHeaders` in `packages/autotel-backends/src/grafana.ts` accepts the
+`normalizeHeaders` in `packages/autotel-backends/src/headers.ts` (shared by the
+Grafana preset and `otlpRelay`) accepts the
 `OTEL_EXPORTER_OTLP_HEADERS` string form or an already-parsed record, because
 both are what users have. Discriminating the two at runtime needs `typeof`; the
 check cannot be removed, only moved somewhere less honest. This function _is_
@@ -241,6 +242,9 @@ every caller:
 - `packages/autotel-devtools/src/widget/utils/json-fields.ts`
 - `packages/autotel-devtools/src/widget/attrs.ts`
 - `packages/autotel-devtools/src/server/otlp-types.ts`
+- `packages/autotel-web/src/values.ts`
+- `packages/autotel-sentry/src/values.ts`
+- `packages/autotel-datadog/src/values.ts`
 
 They hold `asString`/`asNumber`/`asBoolean`/`asRecord`/`asFunction`,
 `readProperty`, `toAttributeValue`, `toError` and the proxy-trap helpers. A
@@ -250,6 +254,25 @@ duplicate exists because the packages target different runtimes and must not
 depend on one another - `autotel` is Node-side, `autotel-cloudflare` and
 `autotel-devtools` are not.
 
+### A thrown value, or a vendor's free-form payload — `no-unknown-parameters`, `no-unsafe-dictionary-type`
+
+The frontend joins take what the page's other SDKs hand them, and two of those
+things have no type to parse into:
+
+- **A thrown value.** `spanContextOf(error)` and `currentSpanContext({ error })`
+  in `packages/autotel-web/src/join.ts`, `traceProperties(error)` in
+  `packages/autotel-posthog/src/before-send.ts`, Sentry's
+  `hint.originalException` in `packages/autotel-sentry/src/browser.ts`, and
+  `reportError` / `reportReactError` in
+  `apps/example-datadog-react-express/src/telemetry.ts`. JavaScript lets
+  anything be thrown, and React, TanStack Query and Sentry all type it
+  `unknown`. Each one reads it through its package's `values.ts`.
+- **A vendor's free-form payload.** RUM's `beforeSend` domain context
+  (`packages/autotel-datadog/src/index.ts`) is a union across event types, and
+  Sentry's `contexts` (`packages/autotel-sentry/src/browser.ts`) is a map
+  Sentry itself leaves open. The joins read one known field from each through
+  `readProperty` / `asString`.
+
 ### Narrowing a union TypeScript has to follow — `no-runtime-typeof`
 
 `asString(x)` answers "is it a string" but does not narrow `x` in the else
@@ -257,7 +280,8 @@ branch, so where the _other_ arm of a union is used afterwards - an overload
 that takes either a name or an options object, OTel's `startActiveSpan`
 positions, a config that is either a preset name or a config object - `typeof`
 stays, with a comment at each site saying that TypeScript's own operator is
-what the code needs. About a dozen sites.
+what the code needs. About a dozen sites, including `enrichSpans`' `onFailure`
+result (attributes or a reason) in `packages/autotel-web/src/join.ts`.
 
 ### Generic contracts the caller supplied — `no-known-value-widening`
 

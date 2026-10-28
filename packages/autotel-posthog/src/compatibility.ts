@@ -8,16 +8,10 @@
  * person it was slow for", in whatever backend the spans land in.
  */
 
-import type { Attributes } from '@opentelemetry/api';
-import type { Context } from '@opentelemetry/api';
-import type {
-  ReadableSpan,
-  Span,
-  SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { emitEvent } from 'autotel-web';
+import { enrichSpans } from 'autotel-web/join';
 import { recordFeatureFlag } from 'autotel/feature-flags';
-import { isDevelopment } from './dev-mode';
 import {
   isUsable,
   readDistinctId,
@@ -26,17 +20,6 @@ import {
   readSessionId,
   type PostHogLike,
 } from './posthog-like';
-
-/** `SpanStatusCode.ERROR`, without importing the enum for one comparison. */
-const STATUS_ERROR = 2;
-
-function failed(span: ReadableSpan): boolean {
-  return (
-    span.status?.code === STATUS_ERROR ||
-    span.attributes['exception.type'] !== undefined ||
-    span.events?.some((event) => event.name === 'exception') === true
-  );
-}
 
 export interface PostHogCompatibilityOptions {
   /**
@@ -83,36 +66,12 @@ export interface PostHogCompatibilityOptions {
   debug?: boolean;
 }
 
-/** Why a failed span ended up with no replay link. */
-type Reason = 'no-posthog' | 'session-rotated' | 'not-recording';
-
-const EXPLANATION: Record<Reason, string> = {
-  'no-posthog':
-    'no usable PostHog on the page. Pass the instance to joinPostHog(), or ' +
-    'check posthog.init() runs before the first span.',
-  'session-rotated':
-    'the PostHog session rotated after this span started, so a link would ' +
-    'point at a different recording than the one the span belongs to.',
-  'not-recording':
-    'session replay is not recording. Check it is enabled for the project, ' +
-    'that this session was not sampled out, and that the recorder has ' +
-    'started. Note posthog-js does not record bots or headless browsers.',
-};
-
 /**
- * One warning per reason, not per span. A failing join fails on every span,
- * and a console with a thousand copies of the same line is the same as a
- * console with none.
+ * Whether to copy PostHog's session id onto same-origin fetches as baggage.
+ * Off here, on in `joinPostHog`, which documents it.
  */
-function explainer(enabled: boolean | undefined) {
-  const said = new Set<Reason>();
-  return (reason: Reason): void => {
-    if (!enabled || said.has(reason)) return;
-    said.add(reason);
-    console.warn(
-      `[autotel-posthog] No session.replay.url on a failed span: ${EXPLANATION[reason]}`,
-    );
-  };
+interface PropagateOption {
+  propagateSession?: boolean;
 }
 
 export function resolvePostHog(
@@ -127,42 +86,31 @@ export function resolvePostHog(
 }
 
 export function posthogCompatibility(
-  options: PostHogCompatibilityOptions = {},
+  options: PostHogCompatibilityOptions & PropagateOption = {},
 ): SpanProcessor {
-  const explain = explainer(options.debug ?? isDevelopment());
+  const resolve = () => resolvePostHog(options);
 
-  return {
+  return enrichSpans({
+    name: 'posthog',
+    debug: options.debug,
+    propagateSession: options.propagateSession ?? false,
+
+    // PostHog's session id is the one the replay, the funnels and the person
+    // profile are keyed on, so it outranks whatever the tracer minted.
+    session: () => {
+      const posthog = resolve();
+      return posthog ? readSessionId(posthog) : undefined;
+    },
+
     /**
-     * Identity is read here, not in `onEnd`, because it is a fact about when
-     * the operation happened. PostHog rotates a session after 30 minutes idle,
-     * and `identify()` can land mid-request; a long span asking at the end
-     * would be filed under whoever the visitor had become by then rather than
-     * who started it.
+     * Identity is read at the start because it is a fact about when the
+     * operation happened: PostHog rotates a session after 30 minutes idle, and
+     * `identify()` can land mid-request.
      */
-    onStart(span: Span, _context: Context): void {
-      const posthog = resolvePostHog(options);
-      if (!posthog) return;
-
-      // Assigned, not filled. PostHog's session id is the one the replay, the
-      // funnels and the person profile are keyed on, so where PostHog has one
-      // it outranks whatever the tracer minted for itself — a span carrying any
-      // other id links to nothing.
-      const sessionId = readSessionId(posthog);
-      if (sessionId !== undefined) {
-        span.setAttribute('session.id', sessionId);
-      }
-
-      // SAFETY: ReadableSpan types attributes as readonly; a span enricher's job
-      // is to add to them before export, which is what this processor does.
-      const attributes = span.attributes as Attributes;
-      const fill = (key: string, value: string | boolean | undefined): void => {
-        if (value !== undefined && attributes[key] === undefined) {
-          span.setAttribute(key, value);
-        }
-      };
-
+    onStart: (span) => {
+      const posthog = resolve();
+      if (!posthog) return undefined;
       const distinctId = readDistinctId(posthog);
-      fill('user.id', distinctId);
 
       // One sink for the span: the projection keys on it, so the span keeps
       // its first flag whole rather than a mix of every flag's fields.
@@ -193,50 +141,28 @@ export function posthogCompatibility(
           contextId: distinctId,
         });
       }
+
+      return { 'user.id': distinctId };
     },
 
-    /**
-     * Only the replay link is left for the end, because only the end knows
-     * whether the span failed.
-     */
-    onEnd(span: ReadableSpan): void {
-      if (!failed(span)) return;
-
-      const posthog = resolvePostHog(options);
+    onFailure: () => {
+      const posthog = resolve();
       if (!posthog) {
-        explain('no-posthog');
-        return;
+        return (
+          'no usable PostHog on the page. Pass the instance to joinPostHog(), ' +
+          'or check posthog.init() runs before the first span.'
+        );
       }
-
-      // SAFETY: ReadableSpan types attributes as readonly; a span enricher's job
-      // is to add to them before export, which is what this processor does.
-      const attributes = span.attributes as Attributes;
-      if (attributes['session.replay.url'] !== undefined) return;
-
-      // `get_session_replay_url()` describes the session PostHog is in *now*.
-      // If that is no longer the session this span was stamped with — a
-      // rotation, a reset, an identify — the link would point at a recording
-      // the span has nothing to do with.
-      const current = readSessionId(posthog);
-      if (current === undefined || current !== attributes['session.id']) {
-        explain('session-rotated');
-        return;
-      }
-
       const url = readReplayUrl(posthog);
       if (url === undefined) {
-        explain('not-recording');
-        return;
+        return (
+          'session replay is not recording. Check it is enabled for the ' +
+          'project, that this session was not sampled out, and that the ' +
+          'recorder has started. Note posthog-js does not record bots or ' +
+          'headless browsers.'
+        );
       }
-      attributes['session.replay.url'] = url;
+      return { 'session.replay.url': url };
     },
-
-    forceFlush(): Promise<void> {
-      return Promise.resolve();
-    },
-
-    shutdown(): Promise<void> {
-      return Promise.resolve();
-    },
-  };
+  });
 }

@@ -1,16 +1,15 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { context, trace as otelTrace } from '@opentelemetry/api';
 import type { AttributeValue, Attributes } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import type { BeforeSendFn } from 'posthog-js';
-import { setBaggage } from 'autotel-web/baggage';
-import { joinPostHog } from './join';
+import { clearBaggage, getBaggageEntries } from 'autotel-web/baggage';
 
-vi.mock('autotel-web/baggage', () => ({
-  setBaggage: vi.fn(),
-}));
+const sessionBaggage = () => getBaggageEntries()['session.id'];
+import { liveSpanCountForTesting, resetJoinForTesting } from 'autotel-web/join';
+import { joinPostHog } from './join';
 
 beforeAll(() => {
   context.setGlobalContextManager(
@@ -19,7 +18,8 @@ beforeAll(() => {
 });
 
 afterEach(() => {
-  vi.mocked(setBaggage).mockClear();
+  clearBaggage();
+  resetJoinForTesting();
 });
 
 // PostHog's own hook type, so the double cannot drift from what before_send
@@ -351,10 +351,7 @@ describe('session baggage', () => {
       tracer.startSpan(`never.ends.${index}`);
     }
 
-    // SAFETY: reaching into the processor's own bookkeeping is the only way to
-    // observe retention; there is no public surface that reports it.
-    const retained = (join as unknown as { liveCount: () => number }).liveCount;
-    expect(retained()).toBeLessThanOrEqual(128);
+    expect(liveSpanCountForTesting()).toBeLessThanOrEqual(128);
   });
 
   it('seeds the session before anything has been traced', () => {
@@ -365,7 +362,7 @@ describe('session baggage', () => {
     // application span around the call, that is every first request.
     joinPostHog(fakePostHog());
 
-    expect(setBaggage).toHaveBeenCalledWith({ 'session.id': 'sess_1' });
+    expect(sessionBaggage()).toBe('sess_1');
   });
 
   it('waits for PostHog when it is not on the page yet', () => {
@@ -374,21 +371,20 @@ describe('session baggage', () => {
     // join works at all.
     joinPostHog({});
 
-    expect(setBaggage).not.toHaveBeenCalled();
+    expect(sessionBaggage()).toBeUndefined();
   });
 
   it('does not seed when propagateSession is off', () => {
     joinPostHog(fakePostHog(), { propagateSession: false });
 
-    expect(setBaggage).not.toHaveBeenCalled();
+    expect(sessionBaggage()).toBeUndefined();
   });
 
   it('writes PostHog session.id on the first span', () => {
     const enricher = joinPostHog(fakePostHog());
     startSpan(enricher);
 
-    expect(setBaggage).toHaveBeenCalledTimes(1);
-    expect(setBaggage).toHaveBeenCalledWith({ 'session.id': 'sess_1' });
+    expect(sessionBaggage()).toBe('sess_1');
   });
 
   it('does not rewrite the same session id', () => {
@@ -397,7 +393,7 @@ describe('session baggage', () => {
     startSpan(enricher);
     startSpan(enricher);
 
-    expect(setBaggage).toHaveBeenCalledTimes(1);
+    expect(sessionBaggage()).toBe('sess_1');
   });
 
   it('writes again after the session rotates', () => {
@@ -410,17 +406,14 @@ describe('session baggage', () => {
     current = 'sess_late';
     startSpan(enricher);
 
-    expect(setBaggage).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(setBaggage).mock.calls[1]?.[0]).toEqual({
-      'session.id': 'sess_late',
-    });
+    expect(sessionBaggage()).toBe('sess_late');
   });
 
   it('skips when propagateSession is false', () => {
     const enricher = joinPostHog(fakePostHog(), { propagateSession: false });
     startSpan(enricher);
 
-    expect(setBaggage).not.toHaveBeenCalled();
+    expect(sessionBaggage()).toBeUndefined();
   });
 
   it('skips an empty session id', () => {
@@ -429,6 +422,6 @@ describe('session baggage', () => {
     const enricher = joinPostHog(posthog);
     startSpan(enricher);
 
-    expect(setBaggage).not.toHaveBeenCalled();
+    expect(sessionBaggage()).toBeUndefined();
   });
 });

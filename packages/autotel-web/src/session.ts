@@ -45,6 +45,14 @@ export type SessionIdProvider = () => string | undefined;
 let enabled = true;
 let timeoutMs = DEFAULT_TIMEOUT_MS;
 let idProvider: SessionIdProvider | undefined;
+/**
+ * The session of the join that owns `session.id` (see `autotel-web/join`).
+ * Its own slot, because joins are created before `init()` runs and
+ * `configureSession` must not wipe it; an explicit `session.id` in the config
+ * still wins. Logs and events read the session from here, so they carry the
+ * same `session.id` as the spans and baggage the join stamps.
+ */
+let joinIdProvider: SessionIdProvider | undefined;
 let emitEvents = false;
 let state: SessionState | undefined;
 let announced: string | undefined;
@@ -150,6 +158,102 @@ function writeStored(next: SessionState): void {
 }
 
 /**
+ * Ids minted while a join owned the session but had none yet. A recorder's
+ * SDK can take a moment to start (RUM's session appears ~half a second after
+ * init), and the first console line or web vital of the visit would otherwise
+ * carry an id nobody filters by. Records waiting in the export batch are
+ * re-stamped with the vendor's session once it exists: {@link settledSessionId}.
+ */
+const provisional = new Set<string>();
+/**
+ * Where each provisional id was filed, decided once: the vendor session in
+ * place when it first resolved. Never re-read, because the vendor's session
+ * rotates, and a record queued or retried after a rotation from A to B still
+ * belongs to A.
+ */
+const settledAs = new Map<string, string>();
+/**
+ * The other way round: the provisional id a vendor session took over from.
+ * Sampling hashes that one for the whole visit (see {@link samplingKeyFor}).
+ */
+const takenOverFrom = new Map<string, string>();
+
+/** File every still-unfiled provisional id under `vendorId`, once. */
+function settleProvisional(vendorId: string): void {
+  for (const id of provisional) {
+    if (settledAs.has(id)) continue;
+    settledAs.set(id, vendorId);
+    if (!takenOverFrom.has(vendorId)) takenOverFrom.set(vendorId, id);
+  }
+}
+/** When the first stand-in id was minted, for {@link awaitingJoinSession}. */
+let firstProvisionalAt: number | undefined;
+
+/**
+ * How long records wait for the owning join's session before leaving with the
+ * stand-in id. RUM's session appears ~half a second after init; this is well
+ * past that, and short enough that a recorder that never starts costs little.
+ */
+const JOIN_SESSION_GRACE_MS = 3000;
+
+/**
+ * Whether records should wait a moment for the owning join's session: a join
+ * owns it, has none yet, and stand-ins have only just started being minted.
+ */
+export function awaitingJoinSession(): boolean {
+  if (!joinIdProvider || idProvider || firstProvisionalAt === undefined) {
+    return false;
+  }
+  if (Date.now() - firstProvisionalAt > JOIN_SESSION_GRACE_MS) return false;
+  let current: string | undefined;
+  try {
+    current = joinIdProvider();
+  } catch {
+    current = undefined;
+  }
+  return current === undefined || current.length === 0;
+}
+
+/**
+ * The session a record stamped with `id` belongs to now: the owning join's
+ * session if `id` was minted only while that join had none yet, `id` itself
+ * otherwise.
+ */
+export function settledSessionId(id: string): string {
+  const filed = settledAs.get(id);
+  if (filed !== undefined) return filed;
+  if (!provisional.has(id) || idProvider || !joinIdProvider) return id;
+  let current: string | undefined;
+  try {
+    current = joinIdProvider();
+  } catch {
+    current = undefined;
+  }
+  if (current === undefined || current.length === 0) return id;
+  settleProvisional(current);
+  return settledAs.get(id) ?? id;
+}
+
+/**
+ * The key a session is sampled by. A vendor session that took over from a
+ * provisional id is sampled as that id, so a visit is kept or dropped whole
+ * across the moment its recorder starts; hashing the vendor id instead could
+ * keep the start of a visit and drop the rest, or the other way round, and a
+ * dropped record cannot be re-stamped back. A later rotation is a new session
+ * and gets its own decision.
+ */
+export function samplingKeyFor(sessionId: string): string {
+  return takenOverFrom.get(sessionId) ?? sessionId;
+}
+
+/** @internal Called by the join that owns `session.id`. */
+export function setJoinSessionProvider(
+  provider: SessionIdProvider | undefined,
+): void {
+  joinIdProvider = provider;
+}
+
+/**
  * Configure session tracking. Called by `init()` / `initFull()`; exported so a
  * host app can turn it off or lengthen the window without re-initializing.
  */
@@ -195,10 +299,20 @@ export function getSessionAttributes(): Record<string, string> | undefined {
   // claiming a session began the moment we first asked would be a guess.
   // A provider that throws counts as one still starting up.
   let provided: string | undefined;
-  try {
-    provided = idProvider?.();
-  } catch {
-    provided = undefined;
+  for (const provider of [idProvider, joinIdProvider]) {
+    try {
+      provided = provider?.();
+    } catch {
+      provided = undefined;
+    }
+    if (provided !== undefined && provided.length > 0) {
+      // The owning join's session has arrived: file the stand-ins minted
+      // before it under this one now, before it can rotate.
+      if (provider === joinIdProvider && !idProvider) {
+        settleProvisional(provided);
+      }
+      break;
+    }
   }
   if (provided !== undefined && provided.length > 0) {
     return { [SESSION.ID]: provided };
@@ -206,7 +320,13 @@ export function getSessionAttributes(): Record<string, string> | undefined {
 
   resolving = true;
   try {
-    return resolveSession();
+    const minted = resolveSession();
+    // A join owns the session but has none yet: this id is a stand-in.
+    if (joinIdProvider && !idProvider && minted?.[SESSION.ID]) {
+      provisional.add(minted[SESSION.ID]);
+      firstProvisionalAt ??= Date.now();
+    }
+    return minted;
   } finally {
     resolving = false;
   }
@@ -251,6 +371,11 @@ export function resetSessionForTesting(): void {
   enabled = true;
   timeoutMs = DEFAULT_TIMEOUT_MS;
   idProvider = undefined;
+  joinIdProvider = undefined;
+  provisional.clear();
+  settledAs.clear();
+  takenOverFrom.clear();
+  firstProvisionalAt = undefined;
   emitEvents = false;
   state = undefined;
   announced = undefined;

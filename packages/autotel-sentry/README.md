@@ -2,7 +2,9 @@
 
 Parses a Sentry DSN into the OTLP endpoint and auth headers that Autotel's `init()` expects, so autotel exports traces and logs straight to Sentry.
 
-That is the whole package. To put captured errors on the active trace, call `Sentry.setOpenTelemetryContextAsyncContextStrategy()` after `Sentry.init()`: `@sentry/node` then reads the active OpenTelemetry span when it builds an event, so each error carries that span's `trace_id` and `span_id`.
+In the browser, `autotel-sentry/browser` links the Sentry SDK already on your page to autotel-web's traces: see [Browser](#browser).
+
+On the server, to put captured errors on the active trace, call `Sentry.setOpenTelemetryContextAsyncContextStrategy()` after `Sentry.init()`: `@sentry/node` then reads the active OpenTelemetry span when it builds an event, so each error carries that span's `trace_id` and `span_id`.
 
 ## Prerequisites
 
@@ -27,7 +29,7 @@ import { sentryOtlpConfig } from 'autotel-sentry';
 const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
 // 1. Initialize Sentry: tell it not to register its own OTel SDK
-Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+Sentry.init({ dsn: config.dsn });
 // Sentry reads trace ids from the active OpenTelemetry span
 Sentry.setOpenTelemetryContextAsyncContextStrategy();
 
@@ -35,7 +37,42 @@ Sentry.setOpenTelemetryContextAsyncContextStrategy();
 init({ service: 'my-app', endpoint: config.endpoint, headers: config.headers });
 ```
 
-`skipOpenTelemetrySetup: true` is required because Sentry SDK v8+ registers its own OTel SDK internally. Autotel owns OTel setup; without this flag you get duplicate span processors and broken traces.
+`@sentry/node` 11 leaves OpenTelemetry to autotel by default (`enableOpenTelemetrySetup` is `false`). On 8–10, pass `skipOpenTelemetrySetup: true` instead: those versions register their own OTel SDK otherwise, and you get duplicate span processors and broken traces.
+
+## Browser
+
+Keep Sentry for errors and replays; let `autotel-web` trace. `joinSentry` puts the autotel trace on every Sentry error (even one captured after an `await`), and `user.id` plus `sentry.replay_id` on every span.
+
+```bash
+pnpm add autotel-web autotel-sentry @sentry/browser
+```
+
+```typescript
+import * as Sentry from '@sentry/browser'; // or @sentry/react, @sentry/vue…
+import { initFull } from 'autotel-web/full';
+import { joinSentry, sentryOtlpConfig } from 'autotel-sentry/browser';
+
+const sentry = sentryOtlpConfig(SENTRY_DSN);
+
+Sentry.init({
+  dsn: sentry.dsn, // no browserTracingIntegration: autotel traces
+  integrations: [Sentry.replayIntegration()],
+  replaysSessionSampleRate: 0.1,
+});
+
+initFull({
+  service: 'web',
+  endpoint: sentry.browserEndpoint, // Sentry's OTLP endpoint, straight from the browser
+  spanEnrichers: [
+    joinSentry(Sentry, {
+      traceUrl: ({ traceId }) => `https://traces.example.com/${traceId}`, // optional
+      replayUrl: (id) => `https://my-org.sentry.io/replays/${id}/`, // optional
+    }),
+  ],
+});
+```
+
+No Sentry package is imported: the SDK you pass in is read structurally, so the page keeps one copy. Built from [`autotel-web/join`](../autotel-web#joining-the-sdks-already-on-your-page). Docs: [Sentry](https://jagreehal.github.io/autotel/integrations/sentry/#browser-autotel-traces-sentry-errors).
 
 ## API reference
 
@@ -50,6 +87,7 @@ const config = sentryOtlpConfig(
 // config.dsn: normalized DSN string (pass to Sentry.init)
 // config.endpoint: OTLP base URL (pass to Autotel init as `endpoint`)
 // config.headers: auth headers (pass to Autotel init as `headers`)
+// config.browserEndpoint: the endpoint with the key as ?sentry_key= (pass to autotel-web as `endpoint`)
 ```
 
 Throws if the DSN is missing or cannot be parsed.
@@ -61,6 +99,7 @@ interface SentryOtlpConfig {
   dsn: string; // Normalized DSN for Sentry.init
   endpoint: string; // OTLP base endpoint (Autotel appends /v1/traces)
   headers: Record<string, string>; // Auth headers for OTLP requests
+  browserEndpoint: string; // endpoint with ?sentry_key= for autotel-web
 }
 ```
 

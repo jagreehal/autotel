@@ -10,7 +10,7 @@ Sentry SDK ─────────────────> Sentry (errors, 
 ```
 
 1. `sentryOtlpConfig(dsn)` parses your Sentry DSN into an OTLP endpoint and auth headers
-2. Sentry SDK is initialized with `skipOpenTelemetrySetup: true` so Autotel owns the OTel setup
+2. The Sentry SDK leaves OpenTelemetry to Autotel (`@sentry/node` 11 does by default; on 8–10 pass `skipOpenTelemetrySetup: true`)
 3. `Sentry.setOpenTelemetryContextAsyncContextStrategy()` makes Sentry read the active OTel span, so captured errors carry its `trace_id` and `span_id`
 4. Autotel exports traces via OTLP to Sentry's ingestion endpoint
 5. Pino is auto-instrumented (`autoInstrumentations: ['pino']`, `logs: true`), so each log line also goes to Sentry as a log on its trace
@@ -66,13 +66,40 @@ AUTOTEL_DEBUG=1 pnpm start
 - **Logs**: the three pino lines, each on the trace
 - **Errors** (with `THROW_FOR_DEMO=1`): A "Demo error for Sentry" error on the same trace, and the root span marked as failed
 
+## Browser join
+
+```bash
+pnpm web          # http://localhost:8788
+pnpm smoke:web    # headless Chrome, then reads the result back from Sentry
+```
+
+Click **Fail checkout**. The page calls `/checkout`, which fails with 402, and
+then `Sentry.captureException` runs _after_ the `await`, where the browser has
+already lost the active span. In Sentry:
+
+- the **error** `Checkout failed: 402` is on the autotel trace;
+- the **trace** holds `checkout.click` and its fetch span from the browser
+  (exported straight to Sentry's OTLP endpoint) and `POST /checkout` from the
+  server;
+- both browser spans carry `sentry.replay_id`, so the trace opens the replay.
+
+`src/web/client.ts` is the whole browser setup: `Sentry.init` with replay and
+no `browserTracingIntegration`, then `initFull` with
+`endpoint: sentry.browserEndpoint` and `spanEnrichers: [joinSentry(Sentry)]`.
+Set `SENTRY_ORG` to also get a `session.replay.url` on failed spans.
+
+`smoke:web` needs `SENTRY_AUTH_TOKEN` (a user token that can read events) and
+`SENTRY_ORG` for the live checks. Without them it checks only the page.
+
 ## Environment variables
 
-| Variable         | Required | Description                        |
-| ---------------- | -------- | ---------------------------------- |
-| `SENTRY_DSN`     | Yes      | Sentry project DSN                 |
-| `THROW_FOR_DEMO` | No       | Set to `1` to capture a demo error |
-| `AUTOTEL_DEBUG`  | No       | Set to `1` for debug logging       |
+| Variable            | Required | Description                                          |
+| ------------------- | -------- | ---------------------------------------------------- |
+| `SENTRY_DSN`        | Yes      | Sentry project DSN                                   |
+| `THROW_FOR_DEMO`    | No       | Set to `1` to capture a demo error                   |
+| `AUTOTEL_DEBUG`     | No       | Set to `1` for debug logging                         |
+| `SENTRY_ORG`        | No       | Org slug: replay links, and `smoke:web` live checks  |
+| `SENTRY_AUTH_TOKEN` | No       | Token that reads events, for `smoke:web` live checks |
 
 ## Key code
 
@@ -81,7 +108,7 @@ import { sentryOtlpConfig } from 'autotel-sentry';
 
 const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
-Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+Sentry.init({ dsn: config.dsn });
 Sentry.setOpenTelemetryContextAsyncContextStrategy();
 init({
   service: 'example-sentry',

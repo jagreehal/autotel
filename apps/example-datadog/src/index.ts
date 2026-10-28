@@ -171,7 +171,7 @@ const metrics = new Metric('datadog-example', { logger });
  */
 const processOrder = withTracing({})(
   (ctx: TraceContext) => async (orderId: string, amount: number) => {
-    logger.info('Processing order', { orderId, amount });
+    logger.info({ orderId, amount }, 'Processing order');
 
     // Add custom attributes to the trace
     ctx.setAttribute('order.id', orderId);
@@ -187,10 +187,13 @@ const processOrder = withTracing({})(
       environment: config.environment,
     });
 
-    logger.info('Order processed successfully', {
-      orderId,
-      traceId: ctx.traceId,
-    });
+    logger.info(
+      {
+        orderId,
+        traceId: ctx.traceId,
+      },
+      'Order processed successfully',
+    );
 
     return { orderId, status: 'completed' as const, amount };
   },
@@ -202,7 +205,7 @@ const processOrder = withTracing({})(
  */
 const validatePayment = withTracing({})(
   (ctx: TraceContext) => async (orderId: string, amount: number) => {
-    logger.info('Validating payment', { orderId });
+    logger.info({ orderId }, 'Validating payment');
 
     ctx.setAttribute('payment.amount', amount);
 
@@ -219,7 +222,7 @@ const validatePayment = withTracing({})(
 
 const chargeCard = withTracing({})(
   (ctx: TraceContext) => async (orderId: string) => {
-    logger.info('Charging card', { orderId });
+    logger.info({ orderId }, 'Charging card');
 
     ctx.setAttribute('payment.method', 'credit_card');
 
@@ -232,7 +235,7 @@ const chargeCard = withTracing({})(
 
 const processPayment = withTracing({})(
   (ctx: TraceContext) => async (orderId: string, amount: number) => {
-    logger.info('Processing payment', { orderId, amount });
+    logger.info({ orderId, amount }, 'Processing payment');
 
     ctx.setAttribute('order.id', orderId);
     ctx.setAttribute('payment.amount', amount);
@@ -241,10 +244,13 @@ const processPayment = withTracing({})(
     await validatePayment(orderId, amount);
     const charge = await chargeCard(orderId);
 
-    logger.info('Payment completed', {
-      orderId,
-      transactionId: charge.transactionId,
-    });
+    logger.info(
+      {
+        orderId,
+        transactionId: charge.transactionId,
+      },
+      'Payment completed',
+    );
 
     return charge;
   },
@@ -256,7 +262,7 @@ const processPayment = withTracing({})(
  */
 const processRefund = withTracing({})(
   (ctx: TraceContext) => async (orderId: string) => {
-    logger.info('Processing refund', { orderId });
+    logger.info({ orderId }, 'Processing refund');
 
     ctx.setAttribute('refund.order_id', orderId);
 
@@ -264,13 +270,16 @@ const processRefund = withTracing({})(
     if (shouldSimulateFailure(REFUND_FAILURE_PROBABILITY)) {
       // Error is automatically captured in the trace with full stack trace
       const error = new Error('Refund failed: insufficient funds');
-      logger.error('Refund failed: insufficient funds', error, { orderId });
+      logger.error(
+        { orderId, err: error },
+        'Refund failed: insufficient funds',
+      );
       throw error;
     }
 
     await delay(SIMULATION_DELAYS.REFUND_PROCESSING);
 
-    logger.info('Refund processed successfully', { orderId });
+    logger.info({ orderId }, 'Refund processed successfully');
 
     return { orderId, status: 'refunded' as const };
   },
@@ -282,7 +291,7 @@ const processRefund = withTracing({})(
  */
 const generateReport = withTracing({})(
   (ctx: TraceContext) => async (reportType: string) => {
-    logger.info('Generating report', { reportType });
+    logger.info({ reportType }, 'Generating report');
 
     ctx.setAttribute('report.type', reportType);
 
@@ -310,11 +319,14 @@ const generateReport = withTracing({})(
     ctx.setAttribute('report.records', recordCount);
     ctx.setAttribute('report.duration_ms', duration);
 
-    logger.info('Report generated successfully', {
-      reportType,
-      recordCount,
-      duration,
-    });
+    logger.info(
+      {
+        reportType,
+        recordCount,
+        duration,
+      },
+      'Report generated successfully',
+    );
 
     return { reportType, recordCount, duration };
   },
@@ -384,8 +396,8 @@ async function main() {
     console.log('   - Adaptive sampling captures all errors automatically');
   } catch (error) {
     logger.error(
+      { err: error instanceof Error ? error : new Error(String(error)) },
       'Application error',
-      error instanceof Error ? error : new Error(String(error)),
     );
     console.error('❌ Error:', error);
   } finally {
@@ -400,13 +412,13 @@ async function main() {
 
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught exception', error);
+  logger.error({ err: error }, 'Uncaught exception');
   shutdown().then(() => process.exit(1));
 });
 
 process.on('unhandledRejection', (reason) => {
   const error = reason instanceof Error ? reason : new Error(String(reason));
-  logger.error('Unhandled rejection', error);
+  logger.error({ err: error }, 'Unhandled rejection');
   shutdown().then(() => process.exit(1));
 });
 

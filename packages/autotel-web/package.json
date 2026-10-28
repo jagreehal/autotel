@@ -22,6 +22,10 @@
     "./baggage": {
       "types": "./dist/baggage.d.ts",
       "import": "./dist/baggage.js"
+    },
+    "./join": {
+      "types": "./dist/join.d.ts",
+      "import": "./dist/join.js"
     }
   },
   "files": [

@@ -24,6 +24,7 @@
 import { createRequire } from 'node:module';
 import type { AutotelConfig } from 'autotel';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
+import { normalizeHeaders } from './headers';
 
 // See packages/autotel/src/node-require.ts for why the __filename fallback
 // is necessary alongside import.meta.url.
@@ -81,23 +82,6 @@ export interface GrafanaPresetConfig {
    * Overrides the default OTLP log processor when enableLogs is true.
    */
   logRecordProcessors?: LogRecordProcessor[];
-}
-
-function normalizeHeaders(
-  headers: string | Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  if (!headers) return undefined;
-  if (typeof headers === 'object') return headers;
-  const out: Record<string, string> = {};
-  for (const pair of headers.split(',')) {
-    const [key, ...valueParts] = pair.split('=');
-    if (key && valueParts.length > 0) {
-      let value = valueParts.join('=').trim();
-      value = value.replaceAll('%20', ' ');
-      out[key.trim()] = value;
-    }
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**

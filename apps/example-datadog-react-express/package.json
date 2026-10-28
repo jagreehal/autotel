@@ -1,0 +1,44 @@
+{
+  "name": "@jagreehal/example-datadog-react-express",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Frontend errors and traces in Datadog: a Vite + React 19 + TanStack Query + axios SPA and an Express API, with autotel-web, Datadog RUM and autotel-datadog",
+  "scripts": {
+    "api": "tsx --import ./server/instrumentation.ts server/index.ts",
+    "web": "vite --port 5174 --strictPort",
+    "dev": "node dev.mjs",
+    "type-check": "tsc --noEmit",
+    "smoke": "node smoke.mjs"
+  },
+  "dependencies": {
+    "@datadog/browser-rum": "7.16.1",
+    "@datadog/browser-rum-react": "7.16.1",
+    "@opentelemetry/api": "^1.9.1",
+    "@tanstack/react-query": "^5.104.4",
+    "autotel": "workspace:*",
+    "autotel-backends": "workspace:*",
+    "autotel-datadog": "workspace:*",
+    "autotel-posthog": "workspace:*",
+    "autotel-web": "workspace:*",
+    "axios": "1.20.0",
+    "dotenv": "^18.0.8",
+    "express": "4.22.2",
+    "posthog-js": "1.438.12",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router": "7.18.4",
+    "react-router-dom": "7.18.4"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.25",
+    "@types/node": "^26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "playwright": "1.64.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "8.3.4"
+  }
+}

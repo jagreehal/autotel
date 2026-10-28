@@ -5,17 +5,24 @@
   "type": "module",
   "description": "Example: Autotel + Sentry via OTLP with autotel-sentry helpers",
   "scripts": {
-    "start": "tsx --import autotel/register src/index.ts"
+    "start": "tsx --import autotel/register src/index.ts",
+    "web": "tsx src/web/server.ts",
+    "smoke:web": "node smoke-web.mjs"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@sentry/browser": "11.9.0",
     "@sentry/node": "^11.8.0",
     "autotel": "workspace:*",
     "autotel-sentry": "workspace:*",
+    "autotel-web": "workspace:*",
     "dotenv": "^18.0.8",
+    "esbuild": "^0.28.2",
     "pino": "^10.4.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "playwright": "1.64.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

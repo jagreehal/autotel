@@ -4,7 +4,8 @@ import type { SentryOtlpConfig } from './types';
  * Build OTLP export configuration from a Sentry DSN.
  *
  * Returns the normalized DSN (for Sentry.init), the OTLP base endpoint
- * (autotel appends /v1/traces), and the auth header.
+ * (autotel appends /v1/traces), the auth header, and the same endpoint with
+ * the key in the query for `autotel-web`.
  */
 export function sentryOtlpConfig(rawDsn: string): SentryOtlpConfig {
   const dsn = rawDsn.trim().replace(/^dsn=/i, '').trim();
@@ -23,9 +24,11 @@ export function sentryOtlpConfig(rawDsn: string): SentryOtlpConfig {
     throw new Error('SENTRY_DSN is missing the project id');
   }
 
+  const endpoint = `${url.origin}/api/${projectId}/integration/otlp`;
   return {
     dsn,
-    endpoint: `${url.origin}/api/${projectId}/integration/otlp`,
+    endpoint,
+    browserEndpoint: `${endpoint}?sentry_key=${encodeURIComponent(publicKey)}`,
     headers: {
       'x-sentry-auth': `sentry sentry_key=${publicKey}`,
     },

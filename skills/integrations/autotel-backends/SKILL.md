@@ -131,6 +131,25 @@ the routing, so the option does not apply.
 
 When `enableLogs: true`, the preset auto-sets `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL`, and `OTEL_EXPORTER_OTLP_LOGS_HEADERS` environment variables (only if not already set), enabling `pino-opentelemetry-transport` without extra configuration.
 
+### Browser export: `otlpRelay` (`autotel-backends/relay`)
+
+A key that authenticates OTLP (Datadog, Honeycomb, Grafana) must stay on the server, and Datadog's intake refuses browser requests. The page exports to its own origin and the server relays with the key added. It takes any preset in this package:
+
+```ts
+import { otlpRelay } from 'autotel-backends/relay';
+import { createDatadogConfig } from 'autotel-backends/datadog';
+
+const relay = otlpRelay(
+  createDatadogConfig({ apiKey, site: 'datadoghq.eu', service: 'web' }),
+);
+app.post('/otel/v1/*', (c) => relay(c.req.raw)); // Hono, Next route handlers, Workers
+
+// browser
+initFull({ service: 'web', endpoint: '/otel' });
+```
+
+It forwards `/v1/traces` and `/v1/logs` only, from the page's own origin (`allowedOrigins` adds others, with CORS; `X-Forwarded-Host` counts behind a proxy), bodies up to 1 MiB, and only the content headers. It returns the backend's status, not its body, and logs each refusal once on the server. In Vite dev, proxy with the object form and `xfwd: true`: the string shorthand turns on `changeOrigin`.
+
 ### Google Cloud
 
 **Via OpenTelemetry Collector (recommended, no auth in app):**

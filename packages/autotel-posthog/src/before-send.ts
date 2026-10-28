@@ -21,6 +21,7 @@
  */
 
 import { context, trace, type SpanContext } from '@opentelemetry/api';
+import { currentSpanContext, spanContextOf } from 'autotel-web/join';
 import type { CaptureResult } from 'posthog-js';
 
 /** What a PostHog event property can hold: JSON, since that is what is sent. */
@@ -64,46 +65,71 @@ export interface AutotelBeforeSendOptions {
    * time the fetch resolves and the interesting event fires. Without this the
    * hook would silently add nothing to exactly the events worth joining.
    *
-   * `joinPostHog()` supplies one backed by the spans it has seen start and not
-   * yet end. Left unset, the hook uses only the active context.
+   * Defaults to `currentSpanContext()` from `autotel-web/join`: the newest
+   * span still in flight, as seen by any join enricher on the page, and
+   * nothing when more than one trace is in flight.
    */
   fallbackSpanContext?: () => SpanContext | undefined;
+
+  /**
+   * Explain, once, why an event got no `$trace_id` because more than one
+   * trace was in flight. Defaults to on in development.
+   */
+  debug?: boolean;
 }
 
 /**
  * The ids of the span in progress, shaped to spread straight onto a capture.
  *
  * The hook recovers the span by itself in every case it can be sure of. This
- * is for the case it cannot: two overlapping user actions, each its own trace,
- * with no active context left to say which one an event belongs to. Read it
- * while the span is still active — before the first `await` — and spread it:
+ * is for the cases it cannot:
  *
- * ```ts
- * await span('checkout.click', async () => {
- *   const trace = traceProperties();
- *   await fetch('/checkout', { method: 'POST' });
- *   posthog.capture('checkout_failed', { ...trace });
- * });
- * ```
+ * - **A failed request's error.** PostHog's `before_send` never sees the
+ *   error object, so it cannot tell which request an exception came from.
+ *   Pass the error and the request it came from decides (axios'
+ *   `error.request`, ky's `error.response`, `error.cause`):
+ *
+ *   ```ts
+ *   onError: (error) => posthog.captureException(error, traceProperties(error))
+ *   ```
+ *
+ * - **Two overlapping user actions**, each its own trace, with no active
+ *   context left to say which one an event belongs to. Read it while the span
+ *   is still active, before the first `await`, and spread it:
+ *
+ *   ```ts
+ *   await span('checkout.click', async () => {
+ *     const trace = traceProperties();
+ *     await fetch('/checkout', { method: 'POST' });
+ *     posthog.capture('checkout_failed', { ...trace });
+ *   });
+ *   ```
  *
  * Returns `{}` when nothing is being traced, so the spread is always safe.
  * Properties the caller sets are never overwritten, so this always wins.
  */
-export function traceProperties(): {
+export function traceProperties(error?: unknown): {
   $trace_id?: string;
   $span_id?: string;
 } {
-  const spanContext = trace.getSpanContext(context.active());
+  const spanContext =
+    (error === undefined ? undefined : spanContextOf(error)) ??
+    trace.getSpanContext(context.active());
   if (!spanContext) return {};
   return { $trace_id: spanContext.traceId, $span_id: spanContext.spanId };
 }
+
+const HINT =
+  'With PostHog: const t = traceProperties(); ... posthog.capture(name, { ...t }).';
 
 /** The active context wins; this only answers when there is nothing active. */
 function readFallback(
   options: AutotelBeforeSendOptions,
 ): SpanContext | undefined {
   try {
-    return options.fallbackSpanContext?.();
+    return options.fallbackSpanContext
+      ? options.fallbackSpanContext()
+      : currentSpanContext({ debug: options.debug, hint: HINT });
   } catch {
     // A fallback that throws is a fallback that adds nothing, not an event
     // that fails to send.

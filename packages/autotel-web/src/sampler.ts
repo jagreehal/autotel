@@ -18,7 +18,7 @@ import {
   type SamplingResult,
 } from '@opentelemetry/sdk-trace-base';
 import { sampleByKey } from './sampling';
-import { getSessionAttributes } from './session';
+import { getSessionAttributes, samplingKeyFor } from './session';
 import { SESSION } from './semconv';
 
 export function createSessionRatioSampler(ratio: number): Sampler {
@@ -33,7 +33,9 @@ export function createSessionRatioSampler(ratio: number): Sampler {
     ): SamplingResult {
       if (ratio >= 1) return { decision: SamplingDecision.RECORD_AND_SAMPLED };
       if (ratio <= 0) return { decision: SamplingDecision.NOT_RECORD };
-      const key = getSessionAttributes()?.[SESSION.ID] ?? traceId;
+      const sessionId = getSessionAttributes()?.[SESSION.ID];
+      // The visit's key, stable across the owning join's SDK starting up.
+      const key = sessionId === undefined ? traceId : samplingKeyFor(sessionId);
       return sampleByKey(key, ratio)
         ? { decision: SamplingDecision.RECORD_AND_SAMPLED }
         : { decision: SamplingDecision.NOT_RECORD };

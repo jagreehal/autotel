@@ -11,7 +11,6 @@ const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 // Sentry handles errors only; Autotel owns the OTel setup.
 Sentry.init({
   dsn: config.dsn,
-  skipOpenTelemetrySetup: true,
 });
 // Sentry reads trace ids from the active OTel span, so captured errors join it.
 Sentry.setOpenTelemetryContextAsyncContextStrategy();

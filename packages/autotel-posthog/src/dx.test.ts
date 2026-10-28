@@ -3,6 +3,7 @@ import { context, trace } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
 import type { BeforeSendFn } from 'posthog-js';
+import { rememberRequestSpan } from 'autotel-web/join';
 import { autotelBeforeSend, traceProperties } from './before-send';
 import { joinPostHog } from './join';
 
@@ -58,6 +59,21 @@ describe('traceProperties()', () => {
     expect(properties['$trace_id']).toBe(span.spanContext().traceId);
     expect(properties['$span_id']).toBe(span.spanContext().spanId);
     span.end();
+  });
+
+  it('takes the trace of the request a failed call came from', () => {
+    // PostHog's before_send never sees the error, so the app passes it.
+    const xhr = {};
+    const request = {
+      traceId: 'f'.repeat(32),
+      spanId: 'e'.repeat(16),
+      traceFlags: 1,
+    };
+    rememberRequestSpan(xhr, request);
+    expect(traceProperties({ request: xhr })).toEqual({
+      $trace_id: request.traceId,
+      $span_id: request.spanId,
+    });
   });
 
   it('spreads to nothing when there is no span to read', () => {
