@@ -5,7 +5,7 @@
  *   import { sentryOtlpConfig } from 'autotel-sentry';
  *
  *   const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
- *   Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+ *   Sentry.init({ dsn: config.dsn }); // 8–10: add skipOpenTelemetrySetup: true
  *   Sentry.setOpenTelemetryContextAsyncContextStrategy();
  *   init({ service: 'my-app', endpoint: config.endpoint, headers: config.headers });
  *

@@ -3,6 +3,7 @@ import {
   APP,
   AUTOTEL_WEB,
   BROWSER,
+  RESOURCE,
   SESSION,
   USER_AGENT,
   WEB_EVENT,
@@ -12,6 +13,14 @@ import {
 // browser dashboard. A typo here is invisible at runtime and silently empties a
 // panel, so they are pinned rather than trusted.
 describe('canonical OpenTelemetry names', () => {
+  it('pins resource attributes', () => {
+    expect(RESOURCE).toEqual({
+      SERVICE_NAME: 'service.name',
+      SERVICE_VERSION: 'service.version',
+      DEPLOYMENT_ENVIRONMENT_NAME: 'deployment.environment.name',
+    });
+  });
+
   it('pins browser attributes', () => {
     expect(BROWSER).toEqual({
       LANGUAGE: 'browser.language',

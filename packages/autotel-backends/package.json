@@ -46,6 +46,11 @@
       "types": "./dist/posthog.d.ts",
       "import": "./dist/posthog.js",
       "require": "./dist/posthog.cjs"
+    },
+    "./relay": {
+      "types": "./dist/relay.d.ts",
+      "import": "./dist/relay.js",
+      "require": "./dist/relay.cjs"
     }
   },
   "files": [

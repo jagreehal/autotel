@@ -217,6 +217,37 @@ init(
 
 [View full Langfuse configuration options →](./src/langfuse.ts)
 
+## Browser export: `otlpRelay`
+
+A backend that authenticates OTLP with a secret key (Datadog, Honeycomb,
+Grafana) cannot take spans straight from a page: the key would ship to every
+visitor, and most intakes refuse browser requests anyway. Point `autotel-web`
+at your own origin and relay from the server, adding the key there. It takes
+any preset in this package as-is:
+
+```typescript
+import { otlpRelay } from 'autotel-backends/relay';
+import { createDatadogConfig } from 'autotel-backends/datadog';
+
+const relay = otlpRelay(
+  createDatadogConfig({ apiKey, site: 'datadoghq.eu', service: 'web' }),
+);
+
+// Hono, Next.js route handlers, Workers: anything with Request/Response
+app.post('/otel/v1/*', (c) => relay(c.req.raw));
+```
+
+```typescript
+// browser
+initFull({ service: 'web', endpoint: '/otel' });
+```
+
+It forwards `/v1/traces` and `/v1/logs` only, from the page's own origin only
+(`allowedOrigins` adds others, with CORS), bodies up to `maxBodyBytes` (1 MiB),
+and only `content-type` / `content-encoding` from the request: never cookies.
+The backend's status comes back (so the exporter's retries work), its body
+does not.
+
 ## Why Use Backend Configs?
 
 ### Without backend configs (manual):

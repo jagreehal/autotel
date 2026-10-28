@@ -139,7 +139,13 @@ await span('checkout.click', async () => {
 
 `traceProperties()` returns `{}` when nothing is being traced, so the spread is always safe, and a property the caller set is never overwritten.
 
-`autotelBeforeSend()` alone reads only the active context. Pass `fallbackSpanContext` for the same behaviour without the enricher.
+A failed request reported after it finished (TanStack Query's `onError`, a `catch` after `await`) needs the error itself, because PostHog's `before_send` never sees the error object. `traceProperties(error)` reads the request's trace from `error.request` (axios), `error.response` (ky, ofetch) or `error.cause`:
+
+```typescript
+onError: (error) => posthog.captureException(error, traceProperties(error));
+```
+
+`autotelBeforeSend()` on its own falls back to `currentSpanContext()` from `autotel-web/join`, so it recovers the span after an `await` whenever any join enricher is on the page. Pass `fallbackSpanContext` to replace that.
 
 ### Carry the session to the server
 
@@ -203,10 +209,15 @@ PostHog still classifies that traffic as a bot server-side, so filter it out of 
 - `spanEnrichers`, not `spanProcessor`
 - Feature flags named explicitly, never harvested
 - `traceProperties()` used where a capture follows an `await`, rather than trusting the active context
+- `traceProperties(error)` on `captureException` for errors from failed requests
 - One copy of `posthog-js` on the page
 - `baggage: ''` on the server when the session should reach handler spans
 - Bot filtering turned off only on the instance under test
 
 ## Which session id wins
 
-Where PostHog has a session id it replaces the one `autotel-web` mints, because PostHog's id is what the replay, the funnels and the person profile are keyed on. Where PostHog has none yet the local id stands, since spans with no session are worse than spans with a session only autotel knows about. `user.id` and the rest are filled, never overwritten.
+Where PostHog has a session id it replaces the one `autotel-web` mints, because PostHog's id is what the replay, the funnels and the person profile are keyed on. That covers every signal: spans, baggage, logs and events. Where PostHog has none yet the local id stands, since spans with no session are worse than spans with a session only autotel knows about. `user.id` and the rest are filled, never overwritten.
+
+With another recorder on the page (Datadog RUM through `joinDatadog`), the join created first owns `session.id`; the other records its id as `<name>.session.id`. Create the error tracker's join first.
+
+`joinPostHog` is built on `autotel-web/join` (`enrichSpans`, `currentSpanContext`), the same blocks an app uses to join any other SDK.

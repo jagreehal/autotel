@@ -148,9 +148,17 @@ await span('checkout.click', async () => {
 });
 ```
 
+For a failed request reported after it finished (a TanStack Query `onError`, a `catch` after `await`), pass the error: PostHog's `before_send` never sees the error object, so the request's trace has to travel with the capture:
+
+```ts
+onError: (error) => posthog.captureException(error, traceProperties(error));
+```
+
 `traceProperties()` returns `{}` when nothing is being traced, so the spread is always safe, and a property the caller set is never overwritten — explicit always wins. `$trace_url` is still added for you.
 
-`autotelBeforeSend()` on its own reads only the active context. Pass `fallbackSpanContext` for the same behaviour without the enricher.
+`autotelBeforeSend()` on its own falls back to `currentSpanContext()` from `autotel-web/join`, so it recovers the span after an `await` whenever any join enricher is on the page. Pass `fallbackSpanContext` to replace that.
+
+`joinPostHog` is built from `autotel-web/join`, the same building blocks you can use to join any other frontend SDK: see [Join any frontend SDK](https://jagreehal.github.io/autotel/integrations/join/).
 
 ## When nothing shows up
 

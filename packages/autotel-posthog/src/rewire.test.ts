@@ -1,11 +1,12 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { context } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
 import type { BeforeSendFn } from 'posthog-js';
+import { liveSpanCountForTesting, resetJoinForTesting } from 'autotel-web/join';
 import { joinPostHog } from './join';
 
-vi.mock('autotel-web/baggage', () => ({ setBaggage: vi.fn() }));
+afterEach(() => resetJoinForTesting());
 
 beforeAll(() => {
   context.setGlobalContextManager(
@@ -37,39 +38,27 @@ const hooks = (p: ReturnType<typeof fakePostHog>): BeforeSendFn[] => {
 describe('joinPostHog called more than once', () => {
   it('does not accumulate state for processors nobody registered', () => {
     // Strict mode, HMR and repeated configuration all call this again. Only
-    // the processor the app registers ever sees a span; the rest are garbage.
-    // Holding a slot for each of them grows both retained memory and the work
-    // every single PostHog capture has to do.
+    // the processor the app registers ever sees a span; the rest must cost
+    // nothing, and must not install another hook.
     const posthog = fakePostHog();
-    let processor = joinPostHog(posthog);
-    for (let index = 0; index < 5000; index += 1) {
-      processor = joinPostHog(posthog);
-    }
+    for (let index = 0; index < 5000; index += 1) joinPostHog(posthog);
 
-    // SAFETY: the shared registry has no public surface; reading its size is
-    // the only way to observe that it is not growing.
-    const registered = (
-      processor as unknown as { registeredCount: () => number }
-    ).registeredCount;
-    expect(registered()).toBe(0);
+    expect(hooks(posthog)).toHaveLength(1);
+    expect(liveSpanCountForTesting()).toBe(0);
   });
 
-  it('lets go of a processor once its spans have ended', () => {
+  it('lets go of a span once it has ended, however many joins saw it', () => {
     const posthog = fakePostHog();
-    const first = joinPostHog(posthog);
-    const second = joinPostHog(posthog);
     const provider = new BasicTracerProvider({
-      spanProcessors: [first, second],
+      spanProcessors: [joinPostHog(posthog), joinPostHog(posthog)],
     });
 
     const span = provider.getTracer('test').startSpan('checkout.click');
-    const registered = (second as unknown as { registeredCount: () => number })
-      .registeredCount;
-    expect(registered()).toBeGreaterThan(0);
+    expect(liveSpanCountForTesting()).toBe(1);
 
     span.end();
 
-    expect(registered()).toBe(0);
+    expect(liveSpanCountForTesting()).toBe(0);
   });
 
   it('recovers the span from whichever processor is registered', () => {

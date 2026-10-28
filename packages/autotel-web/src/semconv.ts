@@ -26,6 +26,17 @@
  * to every log and event dashboard, and would show up in trace search as noise.
  */
 
+/**
+ * Canonical resource attributes: which service, which release, which
+ * environment. Backends key releases, source maps and environment filters on
+ * these (Datadog's unified `service`/`version`/`env` tags among them).
+ */
+export const RESOURCE = {
+  SERVICE_NAME: 'service.name',
+  SERVICE_VERSION: 'service.version',
+  DEPLOYMENT_ENVIRONMENT_NAME: 'deployment.environment.name',
+} as const;
+
 /** Canonical `browser.*` attributes. */
 export const BROWSER = {
   LANGUAGE: 'browser.language',

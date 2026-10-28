@@ -1,4 +1,5 @@
-import { trace, SpanStatusCode } from '@opentelemetry/api';
+import { context, trace, SpanStatusCode } from '@opentelemetry/api';
+import { spanContextOf } from '../join';
 import type { ErrorTrackingConfig, ExceptionMechanism } from './types';
 import { buildExceptionList } from './exception-builder';
 import { readBreadcrumbs } from '../breadcrumbs';
@@ -125,7 +126,14 @@ function recordException(
     activeSpan.setAttribute('error.source', mechanismType);
     if (trail) activeSpan.setAttribute('exception.breadcrumbs', trail);
   } else {
-    tracer.startActiveSpan('unhandled_error', (span) => {
+    // An error from a traced request belongs on that request's trace, under
+    // its span: the span has ended by the time a `catch` or a query's
+    // `onError` reports it, but the request object still says which it was.
+    const request = spanContextOf(error);
+    const parent = request
+      ? trace.setSpanContext(context.active(), request)
+      : context.active();
+    tracer.startActiveSpan('unhandled_error', {}, parent, (span) => {
       const normalizedError =
         error instanceof Error ? error : new Error(String(error));
       span.recordException(normalizedError);

@@ -18,6 +18,12 @@ describe('sentryOtlpConfig', () => {
     });
   });
 
+  it('carries the key in the query for a browser', () => {
+    expect(sentryOtlpConfig(DSN).browserEndpoint).toBe(
+      'https://o456.ingest.us.sentry.io/api/789/integration/otlp?sentry_key=abc123',
+    );
+  });
+
   it('returns normalized DSN', () => {
     const config = sentryOtlpConfig(DSN);
     expect(config.dsn).toBe(DSN);

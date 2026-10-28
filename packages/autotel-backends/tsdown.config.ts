@@ -13,6 +13,7 @@ export default defineConfig({
     logfire: 'src/logfire.ts',
     langfuse: 'src/langfuse.ts',
     posthog: 'src/posthog.ts',
+    relay: 'src/relay.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

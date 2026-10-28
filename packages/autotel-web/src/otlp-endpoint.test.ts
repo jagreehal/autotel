@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ignoreUrlPatterns,
   isSelfTelemetryUrl,
+  VENDOR_TELEMETRY_URLS,
   normaliseOtlpEndpoint,
+  otlpEndpointFor,
   selfInstrumentationIgnoreUrls,
 } from './otlp-endpoint';
 
@@ -35,6 +38,32 @@ describe('normaliseOtlpEndpoint', () => {
 
   it('supports same-origin export via an empty string', () => {
     expect(normaliseOtlpEndpoint('')).toBe('/v1/traces');
+  });
+});
+
+describe('an endpoint carrying its key as a query', () => {
+  // Sentry authenticates browsers with `?sentry_key=`, since sendBeacon cannot
+  // carry a header. The signal path must go before the query, not after it.
+  const sentry =
+    'https://o1.ingest.sentry.io/api/2/integration/otlp?sentry_key=abc';
+
+  it('puts the traces path before the query', () => {
+    expect(normaliseOtlpEndpoint(sentry)).toBe(
+      'https://o1.ingest.sentry.io/api/2/integration/otlp/v1/traces?sentry_key=abc',
+    );
+  });
+
+  it('swaps the signal path and keeps the query', () => {
+    expect(otlpEndpointFor(sentry, 'logs')).toBe(
+      'https://o1.ingest.sentry.io/api/2/integration/otlp/v1/logs?sentry_key=abc',
+    );
+  });
+
+  it('still excludes the exporter POST from tracing', () => {
+    const ignored = selfInstrumentationIgnoreUrls(sentry);
+    const url =
+      'https://o1.ingest.sentry.io/api/2/integration/otlp/v1/traces?sentry_key=abc';
+    expect(ignored.some((pattern) => pattern.test(url))).toBe(true);
   });
 });
 
@@ -333,5 +362,69 @@ describe('isSelfTelemetryUrl', () => {
         false,
       );
     });
+  });
+});
+
+describe('other telemetry vendors', () => {
+  const vendor = (url: string) =>
+    VENDOR_TELEMETRY_URLS.some((pattern) => pattern.test(url));
+
+  it('never traces their uploads', () => {
+    expect(
+      vendor('https://browser-intake-datadoghq.eu/api/v2/rum?ddsource=browser'),
+    ).toBe(true);
+    expect(vendor('https://browser-intake-us3-datadoghq.com/api/v2/logs')).toBe(
+      true,
+    );
+    expect(
+      vendor('https://o1.ingest.us.sentry.io/api/2/envelope/?sentry_key=k'),
+    ).toBe(true);
+    expect(vendor('https://o1.ingest.sentry.io/api/2/envelope/')).toBe(true);
+    expect(vendor('https://eu.i.posthog.com/e/?ip=1')).toBe(true);
+    expect(vendor('https://bam.nr-data.net/1/key')).toBe(true);
+  });
+
+  it('leaves look-alikes and the app alone', () => {
+    expect(vendor('https://api.example.com/browser-intake-x/orders')).toBe(
+      false,
+    );
+    expect(vendor('https://ingest.sentry.io.attacker.example/x')).toBe(false);
+    expect(vendor('https://posthog.com/pricing')).toBe(false);
+    expect(vendor('http://localhost:5173/api/orders')).toBe(false);
+  });
+});
+
+describe('ignoreUrlPatterns', () => {
+  it('treats a string as a URL prefix on the page', () => {
+    const [pattern] = ignoreUrlPatterns(
+      ['/rum-proxy'],
+      'https://app.example.com',
+    );
+    expect(pattern!.test('https://app.example.com/rum-proxy?ddforward=x')).toBe(
+      true,
+    );
+    expect(pattern!.test('https://app.example.com/api/rum-proxy')).toBe(false);
+  });
+
+  it('matches the same URL every time, whatever flags the RegExp has', () => {
+    // A /g or /y RegExp keeps lastIndex between .test() calls, so the same
+    // URL alternated match / no match and an ignored request got through
+    // every other time.
+    const caller = /rum-proxy/g;
+    const [pattern] = ignoreUrlPatterns([caller], undefined);
+    const url = 'https://app.example.com/rum-proxy?ddforward=x';
+    expect([1, 2, 3, 4].map(() => pattern!.test(url))).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ]);
+    expect(caller.lastIndex).toBe(0);
+    expect(caller.flags).toBe('g');
+  });
+
+  it('uses a RegExp as given', () => {
+    const [pattern] = ignoreUrlPatterns([/\/health$/], undefined);
+    expect(pattern!.test('https://app.example.com/health')).toBe(true);
   });
 });

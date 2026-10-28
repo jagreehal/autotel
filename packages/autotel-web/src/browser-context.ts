@@ -11,7 +11,7 @@
  * be wrong in a way nobody could correct without a release.
  */
 
-import { BROWSER, USER_AGENT } from './semconv';
+import { BROWSER, RESOURCE, USER_AGENT } from './semconv';
 
 interface UserAgentBrand {
   brand: string;
@@ -66,4 +66,29 @@ export function browserResourceAttributes(): BrowserResourceAttributes {
     }
   }
   return attributes;
+}
+
+/** Which release, in which environment. See {@link ReleaseConfig}. */
+export interface ReleaseConfig {
+  /**
+   * The release this page is running, as `service.version`. Backends match
+   * uploaded source maps and group regressions by it, so set it to the same
+   * value your build uploads source maps under.
+   */
+  version?: string;
+  /**
+   * Where it runs (`production`, `staging`), as
+   * `deployment.environment.name`. Backends filter errors and traces by it.
+   */
+  environment?: string;
+}
+
+/** `service.version` and `deployment.environment.name`, where configured. */
+export function releaseResourceAttributes(config: ReleaseConfig) {
+  return {
+    ...(config.version && { [RESOURCE.SERVICE_VERSION]: config.version }),
+    ...(config.environment && {
+      [RESOURCE.DEPLOYMENT_ENVIRONMENT_NAME]: config.environment,
+    }),
+  };
 }

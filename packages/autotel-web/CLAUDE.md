@@ -91,6 +91,48 @@ rather than a nice-to-have.
   win **both** ways (a toggle that can only say "off" is not a control), while
   `applyRemoteSuppression` is additive only, because there the failure mode is
   silently losing errors the application asked to see.
+- `src/join.ts` (`autotel-web/join`): the vendor-neutral building blocks every
+  frontend-SDK join is made of: `enrichSpans()` (vendor → spans: `session`
+  assigned to `session.id` and sent as baggage, `onStart` filled, `onFailure`
+  filled on failed spans only and withheld if the session rotated, every read
+  guarded, once-per-reason diagnostics) and `currentSpanContext()` (spans →
+  vendor: active context, else the newest span still in flight, else nothing
+  when two traces are live). The live-span list is **module state on purpose**:
+  one page-wide list, deduplicated by span id, so re-renders and composed joins
+  share it. `autotel-posthog` and `autotel-sentry/browser` are built on it; put
+  anything vendor-agnostic here rather than in an adapter. Depends only on
+  `@opentelemetry/api` and the baggage module, never on full mode.
+  `spanContextOf(error)` reads a `WeakMap` from request object (XHR, fetch
+  `Response`) to span context that full mode fills from the instrumentations'
+  `applyCustomAttributesOnSpan` hooks. Those hooks run at XHR `loadend`
+  (before axios's rejection reaches any `onError`) and after a fetch body is
+  read; a fetch error thrown at the headers is still covered by the live list
+  because that span has not ended yet. Recording a request also removes it
+  from the live list: the XHR instrumentation holds spans ~300ms for resource
+  timing, and finished requests must not make errors ambiguous.
+- **The owning join's session is the page's session, for every signal.** The
+  owner registers its reader with `setJoinSessionProvider` (`src/session.ts`),
+  a slot separate from `configureSession`'s `id` (joins are built before
+  `init()`, and an explicit `id` still wins). Logs, events, sampling and
+  spans all read `getSessionAttributes()`, so filtering by the vendor's
+  session finds the whole visit. While the owner's SDK is still starting
+  (RUM: ~500ms), ids minted meanwhile are _provisional_: the exporter holds
+  non-beacon flushes up to 3s (`awaitingJoinSession`), and logs, events and
+  spans are re-stamped at send/export time with `settledSessionId`. Never
+  drop records waiting on a session; past the grace, or on the unload
+  beacon, they leave with the stand-in. A provisional id is filed once, under
+  the vendor session current when it first resolves (`settledAs`), and never
+  re-read: the vendor rotates, and a queued or retried record stays in its
+  session. Sampling hashes `samplingKeyFor(id)`, the provisional id a vendor
+  session took over from, so a visit keeps one decision across its
+  recorder starting; a dropped record cannot be re-stamped back.
+- **Other vendors' uploads are never traced** (`VENDOR_TELEMETRY_URLS` in
+  `src/otlp-endpoint.ts`), in both modes, beside our own collector. Tracing
+  them leaked their client keys into span URLs and put extra traces in
+  flight. Match on host shape, anchored, so a look-alike path or host on the
+  app's own API is never excluded. The same exclusions (collector, vendors,
+  `ignoreUrls`) gate full mode's baggage wrapper too: never traced means never
+  propagated on, baggage included. Lean mode returns before any header.
 - `src/span-exporter.ts`: two independent signal queues (traces, logs) sharing
   one blocked-request count, because that describes the network rather than the
   payload.

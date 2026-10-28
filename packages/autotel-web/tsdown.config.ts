@@ -8,6 +8,7 @@ export default defineConfig({
     index: 'src/index.ts',
     full: 'src/full.ts',
     baggage: 'src/baggage-entry.ts',
+    join: 'src/join.ts',
     // The exports map declares `autotel-web/privacy`; without an entry here it
     // resolved to a file the build never wrote.
     privacy: 'src/privacy.ts',

@@ -61,4 +61,62 @@ describe('initFull baggage injection', () => {
 
     expect(seen).toEqual([]);
   });
+
+  it('never sends baggage to an ignored URL or our own collector', async () => {
+    // ignoreUrls promises no propagation, and a same-origin RUM proxy or the
+    // OTLP endpoint would otherwise pass the destination allowlist.
+    const seen: Record<string, string | null> = {};
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      seen[
+        new URL(
+          String(input instanceof Request ? input.url : input),
+          location.href,
+        ).pathname
+      ] = baggageOf(input, init);
+      return Promise.resolve(new Response('ok'));
+    });
+
+    initFull({
+      service: 'web',
+      endpoint: '/otel',
+      ignoreUrls: ['/rum-proxy'],
+      captureNavigation: false,
+      captureFetch: false,
+      captureXHR: false,
+    });
+    setBaggage({ 'session.id': 'sess_1' });
+
+    await fetch('/rum-proxy?ddforward=x', { method: 'POST' });
+    await fetch('/otel/v1/traces', { method: 'POST' });
+    await fetch('/checkout', { method: 'POST' });
+
+    expect(seen['/rum-proxy']).toBeNull();
+    expect(seen['/otel/v1/traces']).toBeNull();
+    expect(seen['/checkout']).toBe('session.id=sess_1');
+  });
+});
+
+describe('initFull baggage with a stateful ignoreUrls RegExp', () => {
+  it('excludes the URL on every request, not every other one', async () => {
+    const seen: Array<string | null> = [];
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push(baggageOf(input, init));
+      return Promise.resolve(new Response('ok'));
+    });
+
+    initFull({
+      service: 'web',
+      ignoreUrls: [/rum-proxy/g],
+      captureNavigation: false,
+      captureFetch: false,
+      captureXHR: false,
+    });
+    setBaggage({ 'session.id': 'sess_1' });
+
+    for (let index = 0; index < 4; index += 1) {
+      await fetch('/rum-proxy?ddforward=x', { method: 'POST' });
+    }
+
+    expect(seen).toEqual([null, null, null, null]);
+  });
 });

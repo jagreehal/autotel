@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { trace } from '@opentelemetry/api';
+import { trace, type Context } from '@opentelemetry/api';
+import { rememberRequestSpan } from '../join';
 import {
   setupErrorTracking,
   captureException,
@@ -22,9 +23,8 @@ const mockSpan = {
   isRecording: () => true,
 };
 
-const mockStartActiveSpan = vi.fn((_name: string, fn: (span: any) => any) =>
-  fn(mockSpan),
-);
+// The callback is always the last argument, whatever comes between.
+const mockStartActiveSpan = vi.fn((...args: any[]) => args.at(-1)(mockSpan));
 const mockTracer = {
   startActiveSpan: mockStartActiveSpan,
 };
@@ -242,5 +242,43 @@ describe('skipLocalhost', () => {
     captureException(new Error('prod'));
 
     expect(mockStartActiveSpan).toHaveBeenCalled();
+  });
+});
+
+describe('captureException for a failed request', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetErrorTrackingForTesting();
+  });
+
+  it('records the error under the request span, not in a trace of its own', () => {
+    // axios rejects after the request span has ended, with the XHR on the
+    // error; the exception belongs to that request's trace.
+    const xhr = {};
+    const requestSpan = {
+      traceId: 'c'.repeat(32),
+      spanId: 'd'.repeat(16),
+      traceFlags: 1,
+    };
+    rememberRequestSpan(xhr, requestSpan);
+
+    const error = Object.assign(
+      new Error('Request failed with status code 402'),
+      {
+        request: xhr,
+      },
+    );
+    captureException(error);
+
+    // SAFETY: the third argument of startActiveSpan is the parent context.
+    const parent = mockStartActiveSpan.mock.calls[0]?.[2] as Context;
+    expect(trace.getSpanContext(parent)).toEqual(requestSpan);
+  });
+
+  it('starts a trace of its own for an error from no request', () => {
+    captureException(new Error('plain'));
+    // SAFETY: the third argument of startActiveSpan is the parent context.
+    const parent = mockStartActiveSpan.mock.calls[0]?.[2] as Context;
+    expect(trace.getSpanContext(parent)).toBeUndefined();
   });
 });

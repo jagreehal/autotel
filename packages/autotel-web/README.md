@@ -455,6 +455,67 @@ initFull({
 });
 ```
 
+### Release and environment
+
+```typescript
+initFull({
+  service: 'web',
+  version: '1.4.2',
+  environment: 'production',
+  endpoint,
+});
+```
+
+Exported as `service.version` and `deployment.environment.name` on every span,
+log and event, in both modes. Backends match source maps and group regressions
+by the version, and filter by the environment (Datadog's `version` and `env`).
+
+### Joining the SDKs already on your page
+
+Error trackers, session recorders and analytics SDKs know things a tracer
+cannot (which recording, which person), and capture events a trace explains.
+`autotel-web/join` holds the two building blocks every such join needs, so you
+can link any SDK without waiting for a package:
+
+```typescript
+import { initFull } from 'autotel-web/full';
+import { currentSpanContext, enrichSpans } from 'autotel-web/join';
+
+initFull({
+  service: 'web',
+  endpoint,
+  spanEnrichers: [
+    enrichSpans({
+      name: 'vendor',
+      session: () => vendor.getSessionId(), // → session.id, plus baggage
+      onStart: () => ({ 'user.id': vendor.getUserId() }), // filled, never overwritten
+      onFailure: () => ({ 'session.replay.url': vendor.getReplayUrl() }), // failed spans only
+    }),
+  ],
+});
+
+// The span in flight, even after an `await` lost the active context.
+vendor.beforeSend((event) => {
+  const span = currentSpanContext();
+  if (span) event.metadata.trace_id = span.traceId;
+  return event;
+});
+```
+
+A failed request's error leads back to its trace even after the span ended:
+`currentSpanContext({ error })` and `spanContextOf(error)` read the request
+from `error.request` (axios), `error.response` (ky, ofetch) or `error.cause`,
+and `captureException(error)` records it under that request's span.
+
+Other SDKs' own uploads (Datadog RUM, Sentry, PostHog Cloud, New Relic) are
+never traced. For one proxied through your origin, add its path:
+`initFull({ ignoreUrls: ['/rum-proxy'] })`.
+
+Ready-made joins built from the same blocks: [`autotel-posthog`](../autotel-posthog)
+(`joinPostHog`), [`autotel-sentry/browser`](../autotel-sentry) (`joinSentry`) and
+[`autotel-datadog`](../autotel-datadog) (`joinDatadog`, for Datadog RUM).
+Guide: [Join any frontend SDK](https://jagreehal.github.io/autotel/integrations/join/).
+
 ## Framework Integration
 
 ### React (Client-Only)

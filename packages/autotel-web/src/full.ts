@@ -11,8 +11,13 @@ import {
   trace as otelTrace,
   context,
   SpanStatusCode,
+  type Attributes,
 } from '@opentelemetry/api';
-import type { Sampler, SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type {
+  Sampler,
+  SpanExporter,
+  SpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
 import {
   BatchSpanProcessor,
   WebTracerProvider,
@@ -24,6 +29,7 @@ import { DocumentLoadInstrumentation } from '@opentelemetry/instrumentation-docu
 import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch';
 import { XMLHttpRequestInstrumentation } from '@opentelemetry/instrumentation-xml-http-request';
 import { resourceFromAttributes } from '@opentelemetry/resources';
+import { rememberRequestSpan } from './join';
 import { PrivacyManager, type PrivacyConfig } from './privacy';
 import { setupNetworkTimingObserver } from './network-timing';
 import { setupUserInteractionInstrumentation } from './user-interaction';
@@ -31,7 +37,11 @@ import { setupErrorTracking, type ErrorTrackingConfig } from './error-tracking';
 import { createStringRedactor } from './error-tracking/redact-values';
 import { setupWebVitals } from './web-vitals';
 import { setupLongTaskObserver } from './long-tasks';
-import { browserResourceAttributes } from './browser-context';
+import {
+  browserResourceAttributes,
+  releaseResourceAttributes,
+  type ReleaseConfig,
+} from './browser-context';
 import {
   collectBreadcrumbs,
   configureBreadcrumbs,
@@ -55,11 +65,13 @@ import {
   resolveCaptureToggles,
 } from './remote-config';
 import { isDevelopment } from './dev-mode';
+import { asString } from './values';
 import { createSessionRatioSampler, withoutResourceFetch } from './sampler';
 import {
   configureSession,
   endSessionOnUnload,
   getSessionAttributes,
+  settledSessionId,
 } from './session';
 import {
   getBaggageHeader,
@@ -69,6 +81,8 @@ import {
 import {
   normaliseOtlpEndpoint,
   selfInstrumentationIgnoreUrls,
+  VENDOR_TELEMETRY_URLS,
+  ignoreUrlPatterns,
 } from './otlp-endpoint';
 import { propagationUrlPattern } from './propagate';
 
@@ -90,7 +104,7 @@ function sessionSpanProcessor(): SpanProcessor {
   };
 }
 
-export interface AutotelWebFullConfig {
+export interface AutotelWebFullConfig extends ReleaseConfig {
   /** Service name for the browser application */
   service: string;
 
@@ -127,6 +141,15 @@ export interface AutotelWebFullConfig {
    * @default false
    */
   collectorOwnsOrigin?: boolean;
+
+  /**
+   * Requests never to trace or propagate on, besides the collector's own and
+   * the known telemetry vendors' uploads (Datadog, Sentry, PostHog Cloud, New
+   * Relic), which are always excluded. A RegExp is matched against the full
+   * URL; a string is a URL prefix, resolved against the page, so
+   * `'/rum-proxy'` covers a vendor SDK proxied through your own origin.
+   */
+  ignoreUrls?: (string | RegExp)[];
 
   /**
    * Custom span processor(s). If provided, used instead of default BatchSpanProcessor + OTLP exporter.
@@ -393,8 +416,10 @@ export function initFull(config: AutotelWebFullConfig): void {
   const service = config.service ?? 'browser';
   // Canonical `browser.*` context, so a span can answer "only on mobile
   // Safari?" without anyone re-deriving it from a user-agent string.
+  const release = releaseResourceAttributes(config);
   const resource = resourceFromAttributes({
     'service.name': service,
+    ...release,
     ...browserResourceAttributes(),
   });
 
@@ -412,11 +437,13 @@ export function initFull(config: AutotelWebFullConfig): void {
   if (config.spanProcessor) {
     spanProcessors.push(config.spanProcessor);
   } else if (config.endpoint) {
-    const exporter = new OTLPTraceExporter({
-      // Accept a bare origin as init() does; without this a bare origin POSTs
-      // to the collector root and 404s.
-      url: normaliseOtlpEndpoint(config.endpoint),
-    });
+    const exporter = settlingSessions(
+      new OTLPTraceExporter({
+        // Accept a bare origin as init() does; without this a bare origin POSTs
+        // to the collector root and 404s.
+        url: normaliseOtlpEndpoint(config.endpoint),
+      }),
+    );
     spanProcessors.push(
       new BatchSpanProcessor(exporter, {
         scheduledDelayMillis: 1000,
@@ -468,11 +495,15 @@ export function initFull(config: AutotelWebFullConfig): void {
   // creates a span, which is exported, which creates another span -- a
   // feedback loop that floods the collector and starves real spans out of the
   // batch buffer.
-  const selfUrls = selfInstrumentationIgnoreUrls(
-    config.endpoint,
-    window.location?.origin,
-    config.collectorOwnsOrigin,
-  );
+  const selfUrls = [
+    ...selfInstrumentationIgnoreUrls(
+      config.endpoint,
+      window.location?.origin,
+      config.collectorOwnsOrigin,
+    ),
+    ...VENDOR_TELEMETRY_URLS,
+    ...ignoreUrlPatterns(config.ignoreUrls, window.location?.origin),
+  ];
 
   // Cross-origin destinations that may receive the header. The Web SDK is
   // already same-origin-only without this, which is the behaviour lean mode now
@@ -496,6 +527,10 @@ export function initFull(config: AutotelWebFullConfig): void {
     if (selfUrls.length) {
       fetchOptions.ignoreUrls = selfUrls;
     }
+    // So an error built from this response can find the request's trace
+    // after the span has ended: see `spanContextOf`.
+    fetchOptions.applyCustomAttributesOnSpan = (span, _request, result) =>
+      rememberRequestSpan(result, span.spanContext());
     instrumentations.push(new FetchInstrumentation(fetchOptions));
   }
   if (config.captureXHR !== false) {
@@ -508,6 +543,10 @@ export function initFull(config: AutotelWebFullConfig): void {
     if (selfUrls.length) {
       xhrOptions.ignoreUrls = selfUrls;
     }
+    // axios rejects with `error.request` set to this XHR, after the span has
+    // ended; this is how that error finds its trace.
+    xhrOptions.applyCustomAttributesOnSpan = (span, xhr) =>
+      rememberRequestSpan(xhr, span.spanContext());
     instrumentations.push(new XMLHttpRequestInstrumentation(xhrOptions));
   }
 
@@ -531,6 +570,8 @@ export function initFull(config: AutotelWebFullConfig): void {
       // anyway would split the signals: an always-on sampler with `sampleRate:
       // 0` would export spans and silently drop every event.
       ...(config.sampler == null && sampleRate != null && { sampleRate }),
+      // Logs and events carry the same release as the spans.
+      resource: release,
     });
     setEventSink(recordEvent);
     // The same last chance lean mode takes. Events and console logs sit in the
@@ -551,6 +592,9 @@ export function initFull(config: AutotelWebFullConfig): void {
   wrapFetchForBaggage(
     config.baggage?.allowedOrigins ?? [],
     config.privacy ? new PrivacyManager(config.privacy) : undefined,
+    // The same exclusions the instrumentations get: a request that is never
+    // traced is never propagated on either, baggage included.
+    selfUrls,
     config.debug,
   );
 
@@ -690,15 +734,40 @@ function effectiveHeaders(
   return new Headers();
 }
 
+/**
+ * A span exporter that files spans under the visit's settled session: a span
+ * that ended while the owning join's SDK was still starting carries a
+ * stand-in id, and by export time (the batch waits ~1s) the vendor's session
+ * usually exists. See `settledSessionId`.
+ */
+function settlingSessions(inner: SpanExporter): SpanExporter {
+  return {
+    export(spans, done) {
+      for (const span of spans) {
+        // SAFETY: attributes are plain and mutable until serialized; this
+        // runs just before that.
+        const attributes = span.attributes as Attributes;
+        const id = asString(attributes['session.id']);
+        if (id) attributes['session.id'] = settledSessionId(id);
+      }
+      inner.export(spans, done);
+    },
+    shutdown: () => inner.shutdown(),
+    forceFlush: () => inner.forceFlush?.() ?? Promise.resolve(),
+  };
+}
+
 function wrapFetchForBaggage(
   allowedOrigins: readonly string[],
   privacy: PrivacyManager | undefined,
+  excluded: readonly RegExp[],
   debug?: boolean,
 ): void {
   const inner = globalThis.fetch.bind(globalThis);
   globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = fetchUrl(input);
     const origin = globalThis.location?.origin ?? '';
+    if (isExcluded(url, origin, excluded)) return inner(input, init);
     // Both gates, the same way lean mode decides it. The destination allowlist
     // answers "is this our own backend"; the privacy configuration answers
     // "may we send context about this visitor at all" — Do Not Track, Global
@@ -723,6 +792,25 @@ function wrapFetchForBaggage(
     }
     return inner(input, { ...init, headers });
   };
+}
+
+/**
+ * Whether a URL is one the page must not propagate on: our collector, another
+ * telemetry SDK's uploads, or the app's `ignoreUrls`. Matched on the resolved
+ * URL, since the patterns are absolute and a fetch is often relative.
+ */
+function isExcluded(
+  url: string,
+  origin: string,
+  excluded: readonly RegExp[],
+): boolean {
+  let absolute = url;
+  try {
+    absolute = new URL(url, origin || undefined).href;
+  } catch {
+    // Matched as written.
+  }
+  return excluded.some((pattern) => pattern.test(absolute));
 }
 
 function fetchUrl(input: RequestInfo | URL): string {

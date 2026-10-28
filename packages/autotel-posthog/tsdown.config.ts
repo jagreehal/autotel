@@ -15,6 +15,7 @@ export default defineConfig({
     'autotel-subscribers',
     'autotel-web',
     'autotel-web/baggage',
+    'autotel-web/join',
     'slow-redact',
   ],
   format: ['esm', 'cjs'],

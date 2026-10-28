@@ -93,6 +93,33 @@ https://app.datadoghq.com/metric/explorer?query=example-datadog
 
 > **Note**: Replace `datadoghq.com` with your Datadog site (e.g., `datadoghq.eu`) if you're in a different region.
 
+## Browser: frontend errors
+
+```bash
+pnpm web          # http://localhost:8790
+pnpm smoke:web    # Chromium, then reads the result back from Datadog
+```
+
+`src/web/` is a page with Datadog RUM and `autotel-web` on it, joined by
+[`autotel-datadog`](../../packages/autotel-datadog), and a server that relays
+the page's spans to Datadog with
+[`otlpRelay`](../../packages/autotel-backends#browser-export-otlprelay) (the
+API key stays on the server).
+
+- **Fail checkout**: `/checkout` fails with 402, and `datadogRum.addError` runs
+  after the `await`. The RUM error carries `context.trace_id`, `span_id` and
+  `trace_url` for the autotel trace, which holds the browser span
+  (`checkout.click`, with the RUM `session.id` and `user.id`), its fetch and
+  the server's `POST /checkout`.
+- **Throw**: an uncaught error. RUM records it, and autotel-web's error capture
+  puts it on a span that Datadog Error Tracking groups as an issue under
+  `example-datadog-web`, tagged with the page's `version` and `env`.
+
+Set `DD_RUM_APPLICATION_ID` and `DD_RUM_CLIENT_TOKEN` to send RUM to Datadog.
+Without them, RUM posts to this server (RUM's `proxy` option) and the smoke
+test checks the events RUM actually sent. `smoke:web` needs `DD_APP_KEY` to read
+spans and issues back.
+
 ## How It Works
 
 ### Architecture

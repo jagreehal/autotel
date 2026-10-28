@@ -147,8 +147,10 @@ await span('checkout.click', async () => {
 always safe. A property the caller set is never overwritten, so explicit always
 wins — and `$trace_url` is still added for you.
 
-`autotelBeforeSend()` used on its own reads only the active context. Pass
-`fallbackSpanContext` if you want the same behaviour without the enricher.
+`autotelBeforeSend()` used on its own falls back to `currentSpanContext()` from
+[`autotel-web/join`](/autotel/integrations/join/), so it recovers the span after
+an `await` whenever any join enricher is registered on the page. Pass
+`fallbackSpanContext` to replace that.
 
 `joinPostHog` appends its `before_send` hook. An event an earlier hook dropped
 (`null`) stays dropped. A second call (strict mode, HMR) does not stack another

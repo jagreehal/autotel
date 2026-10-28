@@ -21,10 +21,16 @@
  * the extra bytes for the status code alone.
  */
 
-import { getSessionAttributes } from './session';
+import {
+  awaitingJoinSession,
+  getSessionAttributes,
+  samplingKeyFor,
+  settledSessionId,
+} from './session';
 import { otlpEndpointFor, type OtlpSignal } from './otlp-endpoint';
 import { sampleByKey } from './sampling';
-import { SESSION } from './semconv';
+import { RESOURCE, SESSION } from './semconv';
+import { asString, readProperty } from './values';
 
 /** Retries for one batch before it is given up on. */
 const MAX_RETRIES = 8;
@@ -62,6 +68,7 @@ function emptyQueue(): SignalQueue {
 
 let debug = false;
 let serviceName = 'browser';
+let extraResource: Record<string, string> = {};
 let exportEndpoint: string | undefined;
 let queues: Record<OtlpSignal, SignalQueue> = {
   traces: emptyQueue(),
@@ -115,6 +122,8 @@ export interface ExporterOptions {
   signals?: OtlpSignal[];
   /** Fraction of sessions to export, 0..1. Defaults to 1. */
   sampleRate?: number;
+  /** Resource attributes besides `service.name`: version, environment. */
+  resource?: Record<string, string>;
 }
 
 /**
@@ -135,7 +144,7 @@ let pageKey: string | undefined;
 
 function samplingKey(): string {
   const sessionId = getSessionAttributes()?.[SESSION.ID];
-  if (sessionId !== undefined) return sessionId;
+  if (sessionId !== undefined) return samplingKeyFor(sessionId);
   pageKey ??= `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   return pageKey;
 }
@@ -162,6 +171,7 @@ export function configureExporter(
 ): void {
   debug = enableDebug;
   serviceName = service;
+  extraResource = options?.resource ?? {};
   enabledSignals = new Set(options?.signals ?? SIGNALS);
   sampleRate = options?.sampleRate ?? 1;
   // Stored unresolved; each signal derives its own path.
@@ -246,7 +256,13 @@ function enqueue(signal: OtlpSignal, record: unknown): void {
 }
 
 function resourceAttributes(): { key: string; value: unknown }[] {
-  return [{ key: 'service.name', value: { stringValue: serviceName } }];
+  return [
+    { key: RESOURCE.SERVICE_NAME, value: { stringValue: serviceName } },
+    ...Object.entries(extraResource).map(([key, value]) => ({
+      key,
+      value: { stringValue: value },
+    })),
+  ];
 }
 
 /** OTLP attribute list from a flat record. */
@@ -270,7 +286,35 @@ function otlpValue(value: string | number | boolean): unknown {
   return { stringValue: value };
 }
 
-function payloadFor(signal: OtlpSignal, records: unknown[]): string {
+/**
+ * A record stamped with a stand-in session id while the owning join's SDK was
+ * still starting, re-stamped with the vendor's session now that it exists, so
+ * the start of a visit is filed under the same session as the rest of it.
+ */
+function settleSession(record: OtlpRecord): OtlpRecord {
+  if (!record.attributes) return record;
+  let changed = false;
+  const attributes = record.attributes.map((attribute) => {
+    const id = asString(readProperty(attribute.value, 'stringValue'));
+    if (attribute.key !== SESSION.ID || id === undefined) return attribute;
+    const settled = settledSessionId(id);
+    if (settled === id) return attribute;
+    changed = true;
+    return { key: SESSION.ID, value: { stringValue: settled } };
+  });
+  return changed ? { ...record, attributes } : record;
+}
+
+/** A queued span or log record, as far as session settling reads it. */
+interface OtlpRecord {
+  attributes?: { key: string; value: unknown }[];
+}
+
+function payloadFor(signal: OtlpSignal, unsettled: unknown[]): string {
+  // SAFETY: the queues hold only records `recordSpan` and `recordLog` built,
+  // each with an `otlpAttributes` list.
+  const built = unsettled as OtlpRecord[];
+  const records = built.map(settleSession);
   if (signal === 'logs') {
     // Grouped by scope so console auto-capture is distinguishable from what the
     // application logged deliberately.
@@ -369,6 +413,10 @@ function flushSignal(signal: OtlpSignal, options?: FlushOptions): void {
   }
 
   if (queue.inFlight || queue.retryTimer !== undefined) return;
+  // The owning join's SDK is still starting: hold the records a moment so
+  // they leave under the visit's real session. The 2s timer tries again; the
+  // unload beacon above never waits.
+  if (awaitingJoinSession()) return;
   if (isOffline()) return;
   if (blockedFailures >= MAX_BLOCKED_FAILURES) return;
   if (!rawFetch) return;

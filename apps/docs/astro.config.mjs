@@ -98,6 +98,7 @@ export default defineConfig({
             { label: 'Langfuse', slug: 'integrations/langfuse' },
             { label: 'PostHog', slug: 'integrations/posthog' },
             { label: 'Sentry', slug: 'integrations/sentry' },
+            { label: 'Join any frontend SDK', slug: 'integrations/join' },
             { label: 'Plugins', slug: 'integrations/plugins' },
             { label: 'Backends', slug: 'integrations/backends' },
             { label: 'Datadog', slug: 'integrations/datadog' },

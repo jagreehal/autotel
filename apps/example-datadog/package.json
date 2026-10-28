@@ -8,16 +8,24 @@
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
     "debug-proxy": "tsx src/debug-proxy.ts",
-    "start:debug": "tsx src/index-debug.ts"
+    "start:debug": "tsx src/index-debug.ts",
+    "web": "tsx src/web/server.ts",
+    "smoke:web": "node smoke-web.mjs"
   },
   "dependencies": {
+    "@datadog/browser-rum": "7.16.1",
+    "@opentelemetry/api": "^1.9.1",
     "autotel": "workspace:*",
+    "autotel-backends": "workspace:*",
+    "autotel-datadog": "workspace:*",
+    "autotel-web": "workspace:*",
     "dotenv": "^18.0.8",
-    "pino": "^10.4.0",
-    "autotel-backends": "workspace:*"
+    "esbuild": "^0.28.2",
+    "pino": "^10.4.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "playwright": "1.64.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
