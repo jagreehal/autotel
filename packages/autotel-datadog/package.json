@@ -1,6 +1,6 @@
 {
   "name": "autotel-datadog",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Join autotel-web traces to Datadog RUM: RUM errors carry the trace, spans carry the RUM session and replay",
   "type": "module",
   "main": "./dist/index.js",
