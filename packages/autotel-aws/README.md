@@ -114,45 +114,53 @@ const s3 = createTracedClient(S3Client, { region: 'us-east-1' });
 
 ## SQS Producer/Consumer
 
-End-to-end distributed tracing across message queues with **automatic context injection/extraction** - each message in a batch is correctly linked to its parent trace:
+The producer injects trace context into each message's attributes. The
+consumer runs each message under its own CONSUMER span, linked to the
+producer's span, and hands your handler the `autotel/messaging` consumer
+helpers:
 
 ```typescript
 import { SQSProducer, SQSConsumer } from 'autotel-aws/sqs';
 import { SQSClient } from '@aws-sdk/client-sqs';
 
 const sqs = new SQSClient({ region: 'us-east-1' });
+const queueUrl = 'https://sqs.us-east-1.amazonaws.com/123456789/orders';
 
-// Producer - automatically injects trace context
-const producer = new SQSProducer(sqs, {
-  queueUrl: 'https://sqs.us-east-1.amazonaws.com/123456789/my-queue',
-});
-
+const producer = new SQSProducer(sqs, { queueUrl });
 await producer.send({ body: JSON.stringify({ orderId: '12345' }) });
-
-// Batch send
 await producer.sendBatch([
-  { body: JSON.stringify({ orderId: '1' }), id: 'msg-1' },
-  { body: JSON.stringify({ orderId: '2' }), id: 'msg-2' },
+  { body: JSON.stringify({ orderId: '1' }) },
+  { body: JSON.stringify({ orderId: '2' }) },
 ]);
 
-// Consumer - automatically extracts trace context
-const consumer = new SQSConsumer(sqs, {
-  queueUrl: 'https://sqs.us-east-1.amazonaws.com/123456789/my-queue',
-});
+const consumer = new SQSConsumer(sqs, { queueUrl });
 
+// Deletes each message whose handler succeeds. A handler that throws marks
+// its span as an error and leaves the message for SQS to redeliver; the rest
+// of the batch still runs.
 await consumer.processMessages(async (message, ctx) => {
-  ctx.setAttribute('order.id', JSON.parse(message.body).orderId);
-  await processOrder(message.body);
+  const attempt = Number(message.systemAttributes.ApproximateReceiveCount);
+  try {
+    await processOrder(JSON.parse(message.body));
+  } catch (error) {
+    if (attempt >= 3) {
+      ctx.recordDLQ(error.message, 'orders-dlq', { attemptCount: attempt });
+    } else {
+      ctx.recordRetry(attempt, 3);
+    }
+    throw error;
+  }
 });
 
-// Continuous polling
-await consumer.poll(
-  async (message, ctx) => {
-    return await processOrder(message.body);
-  },
-  { maxIterations: 100 },
-);
+// Continuous polling until aborted
+const controller = new AbortController();
+void consumer.poll(async (message) => processOrder(JSON.parse(message.body)), {
+  signal: controller.signal,
+});
 ```
+
+See [`apps/example-sqs-dlq`](../../apps/example-sqs-dlq) for a DLQ that
+records why each message failed and links replays back to the failure.
 
 ## SNS Publisher
 

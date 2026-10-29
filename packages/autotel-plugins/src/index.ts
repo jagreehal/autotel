@@ -6,23 +6,21 @@
  *
  * Currently supported:
  * - BigQuery (no official instrumentation available)
- * - Kafka (composition layer for use with @opentelemetry/instrumentation-kafkajs):
- *   - Processing span wrapper with context mode control (inherit/link/none)
- *   - Batch lineage for fan-in trace correlation
- *   - Correlation ID policy for org-level conventions
+ * - RabbitMQ (composition layer for use with @opentelemetry/instrumentation-amqplib)
+ * - Kafka: re-exported from `autotel-kafka` (deprecated here, import `autotel-kafka`)
  *
  * Philosophy:
  * Only include plugins for libraries that either:
  * 1. Have NO official instrumentation (e.g., BigQuery)
  * 2. Have BROKEN official instrumentation
- * 3. Add SIGNIFICANT value beyond official packages (e.g., Kafka processing spans)
+ * 3. Add SIGNIFICANT value beyond official packages (e.g., RabbitMQ ack tracking)
  *
  * For databases/ORMs with working official instrumentation, use those directly with the --import pattern:
  * - MongoDB: @opentelemetry/instrumentation-mongodb
  * - PostgreSQL: @opentelemetry/instrumentation-pg
  * - MySQL: @opentelemetry/instrumentation-mysql2
  * - Redis: @opentelemetry/instrumentation-redis
- * - Kafka: @opentelemetry/instrumentation-kafkajs (use with autotel-plugins/kafka for processing spans)
+ * - Kafka: @opentelemetry/instrumentation-kafkajs (use with autotel-kafka for processing spans)
  *
  * See: https://github.com/open-telemetry/opentelemetry-js-contrib
  *
@@ -62,7 +60,7 @@ export {
   type BigQueryInstrumentationConfig,
 } from './bigquery';
 
-// Re-export Kafka plugin
+// Re-export Kafka (deprecated: import from `autotel-kafka`)
 export {
   withProcessingSpan,
   withProducerSpan,

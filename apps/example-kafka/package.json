@@ -1,0 +1,28 @@
+{
+  "name": "@jagreehal/example-kafka",
+  "version": "0.0.0",
+  "description": "A live match feed on Kafka: fan-out, keyed ordering, retry topic to DLQ, redelivery, hot partitions and idle consumers, each shown in the spans autotel records.",
+  "private": true,
+  "type": "module",
+  "author": "Jag Reehal",
+  "license": "MIT",
+  "scripts": {
+    "start": "tsx src/demo.ts",
+    "kafka:up": "docker compose up -d",
+    "kafka:down": "docker compose down",
+    "test:integration": "vitest run",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "autotel": "workspace:*",
+    "autotel-kafka": "workspace:*",
+    "autotel-subscribers": "workspace:*",
+    "kafkajs": "^2.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

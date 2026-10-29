@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { ConsumerMetrics } from 'autotel-plugins/kafka';
+ * import { ConsumerMetrics } from 'autotel-kafka';
  *
  * const metrics = new ConsumerMetrics({
  *   consumer,
@@ -196,7 +196,7 @@ export class ConsumerMetrics {
     };
 
     // Initialize meter
-    this.meter = otelMetrics.getMeter('autotel-plugins/kafka');
+    this.meter = otelMetrics.getMeter('autotel-kafka');
     const prefix = this.config.metricsPrefix;
 
     // Create metric instruments

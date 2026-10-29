@@ -23,6 +23,7 @@ import {
 import { otelTrace as trace } from 'autotel';
 import {
   propagation,
+  type Span,
   type SpanOptions,
   type Context,
 } from '@opentelemetry/api';
@@ -1503,6 +1504,51 @@ describe('instrumentConsumerEvents', () => {
       l.event.includes('heartbeat'),
     );
     expect(heartbeatListeners.length).toBe(0);
+  });
+
+  it('reads the payload KafkaJS wraps its group join event in', () => {
+    const listeners = new Map<string, (event: unknown) => void>();
+    const recorded: Array<{ name: string; attributes: unknown }> = [];
+    const lifecycleSpan = {
+      addEvent: (name: string, attributes: unknown) => {
+        recorded.push({ name, attributes });
+      },
+    } as unknown as Span;
+
+    instrumentConsumerEvents(
+      { on: (event, listener) => listeners.set(event, listener) },
+      { lifecycleSpan },
+    );
+    // Captured from KafkaJS 2.2.4 against Kafka 4.4.
+    listeners.get('consumer.group_join')!({
+      id: 0,
+      type: 'consumer.group_join',
+      timestamp: 1_793_296_440_621,
+      payload: {
+        groupId: 'scoreboard',
+        memberId: 'member-1',
+        leaderId: 'member-1',
+        isLeader: true,
+        memberAssignment: { 'match-events': [0, 2] },
+        groupProtocol: 'RoundRobinAssigner',
+        duration: 3564,
+      },
+    });
+
+    expect(recorded).toEqual([
+      {
+        name: 'consumer.group_join',
+        attributes: {
+          'messaging.kafka.consumer.group': 'scoreboard',
+          'messaging.kafka.consumer.member_id': 'member-1',
+          'messaging.kafka.consumer.leader_id': 'member-1',
+          'messaging.kafka.consumer.is_leader': true,
+          'messaging.kafka.consumer.assignment_count': 2,
+          'event.duration_ms': 3564,
+          'event.type': 'consumer.group_join',
+        },
+      },
+    ]);
   });
 
   it('should cleanup listeners when cleanup function called', () => {

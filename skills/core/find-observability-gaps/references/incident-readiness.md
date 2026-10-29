@@ -48,7 +48,9 @@ deps.trackOutcome('payments.charge', 'failure', {
 ```
 
 **Queues.** `traceConsumer` links producer and consumer spans and records
-retries and dead letters; `lagMetrics` puts consumer lag on the span:
+retries and dead letters; `lagMetrics` puts consumer lag on the span. Record
+the dead letter on the attempt that gives up, with the reason and error, so the
+DLQ entry has a span that says why:
 
 ```typescript
 import { traceConsumer } from 'autotel/messaging';
@@ -56,12 +58,27 @@ import { traceConsumer } from 'autotel/messaging';
 export const handle = traceConsumer({
   system: 'sqs',
   destination: 'orders-queue',
-  onDLQ: (ctx, reason) => ctx.recordDLQ(reason, 'orders-dlq'),
+  headersFrom: (message) => toHeaders(message.MessageAttributes),
 })((ctx) => async (message: SQSMessage) => {
-  ctx.recordRetry(Number(message.Attributes?.ApproximateReceiveCount), 3);
-  await processOrder(JSON.parse(message.Body));
+  const attempt = Number(message.Attributes?.ApproximateReceiveCount);
+  try {
+    await processOrder(JSON.parse(message.Body));
+  } catch (error) {
+    if (attempt < 3) ctx.recordRetry(attempt, 3);
+    else
+      ctx.recordDLQ(error.message, 'orders-dlq', {
+        reasonCategory: 'processing',
+        attemptCount: attempt,
+        originalError: error,
+      });
+    throw error;
+  }
 });
 ```
+
+On replay, `ctx.recordReplay({ originalDLQSpanContext })` links the new
+attempt to the one that dead-lettered it. `apps/example-sqs-dlq` carries that
+span context on the message.
 
 A span attribute is not an alert source. For depth and oldest-message age,
 read them where the service can observe them accurately:

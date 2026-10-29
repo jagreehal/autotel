@@ -103,7 +103,7 @@ const caseInsensitiveGetter = {
  *
  * @example
  * ```typescript
- * import { normalizeHeaders, extractTraceContext } from 'autotel-plugins/kafka';
+ * import { normalizeHeaders, extractTraceContext } from 'autotel-kafka';
  * import { trace } from '@opentelemetry/api';
  *
  * const headers = normalizeHeaders(message.headers);

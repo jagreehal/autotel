@@ -6,9 +6,6 @@
     "moduleResolution": "Bundler",
     "outDir": "./dist",
     "rootDir": ".",
-    "paths": {
-      "autotel": ["../autotel/src"]
-    },
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

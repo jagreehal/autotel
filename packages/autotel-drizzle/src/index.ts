@@ -14,7 +14,7 @@
  * - PostgreSQL: @opentelemetry/instrumentation-pg
  * - MySQL: @opentelemetry/instrumentation-mysql2
  * - Redis: @opentelemetry/instrumentation-redis
- * - Kafka: @opentelemetry/instrumentation-kafkajs (use with autotel-plugins/kafka for processing spans)
+ * - Kafka: @opentelemetry/instrumentation-kafkajs (use with autotel-kafka for processing spans)
  *
  * See: https://github.com/open-telemetry/opentelemetry-js-contrib
  *

@@ -2,15 +2,14 @@
  * Stream events instrumentation for Kafka consumers.
  *
  * Provides visibility into consumer lifecycle events like rebalances,
- * errors, and heartbeats. Defaults to events mode (not spans) to
- * avoid span explosion.
+ * errors, and heartbeats. With a `lifecycleSpan` it adds events to that span
+ * (no span explosion); without one it records each event as its own span.
  *
  * @example
  * ```typescript
- * import { instrumentConsumerEvents } from 'autotel-plugins/kafka';
+ * import { instrumentConsumerEvents } from 'autotel-kafka';
  *
  * instrumentConsumerEvents(consumer, {
- *   mode: 'events',
  *   traceRebalances: true,
  *   traceErrors: true,
  *   traceHeartbeats: false,
@@ -25,7 +24,7 @@ import {
   type Span,
 } from 'autotel';
 
-const DEFAULT_TRACER_NAME = 'autotel-plugins/kafka';
+const DEFAULT_TRACER_NAME = 'autotel-kafka';
 
 /**
  * Event mode for consumer events.
@@ -47,19 +46,21 @@ export interface EventConsumer {
  */
 export interface ConsumerEventsConfig {
   /**
-   * Event mode: 'events' attaches to spans, 'spans' creates new spans.
-   * @default 'events'
+   * Event mode: 'events' adds events to `lifecycleSpan`, 'spans' creates
+   * new spans.
+   * @default 'events' with a `lifecycleSpan`, otherwise 'spans'
    */
   mode?: EventMode;
 
   /**
-   * Trace rebalance events (GROUP_JOIN, REBALANCING).
+   * Trace rebalance and lifecycle events (GROUP_JOIN, REBALANCING, STOP,
+   * DISCONNECT).
    * @default true
    */
   traceRebalances?: boolean;
 
   /**
-   * Trace error events (CRASH, DISCONNECT).
+   * Trace error events (CRASH, REQUEST_TIMEOUT).
    * @default true
    */
   traceErrors?: boolean;
@@ -89,11 +90,12 @@ const REBALANCE_EVENTS = [
   'consumer.group_join',
   'consumer.rebalancing',
   'consumer.stop',
+  // KafkaJS emits disconnect after a clean shutdown too, so it is lifecycle.
+  'consumer.disconnect',
 ] as const;
 
 const ERROR_EVENTS = [
   'consumer.crash',
-  'consumer.disconnect',
   'consumer.network.request_timeout',
 ] as const;
 
@@ -111,7 +113,6 @@ const HEARTBEAT_EVENTS = ['consumer.heartbeat'] as const;
  * @example
  * ```typescript
  * const cleanup = instrumentConsumerEvents(consumer, {
- *   mode: 'events',
  *   traceRebalances: true,
  *   traceErrors: true,
  * });
@@ -125,12 +126,18 @@ export function instrumentConsumerEvents(
   config: ConsumerEventsConfig = {},
 ): CleanupFunction {
   const {
-    mode = 'events',
+    mode = config.lifecycleSpan ? 'events' : 'spans',
     traceRebalances = true,
     traceErrors = true,
     traceHeartbeats = false,
     lifecycleSpan,
   } = config;
+
+  if (mode === 'events' && !lifecycleSpan) {
+    console.warn(
+      "[autotel-kafka] instrumentConsumerEvents: mode 'events' adds events to a lifecycleSpan; pass one, or leave mode unset to record each event as a span.",
+    );
+  }
 
   const tracer = trace.getTracer(DEFAULT_TRACER_NAME);
   const listeners: Array<{
@@ -173,8 +180,9 @@ export function instrumentConsumerEvents(
           });
 
           // Also record exception if it's a crash
-          if (event === 'consumer.crash' && isErrorPayload(payload)) {
-            lifecycleSpan.recordException(payload.error);
+          const error = crashError(payload);
+          if (event === 'consumer.crash' && error) {
+            lifecycleSpan.recordException(error);
           }
         }
       });
@@ -245,9 +253,8 @@ function createErrorSpan(
 
   span.setStatus({ code: SpanStatusCode.ERROR });
 
-  if (isErrorPayload(payload)) {
-    span.recordException(payload.error);
-  }
+  const error = crashError(payload);
+  if (error) span.recordException(error);
 
   span.end();
 }
@@ -264,7 +271,12 @@ function extractEventAttributes(
     return attributes;
   }
 
-  const p = payload as Record<string, unknown>;
+  const event = payload as Record<string, unknown>;
+  // KafkaJS emits { id, type, timestamp, payload: { groupId, ... } }.
+  const p =
+    event.payload && typeof event.payload === 'object'
+      ? { type: event.type, ...(event.payload as Record<string, unknown>) }
+      : event;
 
   if (typeof p.groupId === 'string') {
     attributes['messaging.kafka.consumer.group'] = p.groupId;
@@ -286,9 +298,18 @@ function extractEventAttributes(
     attributes['messaging.kafka.consumer.is_leader'] = p.isLeader;
   }
 
+  // KafkaJS gives { [topic]: partitions[] }; count the partitions.
   if (Array.isArray(p.memberAssignment)) {
     attributes['messaging.kafka.consumer.assignment_count'] =
       p.memberAssignment.length;
+  } else if (p.memberAssignment && typeof p.memberAssignment === 'object') {
+    attributes['messaging.kafka.consumer.assignment_count'] = Object.values(
+      p.memberAssignment,
+    ).reduce<number>(
+      (count, partitions) =>
+        count + (Array.isArray(partitions) ? partitions.length : 0),
+      0,
+    );
   }
 
   if (typeof p.type === 'string') {
@@ -301,11 +322,10 @@ function extractEventAttributes(
 /**
  * Type guard for error payloads.
  */
-function isErrorPayload(payload: unknown): payload is { error: Error } {
-  return (
-    payload !== null &&
-    typeof payload === 'object' &&
-    'error' in payload &&
-    payload.error instanceof Error
-  );
+/** The error a crash carries, at the top level or inside KafkaJS's `payload`. */
+function crashError(payload: unknown): Error | undefined {
+  if (!payload || typeof payload !== 'object') return undefined;
+  const event = payload as { error?: unknown; payload?: { error?: unknown } };
+  const error = event.payload?.error ?? event.error;
+  return error instanceof Error ? error : undefined;
 }

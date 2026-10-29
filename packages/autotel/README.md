@@ -1258,16 +1258,14 @@ export const processWithLag = traceConsumer({
   consumerGroup: 'processor',
   lagMetrics: {
     getCurrentOffset: (msg) => Number(msg.offset),
-    getEndOffset: async () => {
-      const offsets = await admin.fetchTopicOffsets('events');
-      return Number(offsets[0].high);
-    },
-    partition: 0,
+    getPartition: (msg) => msg.partition,
+    // Receives the message, so it can read that message's partition.
+    getEndOffset: (msg) => Number(msg.highWatermark),
   },
 })((ctx) => async (message) => {
   // Lag attributes automatically added:
   // - messaging.kafka.consumer_lag
-  // - messaging.kafka.message_offset
+  // - messaging.kafka.message.offset
   await processMessage(message);
 });
 ```

@@ -1,0 +1,26 @@
+{
+  "name": "@jagreehal/example-sqs-dlq",
+  "version": "0.0.0",
+  "description": "SQS dead-letter queue you can see into: why each message failed, a replay that links back to the failure, and a trace that survives both. Runs on MiniStack.",
+  "private": true,
+  "type": "module",
+  "author": "Jag Reehal",
+  "license": "MIT",
+  "scripts": {
+    "start": "tsx src/demo.ts",
+    "ministack:up": "docker compose up -d --wait",
+    "ministack:down": "docker compose down",
+    "test:integration": "vitest run",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.1152.0",
+    "autotel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

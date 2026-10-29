@@ -196,15 +196,16 @@ export const processEvent = traceConsumer({
 });
 ```
 
-For **KafkaJS `eachBatch`**, use `withBatchConsumer` from `autotel-plugins/kafka` for batch-level and optional per-message spans with trace continuation from headers (see [autotel-plugins README](../../packages/autotel-plugins/README.md#kafka)).
+For **KafkaJS `eachBatch`**, use `withBatchConsumer` from `autotel-kafka` for batch-level and optional per-message spans with trace continuation from headers (see the [autotel-kafka README](../packages/autotel-kafka/README.md#batch-consumer)).
 
 **Key implementation details:**
 
 - Uses `SpanKind.PRODUCER` / `SpanKind.CONSUMER` for proper trace visualization
 - `ctx.getTraceHeaders()` returns `{ traceparent, tracestate? }` for header injection
-- `ctx.recordDLQ(dlqName, reason)` for dead-letter queue tracking
-- Supports lag metrics via `lagMetrics.getCurrentOffset` / `getEndOffset`
-- Automatic semantic attributes: `messaging.system`, `messaging.destination.name`, `messaging.operation.type`, `messaging.consumer.group`
+- `ctx.recordDLQ(reason, dlqName?, { reasonCategory, attemptCount, originalError })` records why a message went to the dead-letter queue; `ctx.recordReplay({ originalDLQSpanContext, dlqDwellTimeMs, replayAttempt })` links a replayed message to the attempt that dead-lettered it ([SQS example](../apps/example-sqs-dlq))
+- Supports lag metrics via `lagMetrics.getCurrentOffset` / `getEndOffset(msg)`; `getEndOffset` receives the message, so it can return the end offset of that message's partition
+- `ordering` flags out-of-order events per key (`detectOutOfOrder`) and redeliveries per consumer group (`detectDuplicates`) ([Kafka example](../apps/example-kafka))
+- Automatic semantic attributes: `messaging.system`, `messaging.destination.name`, `messaging.destination.partition.id`, `messaging.kafka.offset`, `error.type` on failure, `messaging.operation.type`, `messaging.consumer.group.name`
 
 ## Experiments and Cohorts
 

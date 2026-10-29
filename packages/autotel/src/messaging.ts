@@ -195,7 +195,11 @@ export interface ConsumerConfig<TMessage = unknown> {
   /** Consumer lag metrics extraction */
   lagMetrics?: LagMetricsConfig<TMessage>;
 
-  /** Callback when message goes to DLQ */
+  /**
+   * Called by `ctx.recordDLQ()` after it records the dead letter.
+   *
+   * @deprecated Call your own code after `ctx.recordDLQ()` instead.
+   */
   onDLQ?: (ctx: ConsumerContext, reason: string) => void;
 
   /** Callback on error */
@@ -322,11 +326,14 @@ export interface LagMetricsConfig<TMessage = unknown> {
   /** Get current message offset */
   getCurrentOffset?: (msg: TMessage) => number | undefined;
 
-  /** Get end offset (high watermark) - can be async */
-  getEndOffset?: () => number | Promise<number>;
+  /**
+   * Get end offset (high watermark: the next offset to be written) for the
+   * message's partition - can be async. Lag is the messages after this one.
+   */
+  getEndOffset?: (msg: TMessage) => number | Promise<number>;
 
-  /** Get committed offset - can be async */
-  getCommittedOffset?: () => number | Promise<number>;
+  /** Get committed offset for the message's partition - can be async */
+  getCommittedOffset?: (msg: TMessage) => number | Promise<number>;
 
   /** Get partition from message */
   getPartition?: (msg: TMessage) => number | undefined;
@@ -375,8 +382,9 @@ export interface OrderingConfig<TMessage = unknown> {
   /**
    * Enable out-of-order detection
    *
-   * Tracks sequence numbers per partition and detects when messages
-   * arrive out of order.
+   * Tracks the highest sequence number per partition key. A message below it
+   * arrived after a later one and sets `messaging.ordering.out_of_order`; a
+   * message that skips ahead sets `messaging.ordering.gap_count`.
    *
    * @default false
    */
@@ -422,7 +430,10 @@ export interface OutOfOrderInfo {
   /** Partition key (if available) */
   partitionKey?: string;
 
-  /** Gap size (positive = gap, negative = out of order) */
+  /**
+   * `currentSequence - expectedSequence`: negative, how far behind the
+   * highest sequence already consumed this message arrived
+   */
   gap: number;
 }
 
@@ -954,6 +965,36 @@ export interface ConsumerContext extends TraceContext {
  * });
  * ```
  */
+/**
+ * `error.type` for a failed messaging operation: the error's class name, as
+ * the messaging conventions ask, or `_OTHER` for a non-Error rejection.
+ */
+function errorType(cause: unknown): string {
+  return cause instanceof Error ? cause.constructor.name : '_OTHER';
+}
+
+/**
+ * Run a producer or consumer handler, recording `error.type` and calling
+ * `onError` whether it throws before returning a promise or rejects later.
+ * Each failure propagates the way the handler raised it.
+ */
+function runRecordingFailure<TContext extends TraceContext, TReturn>(
+  ctx: TContext,
+  onError: ((error: Error, ctx: TContext) => void) | undefined,
+  run: () => TReturn | Promise<TReturn>,
+): Promise<TReturn> {
+  const fail = (error: unknown): never => {
+    ctx.setAttribute('error.type', errorType(error));
+    onError?.(toError(error), ctx);
+    throw error;
+  };
+  try {
+    return Promise.resolve(run()).catch(fail);
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 /** The Error an onError callback expects, wrapping a non-Error rejection. */
 function toError(cause: unknown): Error {
   return cause instanceof Error ? cause : new Error(String(cause));
@@ -1026,12 +1067,7 @@ export function traceProducer(config: ProducerConfig) {
         // Execute user's function
         const userFn = fnFactory(ctx);
         assertTraceFactory('traceProducer', userFn, 'result');
-        return Promise.resolve(userFn(...args)).catch((error) => {
-          if (config.onError) {
-            config.onError(toError(error), ctx);
-          }
-          throw error;
-        });
+        return runRecordingFailure(ctx, config.onError, () => userFn(...args));
       };
     }) as (...args: TArgs) => Promise<TReturn>;
   };
@@ -1091,19 +1127,23 @@ export function traceProducer(config: ProducerConfig) {
  * export const processSQSMessage = traceConsumer({
  *   system: 'sqs',
  *   destination: 'orders-queue',
- *   headersFrom: (msg) => sqsAttributesToHeaders(msg.MessageAttributes),
- *   onDLQ: (ctx, reason) => {
- *     ctx.recordDLQ(reason, 'orders-dlq');
- *   },
+ *   headersFrom: (msg) =>
+ *     Object.fromEntries(
+ *       Object.entries(msg.MessageAttributes ?? {}).map(([key, value]) => [
+ *         key,
+ *         value.StringValue,
+ *       ]),
+ *     ),
  * })(ctx => async (message: SQSMessage) => {
+ *   const attempt = Number(message.Attributes?.ApproximateReceiveCount);
  *   try {
  *     await processOrder(JSON.parse(message.Body));
  *   } catch (error) {
- *     if (message.ApproximateReceiveCount > 3) {
- *       ctx.recordDLQ(error.message);
- *       throw error;
+ *     if (attempt >= 3) {
+ *       ctx.recordDLQ(error.message, 'orders-dlq', { attemptCount: attempt });
+ *     } else {
+ *       ctx.recordRetry(attempt, 3);
  *     }
- *     ctx.recordRetry(message.ApproximateReceiveCount, 3);
  *     throw error;
  *   }
  * });
@@ -1203,12 +1243,7 @@ export function traceConsumer<TMessage = unknown>(
         // Execute user's function
         const userFn = fnFactory(ctx);
         assertTraceFactory('traceConsumer', userFn, 'result');
-        return Promise.resolve(userFn(...args)).catch((error) => {
-          if (config.onError) {
-            config.onError(toError(error), ctx);
-          }
-          throw error;
-        });
+        return runRecordingFailure(ctx, config.onError, () => userFn(...args));
       };
     }) as (...args: TArgs) => Promise<TReturn>;
   };
@@ -1442,7 +1477,6 @@ function extendContextForConsumer(
 
       emitCorrelatedEvent(baseCtx, 'dlq_routed', eventAttrs);
 
-      // Call user's onDLQ callback if provided
       if (config.onDLQ) {
         config.onDLQ(consumerCtx, reason);
       }
@@ -1764,6 +1798,7 @@ function setDynamicProducerAttributes(
         'messaging.kafka.destination.partition',
         Number(partition),
       );
+      ctx.setAttribute('messaging.destination.partition.id', String(partition));
     }
   }
 
@@ -1921,6 +1956,7 @@ async function extractLagMetrics(
     currentOffset = lagConfig.getCurrentOffset(msg);
     if (currentOffset !== undefined) {
       ctx.setAttribute('messaging.kafka.message.offset', currentOffset);
+      ctx.setAttribute('messaging.kafka.offset', currentOffset);
     }
   }
 
@@ -1929,15 +1965,20 @@ async function extractLagMetrics(
     const partition = lagConfig.getPartition(msg);
     if (partition !== undefined) {
       ctx.setAttribute('messaging.kafka.partition', partition);
+      ctx.setAttribute('messaging.destination.partition.id', String(partition));
     }
   }
 
   // End offset (high watermark) and lag calculation
   if (lagConfig.getEndOffset) {
     try {
-      const endOffset = await Promise.resolve(lagConfig.getEndOffset());
+      const endOffset = await Promise.resolve(lagConfig.getEndOffset(msg));
       if (endOffset !== undefined && currentOffset !== undefined) {
-        const lag = endOffset - currentOffset;
+        // The end offset (high watermark) is the next offset Kafka will
+        // write, so the messages still waiting after this one are
+        // endOffset - currentOffset - 1: the lag `kafka-consumer-groups`
+        // reports once this message's offset is committed.
+        const lag = Math.max(0, endOffset - currentOffset - 1);
         ctx.setAttribute('messaging.kafka.consumer_lag', lag);
 
         // Add lag event
@@ -1956,7 +1997,7 @@ async function extractLagMetrics(
   if (lagConfig.getCommittedOffset) {
     try {
       const committedOffset = await Promise.resolve(
-        lagConfig.getCommittedOffset(),
+        lagConfig.getCommittedOffset(msg),
       );
       if (committedOffset !== undefined) {
         ctx.setAttribute('messaging.kafka.committed_offset', committedOffset);
@@ -2056,6 +2097,7 @@ function extractAndProcessOrdering(
 
   // Track aggregate stats for batch reporting
   let outOfOrderCount = 0;
+  let gapCount = 0;
   let duplicateCount = 0;
   let lastSequence: number | null = null;
   let lastPartitionKey: string | null = null;
@@ -2107,19 +2149,32 @@ function extractAndProcessOrdering(
         outOfOrderInfo: null,
       };
       const trackerKey = buildTrackerKey(config, msgOrderingState);
-      const prevSequence = sequenceTrackers.get(trackerKey);
+      // The highest sequence consumed so far for this key. A message below it
+      // arrived after a later one: out of order. A message more than one
+      // above it skipped some: a gap. Comparing with the highest rather than
+      // the previous message flags only the late arrivals, not every message
+      // after them.
+      const highestSequence = sequenceTrackers.get(trackerKey);
 
-      if (prevSequence !== undefined) {
-        const expectedSequence = prevSequence + 1;
+      if (highestSequence !== undefined) {
+        const expectedSequence = highestSequence + 1;
+        const orderingAttributes = {
+          'messaging.ordering.batch_index': i,
+          'messaging.ordering.current_sequence': msgSequence,
+          'messaging.ordering.expected_sequence': expectedSequence,
+          'messaging.ordering.gap': msgSequence - expectedSequence,
+          ...(msgPartitionKey && {
+            'messaging.ordering.partition_key': msgPartitionKey,
+          }),
+        };
 
-        if (msgSequence !== expectedSequence) {
+        if (msgSequence < highestSequence) {
           outOfOrderCount++;
-          const gap = msgSequence - expectedSequence;
           const outOfOrderInfo: OutOfOrderInfo = {
             currentSequence: msgSequence,
             expectedSequence,
             partitionKey: msgPartitionKey ?? undefined,
-            gap,
+            gap: msgSequence - expectedSequence,
           };
 
           // Store the first out-of-order info for backward compatibility
@@ -2127,26 +2182,21 @@ function extractAndProcessOrdering(
             orderingState.outOfOrderInfo = outOfOrderInfo;
           }
 
-          // Add event for each out-of-order message
-          emitCorrelatedEvent(ctx, 'message_out_of_order', {
-            'messaging.ordering.batch_index': i,
-            'messaging.ordering.current_sequence': msgSequence,
-            'messaging.ordering.expected_sequence': expectedSequence,
-            'messaging.ordering.gap': gap,
-            ...(msgPartitionKey && {
-              'messaging.ordering.partition_key': msgPartitionKey,
-            }),
-          });
+          emitCorrelatedEvent(ctx, 'message_out_of_order', orderingAttributes);
 
-          // Call user callback if provided
           if (ordering.onOutOfOrder) {
             ordering.onOutOfOrder(ctx, outOfOrderInfo);
           }
+        } else if (msgSequence > expectedSequence) {
+          gapCount++;
+          emitCorrelatedEvent(ctx, 'message_sequence_gap', orderingAttributes);
         }
       }
 
-      // Update tracker with this message's sequence
-      sequenceTrackers.set(trackerKey, msgSequence);
+      sequenceTrackers.set(
+        trackerKey,
+        Math.max(highestSequence ?? msgSequence, msgSequence),
+      );
     }
 
     // Duplicate detection for this message
@@ -2207,6 +2257,9 @@ function extractAndProcessOrdering(
     ctx.setAttribute('messaging.ordering.out_of_order', true);
     ctx.setAttribute('messaging.ordering.out_of_order_count', outOfOrderCount);
   }
+  if (gapCount > 0) {
+    ctx.setAttribute('messaging.ordering.gap_count', gapCount);
+  }
   if (duplicateCount > 0) {
     ctx.setAttribute('messaging.ordering.duplicate', true);
     ctx.setAttribute('messaging.ordering.duplicate_count', duplicateCount);
@@ -2231,13 +2284,18 @@ function buildTrackerKey(
 }
 
 /**
- * Build a unique key for deduplication based on system, destination, and message ID
+ * Build a unique key for deduplication based on system, destination, consumer
+ * group, and message ID. Each consumer group reads every message once, so a
+ * message is a duplicate only when the same group sees it again.
  */
 function buildDedupKey(
   config: ConsumerConfig,
   orderingState: OrderingState,
 ): string {
   const parts = [config.system, config.destination];
+  if (config.consumerGroup) {
+    parts.push(config.consumerGroup);
+  }
   if (orderingState.messageId) {
     parts.push(orderingState.messageId);
   }

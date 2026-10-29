@@ -19,6 +19,7 @@
 **/snapshots/**
 **/schemas/**
 apps/example-eventcatalog/services/test/snapshot.json
+apps/example-kafka/.autotel/snapshot.json
 
 # Captured OTLP evidence: recorded from a live run and asserted against.
 apps/cloudflare-example/scripts/evidence.json

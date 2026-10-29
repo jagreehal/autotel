@@ -6,7 +6,7 @@
  *
  * @example Basic batch consumer
  * ```typescript
- * import { withBatchConsumer } from 'autotel-plugins/kafka';
+ * import { withBatchConsumer } from 'autotel-kafka';
  *
  * await consumer.run({
  *   eachBatch: withBatchConsumer({
@@ -42,10 +42,10 @@ import {
   SEMATTRS_MESSAGING_KAFKA_BATCH_MESSAGES_PROCESSED,
   SEMATTRS_MESSAGING_KAFKA_BATCH_MESSAGES_FAILED,
   SEMATTRS_MESSAGING_KAFKA_BATCH_PROCESSING_TIME_MS,
-} from '../common/constants';
+} from './constants';
 import { normalizeHeaders, extractTraceContext } from './headers';
 
-const DEFAULT_TRACER_NAME = 'autotel-plugins/kafka';
+const DEFAULT_TRACER_NAME = 'autotel-kafka';
 
 /**
  * KafkaJS batch payload interface.

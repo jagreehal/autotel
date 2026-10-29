@@ -85,6 +85,7 @@ export default defineConfig({
             { label: 'Validation Telemetry', slug: 'integrations/validation' },
             { label: 'AWS', slug: 'integrations/aws' },
             { label: 'Amazon Bedrock', slug: 'integrations/bedrock' },
+            { label: 'Kafka', slug: 'integrations/kafka' },
             { label: 'Prisma', slug: 'integrations/prisma' },
             { label: 'Effect', slug: 'integrations/effect' },
             { label: 'Drizzle ORM', slug: 'integrations/drizzle' },

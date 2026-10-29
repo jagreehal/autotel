@@ -1,0 +1,16 @@
+{
+  "consumes": [
+    {
+      "service": "notifications",
+      "event": "match/match.event_recorded",
+      "fields": ["eventId", "matchId", "type"],
+      "deadLetter": { "queue": "match-events.dlq", "maxAttempts": 3 }
+    },
+    {
+      "service": "notifications-retry",
+      "event": "match/match.event_recorded",
+      "fields": ["eventId", "matchId", "type"],
+      "deadLetter": { "queue": "match-events.dlq", "maxAttempts": 3 }
+    }
+  ]
+}

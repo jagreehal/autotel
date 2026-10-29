@@ -273,6 +273,42 @@ pnpm start:in-process  # each service decides   -> orphan spans stored
 
 **See:** [example-distributed-tail-sampling/README.md](./example-distributed-tail-sampling/README.md) for the walkthrough.
 
+### Kafka Match Feed Example
+
+A live match feed on Kafka with six scenarios: fan-out, keyed ordering, retry
+topic to DLQ, redelivery, a hot partition and an idle consumer. Each scenario
+prints the spans autotel records for it:
+
+```bash
+cd apps/example-kafka
+pnpm kafka:up
+pnpm start
+```
+
+**See:** [example-kafka/README.md](./example-kafka/README.md).
+
+### SQS Dead-Letter Queue Example
+
+A DLQ that records why each message failed, and a replay that links back to
+the attempt that dead-lettered it. You run it on MiniStack, with no AWS account:
+
+```bash
+cd apps/example-sqs-dlq
+pnpm ministack:up
+pnpm start
+```
+
+**What it does:**
+
+- Retries with backoff, then dead-letters with `recordDLQ` (reason, category,
+  attempts, original error)
+- Lists the DLQ with each message's reason and trace id
+- Replays it; the replay span links to the producer and to the failed span
+  through `recordReplay`
+- Compares consumer routing with SQS's built-in redrive
+
+**See:** [example-sqs-dlq/README.md](./example-sqs-dlq/README.md).
+
 ### GenAI Metrics Example
 
 Derives the canonical GenAI metrics from `gen_ai.*` spans, so cost and latency

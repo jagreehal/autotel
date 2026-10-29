@@ -243,6 +243,34 @@ describe('Workflow Async Safety', () => {
     expect(stepWorkflows).toContain('w2-step: wf-step-2');
   });
 
+  it('numbers each step in the order the workflow runs it', async () => {
+    const step = (name: string) => traceStep({ name })(async () => {});
+    const workflow = traceWorkflow({
+      name: 'Ordered',
+      workflowId: 'wf-ordered',
+    })(() => async () => {
+      await step('first')();
+      await step('second')();
+      await step('third')();
+    });
+
+    await workflow();
+    await expect.poll(() => exporter.getFinishedSpans().length).toBe(4);
+
+    const steps = exporter
+      .getFinishedSpans()
+      .filter((span) => span.attributes['workflow.step.name'] !== undefined)
+      .map((span) => [
+        span.attributes['workflow.step.name'],
+        span.attributes['workflow.step.index'],
+      ]);
+    expect(steps).toEqual([
+      ['first', 0],
+      ['second', 1],
+      ['third', 2],
+    ]);
+  });
+
   it('should handle many concurrent workflows', async () => {
     const NUM_WORKFLOWS = 20;
     const results = new Map<string, string[]>();

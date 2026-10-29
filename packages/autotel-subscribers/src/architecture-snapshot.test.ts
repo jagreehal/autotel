@@ -2,7 +2,9 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import type { EventAttributes } from 'autotel/event-subscriber';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { init, shutdown, trace } from 'autotel';
+import { traceStep, traceWorkflow } from 'autotel/workflow';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ArchitectureSnapshotSubscriber,
   extractFieldPaths,
@@ -386,6 +388,25 @@ describe('ArchitectureSnapshotSubscriber consumer measurement', () => {
     expect(snap.events['order.updated'].observedConsumers).toBeUndefined();
   });
 
+  it('joins on the destination template when the span has one', async () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    await send(sub, tracked('order.placed', P1));
+    const span = consumerSpan(P1, 'PaymentService', 'orders.events-run-42');
+    sub.spanProcessor.onEnd({
+      ...span,
+      attributes: {
+        ...span.attributes,
+        'messaging.destination.template': 'orders.events',
+      },
+    });
+
+    const snap = sub.toSnapshot({ now: FIXED_NOW });
+    expect(snap.events['order.placed'].observedConsumers?.[0]).toMatchObject({
+      consumer: 'PaymentService',
+      channel: 'orders.events',
+    });
+  });
+
   it('ignores other channels, other spans and non-consumer spans', async () => {
     const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
     const processor = sub.spanProcessor;
@@ -463,11 +484,154 @@ describe('ArchitectureSnapshotSubscriber consumer measurement', () => {
     error.mockRestore();
   });
 
+  /** A consumer span that recorded `attributes` and ended with `code`. */
+  const outcomeSpan = (
+    link: { traceId: string; spanId: string },
+    attributes: Record<string, string | number | boolean>,
+    code = 1,
+  ) => {
+    const span = consumerSpan(link, 'PaymentService');
+    return {
+      ...span,
+      attributes: { ...span.attributes, ...attributes },
+      status: { code },
+    };
+  };
+
+  it('records what happened to each delivery', async () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    const processor = sub.spanProcessor;
+    const P3 = { traceId: 't-3', spanId: 's-3' };
+    const P4 = { traceId: 't-4', spanId: 's-4' };
+    await send(sub, tracked('order.placed', P1));
+    await send(sub, tracked('order.placed', P2));
+
+    processor.onEnd(outcomeSpan(P1, { 'messaging.retry.count': 1 }, 2));
+    processor.onEnd(outcomeSpan(P1, { 'messaging.retry.count': 2 }, 2));
+    const timeout = {
+      'messaging.dlq.reason': 'Payment gateway timeout',
+      'messaging.dlq.reason_category': 'timeout',
+      'messaging.dlq.name': 'orders-dlq',
+    };
+    processor.onEnd(outcomeSpan(P1, timeout, 2));
+    processor.onEnd(
+      outcomeSpan(P2, { 'messaging.dlq.reason': 'x'.repeat(300) }, 2),
+    );
+    // Receipts that arrive before their event carry the outcome with them.
+    processor.onEnd(outcomeSpan(P3, { 'messaging.replay': true }));
+    processor.onEnd(outcomeSpan(P4, timeout));
+    await send(sub, tracked('order.placed', P3));
+    await send(sub, tracked('order.placed', P4));
+
+    const [entry] = sub.toSnapshot({ now: FIXED_NOW }).events['order.placed']
+      .observedConsumers!;
+    expect(entry).toEqual({
+      consumer: 'PaymentService',
+      channel: 'orders.events',
+      count: 6,
+      firstSeen: '2026-05-21T18:00:00.000Z',
+      lastSeen: '2026-05-21T18:00:00.000Z',
+      failed: 4,
+      retried: 2,
+      deadLettered: 3,
+      replayed: 1,
+      deadLetterReasons: [
+        {
+          reason: 'Payment gateway timeout',
+          category: 'timeout',
+          queue: 'orders-dlq',
+          count: 2,
+        },
+        { reason: 'x'.repeat(200), count: 1 },
+      ],
+    });
+  });
+
+  it('writes no outcome keys when every delivery succeeds', async () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    await send(sub, tracked('order.placed', P1));
+    sub.spanProcessor.onEnd(outcomeSpan(P1, {}));
+
+    const [entry] = sub.toSnapshot({ now: FIXED_NOW }).events['order.placed']
+      .observedConsumers!;
+    expect(Object.keys(entry)).toEqual([
+      'consumer',
+      'channel',
+      'count',
+      'firstSeen',
+      'lastSeen',
+    ]);
+  });
+
   it('marks a snapshot unmeasured when no span processor was taken', async () => {
     const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
     await send(sub, tracked('order.placed', P1));
     expect(
       sub.toSnapshot({ now: FIXED_NOW }).consumersMeasured,
     ).toBeUndefined();
+  });
+});
+
+describe('ArchitectureSnapshotSubscriber workflow measurement', () => {
+  const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+  init({ service: 'orders', spanProcessors: [sub.spanProcessor] });
+  afterAll(() => shutdown());
+  beforeEach(() => sub.reset());
+
+  const step = (name: string, fail = false) =>
+    traceStep({ name, compensate: async () => {} })(async () => {
+      if (fail) throw new Error(`${name} failed`);
+    });
+
+  type Order = { id: string; failShipping: boolean };
+  const fulfilOrder = traceWorkflow({
+    name: 'FulfilOrder',
+    workflowId: (order: Order) => order.id,
+  })(() => async ({ failShipping }: Order) => {
+    await step('ReserveStock')();
+    await step('ChargePayment')();
+    await step('ShipOrder', failShipping)();
+  });
+
+  it('counts how each run and step ended', async () => {
+    await fulfilOrder({ id: 'o-1', failShipping: false });
+    await expect(
+      fulfilOrder({ id: 'o-2', failShipping: true }),
+    ).rejects.toThrow('ShipOrder failed');
+
+    const snap = sub.toSnapshot({ freezeTimestamps: 'frozen' });
+    const workflow = snap.workflows?.FulfilOrder;
+    expect(workflow).toEqual({
+      name: 'FulfilOrder',
+      runs: 2,
+      firstSeen: 'frozen',
+      lastSeen: 'frozen',
+      completed: 1,
+      compensated: 1,
+      steps: [
+        { name: 'ReserveStock', count: 2, compensated: 1 },
+        { name: 'ChargePayment', count: 2, compensated: 1 },
+        { name: 'ShipOrder', count: 2, failed: 1 },
+      ],
+      sampleTraceIds: expect.any(Array),
+    });
+    expect(workflow?.sampleTraceIds).toHaveLength(2);
+  });
+
+  it('counts a step that runs inside another span of the workflow', async () => {
+    const settle = traceWorkflow({ name: 'Settle', workflowId: 'w-1' })(
+      () => async () => {
+        await trace.run('load', async () => step('Post')());
+      },
+    );
+    await settle();
+
+    const snap = sub.toSnapshot({ freezeTimestamps: 'frozen' });
+    expect(snap.workflows?.Settle?.steps).toEqual([{ name: 'Post', count: 1 }]);
+  });
+
+  it('writes no workflows key when no workflow ran', async () => {
+    await sub.trackEvent('order.placed', { orderId: 'o-1' });
+    expect(sub.toSnapshot({ now: FIXED_NOW })).not.toHaveProperty('workflows');
   });
 });

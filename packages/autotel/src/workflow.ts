@@ -255,7 +255,8 @@ interface WorkflowState {
   compensations: Map<string, (error: Error) => Promise<void> | void>;
 }
 
-const workflowStates = new WeakMap<object, WorkflowState>();
+/** Each workflow context's state, read by the steps that run inside it. */
+const workflowStates = new WeakMap<WorkflowContext, WorkflowState>();
 
 /**
  * AsyncLocalStorage for workflow context (async-safe)
@@ -377,7 +378,7 @@ export function traceWorkflow<TConfigArgs extends unknown[] = unknown[]>(
             config.onFailed?.(ctx, toError(error));
 
             // Check if we have compensations to run
-            const state = getWorkflowState();
+            const state = workflowStates.get(ctx);
             if (state && state.compensations.size > 0) {
               ctx.setWorkflowStatus('compensating');
               config.onCompensating?.(ctx);
@@ -460,6 +461,9 @@ export function traceStep(
         ctx.setAttribute('workflow.step.name', config.name);
         ctx.setAttribute('workflow.step.index', ctx.getStepIndex());
         ctx.setAttribute('workflow.step.status', 'running');
+        if (workflowCtx) {
+          ctx.setAttribute('workflow.id', workflowCtx.getWorkflowId());
+        }
 
         if (config.description) {
           ctx.setAttribute('workflow.step.description', config.description);
@@ -571,7 +575,6 @@ function createWorkflowContext(
   workflowId: string,
 ): WorkflowContext {
   // Initialize state
-  const span = getActiveSpan();
   const state: WorkflowState = {
     workflowId,
     workflowName,
@@ -581,11 +584,7 @@ function createWorkflowContext(
     compensations: new Map<string, (error: Error) => Promise<void> | void>(),
   };
 
-  if (span) {
-    workflowStates.set(span, state);
-  }
-
-  return {
+  const ctx: WorkflowContext = {
     ...baseCtx,
 
     getWorkflowId(): string {
@@ -717,6 +716,8 @@ function createWorkflowContext(
       });
     },
   };
+  workflowStates.set(ctx, state);
+  return ctx;
 }
 
 /**
@@ -727,34 +728,17 @@ function createStepContext(
   config: StepConfig,
   workflowCtx: WorkflowContext | null,
 ): StepContext {
-  // Determine step index
-  let stepIndex = config.index ?? 0;
-  if (workflowCtx) {
-    const span = getActiveSpan();
-    if (span) {
-      const state = workflowStates.get(span);
-      if (state) {
-        stepIndex = config.index ?? state.stepCounter++;
-      }
-    }
-  }
-
-  // Register step metadata
-  if (workflowCtx) {
-    const wfSpan = getActiveSpan();
-    if (wfSpan) {
-      const state = workflowStates.get(wfSpan);
-      if (state) {
-        state.steps.set(config.name, {
-          name: config.name,
-          index: stepIndex,
-          status: 'running',
-          startTime: Date.now(),
-          compensate: config.compensate,
-        });
-      }
-    }
-  }
+  // Steps run inside their own span, so the workflow state comes from the
+  // workflow context rather than the active span.
+  const state = workflowCtx ? workflowStates.get(workflowCtx) : undefined;
+  const stepIndex = config.index ?? (state ? state.stepCounter++ : 0);
+  state?.steps.set(config.name, {
+    name: config.name,
+    index: stepIndex,
+    status: 'running',
+    startTime: Date.now(),
+    compensate: config.compensate,
+  });
 
   return {
     ...baseCtx,
@@ -793,14 +777,6 @@ function createStepContext(
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Get workflow state from context
- */
-function getWorkflowState() {
-  const span = getActiveSpan();
-  return span ? workflowStates.get(span) : null;
-}
 
 /**
  * Add links to previous steps
