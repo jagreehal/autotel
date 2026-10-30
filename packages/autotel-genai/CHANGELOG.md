@@ -1,5 +1,13 @@
 # autotel-genai
 
+## 0.16.12
+
+### Patch Changes
+
+- Updated dependencies [89cb674]
+  - autotel@8.8.0
+  - autotel-audit@1.2.15
+
 ## 0.16.11
 
 ### Patch Changes

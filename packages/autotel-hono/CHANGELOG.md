@@ -1,5 +1,13 @@
 # autotel-hono
 
+## 0.6.7
+
+### Patch Changes
+
+- Updated dependencies [89cb674]
+  - autotel@8.8.0
+  - autotel-adapters@3.1.2
+
 ## 0.6.6
 
 ### Patch Changes

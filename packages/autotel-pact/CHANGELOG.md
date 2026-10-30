@@ -1,5 +1,12 @@
 # autotel-pact
 
+## 25.0.16
+
+### Patch Changes
+
+- Updated dependencies [89cb674]
+  - autotel@8.8.0
+
 ## 25.0.15
 
 ### Patch Changes
