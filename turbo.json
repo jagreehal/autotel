@@ -33,7 +33,7 @@
     "test:integration": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", "!dist/**", "!coverage/**"],
-      "env": ["MONGO_TEST_URI"],
+      "env": ["MONGO_TEST_URI", "SQS_ENDPOINT", "KAFKA_BROKER"],
       "outputs": []
     },
     "clean": {

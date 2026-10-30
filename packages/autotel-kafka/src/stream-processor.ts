@@ -12,7 +12,7 @@
  *
  * @example
  * ```typescript
- * import { createStreamProcessor } from 'autotel-plugins/kafka';
+ * import { createStreamProcessor } from 'autotel-kafka';
  *
  * const processor = createStreamProcessor({
  *   name: 'order-enrichment',
@@ -46,12 +46,12 @@ import {
   SEMATTRS_MESSAGING_SYSTEM,
   SEMATTRS_MESSAGING_DESTINATION_NAME,
   SEMATTRS_MESSAGING_OPERATION,
-} from '../common/constants';
+} from './constants';
 import { normalizeHeaders, extractTraceContext } from './headers';
 import { injectTraceHeaders } from './correlation';
 import type { RawKafkaHeaders } from './types';
 
-const DEFAULT_TRACER_NAME = 'autotel-plugins/kafka';
+const DEFAULT_TRACER_NAME = 'autotel-kafka';
 
 /**
  * Input message type for stream processing.

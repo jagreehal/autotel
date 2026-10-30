@@ -6,7 +6,7 @@
  *
  * @example Basic producer span
  * ```typescript
- * import { withProducerSpan, injectTraceHeaders } from 'autotel-plugins/kafka';
+ * import { withProducerSpan, injectTraceHeaders } from 'autotel-kafka';
  *
  * await withProducerSpan({
  *   name: 'order.publish',
@@ -30,9 +30,9 @@ import {
   SEMATTRS_MESSAGING_DESTINATION_NAME,
   SEMATTRS_MESSAGING_KAFKA_MESSAGE_KEY,
   SEMATTRS_MESSAGING_OPERATION,
-} from '../common/constants';
+} from './constants';
 
-const DEFAULT_TRACER_NAME = 'autotel-plugins/kafka';
+const DEFAULT_TRACER_NAME = 'autotel-kafka';
 
 /**
  * Create a producer span for Kafka message publishing.

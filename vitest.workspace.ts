@@ -13,6 +13,9 @@ export default defineWorkspace([
   // Plugins package - integration tests
   'packages/autotel-plugins/vitest.integration.config.ts',
 
+  // Kafka package - unit tests
+  'packages/autotel-kafka/vitest.unit.config.ts',
+
   // Cloudflare package - unit tests
   'packages/autotel-cloudflare/vitest.config.ts',
   // Cloudflare package - integration tests

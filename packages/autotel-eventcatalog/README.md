@@ -172,6 +172,14 @@ span is one message, so a consumer span whose link points at that span, on the
 same channel, counts as that consumer receiving exactly that event. An event
 tracked outside a producer span is never credited to a consumer. The
 snapshot records it under `observedConsumers` and sets `consumersMeasured`.
+Each entry also counts what the consumer did with its deliveries: `failed`
+(span ended with an error), `retried` (`ctx.recordRetry`), `deadLettered`
+(`ctx.recordDLQ`) and `replayed` (`ctx.recordReplay`), plus up to ten
+`deadLetterReasons`. A count of zero leaves its key out. The same span
+processor reads `traceWorkflow` and `traceStep` spans into a top-level
+`workflows` map: per workflow, its runs by end status (`completed`, `failed`,
+`compensated`, `compensationFailed`) and each step's runs, failures, skips and
+compensations.
 In a measured snapshot every consumer edge carries `observed` evidence, and its
 liveness is the finding: a catalog `receives` nobody was seen receiving on is
 `declared-only`, and a consumer the catalog never mentions is `undocumented`.

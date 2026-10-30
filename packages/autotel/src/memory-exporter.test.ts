@@ -50,6 +50,31 @@ describe('createMemoryExporter()', () => {
       .toMatchObject({ 'payment.provider': 'stripe' });
   });
 
+  it('records the spans a span links to', async () => {
+    await trace.run('checkout.linked', async (traceCtx) => {
+      traceCtx.addLinks([
+        {
+          context: {
+            traceId: '0af7651916cd43dd8448eb211c80319c',
+            spanId: 'b7ad6b7169203331',
+            traceFlags: 1,
+          },
+          attributes: { 'messaging.link.source': 'dlq_replay' },
+        },
+      ]);
+    });
+
+    await expect
+      .poll(() => exporter.findSpan('checkout.linked')?.links)
+      .toEqual([
+        {
+          traceId: '0af7651916cd43dd8448eb211c80319c',
+          spanId: 'b7ad6b7169203331',
+          attributes: { 'messaging.link.source': 'dlq_replay' },
+        },
+      ]);
+  });
+
   it('reset() empties what it has collected', async () => {
     const noop = instrument({ key: 'checkout.reset', fn: async () => {} });
     await noop();

@@ -371,6 +371,19 @@ describe('Messaging Helpers', () => {
       expect(config.lagMetrics!.getCurrentOffset!({ offset: 500 })).toBe(500);
     });
 
+    it('reads the end offset for the message being consumed', async () => {
+      const getEndOffset = vi.fn((msg: TestMessage) => Number(msg.offset) + 5);
+      const consume = traceConsumer<TestMessage>({
+        system: 'kafka',
+        destination: 'events',
+        lagMetrics: { getCurrentOffset: (msg) => msg.offset, getEndOffset },
+      })(() => async (_msg: TestMessage) => {});
+
+      await consume({ offset: 10, key: 'match-1' });
+
+      expect(getEndOffset).toHaveBeenCalledWith({ offset: 10, key: 'match-1' });
+    });
+
     it('should extract headers using string path', () => {
       const config: ConsumerConfig<TestMessage> = {
         system: 'kafka',
@@ -1142,6 +1155,34 @@ describe('Messaging Helpers', () => {
       });
     });
 
+    describe('Out-of-order detection', () => {
+      it('flags only the messages that arrive after a later one', async () => {
+        const late: number[] = [];
+        const reported: number[] = [];
+        const consume = traceConsumer<TestMessage>({
+          system: 'kafka',
+          destination: 'matches',
+          ordering: {
+            sequenceFrom: (msg) => msg.offset,
+            partitionKeyFrom: (msg) => msg.key,
+            detectOutOfOrder: true,
+            onOutOfOrder: (_ctx, info) => reported.push(info.currentSequence),
+          },
+        })((ctx) => async (msg: TestMessage) => {
+          if (ctx.getOutOfOrderInfo()) late.push(msg.offset!);
+        });
+
+        // Three partitions read one after another: 1,4 then 2,5 then 3,6.
+        // 4 skips ahead (a gap); 2 and 3 arrive after 4 and 5.
+        for (const offset of [1, 4, 2, 5, 3, 6, 6]) {
+          await consume({ offset, key: 'BRA-GER' });
+        }
+
+        expect(late).toEqual([2, 3]);
+        expect(reported).toEqual([2, 3]);
+      });
+    });
+
     describe('Duplicate detection', () => {
       it('should detect duplicate messages and call callback', async () => {
         const duplicateCallback = vi.fn();
@@ -1159,6 +1200,62 @@ describe('Messaging Helpers', () => {
         // Verify config is set up correctly
         expect(config.ordering?.detectDuplicates).toBe(true);
         expect(config.ordering?.onDuplicate).toBe(duplicateCallback);
+      });
+
+      it('still calls the deprecated onDLQ after recordDLQ', async () => {
+        const onDLQ = vi.fn();
+        const consume = traceConsumer<TestMessage>({
+          system: 'kafka',
+          destination: 'orders',
+          onDLQ,
+        })((ctx) => async (_msg: TestMessage) => {
+          ctx.recordDLQ('unparseable order', 'orders-dlq');
+        });
+
+        await consume({ id: 'evt-1' });
+
+        expect(onDLQ).toHaveBeenCalledWith(
+          expect.anything(),
+          'unparseable order',
+        );
+      });
+
+      it('flags a redelivery to the same consumer group', async () => {
+        const seen: boolean[] = [];
+        const consume = traceConsumer<TestMessage>({
+          system: 'kafka',
+          destination: 'orders',
+          consumerGroup: 'payments',
+          ordering: { messageIdFrom: (msg) => msg.id, detectDuplicates: true },
+        })((ctx) => async (_msg: TestMessage) => {
+          seen.push(ctx.isDuplicate());
+        });
+
+        await consume({ id: 'evt-1' });
+        await consume({ id: 'evt-1' });
+
+        expect(seen).toEqual([false, true]);
+      });
+
+      it('lets every consumer group read a message once', async () => {
+        const seen: boolean[] = [];
+        const groupConsumer = (consumerGroup: string) =>
+          traceConsumer<TestMessage>({
+            system: 'kafka',
+            destination: 'orders',
+            consumerGroup,
+            ordering: {
+              messageIdFrom: (msg) => msg.id,
+              detectDuplicates: true,
+            },
+          })((ctx) => async (_msg: TestMessage) => {
+            seen.push(ctx.isDuplicate());
+          });
+
+        await groupConsumer('payments')({ id: 'evt-1' });
+        await groupConsumer('inventory')({ id: 'evt-1' });
+
+        expect(seen).toEqual([false, false]);
       });
 
       it('should use custom deduplication window size', () => {

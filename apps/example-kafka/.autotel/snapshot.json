@@ -1,0 +1,225 @@
+{
+  "spec": "autotel-architecture/v0.1.0",
+  "generatedAt": "2026-01-01T00:00:00.000Z",
+  "service": "match-feed",
+  "consumersMeasured": true,
+  "events": {
+    "match.event_recorded": {
+      "name": "match.event_recorded",
+      "observedCount": 55,
+      "firstSeen": "2026-01-01T00:00:00.000Z",
+      "lastSeen": "2026-01-01T00:00:00.000Z",
+      "fieldPaths": [
+        "eventId",
+        "matchId",
+        "minute",
+        "seq",
+        "type"
+      ],
+      "sampleTraceIds": [
+        "31bff44fbddc0137647c29d070bc8352",
+        "51e1ed90b9d70a6dec7b960882e68bae",
+        "eca650eda36a7409c47e331744659646"
+      ],
+      "channel": "match-events",
+      "producer": "match-feed",
+      "consumers": [],
+      "fieldStats": {
+        "eventId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "A1-1",
+            "ARG-FRA-2",
+            "B1-1",
+            "BRA-GER-1",
+            "BRA-GER-2",
+            "BRA-GER-3",
+            "BRA-GER-4",
+            "BRA-GER-5",
+            "BRA-GER-6",
+            "C1-1",
+            "D1-1",
+            "E1-1",
+            "ESP-ITA-2",
+            "ESP-ITA-x",
+            "FINAL-1",
+            "FINAL-10",
+            "FINAL-11",
+            "FINAL-12",
+            "FINAL-13",
+            "FINAL-14"
+          ]
+        },
+        "matchId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "A1",
+            "ARG-FRA",
+            "B1",
+            "BRA-GER",
+            "C1",
+            "D1",
+            "E1",
+            "ESP-ITA",
+            "FINAL",
+            "NED-POR"
+          ]
+        },
+        "minute": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            12,
+            15,
+            18,
+            21,
+            24,
+            27,
+            3,
+            30,
+            33,
+            36,
+            39,
+            42,
+            45,
+            48,
+            51,
+            54,
+            57,
+            6,
+            60,
+            63
+          ]
+        },
+        "seq": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            1,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            2,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ]
+        },
+        "type": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "card",
+            "full_time",
+            "gaol",
+            "goal",
+            "kickoff",
+            "sub"
+          ]
+        }
+      },
+      "sources": [
+        {
+          "producer": "match-feed",
+          "channel": "match-events",
+          "count": 51,
+          "firstSeen": "2026-01-01T00:00:00.000Z",
+          "lastSeen": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "producer": "match-feed",
+          "channel": "match-events.dlq",
+          "count": 2,
+          "firstSeen": "2026-01-01T00:00:00.000Z",
+          "lastSeen": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "producer": "match-feed",
+          "channel": "match-events.retry",
+          "count": 2,
+          "firstSeen": "2026-01-01T00:00:00.000Z",
+          "lastSeen": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "observedConsumers": [
+        {
+          "consumer": "dlq-inspector",
+          "channel": "match-events.dlq",
+          "count": 2,
+          "firstSeen": "2026-01-01T00:00:00.000Z",
+          "lastSeen": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "consumer": "notifications",
+          "channel": "match-events",
+          "count": 3,
+          "firstSeen": "2026-01-01T00:00:00.000Z",
+          "lastSeen": "2026-01-01T00:00:00.000Z",
+          "failed": 2,
+          "retried": 1,
+          "deadLettered": 1,
+          "deadLetterReasons": [
+            {
+              "reason": "unknown event type 'gaol'",
+              "category": "validation",
+              "queue": "match-events.dlq",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "consumer": "notifications-retry",
+          "channel": "match-events.retry",
+          "count": 2,
+          "firstSeen": "2026-01-01T00:00:00.000Z",
+          "lastSeen": "2026-01-01T00:00:00.000Z",
+          "failed": 2,
+          "retried": 1,
+          "deadLettered": 1,
+          "deadLetterReasons": [
+            {
+              "reason": "push provider unavailable",
+              "category": "processing",
+              "queue": "match-events.dlq",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "consumer": "scoreboard",
+          "channel": "match-events",
+          "count": 15,
+          "firstSeen": "2026-01-01T00:00:00.000Z",
+          "lastSeen": "2026-01-01T00:00:00.000Z",
+          "failed": 1
+        },
+        {
+          "consumer": "stats",
+          "channel": "match-events",
+          "count": 36,
+          "firstSeen": "2026-01-01T00:00:00.000Z",
+          "lastSeen": "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    }
+  }
+}

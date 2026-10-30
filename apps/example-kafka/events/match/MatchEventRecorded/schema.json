@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["eventId", "matchId", "seq", "type", "minute"],
+  "properties": {
+    "eventId": { "type": "string" },
+    "matchId": { "type": "string" },
+    "seq": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Position of this event within its match."
+    },
+    "type": { "enum": ["kickoff", "goal", "card", "sub", "full_time"] },
+    "minute": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

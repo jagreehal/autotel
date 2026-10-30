@@ -56,6 +56,37 @@ export type ArchitectureSnapshot = {
    */
   consumersMeasured?: boolean;
   events: Record<string, EventObservation>;
+  /**
+   * Workflows seen running, keyed by `workflow.name`, read from `traceWorkflow`
+   * and `traceStep` spans. Present once the `spanProcessor` sees a workflow.
+   */
+  workflows?: Record<string, WorkflowObservation>;
+};
+
+export type WorkflowObservation = {
+  name: string;
+  /** Workflow runs seen. */
+  runs: number;
+  firstSeen: string;
+  lastSeen: string;
+  completed?: number;
+  failed?: number;
+  compensated?: number;
+  compensationFailed?: number;
+  /** Each step seen, in step-index order, with how its runs ended. */
+  steps: WorkflowStepObservation[];
+  /** Up to 5 trace ids, runs that failed or compensated first. */
+  sampleTraceIds?: string[];
+};
+
+/** One step of a workflow, with how its runs ended. */
+export type WorkflowStepObservation = {
+  name: string;
+  count: number;
+  failed?: number;
+  skipped?: number;
+  compensated?: number;
+  compensationFailed?: number;
 };
 
 export type EventObservation = {
@@ -116,6 +147,24 @@ export type ObservedConsumer = {
   count: number;
   firstSeen: string;
   lastSeen: string;
+  /** Deliveries whose consumer span ended with an error status. */
+  failed?: number;
+  /** Deliveries the consumer retried (`ctx.recordRetry`). */
+  retried?: number;
+  /** Deliveries the consumer moved to a dead-letter queue (`ctx.recordDLQ`). */
+  deadLettered?: number;
+  /** Deliveries replayed from a dead-letter queue (`ctx.recordReplay`). */
+  replayed?: number;
+  /** Why deliveries were dead-lettered, most frequent first, at most 10. */
+  deadLetterReasons?: DeadLetterReason[];
+};
+
+/** One reason a consumer gave for dead-lettering, with how often it gave it. */
+export type DeadLetterReason = {
+  reason: string;
+  category?: string;
+  queue?: string;
+  count: number;
 };
 
 /** A ReadableSpan as the consumer join reads one, without a hard SDK dependency. */
@@ -124,6 +173,9 @@ export interface ConsumerSpanLike {
   attributes: Record<string, SpanAttributeValue>;
   links: Array<{ context: { traceId: string; spanId: string } }>;
   endTime: [number, number];
+  status?: { code: number };
+  spanContext?(): { traceId: string; spanId: string };
+  parentSpanContext?: { spanId: string };
   resource?: { attributes: Record<string, SpanAttributeValue> };
 }
 
@@ -145,6 +197,28 @@ export interface ConsumerSpanProcessor {
 
 /** OTel `SpanKind.CONSUMER`. */
 const SPAN_KIND_CONSUMER = 4;
+/** OTel `SpanStatusCode.ERROR`. */
+const SPAN_STATUS_ERROR = 2;
+const MAX_REASON_LENGTH = 200;
+const MAX_REASONS_WRITTEN = 10;
+// Distinct reasons counted per consumer, so per-message text cannot grow the
+// snapshot without limit.
+const MAX_REASONS_KEPT = 100;
+// The snapshot counts the first 1000 workflow names, the first 100 steps of
+// each, and holds up to 100 step spans per workflow run still in progress.
+const MAX_WORKFLOWS = 1000;
+const MAX_STEPS = 100;
+const MAX_SAMPLE_WORKFLOW_TRACES = 5;
+
+type WorkflowOutcome =
+  'completed' | 'failed' | 'compensated' | 'compensationFailed';
+/** `workflow.status` values a run ends in, by the field that counts them. */
+const WORKFLOW_OUTCOMES = new Map<SpanAttributeValue, WorkflowOutcome>([
+  ['completed', 'completed'],
+  ['failed', 'failed'],
+  ['compensated', 'compensated'],
+  ['compensation_failed', 'compensationFailed'],
+]);
 
 /**
  * Producer spans remembered on each side of the producer/consumer join. Either
@@ -159,9 +233,20 @@ const MAX_JOIN_SPANS = 10_000;
 const MAX_PER_SPAN = 16;
 
 type Delivery = { event: string; channel?: string };
-type Receipt = { consumer: string; channel: string; at: string };
+type Receipt = {
+  consumer: string;
+  channel: string;
+  at: string;
+  failed?: true;
+  retried?: true;
+  replayed?: true;
+  deadLetter?: Omit<DeadLetterReason, 'count'>;
+};
 
-/** A consumer measured receiving an event, as `onConsumerObserved` reports it. */
+/**
+ * A consumer measured receiving an event, as `onConsumerObserved` reports it,
+ * with what the consumer did with that delivery.
+ */
 export type ConsumerReceipt = Receipt & { event: string };
 
 /** Join key: the producer span a message was published from. */
@@ -169,10 +254,15 @@ const spanKey = (traceId: string, spanId: string) => `${traceId}/${spanId}`;
 
 // Insertion-order eviction; a span evicted before its other half arrives is
 // not counted.
-function remember<T>(index: Map<string, T[]>, key: string, item: T): void {
+function remember<T>(
+  index: Map<string, T[]>,
+  key: string,
+  item: T,
+  limit = MAX_PER_SPAN,
+): void {
   const list = index.get(key);
   if (list) {
-    if (list.length < MAX_PER_SPAN) list.push(item);
+    if (list.length < limit) list.push(item);
     return;
   }
   if (index.size >= MAX_JOIN_SPANS) {
@@ -184,19 +274,159 @@ function remember<T>(index: Map<string, T[]>, key: string, item: T): void {
 
 function recordConsumer(
   observation: { observedConsumers?: ObservedConsumer[] },
-  { consumer, channel, at }: Receipt,
+  receipt: Receipt,
 ): void {
+  const { consumer, channel, at } = receipt;
   const consumers = (observation.observedConsumers ??= []);
-  const existing = consumers.find(
-    (entry) => entry.consumer === consumer && entry.channel === channel,
+  let entry = consumers.find(
+    (e) => e.consumer === consumer && e.channel === channel,
   );
-  if (existing) {
-    existing.count += 1;
-    if (at < existing.firstSeen) existing.firstSeen = at;
-    if (at > existing.lastSeen) existing.lastSeen = at;
-    return;
+  if (entry) {
+    entry.count += 1;
+    if (at < entry.firstSeen) entry.firstSeen = at;
+    if (at > entry.lastSeen) entry.lastSeen = at;
+  } else {
+    entry = { consumer, channel, count: 1, firstSeen: at, lastSeen: at };
+    consumers.push(entry);
   }
-  consumers.push({ consumer, channel, count: 1, firstSeen: at, lastSeen: at });
+  if (receipt.failed) entry.failed = (entry.failed ?? 0) + 1;
+  if (receipt.retried) entry.retried = (entry.retried ?? 0) + 1;
+  if (receipt.replayed) entry.replayed = (entry.replayed ?? 0) + 1;
+  if (receipt.deadLetter) {
+    entry.deadLettered = (entry.deadLettered ?? 0) + 1;
+    recordReason((entry.deadLetterReasons ??= []), receipt.deadLetter);
+  }
+}
+
+function recordReason(
+  reasons: DeadLetterReason[],
+  { reason, category, queue }: Omit<DeadLetterReason, 'count'>,
+): void {
+  const existing = reasons.find(
+    (r) => r.reason === reason && r.category === category && r.queue === queue,
+  );
+  if (existing) existing.count += 1;
+  else if (reasons.length < MAX_REASONS_KEPT) {
+    reasons.push({
+      reason,
+      ...(category !== undefined && { category }),
+      ...(queue !== undefined && { queue }),
+      count: 1,
+    });
+  }
+}
+
+/** What the consumer did with a delivery, read from its span. */
+function readOutcome(
+  span: ConsumerSpanLike,
+): Omit<Receipt, 'consumer' | 'channel' | 'at'> {
+  const attrs = span.attributes;
+  const reason = attrs['messaging.dlq.reason'];
+  const category = attrs['messaging.dlq.reason_category'];
+  const queue = attrs['messaging.dlq.name'];
+  return {
+    ...(span.status?.code === SPAN_STATUS_ERROR && { failed: true }),
+    ...(attrs['messaging.retry.count'] !== undefined && { retried: true }),
+    ...(attrs['messaging.replay'] === true && { replayed: true }),
+    ...(reason !== undefined && {
+      deadLetter: {
+        reason: String(reason).slice(0, MAX_REASON_LENGTH),
+        ...(typeof category === 'string' && { category }),
+        ...(typeof queue === 'string' && { queue }),
+      },
+    }),
+  };
+}
+
+type StepRun = { name: string; index: number; status?: SpanAttributeValue };
+type StepTally = WorkflowStepObservation & { index: number };
+type WorkflowTally = Omit<WorkflowObservation, 'steps' | 'sampleTraceIds'> & {
+  steps: StepTally[];
+  /** Trace ids of runs that did not complete, then of runs that did. */
+  flaggedTraceIds: string[];
+  okTraceIds: string[];
+};
+
+const increment = <K extends string>(
+  tally: Partial<Record<K, number>>,
+  key: K,
+) => {
+  tally[key] = (tally[key] ?? 0) + 1;
+};
+
+function recordWorkflowRun(
+  tally: WorkflowTally,
+  span: ConsumerSpanLike,
+  traceId: string,
+  at: string,
+  stepRuns: StepRun[],
+): void {
+  tally.runs += 1;
+  if (at < tally.firstSeen) tally.firstSeen = at;
+  if (at > tally.lastSeen) tally.lastSeen = at;
+  const outcome = WORKFLOW_OUTCOMES.get(span.attributes['workflow.status']);
+  if (outcome) increment(tally, outcome);
+  const samples =
+    outcome === 'completed' ? tally.okTraceIds : tally.flaggedTraceIds;
+  if (
+    samples.length < MAX_SAMPLE_WORKFLOW_TRACES &&
+    !samples.includes(traceId)
+  ) {
+    samples.push(traceId);
+  }
+
+  for (const run of stepRuns) {
+    let step = tally.steps.find((s) => s.name === run.name);
+    if (!step) {
+      if (tally.steps.length >= MAX_STEPS) continue;
+      step = { name: run.name, count: 0, index: run.index };
+      tally.steps.push(step);
+    }
+    step.count += 1;
+    step.index = Math.min(step.index, run.index);
+    if (run.status === 'failed') increment(step, 'failed');
+    if (run.status === 'skipped') increment(step, 'skipped');
+    // The workflow span records each compensation it ran as
+    // `workflow.compensation.<step>`: 'success' or 'failed'.
+    const compensation = span.attributes[`workflow.compensation.${run.name}`];
+    if (compensation === 'success') increment(step, 'compensated');
+    if (compensation === 'failed') increment(step, 'compensationFailed');
+  }
+}
+
+function workflowToSnapshot(
+  tally: WorkflowTally,
+  freezeTimestamps: string | undefined,
+): WorkflowObservation {
+  const sampleTraceIds = [
+    ...tally.flaggedTraceIds.toSorted(),
+    ...tally.okTraceIds.toSorted(),
+  ].slice(0, MAX_SAMPLE_WORKFLOW_TRACES);
+  return {
+    name: tally.name,
+    runs: tally.runs,
+    firstSeen: freezeTimestamps ?? tally.firstSeen,
+    lastSeen: freezeTimestamps ?? tally.lastSeen,
+    ...(tally.completed && { completed: tally.completed }),
+    ...(tally.failed && { failed: tally.failed }),
+    ...(tally.compensated && { compensated: tally.compensated }),
+    ...(tally.compensationFailed && {
+      compensationFailed: tally.compensationFailed,
+    }),
+    steps: tally.steps
+      .toSorted((a, b) => a.index - b.index || a.name.localeCompare(b.name))
+      .map((step) => ({
+        name: step.name,
+        count: step.count,
+        ...(step.failed && { failed: step.failed }),
+        ...(step.skipped && { skipped: step.skipped }),
+        ...(step.compensated && { compensated: step.compensated }),
+        ...(step.compensationFailed && {
+          compensationFailed: step.compensationFailed,
+        }),
+      })),
+    ...(sampleTraceIds.length > 0 && { sampleTraceIds }),
+  };
 }
 
 function hrTimeToIso([seconds, nanos]: [number, number]): string {
@@ -272,6 +502,9 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
   private readonly observations = new Map<string, EventObservation>();
   private readonly deliveries = new Map<string, Delivery[]>();
   private readonly receipts = new Map<string, Receipt[]>();
+  private readonly workflows = new Map<string, WorkflowTally>();
+  /** Step spans waiting for the workflow span they ran under to end. */
+  private readonly stepRuns = new Map<string, StepRun[]>();
   private consumersMeasured = false;
   private processor?: ConsumerSpanProcessor;
 
@@ -291,8 +524,11 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
    * event tracked anywhere else is never credited to a consumer. Consumers need
    * `headersFrom` so the link exists, and
    * `init({ events: { includeTraceContext: true } })` so tracked events carry
-   * the span the link is matched against. The consumer is
-   * `messaging.consumer.group.name`, falling back to the span's `service.name`.
+   * the span the link is matched against. The channel is
+   * `messaging.destination.template` when set, otherwise
+   * `messaging.destination.name`, and must equal the event's `_autotel.channel`.
+   * The consumer is `messaging.consumer.group.name`, falling back to the span's
+   * `service.name`.
    */
   get spanProcessor(): ConsumerSpanProcessor {
     this.consumersMeasured = true;
@@ -302,6 +538,7 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
       // work or starve the processors after this one.
       onEnd: (span) => {
         try {
+          this.recordWorkflowSpan(span);
           this.recordConsumerSpan(span);
         } catch (error) {
           console.error(`[${this.name}] consumer span not recorded:`, error);
@@ -313,15 +550,80 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
     return this.processor;
   }
 
+  // Step spans end before their workflow span, so each is held under its run
+  // until the workflow span ends and folds them in.
+  private recordWorkflowSpan(span: ConsumerSpanLike): void {
+    const ids = span.spanContext?.();
+    if (!ids) return;
+    const stepName = span.attributes['workflow.step.name'];
+    const workflowId = span.attributes['workflow.id'];
+    if (typeof stepName === 'string') {
+      // A step names its run by `workflow.id`, wherever it sits under the
+      // workflow span; a step without one belongs to its parent span.
+      const run =
+        typeof workflowId === 'string'
+          ? `id:${workflowId}`
+          : span.parentSpanContext?.spanId;
+      const index = span.attributes['workflow.step.index'];
+      if (!run) return;
+      remember(
+        this.stepRuns,
+        spanKey(ids.traceId, run),
+        {
+          name: stepName,
+          index: typeof index === 'number' ? index : 0,
+          status: span.attributes['workflow.step.status'],
+        },
+        MAX_STEPS,
+      );
+      return;
+    }
+    const name = span.attributes['workflow.name'];
+    if (typeof name !== 'string') return;
+    const keys = [
+      spanKey(ids.traceId, ids.spanId),
+      ...(typeof workflowId === 'string'
+        ? [spanKey(ids.traceId, `id:${workflowId}`)]
+        : []),
+    ];
+    const stepRuns = keys.flatMap((key) => this.stepRuns.get(key) ?? []);
+    for (const key of keys) this.stepRuns.delete(key);
+    const at = hrTimeToIso(span.endTime);
+    let tally = this.workflows.get(name);
+    if (!tally) {
+      if (this.workflows.size >= MAX_WORKFLOWS) return;
+      tally = {
+        name,
+        runs: 0,
+        firstSeen: at,
+        lastSeen: at,
+        steps: [],
+        flaggedTraceIds: [],
+        okTraceIds: [],
+      };
+      this.workflows.set(name, tally);
+    }
+    recordWorkflowRun(tally, span, ids.traceId, at, stepRuns);
+  }
+
   private recordConsumerSpan(span: ConsumerSpanLike): void {
     if (span.kind !== SPAN_KIND_CONSUMER) return;
-    const channel = span.attributes['messaging.destination.name'];
+    // The template names a destination whose actual name varies per run or
+    // per tenant (`orders-{tenant}`), so every copy joins as one channel.
+    const channel =
+      span.attributes['messaging.destination.template'] ??
+      span.attributes['messaging.destination.name'];
     const consumer =
       span.attributes['messaging.consumer.group.name'] ??
       span.resource?.attributes['service.name'];
     if (typeof channel !== 'string' || typeof consumer !== 'string') return;
 
-    const receipt = { consumer, channel, at: hrTimeToIso(span.endTime) };
+    const receipt: Receipt = {
+      consumer,
+      channel,
+      at: hrTimeToIso(span.endTime),
+      ...readOutcome(span),
+    };
     const keys = new Set(
       span.links.map((l) => spanKey(l.context.traceId, l.context.spanId)),
     );
@@ -494,10 +796,30 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
         }),
         ...(obs.observedConsumers && {
           observedConsumers: obs.observedConsumers
+            // Built field by field so key order is fixed whichever outcome
+            // arrived first.
             .map((entry) => ({
-              ...entry,
+              consumer: entry.consumer,
+              channel: entry.channel,
+              count: entry.count,
               firstSeen: freezeTimestamps ?? entry.firstSeen,
               lastSeen: freezeTimestamps ?? entry.lastSeen,
+              ...(entry.failed && { failed: entry.failed }),
+              ...(entry.retried && { retried: entry.retried }),
+              ...(entry.deadLettered && { deadLettered: entry.deadLettered }),
+              ...(entry.replayed && { replayed: entry.replayed }),
+              ...(entry.deadLetterReasons && {
+                deadLetterReasons: entry.deadLetterReasons
+                  .toSorted(
+                    (a, b) =>
+                      b.count - a.count ||
+                      a.reason.localeCompare(b.reason) ||
+                      (a.category ?? '').localeCompare(b.category ?? '') ||
+                      (a.queue ?? '').localeCompare(b.queue ?? ''),
+                  )
+                  .slice(0, MAX_REASONS_WRITTEN)
+                  .map((reason) => ({ ...reason })),
+              }),
             }))
             .toSorted(
               (a, b) =>
@@ -514,6 +836,16 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
       service: this.service,
       ...(this.consumersMeasured && { consumersMeasured: true }),
       events,
+      ...(this.workflows.size > 0 && {
+        workflows: Object.fromEntries(
+          [...this.workflows]
+            .toSorted(([a], [b]) => a.localeCompare(b))
+            .map(([name, tally]) => [
+              name,
+              workflowToSnapshot(tally, freezeTimestamps),
+            ]),
+        ),
+      }),
     };
   }
 
@@ -538,6 +870,8 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
     this.observations.clear();
     this.deliveries.clear();
     this.receipts.clear();
+    this.workflows.clear();
+    this.stepRuns.clear();
   }
 }
 

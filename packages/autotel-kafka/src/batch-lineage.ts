@@ -99,7 +99,7 @@ function hashTraceIdsSync(traceIds: string[]): string {
  *
  * @example Basic batch lineage
  * ```typescript
- * import { extractBatchLineage, withProcessingSpan } from 'autotel-plugins/kafka';
+ * import { extractBatchLineage, withProcessingSpan } from 'autotel-kafka';
  *
  * // In batch consumer
  * const lineage = extractBatchLineage(batch, { maxLinks: 50 });

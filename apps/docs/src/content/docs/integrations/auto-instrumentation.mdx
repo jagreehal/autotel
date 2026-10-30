@@ -118,13 +118,14 @@ For ESM apps (Node 18.19+), you must:
 
 ## autotel-plugins vs Official Packages
 
-| Package                            | When to Use                                           |
-| ---------------------------------- | ----------------------------------------------------- |
-| `@opentelemetry/instrumentation-*` | Official package exists and works                     |
-| `autotel-plugins`                  | No official package (BigQuery, Kafka batch) or broken |
-| `autotel-drizzle`                  | Drizzle ORM (no official package)                     |
-| `autotel-mongoose`                 | Mongoose (stable semconv, value-free query text)      |
-| `autotel-mongodb`                  | MongoDB driver: query text that groups, query plans   |
+| Package                            | When to Use                                         |
+| ---------------------------------- | --------------------------------------------------- |
+| `@opentelemetry/instrumentation-*` | Official package exists and works                   |
+| `autotel-plugins`                  | No official package (BigQuery, RabbitMQ) or broken  |
+| `autotel-kafka`                    | KafkaJS processing, batch and producer spans        |
+| `autotel-drizzle`                  | Drizzle ORM (no official package)                   |
+| `autotel-mongoose`                 | Mongoose (stable semconv, value-free query text)    |
+| `autotel-mongodb`                  | MongoDB driver: query text that groups, query plans |
 
 ## Examples
 

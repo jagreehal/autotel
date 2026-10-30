@@ -76,12 +76,24 @@ await producer.send({
 
 const consumer = new SQSConsumer(sqs, {
   queueUrl: 'https://sqs.us-east-1.amazonaws.com/123456/events',
-  handleMessage: async (message) => {
-    // Trace context automatically extracted from message
-    console.log('Received:', message.body);
-  },
+});
+
+// One CONSUMER span per message, linked to the producer's span. A handler
+// that throws leaves its message for SQS to redeliver; the batch continues.
+await consumer.processMessages(async (message, ctx) => {
+  const attempt = Number(message.systemAttributes.ApproximateReceiveCount);
+  try {
+    await handleEvent(JSON.parse(message.body));
+  } catch (error) {
+    if (attempt >= 3) ctx.recordDLQ(error.message, 'events-dlq');
+    else ctx.recordRetry(attempt, 3);
+    throw error;
+  }
 });
 ```
+
+The [SQS DLQ example](https://github.com/jagreehal/autotel/tree/main/apps/example-sqs-dlq)
+records why each message reached the DLQ and links replays back to the failure.
 
 ## Durable Functions
 

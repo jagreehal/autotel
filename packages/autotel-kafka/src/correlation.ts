@@ -14,7 +14,7 @@ import {
   type TextMapSetter,
 } from 'autotel';
 import type { InjectOptions } from './types';
-import { CORRELATION_ID_HEADER } from '../common/constants';
+import { CORRELATION_ID_HEADER } from './constants';
 
 /**
  * TextMapSetter for injecting headers.
@@ -37,7 +37,7 @@ const headerSetter: TextMapSetter<Record<string, string>> = {
  *
  * @example
  * ```typescript
- * import { deriveCorrelationId } from 'autotel-plugins/kafka';
+ * import { deriveCorrelationId } from 'autotel-kafka';
  *
  * // Inside a traced operation
  * const correlationId = deriveCorrelationId();
@@ -74,7 +74,7 @@ export function deriveCorrelationId(): string {
  *
  * @example
  * ```typescript
- * import { extractCorrelationId, normalizeHeaders } from 'autotel-plugins/kafka';
+ * import { extractCorrelationId, normalizeHeaders } from 'autotel-kafka';
  *
  * const headers = normalizeHeaders(message.headers);
  * const correlationId = extractCorrelationId(headers);
@@ -110,7 +110,7 @@ export function extractCorrelationId(
  *
  * @example
  * ```typescript
- * import { injectTraceHeaders } from 'autotel-plugins/kafka';
+ * import { injectTraceHeaders } from 'autotel-kafka';
  *
  * // Producer: inject headers with correlation ID
  * const headers = injectTraceHeaders({}, { includeCorrelationIdHeader: true });

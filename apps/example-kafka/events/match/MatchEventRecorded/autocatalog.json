@@ -1,0 +1,30 @@
+{
+  "spec": "autocatalog/v2",
+  "id": "match.event_recorded",
+  "version": "1.0.0",
+  "name": "Match event recorded",
+  "summary": "Something happened in a match: kickoff, a goal, a card, a substitution or full time.",
+  "domain": "match",
+  "owner": { "team": "Match feed" },
+  "producers": ["match-feed"],
+  "consumers": [
+    "scoreboard",
+    "notifications",
+    "notifications-retry",
+    "stats",
+    "dlq-inspector"
+  ],
+  "tags": ["kafka"],
+  "status": "active",
+  "schema": "schema.json",
+  "transport": [
+    { "address": "match-events", "protocols": ["kafka"] },
+    { "address": "match-events.retry", "protocols": ["kafka"] },
+    { "address": "match-events.dlq", "protocols": ["kafka"] }
+  ],
+  "examples": [],
+  "provenance": { "default": "extracted", "fields": {} },
+  "confidence": 1,
+  "needsReview": false,
+  "source": { "file": "src/match-feed.ts", "symbol": "MatchEvent" }
+}

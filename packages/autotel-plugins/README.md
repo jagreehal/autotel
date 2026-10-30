@@ -69,55 +69,22 @@ npm install autotel autotel-plugins
 
 Each plugin needs the core packages above plus the library (and optional OTel instrumentation) you use:
 
-| Plugin       | Install                                                                                                                    |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| **BigQuery** | `autotel` + `autotel-plugins` + `@google-cloud/bigquery`                                                                   |
-| **Kafka**    | `autotel` + `autotel-plugins` + `kafkajs`. Optional: `@opentelemetry/instrumentation-kafkajs` for producer/consumer spans. |
+| Plugin       | Install                                                  |
+| ------------ | -------------------------------------------------------- |
+| **BigQuery** | `autotel` + `autotel-plugins` + `@google-cloud/bigquery` |
 
 Examples:
 
 ```bash
 # BigQuery
 npm install autotel autotel-plugins @google-cloud/bigquery
-
-# Kafka (with optional official instrumentation)
-npm install autotel autotel-plugins kafkajs @opentelemetry/instrumentation-kafkajs
 ```
 
 ## Currently Supported
 
 ### Kafka
 
-Composition layer for KafkaJS: processing span wrapper, producer span wrapper, batch lineage for fan-in trace correlation, and batch consumer wrapper. Works alongside optional `@opentelemetry/instrumentation-kafkajs` for producer/consumer spans.
-
-**Batch consumer:** Wrap KafkaJS `eachBatch` with `withBatchConsumer(config, handler)`. Preserves the exact KafkaJS payload signature. Config: `name`, `consumerGroup`, `perMessageSpans` (`'none'` | `'all'` | `'errors'`), `onProgress`.
-
-**Per-message spans:**
-
-- **`'all'`** : One span per message. Message spans are parented to **extracted trace context from message headers when valid** (trace continuation); otherwise to the **batch span**. All per-message spans are ended when the batch completes, including skipped or unresolved messages (no span leak).
-- **`'errors'`** : Per-message span only on failure. When the handler throws, an error span is created for the first message. Use `createMessageErrorSpan` in your catch block for per-message error spans.
-
-```typescript
-import { withBatchConsumer } from 'autotel-plugins/kafka';
-
-await consumer.run({
-  eachBatch: withBatchConsumer(
-    {
-      name: 'orders.batch',
-      consumerGroup: 'processor',
-      perMessageSpans: 'all',
-    },
-    async ({ batch, resolveOffset }) => {
-      for (const message of batch.messages) {
-        await processOrder(message);
-        resolveOffset(message.offset);
-      }
-    },
-  ),
-});
-```
-
-Optional: install `@opentelemetry/instrumentation-kafkajs` for producer/consumer spans.
+Kafka has its own package, [`autotel-kafka`](../autotel-kafka). `autotel-plugins/kafka` re-exports it and is deprecated: import from `autotel-kafka` instead.
 
 ## Combining with Official Packages
 

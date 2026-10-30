@@ -50,9 +50,15 @@
  */
 
 import { trace, type TraceContext, withTracing } from 'autotel';
+import { traceConsumer, type ConsumerContext } from 'autotel/messaging';
 import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 import { buildSQSAttributes } from '../attributes';
+import { loadModule } from '../common/require';
 import { wrapSDKClient } from '../common/sdk-wrapper';
+
+/** `@aws-sdk/client-sqs`, an optional peer, loaded on first use. */
+const sqsSdk = (): typeof import('@aws-sdk/client-sqs') =>
+  loadModule('@aws-sdk/client-sqs');
 
 /**
  * SQS operation configuration
@@ -314,9 +320,8 @@ export class SQSProducer<
         }),
       };
 
-      // Dynamically import the command to avoid requiring @aws-sdk/client-sqs at load time
       try {
-        const { SendMessageCommand } = await import('@aws-sdk/client-sqs');
+        const { SendMessageCommand } = sqsSdk();
         const result = await this.client.send(new SendMessageCommand(input));
 
         if (result.MessageId) {
@@ -381,7 +386,7 @@ export class SQSProducer<
       }));
 
       try {
-        const { SendMessageBatchCommand } = await import('@aws-sdk/client-sqs');
+        const { SendMessageBatchCommand } = sqsSdk();
         const result = await this.client.send(
           new SendMessageBatchCommand({
             QueueUrl: this.config.queueUrl,
@@ -450,7 +455,7 @@ export interface SQSConsumerConfig {
 
   /**
    * Extract W3C Trace Context from message attributes
-   * Creates child spans linked to the producer
+   * Links each CONSUMER span to the producer's span
    * @default true
    */
   extractTraceContext?: boolean;
@@ -516,11 +521,12 @@ export interface ReceivedSQSMessage {
 }
 
 /**
- * Message processor function type
+ * Message processor function type. `ctx` carries the consumer helpers from
+ * `autotel/messaging`: `recordRetry`, `recordDLQ`, `recordReplay`.
  */
 export type MessageProcessor = (
   message: ReceivedSQSMessage,
-  ctx: TraceContext,
+  ctx: ConsumerContext,
 ) => Promise<void>;
 
 /**
@@ -588,32 +594,6 @@ export class SQSConsumer<
   }
 
   /**
-   * Extract trace context from message attributes
-   */
-
-  private extractContext(
-    messageAttributes: any,
-  ): Record<string, string> | undefined {
-    if (!this.config.extractTraceContext || !messageAttributes) {
-      return undefined;
-    }
-
-    const carrier: Record<string, string> = {};
-
-    if (messageAttributes.traceparent?.StringValue) {
-      carrier.traceparent = messageAttributes.traceparent.StringValue;
-    }
-    if (messageAttributes.tracestate?.StringValue) {
-      carrier.tracestate = messageAttributes.tracestate.StringValue;
-    }
-    if (messageAttributes.baggage?.StringValue) {
-      carrier.baggage = messageAttributes.baggage.StringValue;
-    }
-
-    return Object.keys(carrier).length > 0 ? carrier : undefined;
-  }
-
-  /**
    * Parse AWS SDK message into our format
    */
 
@@ -651,7 +631,7 @@ export class SQSConsumer<
       );
 
       try {
-        const { ReceiveMessageCommand } = await import('@aws-sdk/client-sqs');
+        const { ReceiveMessageCommand } = sqsSdk();
         const result = await this.client.send(
           new ReceiveMessageCommand({
             QueueUrl: this.config.queueUrl,
@@ -686,7 +666,7 @@ export class SQSConsumer<
    * @param receiptHandle - Receipt handle of the message to delete
    */
   async delete(receiptHandle: string): Promise<void> {
-    const { DeleteMessageCommand } = await import('@aws-sdk/client-sqs');
+    const { DeleteMessageCommand } = sqsSdk();
     await this.client.send(
       new DeleteMessageCommand({
         QueueUrl: this.config.queueUrl,
@@ -698,57 +678,39 @@ export class SQSConsumer<
   /**
    * Process messages with automatic trace context extraction
    *
-   * Receives messages, processes each with the provided handler,
-   * and deletes successfully processed messages.
+   * Receives messages and processes each under its own CONSUMER span, linked
+   * to the producer's span through the message's `traceparent` attribute.
+   * A message is deleted once its handler succeeds. A handler that throws
+   * marks its span as an error and leaves the message on the queue for SQS
+   * to redeliver; the rest of the batch still runs.
    *
    * @param processor - Function to process each message
-   * @returns Number of messages processed
+   * @returns Number of messages processed successfully
    */
   async processMessages(processor: MessageProcessor): Promise<number> {
     const messages = await this.receive();
+    const process = traceConsumer<ReceivedSQSMessage>({
+      system: 'aws_sqs',
+      destination: this.queueName,
+      headersFrom: this.config.extractTraceContext
+        ? (message) => message.attributes
+        : undefined,
+      attributes: { 'aws.sqs.queue_url': this.config.queueUrl },
+    })((ctx) => async (message: ReceivedSQSMessage) => {
+      ctx.setAttribute('messaging.message.id', message.messageId);
+      await processor(message, ctx);
+      await this.delete(message.receiptHandle);
+    });
+
     let processed = 0;
-
     for (const message of messages) {
-      // Extract trace context from message attributes
-      const carrier = this.extractContext(message.raw.MessageAttributes);
-
-      // Create processing span, optionally linked to producer
-      const processMessage = async () => {
-        return trace.run(`sqs.process`, async (ctx) => {
-          ctx.setAttributes(
-            buildSQSAttributes({
-              queueName: this.queueName,
-              queueUrl: this.config.queueUrl,
-              operation: 'receive',
-            }),
-          );
-          ctx.setAttribute('messaging.message.id', message.messageId);
-
-          try {
-            await processor(message, ctx);
-            await this.delete(message.receiptHandle);
-            processed++;
-            ctx.setStatus({ code: SpanStatusCode.OK });
-          } catch (error) {
-            ctx.setStatus({
-              code: SpanStatusCode.ERROR,
-              message:
-                error instanceof Error ? error.message : 'Processing failed',
-            });
-            throw error;
-          }
-        });
-      };
-
-      // Run with extracted context if available
-      if (carrier) {
-        const extractedContext = propagation.extract(context.active(), carrier);
-        await context.with(extractedContext, processMessage);
-      } else {
-        await processMessage();
+      try {
+        await process(message);
+        processed++;
+      } catch {
+        // Recorded on the message's span; SQS redelivers it.
       }
     }
-
     return processed;
   }
 

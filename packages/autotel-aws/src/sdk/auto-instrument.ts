@@ -24,22 +24,9 @@ import path from 'node:path';
 // Type-only import from optional peer dependency
 // @ts-expect-error - Optional peer dependency, may not be installed
 import type { Client, Command } from '@aws-sdk/smithy-client';
+import { loadModule, ownRequire } from '../common/require';
 import { wrapSDKClient } from '../common/sdk-wrapper';
 import type { SDKInstrumentationConfig } from '../config';
-
-// Synchronous require that works in both the ESM and CJS builds. See
-// packages/autotel/src/node-require.ts for the __filename / import.meta.url
-// fallback. Built on first use so importing this module stays side-effect-free.
-declare const __filename: string | undefined;
-function ownRequire(): NodeJS.Require {
-  return createRequire(
-    /* oxlint-disable-next-line anti-slop/no-runtime-typeof -- Probing which module format this build is running as. `__filename` is bound only in the CJS output; the presence of the binding is the fact being read. */
-    typeof __filename === 'string' ? __filename : import.meta.url,
-  );
-}
-function loadModule(id: string): any {
-  return ownRequire()(id);
-}
 
 // Symbol to mark clients as instrumented (prevents double-wrapping)
 const INSTRUMENTED_SYMBOL = Symbol.for('autotel-aws.instrumented');

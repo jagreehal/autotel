@@ -34,6 +34,8 @@ export interface RecordedSpan {
   durationMs: number;
   attributes: Attributes;
   status: SpanStatus;
+  /** Spans this one links to, e.g. a consumer's link to its producer. */
+  links: { traceId: string; spanId: string; attributes: Attributes }[];
 }
 
 export interface MemoryExporter extends SpanExporter {
@@ -56,6 +58,11 @@ function toRecordedSpan(span: ReadableSpan): RecordedSpan {
     durationMs: span.duration[0] * 1000 + span.duration[1] / 1e6,
     attributes: { ...span.attributes },
     status: span.status,
+    links: span.links.map((link) => ({
+      traceId: link.context.traceId,
+      spanId: link.context.spanId,
+      attributes: { ...link.attributes },
+    })),
   };
 }
 

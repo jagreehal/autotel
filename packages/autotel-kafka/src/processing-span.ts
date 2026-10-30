@@ -29,9 +29,9 @@ import {
   SEMATTRS_MESSAGING_KAFKA_PARTITION,
   SEMATTRS_MESSAGING_KAFKA_OFFSET,
   SEMATTRS_MESSAGING_KAFKA_MESSAGE_KEY,
-} from '../common/constants';
+} from './constants';
 
-const DEFAULT_TRACER_NAME = 'autotel-plugins/kafka';
+const DEFAULT_TRACER_NAME = 'autotel-kafka';
 
 /**
  * Check if a span context is valid (has both traceId and spanId).
@@ -71,7 +71,7 @@ function isValidSpanContext(
  *
  * @example Basic usage
  * ```typescript
- * import { withProcessingSpan } from 'autotel-plugins/kafka';
+ * import { withProcessingSpan } from 'autotel-kafka';
  *
  * await consumer.run({
  *   eachMessage: async ({ topic, partition, message }) => {
@@ -96,7 +96,7 @@ function isValidSpanContext(
  *
  * @example With batch lineage links (using semantic attribute constants)
  * ```typescript
- * import { extractBatchLineage, withProcessingSpan, SEMATTRS_LINKED_TRACE_ID_COUNT, SEMATTRS_LINKED_TRACE_ID_HASH } from 'autotel-plugins/kafka';
+ * import { extractBatchLineage, withProcessingSpan, SEMATTRS_LINKED_TRACE_ID_COUNT, SEMATTRS_LINKED_TRACE_ID_HASH } from 'autotel-kafka';
  *
  * const lineage = extractBatchLineage(batch, { maxLinks: 50 });
  *

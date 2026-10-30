@@ -43,6 +43,7 @@ pnpm changeset          # Create a changeset
 - `packages/autotel-cloudflare` - Cloudflare Workers (see `packages/autotel-cloudflare/CLAUDE.md`)
 - `packages/autotel-mcp-instrumentation` - MCP instrumentation (see `packages/autotel-mcp-instrumentation/CLAUDE.md`)
 - `packages/autotel-tanstack` - TanStack Start (see `packages/autotel-tanstack/CLAUDE.md`)
+- `packages/autotel-kafka` - KafkaJS observability: processing and producer spans with trace context from headers, `eachBatch` spans, batch lineage, correlation IDs, consumer metrics and consumer group events. `autotel-plugins/kafka` re-exports it, deprecated (see `packages/autotel-kafka/README.md`)
 - `packages/autotel-subscribers` - Event subscribers and the `EventSubscriber` base (Mixpanel, Amplitude, Segment, Slack, Loki, file, webhooks). PostHog lives in `autotel-posthog` (see `packages/autotel-subscribers/CLAUDE.md`)
 - `packages/autotel-genai` - GenAI/LLM instrumentation: canonical `gen_ai.*` semconv, cost, metrics, events, agents (see `packages/autotel-genai/CLAUDE.md`)
 - `packages/autotel-langfuse` - Langfuse compatibility: `langfuseCompatibility()` span enricher, `langfuseScores()`, `langfuseMedia()`. Depends on no Langfuse package: Langfuse ingests plain OTLP, so this only fills the gaps OTel conventions do not cover (see `packages/autotel-langfuse/CLAUDE.md`)

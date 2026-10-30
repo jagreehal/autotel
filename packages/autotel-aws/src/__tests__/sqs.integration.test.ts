@@ -206,8 +206,56 @@ describe.skipIf(!isLocalStackAvailable)('SQS Integration Tests', () => {
       await flush();
       const spans = exporter.getFinishedSpans();
 
-      const processSpan = spans.find((s) => s.name === 'sqs.process');
+      const processSpan = spans.find((s) => s.name === `process ${queueName}`);
       expect(processSpan).toBeDefined();
+    });
+
+    it('keeps processing the batch after a message fails', async () => {
+      const producer = new SQSProducer(sqs, { queueUrl });
+      const consumer = new SQSConsumer(sqs, {
+        queueUrl,
+        waitTimeSeconds: 1,
+        maxMessages: 10,
+      });
+      const testId = `batch-${Date.now()}`;
+      await producer.sendBatch(
+        ['poison', 'ok-1', 'ok-2'].map((step) => ({
+          body: JSON.stringify({ testId, step }),
+        })),
+      );
+
+      const handled: string[] = [];
+      let processed = 0;
+      for (let poll = 0; poll < 5 && handled.length < 3; poll++) {
+        processed += await consumer.processMessages(async (message, ctx) => {
+          const body = JSON.parse(message.body);
+          if (body.testId !== testId) return;
+          handled.push(body.step);
+          if (body.step === 'poison') {
+            ctx.recordDLQ('unparseable order', 'orders-dlq', {
+              reasonCategory: 'validation',
+            });
+            throw new Error('unparseable order');
+          }
+        });
+      }
+
+      expect(handled).toHaveLength(3);
+      expect(handled).toEqual(
+        expect.arrayContaining(['ok-1', 'ok-2', 'poison']),
+      );
+      expect(processed).toBeGreaterThanOrEqual(2);
+      await flush();
+      const failed = exporter
+        .getFinishedSpans()
+        .find(
+          (s) =>
+            s.name === `process ${queueName}` &&
+            s.attributes['messaging.dlq.reason'] === 'unparseable order',
+        );
+      expect(failed?.attributes['messaging.dlq.reason_category']).toBe(
+        'validation',
+      );
     });
   });
 
@@ -235,16 +283,17 @@ describe.skipIf(!isLocalStackAvailable)('SQS Integration Tests', () => {
       await flush();
       const spans = exporter.getFinishedSpans();
 
-      // Verify we have both producer and consumer spans
+      // The queue is shared across tests, so match on the link itself.
       const sendSpan = spans.find((s) => s.name === 'sqs.send');
-      const processSpan = spans.find((s) => s.name === 'sqs.process');
-
       expect(sendSpan).toBeDefined();
-      expect(processSpan).toBeDefined();
-
-      // Note: In a real test with proper trace propagation,
-      // the consumer span would have the producer span as parent.
-      // This requires the InMemorySpanExporter to capture the full context.
+      const linked = spans.filter(
+        (s) =>
+          s.name === `process ${queueName}` &&
+          s.links.some(
+            (link) => link.context.spanId === sendSpan!.spanContext().spanId,
+          ),
+      );
+      expect(linked).toHaveLength(1);
     });
   });
 });
