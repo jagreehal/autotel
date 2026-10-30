@@ -1,6 +1,6 @@
 {
   "name": "autotel-kafka",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Kafka observability for autotel: processing and producer spans, batch lineage, consumer lag and group events for KafkaJS",
   "type": "module",
   "main": "./dist/index.js",
