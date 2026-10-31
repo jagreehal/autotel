@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 47.1.13
+
+### Patch Changes
+
+- Updated dependencies [8feeb23]
+  - autotel@8.8.1
+
 ## 47.1.12
 
 ### Patch Changes
