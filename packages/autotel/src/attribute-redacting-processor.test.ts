@@ -4,6 +4,11 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
+import {
   AttributeRedactingProcessor,
   REDACTOR_PATTERNS,
   REDACTOR_PRESETS,
@@ -632,6 +637,41 @@ describe('createRedactedSpan', () => {
     const context = redactedSpan.spanContext();
     expect(context.traceId).toBe('trace123');
     expect(context.spanId).toBe('span123');
+  });
+
+  it('redacts event and link attributes on an exported span', () => {
+    const exporter = new InMemorySpanExporter();
+    const provider = new BasicTracerProvider({
+      spanProcessors: [
+        new AttributeRedactingProcessor(new SimpleSpanProcessor(exporter), {
+          redactor: 'default',
+        }),
+      ],
+    });
+    const email = 'jane.payee@example.com';
+    const span = provider.getTracer('test').startSpan('op', {
+      links: [
+        {
+          context: {
+            traceId: 'a'.repeat(32),
+            spanId: 'b'.repeat(16),
+            traceFlags: 1,
+          },
+          attributes: { 'payee.email': email },
+        },
+      ],
+    });
+    span.setAttribute('payee.email', email);
+    // What useLogger().set() + emitNow() produce: the same fields on an event.
+    span.addEvent('log.emit.manual', { 'payee.email': email });
+    span.end();
+
+    const finished = exporter.getFinishedSpans()[0]!;
+    expect(finished.events[0]?.attributes?.['payee.email']).toBe(
+      'j***@***.com',
+    );
+    expect(finished.links[0]?.attributes?.['payee.email']).toBe('j***@***.com');
+    expect(finished.attributes['payee.email']).toBe('j***@***.com');
   });
 });
 

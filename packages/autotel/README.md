@@ -1062,7 +1062,7 @@ export const processUser = withTracing({})((ctx) => async (user) => {
 | `validateEnum`   | boolean                                    | `true`     | Normalize enum values (e.g., HTTP methods) |
 | `warnDeprecated` | boolean                                    | `true`     | Log warnings for deprecated attributes     |
 
-Guardrails apply per call. `init({ attributeRedactor })` redacts every span attribute and log record before export, with the same key rules, paths, built-in patterns and custom `redactor` for both. It walks log bodies and nested attributes under dotted keys (`customer.password`), a sensitive key redacts everything beneath it (binary values included), and processors in `logRecordProcessors` receive the redacted record. `createStringRedactor()` applies the same value rules to a bare string.
+Guardrails apply per call. `init({ attributeRedactor })` redacts every span attribute, span event and link attribute, and log record before export, with the same key rules, paths, built-in patterns and custom `redactor` for both. It walks log bodies and nested attributes under dotted keys (`customer.password`), a sensitive key redacts everything beneath it (binary values included), and processors in `logRecordProcessors` receive the redacted record. `createStringRedactor()` applies the same value rules to a bare string.
 
 ### Domain Helpers
 
@@ -1238,6 +1238,8 @@ export const processWithDLQ = traceConsumer({
   }
 });
 ```
+
+Set `extractBaggage: true` with `headersFrom` to run a single-message handler under the W3C baggage a producer sent with `propagateBaggage: true` and `ctx.getAllPropagationHeaders()`, so `propagation.getActiveBaggage()` returns it.
 
 **Consumer-Specific Attributes:**
 
@@ -2219,7 +2221,7 @@ NODE_OPTIONS="--experimental-loader=@opentelemetry/instrumentation/hook.mjs --im
 - **Adaptive sampling** : 10% baseline, 100% for errors/slow spans by default (override via `sampler`).
 - **Rate limiting & circuit breakers** : Prevent telemetry storms when backends misbehave.
 - **Validation** : Configurable attribute/event name lengths, maximum counts, and nesting depth.
-- **Sensitive data redaction** : Passwords, tokens, API keys, and any custom regex you provide are masked in span attributes and log records before export. `init({ attributeRedactor })` walks log bodies and nested attributes under dotted keys, and a sensitive key redacts its whole subtree.
+- **Sensitive data redaction** : Passwords, tokens, API keys, and any custom regex you provide are masked in span attributes, span events, links and log records before export. `init({ attributeRedactor })` walks log bodies and nested attributes under dotted keys, and a sensitive key redacts its whole subtree.
 - **Auto-flush** : Events buffers drain when root spans end (disable with `flushOnRootSpanEnd: false`).
 - **Runtime flags** : Toggle metrics or swap endpoints via env vars without code edits.
 
@@ -2927,6 +2929,16 @@ init({
 4. Expand coverage with `instrumentDatabase()`, `withTracing()`, metrics, logging, and auto-instrumentations.
 
 ## Troubleshooting & Debugging
+
+### Rejected exports
+
+When a backend rejects an export with HTTP 401, 403 or 404 (gRPC `UNAUTHENTICATED`, `PERMISSION_DENIED` or `UNIMPLEMENTED`), autotel prints one warning per exporter at any log level, naming the signal, endpoint and response:
+
+```text
+[autotel] traces export to https://otlp.datadoghq.eu/v1/traces rejected: 403 Forbidden ({"errors":["API key is missing or invalid"]}). Telemetry is being dropped.
+```
+
+Check the API key and endpoint. Set `OTEL_LOG_LEVEL=debug` for every export attempt.
 
 ### Quick Debug Mode (Recommended)
 

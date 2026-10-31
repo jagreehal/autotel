@@ -515,6 +515,7 @@ safeSetAttributes(ctx, attrs.user.data({ email: 'pii@example.com' }), {
 ## Producer/Consumer Pattern
 
 ```typescript
+import { propagation } from '@opentelemetry/api';
 import { traceProducer, traceConsumer } from 'autotel/messaging';
 
 export const publish = traceProducer({
@@ -524,6 +525,17 @@ export const publish = traceProducer({
 })((ctx) => async (event) => {
   const headers = ctx.getTraceHeaders();
   await producer.send({ messages: [{ value: event, headers }] });
+});
+
+// A producer with `propagateBaggage: true` sends baggage in
+// `ctx.getAllPropagationHeaders()`; `extractBaggage: true` runs this handler under it.
+export const handle = traceConsumer({
+  system: 'kafka',
+  destination: 'user-events',
+  headersFrom: 'headers',
+  extractBaggage: true,
+})((ctx) => async (message) => {
+  const tenant = propagation.getActiveBaggage()?.getEntry('tenant.id')?.value;
 });
 ```
 

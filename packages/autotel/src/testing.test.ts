@@ -48,6 +48,24 @@ describe('createTraceCollector trace-level helpers', () => {
     expect(childSpan.links).toHaveLength(1);
   });
 
+  it('records a thrown error as an exception event', async () => {
+    const collector = createTraceCollector();
+    const fail = withTracing({ name: 'fail' })(() => async () => {
+      throw new TypeError('card declined');
+    });
+
+    await expect(fail()).rejects.toThrow('card declined');
+
+    expect(collector.expectSpan('fail').events).toContainEqual({
+      name: 'exception',
+      attributes: {
+        'exception.type': 'TypeError',
+        'exception.message': 'card declined',
+        'exception.stacktrace': expect.stringContaining('TypeError'),
+      },
+    });
+  });
+
   it('reports ambiguous and missing span matches', async () => {
     const collector = createTraceCollector();
     const duplicate = withTracing({ name: 'duplicate' })(() => async () => {});

@@ -1,3 +1,4 @@
+import { context, propagation } from '@opentelemetry/api';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { init } from './init';
 import { createMemoryExporter } from './memory-exporter';
@@ -15,6 +16,34 @@ describe('messaging spans', () => {
 
   beforeAll(() => {
     init({ service: 'messaging-spans-test', spanExporters: [exporter] });
+  });
+
+  it("hands the producer's baggage to the consumer with extractBaggage", async () => {
+    const send = traceProducer({
+      system: 'kafka',
+      destination: 'baggage-events',
+      propagateBaggage: true,
+    })((ctx) => async () => ctx.getAllPropagationHeaders());
+    const headers = await context.with(
+      propagation.setBaggage(
+        context.active(),
+        propagation.createBaggage({ 'tenant.id': { value: 'acme corp' } }),
+      ),
+      send,
+    );
+
+    let seen: string | undefined;
+    const consume = traceConsumer<{ headers: Record<string, string> }>({
+      system: 'kafka',
+      destination: 'baggage-events',
+      headersFrom: 'headers',
+      extractBaggage: true,
+    })(() => async (_msg: { headers: Record<string, string> }) => {
+      seen = propagation.getActiveBaggage()?.getEntry('tenant.id')?.value;
+    });
+    await consume({ headers });
+
+    expect(seen).toBe('acme corp');
   });
 
   it('reports the messages still waiting after this one as lag', async () => {

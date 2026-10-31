@@ -165,7 +165,7 @@ See `packages/autotel/.env.example` for a complete template.
 
 ## PII Redaction
 
-Redaction is auto-enabled in production. When you leave `attributeRedactor` unset and the resolved environment is `production` (`config.environment` or `NODE_ENV`), autotel applies the `'default'` preset so span attributes and log records never carry raw PII to your backend. In non-production environments redaction stays off so local debugging shows real values.
+Redaction is auto-enabled in production. When you leave `attributeRedactor` unset and the resolved environment is `production` (`config.environment` or `NODE_ENV`), autotel applies the `'default'` preset so span attributes, span events, links and log records never carry raw PII to your backend. In non-production environments redaction stays off so local debugging shows real values.
 
 Set a stronger preset, or control the default, three ways:
 

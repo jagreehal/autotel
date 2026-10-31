@@ -89,3 +89,16 @@ import {
 ```
 
 `createTraceCollector()` registers the W3C trace-context and baggage propagator, so `propagation.inject` and `propagation.extract` work in tests without `init()`. A propagator your test already set stays in place.
+
+A collected span records `recordException()` as an `exception` event with `exception.type`, `exception.message` and `exception.stacktrace`, as an SDK span does, so a test can assert that a thrown error reached the span:
+
+```typescript
+expect(collector.expectSpan('checkout').events).toContainEqual(
+  expect.objectContaining({
+    name: 'exception',
+    attributes: expect.objectContaining({
+      'exception.message': 'card declined',
+    }),
+  }),
+);
+```

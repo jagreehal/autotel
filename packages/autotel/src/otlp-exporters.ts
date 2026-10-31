@@ -13,7 +13,9 @@ import type { LogRecordExporter } from '@opentelemetry/sdk-logs';
 import { OTLPMetricExporter as OTLPMetricExporterHTTP } from '@opentelemetry/exporter-metrics-otlp-http';
 import { OTLPTraceExporter as OTLPTraceExporterHTTP } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPLogExporter as OTLPLogExporterHTTP } from '@opentelemetry/exporter-logs-otlp-http';
+import type { ExportResult } from '@opentelemetry/core';
 import { requireModule } from './node-require';
+import { asRecord, asString } from './values';
 import { AggregationTemporalityPreference } from '@opentelemetry/exporter-metrics-otlp-http';
 
 /** The shape every OTLP exporter constructor accepts. */
@@ -170,7 +172,7 @@ function loadProtoTraceExporter(): new (
 /**
  * Helper: Create trace exporter based on protocol
  */
-export function createTraceExporter(
+function buildTraceExporter(
   protocol: AutotelProtocol,
   config: OTLPExporterConfig,
 ): SpanExporter {
@@ -191,7 +193,7 @@ export function createTraceExporter(
 /**
  * Helper: Create metric exporter based on protocol
  */
-export function createMetricExporter(
+function buildMetricExporter(
   protocol: AutotelProtocol,
   config: OTLPExporterConfig & {
     temporalityPreference?: AggregationTemporalityPreference;
@@ -249,7 +251,7 @@ function loadGRPCLogExporter(): new (
 /**
  * Helper: Create log exporter based on protocol
  */
-export function createLogExporter(
+function buildLogExporter(
   protocol: AutotelProtocol,
   config: OTLPExporterConfig,
 ): LogRecordExporter {
@@ -278,6 +280,96 @@ export function createLogExporter(
 
   // Default: HTTP with a JSON body
   return new OTLPLogExporterHTTP(config);
+}
+
+/**
+ * Statuses that mean every export will fail until the config changes: a
+ * missing or revoked key, or a wrong path. gRPC reports its own codes:
+ * UNAUTHENTICATED (16), PERMISSION_DENIED (7), UNIMPLEMENTED (12).
+ */
+const REJECTED_STATUSES: Record<'http' | 'grpc', ReadonlySet<number>> = {
+  http: new Set([401, 403, 404]),
+  grpc: new Set([16, 7, 12]),
+};
+
+/**
+ * Origin and path only: an endpoint can carry credentials in its userinfo or
+ * query string, and the warning prints at every log level.
+ */
+function endpointForLog(url: string | undefined): string {
+  if (!url) return 'the OTLP endpoint';
+  try {
+    const { origin, pathname } = new URL(url);
+    return pathname === '/' ? origin : `${origin}${pathname}`;
+  } catch {
+    return 'the OTLP endpoint';
+  }
+}
+
+/**
+ * Warn once, at any log level, when the backend rejects an export outright.
+ * The OTLP exporters report failures through `diag`, which prints only when
+ * OTEL_LOG_LEVEL is set.
+ */
+function warnOnRejection<I>(
+  exporter: {
+    export(items: I, resultCallback: (result: ExportResult) => void): void;
+  },
+  protocol: AutotelProtocol,
+  signal: OtlpSignal,
+  url: string | undefined,
+): void {
+  const grpc = protocol === 'grpc';
+  const endpoint = endpointForLog(url);
+  const rejected = REJECTED_STATUSES[grpc ? 'grpc' : 'http'];
+  const original = exporter.export.bind(exporter);
+  let warned = false;
+  exporter.export = (items, resultCallback) =>
+    original(items, (result) => {
+      const error = asRecord(result.error);
+      const status = error?.code;
+      if (!warned && typeof status === 'number' && rejected.has(status)) {
+        warned = true;
+        const message = asString(error?.message) ?? '';
+        // A gRPC error's message already leads with its code and name.
+        const body = grpc
+          ? undefined
+          : asString(error?.data)?.trim().slice(0, 200);
+        console.warn(
+          `[autotel] ${signal} export to ${endpoint} rejected: ${grpc ? message : `${status} ${message}`}${body ? ` (${body})` : ''}. Telemetry is being dropped.`,
+        );
+      }
+      resultCallback(result);
+    });
+}
+
+export function createTraceExporter(
+  protocol: AutotelProtocol,
+  config: OTLPExporterConfig,
+): SpanExporter {
+  const exporter = buildTraceExporter(protocol, config);
+  warnOnRejection(exporter, protocol, 'traces', config.url);
+  return exporter;
+}
+
+export function createMetricExporter(
+  protocol: AutotelProtocol,
+  config: OTLPExporterConfig & {
+    temporalityPreference?: AggregationTemporalityPreference;
+  },
+): PushMetricExporter {
+  const exporter = buildMetricExporter(protocol, config);
+  warnOnRejection(exporter, protocol, 'metrics', config.url);
+  return exporter;
+}
+
+export function createLogExporter(
+  protocol: AutotelProtocol,
+  config: OTLPExporterConfig,
+): LogRecordExporter {
+  const exporter = buildLogExporter(protocol, config);
+  warnOnRejection(exporter, protocol, 'logs', config.url);
+  return exporter;
 }
 
 /**
