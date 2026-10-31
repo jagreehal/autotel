@@ -103,6 +103,8 @@ async function loadInitWithMocks() {
       this.options = options;
       traceExporterOptions.push(options);
     }
+
+    export(): void {}
   }
 
   class MockOTLPMetricExporter {
@@ -112,6 +114,8 @@ async function loadInitWithMocks() {
       this.options = options;
       metricExporterOptions.push(options);
     }
+
+    export(): void {}
   }
 
   class MockPeriodicExportingMetricReader {

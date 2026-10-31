@@ -316,9 +316,24 @@ export function createTraceCollector(): TraceCollector {
         return true;
       },
 
+      // Records the same `exception` event as an SDK span.
       recordException(exception: Exception, time?: TimeInput) {
-        void exception;
-        void time;
+        const attributes: Attributes = {};
+        if (typeof exception === 'string') {
+          attributes['exception.message'] = exception;
+        } else if (exception) {
+          const type = exception.code?.toString() ?? exception.name;
+          if (type) attributes['exception.type'] = type;
+          if (exception.message) {
+            attributes['exception.message'] = exception.message;
+          }
+          if (exception.stack) {
+            attributes['exception.stacktrace'] = exception.stack;
+          }
+        }
+        if (attributes['exception.type'] || attributes['exception.message']) {
+          mockSpan.addEvent('exception', attributes, time);
+        }
       },
 
       end(endTimeArg?: TimeInput) {

@@ -41,8 +41,20 @@
  * @module
  */
 
-import { SpanKind, context, propagation } from '@opentelemetry/api';
-import type { Attributes, Link, SpanContext } from '@opentelemetry/api';
+import {
+  ROOT_CONTEXT,
+  SpanKind,
+  context,
+  defaultTextMapGetter,
+  propagation,
+} from '@opentelemetry/api';
+import type {
+  Attributes,
+  Baggage,
+  Link,
+  SpanContext,
+} from '@opentelemetry/api';
+import { W3CBaggagePropagator } from '@opentelemetry/core';
 import { withTracing } from './functional';
 import { assertTraceFactory } from './trace-factory-validation';
 import {
@@ -186,7 +198,11 @@ export interface ConsumerConfig<TMessage = unknown> {
   /** Enable batch mode - extract links from all messages */
   batchMode?: boolean;
 
-  /** Extract baggage from message headers */
+  /**
+   * Run the handler under the W3C baggage in the message's `baggage` header
+   * (read through `headersFrom`), so `propagation.getBaggage()` returns what
+   * the producer sent with `propagateBaggage`. Single-message mode only.
+   */
   extractBaggage?: boolean;
 
   /** Additional attributes to set on span */
@@ -1243,7 +1259,17 @@ export function traceConsumer<TMessage = unknown>(
         // Execute user's function
         const userFn = fnFactory(ctx);
         assertTraceFactory('traceConsumer', userFn, 'result');
-        return runRecordingFailure(ctx, config.onError, () => userFn(...args));
+        const run = () =>
+          runRecordingFailure(ctx, config.onError, () => userFn(...args));
+        // A batch holds one baggage per message, so there is no single one to
+        // run under; batch handlers read each message's headers themselves.
+        const baggage =
+          config.extractBaggage && config.headersFrom && !config.batchMode
+            ? baggageFromHeaders(extractHeaders(config.headersFrom, args[0]))
+            : undefined;
+        return baggage
+          ? context.with(propagation.setBaggage(context.active(), baggage), run)
+          : run();
       };
     }) as (...args: TArgs) => Promise<TReturn>;
   };
@@ -1849,6 +1875,23 @@ function setConsumerAttributes(
   if (config.attributes) {
     setCustomAttributes(ctx, config.attributes);
   }
+}
+
+/**
+ * The W3C baggage a message carries in its `baggage` header, the format
+ * `propagateBaggage` writes. Parsed directly rather than through the global
+ * propagator, which may not include baggage.
+ */
+function baggageFromHeaders(
+  headers: Record<string, string> | undefined,
+): Baggage | undefined {
+  if (!headers?.['baggage']) return undefined;
+  const extracted = new W3CBaggagePropagator().extract(
+    ROOT_CONTEXT,
+    headers,
+    defaultTextMapGetter,
+  );
+  return propagation.getBaggage(extracted);
 }
 
 /**

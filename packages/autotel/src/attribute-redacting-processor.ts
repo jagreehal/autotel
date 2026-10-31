@@ -815,20 +815,37 @@ function createRedactedSpan(
   span: ReadableSpan,
   redactor: AttributeRedactorFn,
 ): ReadableSpan {
-  // Pre-compute redacted attributes (cached for efficiency)
-  const redactedAttributes: Attributes = {};
-  for (const [key, value] of Object.entries(span.attributes)) {
-    if (value !== undefined) {
-      redactedAttributes[key] = redactor(key, value, span.attributes);
+  const redact = (
+    attributes: Attributes | undefined,
+  ): Attributes | undefined => {
+    if (!attributes) return attributes;
+    const redacted: Attributes = {};
+    for (const [key, value] of Object.entries(attributes)) {
+      if (value !== undefined) {
+        redacted[key] = redactor(key, value, attributes);
+      }
     }
-  }
+    return redacted;
+  };
+
+  // Pre-compute (cached for efficiency). Events and links carry attributes
+  // too, such as the fields the request logger copies onto `log.emit.manual`.
+  const redactedAttributes = redact(span.attributes);
+  const redactedEvents = span.events.map((event) => ({
+    ...event,
+    attributes: redact(event.attributes),
+  }));
+  const redactedLinks = span.links.map((link) => ({
+    ...link,
+    attributes: redact(link.attributes),
+  }));
 
   // Return a proxy that intercepts attribute access
   return new Proxy(span, {
     get(target, prop) {
-      if (prop === 'attributes') {
-        return redactedAttributes;
-      }
+      if (prop === 'attributes') return redactedAttributes;
+      if (prop === 'events') return redactedEvents;
+      if (prop === 'links') return redactedLinks;
       // For all other properties, delegate to the original span
       // SAFETY: a proxy get trap forwards whatever key it was asked for, which
       // is what Reflect.get exists for; the value is redacted before it is
