@@ -1,5 +1,12 @@
 # autotel-hono
 
+## 0.6.9
+
+### Patch Changes
+
+- Updated dependencies [c4cfb30]
+  - autotel-adapters@3.1.4
+
 ## 0.6.8
 
 ### Patch Changes

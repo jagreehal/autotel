@@ -1,5 +1,12 @@
 # autotel-tanstack
 
+## 2.0.17
+
+### Patch Changes
+
+- Updated dependencies [c4cfb30]
+  - autotel-adapters@3.1.4
+
 ## 2.0.16
 
 ### Patch Changes
