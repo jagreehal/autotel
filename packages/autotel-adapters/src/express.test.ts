@@ -16,6 +16,23 @@ describe('express adapter', () => {
     );
   });
 
+  it('marks a request kept only when the keep callback asks for it', async () => {
+    const collector = createTraceCollector();
+    const handler = withAutotel((_request, res: ExpressResponseLike) => res, {
+      spanName: (request) => request.originalUrl ?? '',
+      keep: (ctx) => {
+        if (ctx.status === 402) ctx.shouldKeep = true;
+      },
+    });
+
+    await handler(req({ originalUrl: '/ok' }), { statusCode: 200 });
+    await handler(req({ originalUrl: '/rejected' }), { statusCode: 402 });
+
+    const keep = 'autotel.sampling.tail.keep';
+    expect(collector.expectSpan('/ok').attributes[keep]).toBeUndefined();
+    expect(collector.expectSpan('/rejected').attributes[keep]).toBe(true);
+  });
+
   it('runs the handler with a request-scoped logger', async () => {
     const handler = withAutotel((request, res: ExpressResponseLike) => {
       useLogger(request).set({ feature: 'checkout' });

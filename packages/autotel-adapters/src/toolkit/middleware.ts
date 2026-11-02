@@ -5,7 +5,10 @@ import type {
   RequestLogSnapshot,
 } from 'autotel';
 import {
+  AUTOTEL_SAMPLING_TAIL_EVALUATED,
+  AUTOTEL_SAMPLING_TAIL_KEEP,
   createNoopRequestLogger,
+  forceKeep,
   recordStructuredError,
   SpanStatusCode,
 } from 'autotel';
@@ -159,6 +162,50 @@ function recordOutcome(
   }
 }
 
+/**
+ * Run the `keep` callback and, when it sets `shouldKeep`, keep the trace.
+ * The attributes go on the request span itself for an adapter that finishes
+ * outside the active context; `forceKeep()` stops the tracing wrapper
+ * overwriting them when the finish runs inside it.
+ */
+export async function applyKeep(
+  keep: RouteAdapterOptions['keep'],
+  span: RequestSpan | undefined,
+  tailCtx: TailSamplingContext,
+): Promise<void> {
+  if (!keep) return;
+  try {
+    await keep(tailCtx);
+  } catch (err) {
+    console.error('[autotel-adapters] keep failed:', err);
+    return;
+  }
+  if (!tailCtx.shouldKeep) return;
+  span?.setAttributes({
+    [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+    [AUTOTEL_SAMPLING_TAIL_KEEP]: true,
+  });
+  forceKeep();
+}
+
+function tailContext(
+  logger: RequestLogger,
+  options: MiddlewareLoggerOptions,
+  startedAt: number,
+  status: number | undefined,
+): TailSamplingContext {
+  const context = logger.getContext();
+  return {
+    status:
+      status ?? (context['http.response.status_code'] as number | undefined),
+    durationMs: Date.now() - startedAt,
+    path: options.path,
+    method: options.method,
+    context,
+    shouldKeep: false,
+  };
+}
+
 async function performFinish(
   logger: RequestLogger,
   options: MiddlewareLoggerOptions,
@@ -169,28 +216,17 @@ async function performFinish(
     status?: number;
     error?: Error;
     overrides?: Record<string, unknown>;
+    keepDecided?: boolean;
   },
 ): Promise<RequestLogSnapshot | null> {
   const { status, overrides } = opts ?? {};
   recordOutcome(logger, span, opts ?? {}, emitted);
 
-  const durationMs = Date.now() - startedAt;
+  const tailCtx = tailContext(logger, options, startedAt, status);
+  const { durationMs } = tailCtx;
   logger.set({ duration_ms: durationMs });
 
-  const tailCtx: TailSamplingContext = {
-    status:
-      status ??
-      (logger.getContext()['http.response.status_code'] as number | undefined),
-    durationMs,
-    path: options.path,
-    method: options.method,
-    context: logger.getContext(),
-    shouldKeep: false,
-  };
-
-  if (options.keep) {
-    await options.keep(tailCtx);
-  }
+  if (!opts?.keepDecided) await applyKeep(options.keep, span, tailCtx);
 
   if (options.onFinish) {
     try {
@@ -206,14 +242,7 @@ async function performFinish(
     }
   }
 
-  const mergedOverrides = {
-    ...(overrides ?? {}),
-    'autotel.sampling.tail.keep': true,
-  };
-
-  return logger.emitNow(
-    Object.keys(mergedOverrides).length > 0 ? mergedOverrides : undefined,
-  );
+  return logger.emitNow(overrides);
 }
 
 /**
@@ -271,11 +300,17 @@ export function createMiddlewareLogger(
       // does, so what is already known goes on it now. Only the snapshot
       // waits, and records how the stream itself ended.
       recordOutcome(logger, span, { status, error: opts?.error }, emitted);
+      await applyKeep(
+        options.keep,
+        span,
+        tailContext(logger, options, startedAt, status),
+      );
       return bindStreamingResponseLifecycle(response, async (meta) => {
         await performFinish(logger, options, startedAt, span, emitted, {
           status: meta.status ?? status,
           error: meta.error,
           overrides: opts?.overrides,
+          keepDecided: true,
         });
       });
     },

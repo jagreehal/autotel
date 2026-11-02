@@ -194,7 +194,18 @@ import { forceKeep } from 'autotel';
 if (request.headers.get('x-debug-trace') === '1') forceKeep();
 ```
 
-Both keep the whole trace, auto-instrumented spans included. Invaluable for
+With an `autotel-adapters` framework adapter, the `keep` option makes the
+same decision from the finished request:
+
+```typescript
+autotelMiddleware({
+  keep: (ctx) => {
+    if (ctx.status === 402) ctx.shouldKeep = true;
+  },
+});
+```
+
+Each of these keeps the whole trace, auto-instrumented spans included. Invaluable for
 reproducing customer reports.
 
 ## Edge runtimes: predicate tail sampling
