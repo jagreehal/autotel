@@ -27,6 +27,23 @@ Use `defineFrameworkIntegration()` from `autotel-adapters/toolkit` to wire a new
 
 Toolkit options include route `include` / `exclude`, per-route `service`, serverless `waitUntil`, streaming `finishResponse`, and request-level `keep` callbacks.
 
+### Keeping a request through tail sampling
+
+Every adapter accepts `keep`. It runs when the request finishes, with the status, duration, method, path and the request logger's context. Set `shouldKeep` and the adapter calls `forceKeep()` for that request's trace:
+
+```typescript
+app.use(
+  '*',
+  autotelMiddleware({
+    keep: (ctx) => {
+      if (ctx.status === 402 || ctx.durationMs > 2000) ctx.shouldKeep = true;
+    },
+  }),
+);
+```
+
+For a streamed response, `keep` runs when the handler returns, before the body finishes.
+
 The request handle also exposes `markOutcome({ status, error })`, which records the status code and error on the span without emitting the snapshot, and `finishResponse(response, { error })` for an error the framework caught on the way to the response.
 
 ## Span names and attributes

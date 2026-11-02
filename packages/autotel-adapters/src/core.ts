@@ -12,6 +12,7 @@ import {
   trace,
 } from 'autotel';
 import {
+  applyKeep,
   markServerError,
   mergeRequestLoggerOptions,
   shouldInstrumentPath,
@@ -97,6 +98,7 @@ export function createRequestRunner(storage: AsyncLocalStorage<RequestLogger>) {
     );
 
     return trace.run(spanName, async (ctx): Promise<T> => {
+      const startedAt = Date.now();
       const log = getRequestLogger(ctx, loggerOptions);
       enrich(log);
       try {
@@ -106,10 +108,18 @@ export function createRequestRunner(storage: AsyncLocalStorage<RequestLogger>) {
         throw error;
       } finally {
         const finalized = options?.finalize?.();
-        markServerError(
-          ctx,
-          finalized?.['http.response.status_code'] as number | undefined,
-        );
+        const status = finalized?.['http.response.status_code'] as
+          number | undefined;
+        markServerError(ctx, status);
+        const context = log.getContext();
+        await applyKeep(options?.keep, ctx, {
+          status,
+          durationMs: Date.now() - startedAt,
+          path: options?.path ?? '',
+          method: String(context['http.request.method'] ?? ''),
+          context,
+          shouldKeep: false,
+        });
         if (options?.autoEmit !== false) {
           log.emitNow(finalized);
         }

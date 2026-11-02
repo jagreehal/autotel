@@ -41,6 +41,42 @@ describe('hono adapter', () => {
     });
   });
 
+  it('marks a request kept only when the keep callback asks for it', async () => {
+    const collector = createTraceCollector();
+    const app = new Hono();
+    app.use(
+      '*',
+      autotelMiddleware({
+        keep: (ctx) => {
+          if (ctx.status === 402) ctx.shouldKeep = true;
+        },
+      }),
+    );
+    app.get('/ok', (c) => c.text('ok'));
+    app.get('/rejected', (c) => c.text('no', 402));
+    app.get(
+      '/stream',
+      () =>
+        new Response('data: no\n\n', {
+          status: 402,
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+    );
+
+    await app.request('/ok');
+    await app.request('/rejected');
+    await (await app.request('/stream')).text();
+
+    const keep = 'autotel.sampling.tail.keep';
+    expect(collector.expectSpan('GET /ok').attributes[keep]).toBeUndefined();
+    for (const name of ['GET /rejected', 'GET /stream']) {
+      expect(collector.expectSpan(name).attributes).toMatchObject({
+        [keep]: true,
+        'autotel.sampling.tail.evaluated': true,
+      });
+    }
+  });
+
   it('records the matched template as http.route and names the span after it', async () => {
     const collector = createTraceCollector();
     const onEmit = vi.fn();
