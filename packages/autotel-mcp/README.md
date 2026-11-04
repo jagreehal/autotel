@@ -246,7 +246,7 @@ npx autotel-mcp
 npx autotel-mcp --persist ./autotel.db
 ```
 
-Point your app's OTLP exporter at the collector:
+Point your app's OTLP exporter at the collector. It takes `http/protobuf` and `http/json`, gzipped or not, and stores a histogram or summary point as its mean:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node your-app.js
@@ -254,7 +254,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node your-app.js
 
 ### Jaeger
 
-Query an existing Jaeger instance. Traces only (metrics and logs unsupported by Jaeger API).
+Query an existing Jaeger instance, including 2.22 and later through `/api/v3`. Traces only (metrics and logs unsupported by Jaeger API).
 
 ```bash
 AUTOTEL_BACKEND=jaeger JAEGER_BASE_URL=http://localhost:16686 npx autotel-mcp

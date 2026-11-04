@@ -44,6 +44,11 @@
       "require": "./dist/issues/index.cjs"
     },
     "./mcp-app/trace": "./dist/mcp-app-trace.global.js",
+    "./otlp-proto": {
+      "types": "./dist/server/otlp-proto.d.ts",
+      "import": "./dist/server/otlp-proto.js",
+      "require": "./dist/server/otlp-proto.cjs"
+    },
     "./sourcemaps": {
       "types": "./dist/server/sourcemap.d.ts",
       "import": "./dist/server/sourcemap.js",

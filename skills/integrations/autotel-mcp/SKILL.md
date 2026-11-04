@@ -25,7 +25,7 @@ Add to your MCP client config (e.g. `.mcp.json` for Claude Code):
 }
 ```
 
-Receives OTLP on `:4318`, stores in-memory (or libsql with `--persist ./autotel.db`).
+Receives OTLP on `:4318` (`http/protobuf` or `http/json`, gzipped or not), stores in-memory (or libsql with `--persist ./autotel.db`).
 
 ### Jaeger
 
@@ -43,6 +43,8 @@ Receives OTLP on `:4318`, stores in-memory (or libsql with `--persist ./autotel.
   }
 }
 ```
+
+Works with Jaeger 2.22 and later through `/api/v3`, and `AUTOTEL_BACKEND=auto` detects those servers.
 
 ### Grafana stack (Tempo + Prometheus + Loki)
 

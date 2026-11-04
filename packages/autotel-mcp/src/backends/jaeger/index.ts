@@ -1,4 +1,4 @@
-import { jsonGet } from '../../lib/http';
+import { HttpError, jsonGet } from '../../lib/http';
 import type {
   BackendCapabilities,
   BackendHealth,
@@ -21,6 +21,7 @@ import type {
   TraceSearchResult,
 } from '../../types';
 import type { TelemetryBackend } from '../telemetry';
+import { parseTraces, type OtlpTracesPayload } from '../collector/receiver';
 import {
   spanMatchesQuery,
   traceMatchesQuery,
@@ -71,10 +72,32 @@ type JaegerTraceData = {
 type JaegerTraceSearchResponse = { data: JaegerTraceData[] };
 type JaegerTraceResponse = { data: JaegerTraceData[] };
 
+const DEFAULT_LOOKBACK_MS = 60 * 60 * 1000;
+
 export class JaegerBackend implements TelemetryBackend {
   readonly kind = 'jaeger' as const;
 
+  /**
+   * Set once `/api/services` or `/api/traces` answers 404. Jaeger 2.22 serves
+   * `/api/v3` in their place and keeps `/api/traces/{id}`.
+   */
+  private usesV3Api = false;
+
   constructor(private readonly baseUrl: string) {}
+
+  private async withV3Fallback<T>(
+    legacy: () => Promise<T>,
+    v3: () => Promise<T>,
+  ): Promise<T> {
+    if (this.usesV3Api) return v3();
+    try {
+      return await legacy();
+    } catch (error) {
+      if (!(error instanceof HttpError && error.status === 404)) throw error;
+      this.usesV3Api = true;
+      return v3();
+    }
+  }
 
   async healthCheck(): Promise<BackendHealth> {
     try {
@@ -100,17 +123,40 @@ export class JaegerBackend implements TelemetryBackend {
   }
 
   async listServices(_query?: ServiceQuery): Promise<ServiceListResult> {
-    const data = await jsonGet<JaegerServiceResponse>(
-      `${this.baseUrl}/api/services`,
+    return this.withV3Fallback(
+      async () => {
+        const data = await jsonGet<JaegerServiceResponse>(
+          `${this.baseUrl}/api/services`,
+        );
+        return { services: data.data ?? [] };
+      },
+      async () => {
+        const data = await jsonGet<{ services?: string[] }>(
+          `${this.baseUrl}/api/v3/services`,
+        );
+        return { services: data.services ?? [] };
+      },
     );
-    return { services: data.data ?? [] };
   }
 
   async listOperations(serviceName: string): Promise<OperationListResult> {
-    const data = await jsonGet<JaegerServiceResponse>(
-      `${this.baseUrl}/api/services/${encodeURIComponent(serviceName)}/operations`,
+    return this.withV3Fallback(
+      async () => {
+        const data = await jsonGet<JaegerServiceResponse>(
+          `${this.baseUrl}/api/services/${encodeURIComponent(serviceName)}/operations`,
+        );
+        return { operations: data.data ?? [] };
+      },
+      async () => {
+        const params = new URLSearchParams({ service: serviceName });
+        const data = await jsonGet<{ operations?: Array<{ name: string }> }>(
+          `${this.baseUrl}/api/v3/operations?${params}`,
+        );
+        // One entry per span kind, so a name can appear twice.
+        const names = (data.operations ?? []).map((op) => op.name);
+        return { operations: [...new Set(names)] };
+      },
     );
-    return { operations: data.data ?? [] };
   }
 
   async searchTraces(query: TraceSearchQuery): Promise<TraceSearchResult> {
@@ -172,14 +218,70 @@ export class JaegerBackend implements TelemetryBackend {
       params.set('maxDuration', `${query.maxDurationMs}ms`);
     }
 
-    const data = await jsonGet<JaegerTraceSearchResponse>(
-      `${this.baseUrl}/api/traces?${params}`,
+    const records = await this.withV3Fallback(
+      async () => {
+        const data = await jsonGet<JaegerTraceSearchResponse>(
+          `${this.baseUrl}/api/traces?${params}`,
+        );
+        return data.data.map((trace) => this.toTraceRecord(trace));
+      },
+      () => this.searchTracesV3(query, service, serverLimit),
     );
-    const items = data.data
-      .map((trace) => this.toTraceRecord(trace))
+    const items = records
       .filter((trace) => traceMatchesQuery(trace, query))
       .slice(0, clientLimit);
     return { items, totalCount: items.length };
+  }
+
+  /** `/api/v3/traces` answers in OTLP/JSON, which the collector's parser already reads. */
+  private async searchTracesV3(
+    query: TraceSearchQuery,
+    service: string,
+    limit: number,
+  ): Promise<TraceRecord[]> {
+    const endMs = query.endTimeUnixMs ?? Date.now();
+    const startMs = query.startTimeUnixMs ?? endMs - DEFAULT_LOOKBACK_MS;
+    const params = new URLSearchParams({
+      'query.service_name': service,
+      'query.num_traces': `${limit}`,
+      // Both bounds are required here, and RFC 3339 rather than microseconds.
+      'query.start_time_min': new Date(startMs).toISOString(),
+      'query.start_time_max': new Date(endMs).toISOString(),
+    });
+    if (query.operation) params.set('query.operation_name', query.operation);
+    if (query.minDurationMs !== undefined) {
+      params.set('query.duration_min', `${query.minDurationMs}ms`);
+    }
+    if (query.maxDurationMs !== undefined) {
+      params.set('query.duration_max', `${query.maxDurationMs}ms`);
+    }
+
+    let payload: OtlpTracesPayload | undefined;
+    try {
+      const data = await jsonGet<{ result?: OtlpTracesPayload }>(
+        `${this.baseUrl}/api/v3/traces?${params}`,
+      );
+      payload = data.result;
+    } catch (error) {
+      // An empty search is a 404 here. Read the body so that a missing route
+      // still fails.
+      if (
+        error instanceof HttpError &&
+        error.status === 404 &&
+        error.body?.includes('No traces found')
+      ) {
+        return [];
+      }
+      throw error;
+    }
+
+    const byTrace = new Map<string, SpanRecord[]>();
+    for (const span of parseTraces(payload ?? {})) {
+      const spans = byTrace.get(span.traceId);
+      if (spans) spans.push(span);
+      else byTrace.set(span.traceId, [span]);
+    }
+    return Array.from(byTrace, ([traceId, spans]) => ({ traceId, spans }));
   }
 
   traceUrl(traceId: string): string {

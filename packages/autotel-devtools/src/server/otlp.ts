@@ -239,6 +239,9 @@ export function parseOtlpLogs(payload: unknown): LogData[] {
         const body = rec.body ? resolveOtlpValue(rec.body) : '';
 
         const attributes = flattenAttributes(rec.attributes);
+        // Newer SDKs name an event in this field, older ones in the attribute.
+        // One place to read it from keeps both searchable the same way.
+        if (rec.eventName) attributes['event.name'] ??= rec.eventName;
         // The id must differ for records that share a millisecond: Claude Code
         // emits several `hook_registered` events at the same timestamp with no
         // trace, and the store's `ON CONFLICT DO NOTHING` would keep only one.
@@ -423,20 +426,6 @@ export async function readRawBody(req: IncomingMessage): Promise<Buffer> {
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
-}
-
-/**
- * True for OTLP/protobuf bodies. The OpenTelemetry Python/Java/Go SDKs default to
- * `http/protobuf` over OTLP HTTP, sending `application/x-protobuf`; some clients use
- * `application/protobuf`. Anything else (JSON, unset) is treated as OTLP/JSON.
- */
-export function isProtobufContentType(contentType?: string): boolean {
-  if (!contentType) return false;
-  const value = contentType.toLowerCase();
-  return (
-    value.includes('application/x-protobuf') ||
-    value.includes('application/protobuf')
-  );
 }
 
 /**

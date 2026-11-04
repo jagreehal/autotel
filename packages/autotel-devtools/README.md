@@ -66,6 +66,11 @@ configuration:
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python app.py
 ```
 
+Both encodings accept `Content-Encoding: gzip`, up to 64 MiB inflated. A protobuf
+request gets a protobuf response: an empty body on success, a `google.rpc.Status`
+on error. JSON clients get the accepted counts. Other receivers can reuse the
+decoder from `autotel-devtools/otlp-proto`.
+
 Open http://localhost:4318 to see traces, logs, and metrics.
 
 SDKs configured for OTLP/gRPC can use the standard endpoint directly:
@@ -331,7 +336,7 @@ endpoints must come from loopback, or the server answers `403 Forbidden`.
 | `POST /api/query/traces`       | `{ query, window?, limit?, cursor? }` → `{ traces, nextCursor }` |
 | `POST /api/query/logs`         | same shape, over logs                                            |
 | `POST /api/query/errors`       | same shape, error spans only                                     |
-| `POST /api/query/metrics`      | same shape, over metric series                                   |
+| `POST /api/query/metrics`      | `{ name, window?, maxPoints? }` → `{ series }`                   |
 | `GET /api/query/traces/fields` | `{ fields }` - the bare field names a query can use              |
 | `GET /api/stats`               | `{ traceCount, spanCount, logCount, bytesUsed, maxBytes, … }`    |
 | `GET /v1/traces`               | every trace held, no query                                       |
@@ -339,8 +344,8 @@ endpoints must come from loopback, or the server answers `403 Forbidden`.
 | `GET /healthz`                 | `{ ok, service, version, clients }`                              |
 
 `query` takes the language above, so anything the Traces tab can filter on, a
-script can too. Each returned trace carries `traceId`, `service`, `rootSpan`,
-`spans`, `duration` and `status`.
+script can too. Metrics take a `name` instead. Each returned trace carries
+`traceId`, `service`, `rootSpan`, `spans`, `duration` and `status`.
 
 ### Asserting on traces in CI
 

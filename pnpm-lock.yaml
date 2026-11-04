@@ -2937,6 +2937,9 @@ importers:
       hono:
         specifier: ^4.13.13
         version: 4.13.13
+      protobufjs:
+        specifier: ^8.8.1
+        version: 8.8.1
       yaml:
         specifier: ^2.9.1
         version: 2.9.1

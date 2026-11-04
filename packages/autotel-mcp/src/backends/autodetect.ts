@@ -14,14 +14,16 @@ export interface ProbeResult {
 
 interface Probe {
   kind: ProbeKind;
-  path: string;
+  /** Any of these answering means the backend is there. */
+  paths: string[];
 }
 
 const PROBES = {
-  tempo: { kind: 'tempo', path: '/api/echo' },
-  jaeger: { kind: 'jaeger', path: '/api/services' },
-  prometheus: { kind: 'prometheus', path: '/api/v1/status/buildinfo' },
-  loki: { kind: 'loki', path: '/ready' },
+  tempo: { kind: 'tempo', paths: ['/api/echo'] },
+  // Jaeger 2.22 serves /api/v3 in place of /api/services.
+  jaeger: { kind: 'jaeger', paths: ['/api/services', '/api/v3/services'] },
+  prometheus: { kind: 'prometheus', paths: ['/api/v1/status/buildinfo'] },
+  loki: { kind: 'loki', paths: ['/ready'] },
 } satisfies Record<ProbeKind, Probe>;
 
 const PROBE_TIMEOUT_MS = 1500;
@@ -34,10 +36,11 @@ export async function probeBackend(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
-    const res = await fetch(`${url}${probe.path}`, {
-      signal: controller.signal,
-    });
-    return { kind, url, reachable: res.ok };
+    for (const path of probe.paths) {
+      const res = await fetch(`${url}${path}`, { signal: controller.signal });
+      if (res.ok) return { kind, url, reachable: true };
+    }
+    return { kind, url, reachable: false };
   } catch {
     return { kind, url, reachable: false };
   } finally {

@@ -484,7 +484,7 @@ describe('toGenAiSpan — canonical gen_ai tool parts (autotel-genai)', () => {
 });
 
 describe('toGenAiSpan — real Vercel AI SDK v6 + Ollama capture', () => {
-  // Captured from /Users/jreehal/dev/ai/ai-workshop/vercel-ai-sdk via
+  // Captured from a Vercel AI SDK app via
   // generateText({ experimental_telemetry: { isEnabled: true, ... } }).
   // The AI SDK emits gen_ai.* for model/usage but keeps conversation
   // payload in its own ai.* namespace (`ai.prompt.messages`, `ai.response.text`).
@@ -773,7 +773,7 @@ describe('toGenAiSpan — real Pydantic AI + Logfire + Gemini capture', () => {
 });
 
 describe('toGenAiSpan — real Pydantic AI + Logfire + Ollama capture', () => {
-  // Captured from /Users/jreehal/dev/ai/ai-workshop/pydantic-ai via
+  // Captured from a Pydantic AI app via
   // logfire.instrument_pydantic_ai() + agent.run_sync(...). Logfire emits
   // textbook gen_ai semconv: attribute-based input/output messages plus the
   // agent metadata (gen_ai.agent.name, gen_ai.conversation.id, etc.).

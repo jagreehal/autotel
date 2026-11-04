@@ -13,7 +13,8 @@ export {
   hostHeaderIsLoopback,
   originIsLoopback,
 } from './origin-guard';
-export { parseOtlpTraces, parseOtlpLogs, isProtobufContentType } from './otlp';
+export { parseOtlpTraces, parseOtlpLogs } from './otlp';
+export { isProtobufContentType } from './otlp-proto';
 export { startOtlpGrpcReceiver } from './grpc';
 export { DEVTOOLS_IDENTITY, probePortHolder } from './identity';
 export type { PortHolder } from './identity';

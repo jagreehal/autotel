@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createServer, type Server } from 'node:http';
+import { gzipSync } from 'node:zlib';
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import {
   BasicTracerProvider,
@@ -23,13 +24,9 @@ import {
   decodeOtlpTraceRequest,
   decodeOtlpLogsRequest,
   decodeOtlpMetricsRequest,
-} from '../otlp-proto';
-import {
-  parseOtlpTraces,
-  parseOtlpLogs,
-  countOtlpMetrics,
   isProtobufContentType,
-} from '../otlp';
+} from '../otlp-proto';
+import { parseOtlpTraces, parseOtlpLogs, countOtlpMetrics } from '../otlp';
 import { parseOtlpMetricStreams } from '../metric-streams';
 
 /**
@@ -144,10 +141,10 @@ function exponentialHistogramRequestBytes(): Buffer {
     message Buckets { sint32 offset = 1; repeated uint64 bucket_counts = 2; }
     message Point {
       fixed64 time_unix_nano = 3;
-      uint64 count = 4;
+      fixed64 count = 4;
       double sum = 5;
       sint32 scale = 6;
-      uint64 zero_count = 7;
+      fixed64 zero_count = 7;
       Buckets positive = 8;
       Buckets negative = 9;
       double zero_threshold = 14;
@@ -296,7 +293,6 @@ describe('HTTP ingestion of OTLP/protobuf (Content-Type: application/x-protobuf)
 
     const res = await postProtobuf(base, '/v1/traces', traceRequestBytes());
     expect(res.status).toBe(200);
-    expect((await res.json()).acceptedTraces).toBe(1);
 
     const readBack = await (await fetch(`${base}/v1/traces`)).json();
     expect(readBack.count).toBe(1);
@@ -309,7 +305,8 @@ describe('HTTP ingestion of OTLP/protobuf (Content-Type: application/x-protobuf)
 
     const logsRes = await postProtobuf(base, '/v1/logs', logsRequestBytes());
     expect(logsRes.status).toBe(200);
-    expect((await logsRes.json()).acceptedLogs).toBe(1);
+    const stats = await (await fetch(`${base}/api/stats`)).json();
+    expect(stats.logCount).toBe(1);
 
     const metricsRes = await postProtobuf(
       base,
@@ -317,7 +314,86 @@ describe('HTTP ingestion of OTLP/protobuf (Content-Type: application/x-protobuf)
       metricsRequestBytes(['a', 'b', 'c']),
     );
     expect(metricsRes.status).toBe(200);
-    expect((await metricsRes.json()).acceptedMetrics).toBe(3);
+  });
+
+  it('answers protobuf in protobuf: an empty response is zero bytes', async () => {
+    const base = await start();
+
+    const res = await postProtobuf(base, '/v1/traces', traceRequestBytes());
+
+    expect(res.headers.get('content-type')).toBe('application/x-protobuf');
+    expect((await res.arrayBuffer()).byteLength).toBe(0);
+  });
+
+  it('reports a bad protobuf body as a google.rpc.Status, not JSON', async () => {
+    const base = await start();
+
+    const res = await postProtobuf(
+      base,
+      '/v1/traces',
+      Buffer.from([0xff, 0xff, 0xff]),
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.headers.get('content-type')).toBe('application/x-protobuf');
+    const bytes = Buffer.from(await res.arrayBuffer());
+    expect(bytes[0]).toBe((2 << 3) | 2); // field 2 of Status, length-delimited
+    expect(bytes.toString()).toContain('Invalid OTLP payload');
+  });
+
+  it('accepts gzip on protobuf, as the Collector sends it', async () => {
+    const base = await start();
+
+    const res = await fetch(`${base}/v1/traces`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-protobuf',
+        'Content-Encoding': 'gzip',
+      },
+      body: new Uint8Array(gzipSync(traceRequestBytes())),
+    });
+
+    expect(res.status).toBe(200);
+    const readBack = await (await fetch(`${base}/v1/traces`)).json();
+    expect(readBack.traces[0].traceId).toBe(TRACE_ID_HEX);
+  });
+
+  it('accepts gzip on JSON and still counts it', async () => {
+    const base = await start();
+
+    const res = await fetch(`${base}/v1/traces`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Encoding': 'GZIP',
+      },
+      body: new Uint8Array(gzipSync('{"resourceSpans":[]}')),
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).acceptedTraces).toBe(0);
+  });
+
+  it.each([
+    ['corrupt', Buffer.from('not gzip')],
+    // Valid JSON once inflated, so that only the size limit can refuse it.
+    [
+      'oversized',
+      gzipSync(`{"resourceSpans":[]}${' '.repeat(65 * 1024 * 1024)}`),
+    ],
+  ])('refuses a %s gzip body', async (_, body) => {
+    const base = await start();
+
+    const res = await fetch(`${base}/v1/traces`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Encoding': 'gzip',
+      },
+      body: new Uint8Array(body),
+    });
+
+    expect(res.status).toBe(400);
   });
 
   it('still accepts OTLP/JSON on the same endpoint (content-type drives decoding)', async () => {
@@ -369,5 +445,136 @@ describe('HTTP ingestion of OTLP/protobuf (Content-Type: application/x-protobuf)
     });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe('Invalid OTLP payload');
+  });
+});
+
+describe('log event names', () => {
+  /** ExportLogsServiceRequest with one record, written by hand from logs.proto. */
+  function logWithEventName(name: string) {
+    const nested = (field: number, bytes: Uint8Array) =>
+      protobuf.Writer.create()
+        .uint32((field << 3) | 2)
+        .bytes(bytes)
+        .finish();
+    const record = protobuf.Writer.create()
+      .uint32((12 << 3) | 2)
+      .string(name)
+      .finish();
+    return nested(1, nested(2, nested(2, record)));
+  }
+
+  it('reads event_name off the wire', () => {
+    const decoded = decodeOtlpLogsRequest(logWithEventName('order.paid'));
+
+    expect(JSON.stringify(decoded)).toContain('"eventName":"order.paid"');
+    expect(parseOtlpLogs(decoded)[0]?.attributes?.['event.name']).toBe(
+      'order.paid',
+    );
+  });
+
+  it('lets an explicit event.name attribute win over the field', () => {
+    const logs = parseOtlpLogs({
+      resourceLogs: [
+        {
+          scopeLogs: [
+            {
+              logRecords: [
+                {
+                  eventName: 'from.field',
+                  attributes: [
+                    {
+                      key: 'event.name',
+                      value: { stringValue: 'from.attribute' },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(logs[0]?.attributes?.['event.name']).toBe('from.attribute');
+  });
+});
+
+/**
+ * Written by hand from the OTLP protos: a round trip through our own schema
+ * would agree with itself.
+ */
+describe('metric data points on the wire, as exporters write them', () => {
+  type Build = (writer: protobuf.Writer) => void;
+  const message = (build: Build) => {
+    const writer = protobuf.Writer.create();
+    build(writer);
+    return writer.finish();
+  };
+  const nested = (writer: protobuf.Writer, field: number, bytes: Uint8Array) =>
+    writer.uint32((field << 3) | 2).bytes(bytes);
+  const fixed64 = (writer: protobuf.Writer, field: number, value: number) =>
+    writer.uint32((field << 3) | 1).fixed64(value);
+  const double = (writer: protobuf.Writer, field: number, value: number) =>
+    writer.uint32((field << 3) | 1).double(value);
+
+  /** ExportMetricsServiceRequest holding one metric with one data point. */
+  function request(metricField: number, point: Build) {
+    const data = message((w) => nested(w, 1, message(point)));
+    const metric = message((w) => nested(w, metricField, data));
+    const scope = message((w) => nested(w, 2, metric));
+    const resource = message((w) => nested(w, 2, scope));
+    return message((w) => nested(w, 1, resource));
+  }
+
+  function decodedPoint(bytes: Uint8Array, kind: string) {
+    // SAFETY: `request` above writes exactly this nesting.
+    const decoded = decodeOtlpMetricsRequest(bytes) as {
+      resourceMetrics: Array<{
+        scopeMetrics: Array<{
+          metrics: Array<Record<string, { dataPoints: Array<unknown> }>>;
+        }>;
+      }>;
+    };
+    const metric = decoded.resourceMetrics[0]?.scopeMetrics[0]?.metrics[0];
+    return metric?.[kind]?.dataPoints[0];
+  }
+
+  it('reads a histogram: fixed64 count and buckets, then the sum after them', () => {
+    const bytes = request(9, (w) => {
+      fixed64(w, 4, 4);
+      double(w, 5, 3);
+      w.uint32((6 << 3) | 2).fork();
+      w.fixed64(1).fixed64(3);
+      w.ldelim();
+    });
+
+    expect(decodedPoint(bytes, 'histogram')).toEqual({
+      count: '4',
+      sum: 3,
+      bucketCounts: ['1', '3'],
+    });
+  });
+
+  it('reads an exponential histogram: fixed64 count and zero count', () => {
+    const bytes = request(10, (w) => {
+      fixed64(w, 4, 4);
+      double(w, 5, 3);
+      fixed64(w, 7, 2);
+    });
+
+    expect(decodedPoint(bytes, 'exponentialHistogram')).toEqual({
+      count: '4',
+      sum: 3,
+      zeroCount: '2',
+    });
+  });
+
+  it('reads a summary: fixed64 count', () => {
+    const bytes = request(11, (w) => {
+      fixed64(w, 4, 4);
+      double(w, 5, 3);
+    });
+
+    expect(decodedPoint(bytes, 'summary')).toEqual({ count: '4', sum: 3 });
   });
 });
