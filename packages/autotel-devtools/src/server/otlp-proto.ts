@@ -3,16 +3,12 @@
 // Decodes binary OTLP/protobuf request bodies (`Content-Type: application/x-protobuf`)
 // into the same plain-object shape the JSON parsers in `./otlp` already consume.
 //
-// Why this exists: the OpenTelemetry Python/Java/Go SDKs default to `http/protobuf`
-// when exporting over OTLP HTTP, so a receiver that only understood OTLP/JSON would
-// silently reject the most common real-world clients. Rather than re-implement the
-// wire format, we embed the (stable, v1) OTLP proto definitions and let protobufjs
-// do the decoding via reflection — no codegen step, no `.proto` assets to copy into
-// the build.
+// The OpenTelemetry Python/Java/Go SDKs default to `http/protobuf` over OTLP HTTP. We
+// embed the (stable, v1) OTLP proto definitions and let protobufjs decode by reflection,
+// which needs no codegen step and no `.proto` assets in the build.
 //
 // The OTLP proto schema is frozen at v1 and only ever adds fields, so embedding the
-// subset we read is safe: unknown/newer fields are skipped by the decoder. The metrics
-// schema is intentionally minimal (we only count metrics, never inspect data points).
+// subset we read is safe: unknown/newer fields are skipped by the decoder.
 //
 // `toObject` is configured to mirror OTLP/JSON exactly: 64-bit ints become decimal
 // strings and `bytes` (trace/span IDs) become base64 — which `normalizeHexId` in
@@ -20,12 +16,44 @@
 
 // Default import (not `* as`): under esbuild's CJS->ESM interop a namespace import
 // only reliably exposes `.default`, leaving `protobuf.Root`/`protobuf.parse` undefined
-// in the bundled ESM output (`protobuf.Root is not a constructor` at runtime — the bug
-// that shipped in 5.0.1). The default import binds to protobufjs's `module.exports`, so
-// the constructors resolve in both the ESM and CJS bundles. Guarded by the dist ESM
-// smoke test in `__tests__/otlp-proto.dist.test.ts`.
+// in the bundled ESM output. The default import binds to protobufjs's `module.exports`,
+// so the constructors resolve in both the ESM and CJS bundles. The dist ESM smoke test
+// in `__tests__/otlp-proto.dist.test.ts` covers this.
+import { promisify } from 'node:util';
+import { gunzip } from 'node:zlib';
 import protobuf from 'protobufjs';
 import type { IConversionOptions, Root } from 'protobufjs';
+
+/**
+ * True for OTLP/protobuf bodies. The OpenTelemetry Python/Java/Go SDKs default to
+ * `http/protobuf` over OTLP HTTP, sending `application/x-protobuf` (or
+ * `application/protobuf`). Anything else (JSON, unset) is treated as JSON.
+ */
+export function isProtobufContentType(contentType?: string): boolean {
+  if (!contentType) return false;
+  const value = contentType.toLowerCase();
+  return (
+    value.includes('application/x-protobuf') ||
+    value.includes('application/protobuf')
+  );
+}
+
+const gunzipAsync = promisify(gunzip);
+
+/** Far past any real export batch, and short of what a small gzip bomb inflates to. */
+const MAX_INFLATED_BYTES = 64 * 1024 * 1024;
+
+/**
+ * OTLP/HTTP allows gzip on either encoding, and the OpenTelemetry Collector's
+ * `otlphttp` exporter sends it by default. Rejects on a corrupt or oversized body.
+ */
+export async function decompressOtlpBody(
+  body: Buffer,
+  contentEncoding?: string,
+): Promise<Buffer> {
+  if (contentEncoding?.trim().toLowerCase() !== 'gzip') return body;
+  return gunzipAsync(body, { maxOutputLength: MAX_INFLATED_BYTES });
+}
 
 const COMMON_PROTO = `
 syntax = "proto3";
@@ -190,9 +218,21 @@ message LogRecord {
   fixed32 flags = 8;
   bytes trace_id = 9;
   bytes span_id = 10;
+  string event_name = 12;
 }
 message ExportLogsServiceRequest {
   repeated ResourceLogs resource_logs = 1;
+}
+`;
+
+// What OTLP/HTTP answers a protobuf client with on a 4xx or 5xx.
+const RPC_STATUS_PROTO = `
+syntax = "proto3";
+package google.rpc;
+
+message Status {
+  int32 code = 1;
+  string message = 2;
 }
 `;
 
@@ -266,9 +306,9 @@ message HistogramDataPoint {
   repeated opentelemetry.proto.common.v1.KeyValue attributes = 9;
   fixed64 start_time_unix_nano = 2;
   fixed64 time_unix_nano = 3;
-  uint64 count = 4;
+  fixed64 count = 4;
   double sum = 5;
-  repeated uint64 bucket_counts = 6;
+  repeated fixed64 bucket_counts = 6;
   repeated double explicit_bounds = 7;
   repeated Exemplar exemplars = 8;
   uint32 flags = 10;
@@ -279,10 +319,10 @@ message ExponentialHistogramDataPoint {
   repeated opentelemetry.proto.common.v1.KeyValue attributes = 1;
   fixed64 start_time_unix_nano = 2;
   fixed64 time_unix_nano = 3;
-  uint64 count = 4;
+  fixed64 count = 4;
   double sum = 5;
   sint32 scale = 6;
-  uint64 zero_count = 7;
+  fixed64 zero_count = 7;
   Buckets positive = 8;
   Buckets negative = 9;
   uint32 flags = 10;
@@ -300,7 +340,7 @@ message SummaryDataPoint {
   repeated opentelemetry.proto.common.v1.KeyValue attributes = 7;
   fixed64 start_time_unix_nano = 2;
   fixed64 time_unix_nano = 3;
-  uint64 count = 4;
+  fixed64 count = 4;
   double sum = 5;
   repeated ValueAtQuantile quantile_values = 6;
   uint32 flags = 8;
@@ -345,6 +385,7 @@ function getRoot(): Root {
     TRACE_PROTO,
     LOGS_PROTO,
     METRICS_PROTO,
+    RPC_STATUS_PROTO,
   ]) {
     protobuf.parse(source, root, { keepCase: false });
   }
@@ -393,6 +434,12 @@ export function decodeOtlpMetricsRequest(
     'opentelemetry.proto.metrics.v1.ExportMetricsServiceRequest',
     body,
   );
+}
+
+/** The body of a failed OTLP/protobuf request: a `google.rpc.Status`, per the spec. */
+export function encodeOtlpError(message: string): Uint8Array {
+  const status = getRoot().lookupType('google.rpc.Status');
+  return status.encode(status.create({ message })).finish();
 }
 
 const REQUEST_TYPES = {

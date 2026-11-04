@@ -86,7 +86,7 @@ exactly aligned with them.
   the reason to prefer it over `@mastra/otel-exporter`, which owns its own
   endpoint and processor and therefore misses `spanEnrichers` and cost. Keep it
   assignable to Mastra's real `ObservabilityExporter` / `TracingEvent`:
-  compile-check against `/Users/jreehal/dev/ai/rag-examples/node_modules/@mastra/core`.
+  compile-check against `@mastra/core`.
   `attributes` is deliberately `unknown` — Mastra's per-type attribute union has
   no member in common with a flattened view, so typing it breaks assignability.
   Its module-scope lookup tables must stay **inert object literals**: static
@@ -124,7 +124,7 @@ exactly aligned with them.
     no usage/model and its own attrs win). `rerank` is intentionally unmapped
     (no canonical `gen_ai` operation in the `1.42.0-dev` registry). When changing any of these, keep
     them assignable to the real `ai` `Telemetry` interface (compile-check against
-    `/Users/jreehal/dev/ai/ai/packages/ai/dist`).
+    the published `ai` types).
 - `src/agent/`: agent identity / delegation / policy / audit governance
   (absorbed from the former `autotel-agent` package). Includes Google SAIF-aligned
   security attrs (`AGENT_SECURITY_ATTR`, `recordHumanApproval`, `recordInputProvenance`,

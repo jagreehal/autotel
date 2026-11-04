@@ -7,6 +7,14 @@ import {
   normalizeTags,
   spanKindTag,
 } from '../span-mapping';
+import {
+  decodeOtlpLogsRequest,
+  decodeOtlpMetricsRequest,
+  decodeOtlpTraceRequest,
+  decompressOtlpBody,
+  encodeOtlpError,
+  isProtobufContentType,
+} from 'autotel-devtools/otlp-proto';
 import type { SourceMapResolver } from 'autotel-devtools/sourcemaps';
 import type {
   SpanRecord,
@@ -100,7 +108,8 @@ function toHex(
 
 function nanoStringToMs(ns: string | number | undefined): number {
   if (ns === undefined || ns === null) return Date.now();
-  return Number(BigInt(String(ns)) / 1_000_000n);
+  const nanos = BigInt(String(ns));
+  return Number(nanos / 1_000_000n) + Number(nanos % 1_000_000n) / 1_000_000;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,11 +179,11 @@ interface OtlpResourceSpans {
   scopeSpans?: OtlpScopeSpans[];
 }
 
-interface OtlpTracesPayload {
+export interface OtlpTracesPayload {
   resourceSpans?: OtlpResourceSpans[];
 }
 
-function parseTraces(
+export function parseTraces(
   body: OtlpTracesPayload,
   resolver?: SourceMapResolver,
 ): SpanRecord[] {
@@ -189,7 +198,15 @@ function parseTraces(
 
         const startMs = nanoStringToMs(s.startTimeUnixNano);
         const endMs = nanoStringToMs(s.endTimeUnixNano);
-        const durationMs = endMs - startMs;
+        // Subtract before converting: epoch nanoseconds exceed Number's exact
+        // range, and truncating each endpoint loses sub-millisecond durations.
+        const durationMs =
+          s.startTimeUnixNano != null && s.endTimeUnixNano != null
+            ? Number(
+                BigInt(String(s.endTimeUnixNano)) -
+                  BigInt(String(s.startTimeUnixNano)),
+              ) / 1_000_000
+            : endMs - startMs;
         const statusCode = mapStatusCode(s.status?.code);
 
         spans.push({
@@ -216,6 +233,9 @@ interface OtlpDataPoint {
   timeUnixNano?: string | number;
   asDouble?: number;
   asInt?: string | number;
+  /** Histogram and summary points carry these instead of a value. */
+  sum?: number;
+  count?: string | number;
   attributes?: OtlpKeyValue[];
 }
 
@@ -225,6 +245,8 @@ interface OtlpMetric {
   gauge?: { dataPoints?: OtlpDataPoint[] };
   sum?: { dataPoints?: OtlpDataPoint[] };
   histogram?: { dataPoints?: OtlpDataPoint[] };
+  exponentialHistogram?: { dataPoints?: OtlpDataPoint[] };
+  summary?: { dataPoints?: OtlpDataPoint[] };
 }
 
 interface OtlpScopeMetrics {
@@ -243,7 +265,10 @@ interface OtlpMetricsPayload {
 function dataPointValue(dp: OtlpDataPoint): number {
   if (dp.asDouble !== undefined) return dp.asDouble;
   if (dp.asInt !== undefined) return Number(dp.asInt);
-  return 0;
+  // A histogram or summary has no single value, so report the mean. Under
+  // cumulative temporality that is the mean since the process started.
+  const count = Number(dp.count ?? 0);
+  return dp.sum !== undefined && count > 0 ? dp.sum / count : 0;
 }
 
 /** Stable identity for an attribute set, independent of OTLP key order. */
@@ -263,6 +288,8 @@ export function parseMetrics(body: OtlpMetricsPayload): MetricSeries[] {
           m.gauge?.dataPoints ??
           m.sum?.dataPoints ??
           m.histogram?.dataPoints ??
+          m.exponentialHistogram?.dataPoints ??
+          m.summary?.dataPoints ??
           [];
 
         if (dataPoints.length === 0) continue;
@@ -308,6 +335,7 @@ interface OtlpLogRecord {
   body?: OtlpAnyValue;
   traceId?: string;
   spanId?: string;
+  eventName?: string;
   attributes?: OtlpKeyValue[];
 }
 
@@ -330,6 +358,9 @@ function parseLogs(body: OtlpLogsPayload): LogRecord[] {
     const serviceName = getServiceName(rl.resource?.attributes);
     for (const sl of rl.scopeLogs ?? []) {
       for (const lr of sl.logRecords ?? []) {
+        const attributes = attrsToRecord(lr.attributes);
+        // Newer SDKs name an event in this field, older ones in the attribute.
+        if (lr.eventName) attributes['event.name'] ??= lr.eventName;
         logs.push({
           timestampUnixMs: nanoStringToMs(lr.timeUnixNano),
           severityText: lr.severityText ?? 'UNSPECIFIED',
@@ -337,7 +368,7 @@ function parseLogs(body: OtlpLogsPayload): LogRecord[] {
           serviceName,
           traceId: toHex(lr.traceId, 32) ?? undefined,
           spanId: toHex(lr.spanId, 16) ?? undefined,
-          attributes: attrsToRecord(lr.attributes),
+          attributes,
         });
       }
     }
@@ -349,11 +380,11 @@ function parseLogs(body: OtlpLogsPayload): LogRecord[] {
 // OtlpReceiver
 // ---------------------------------------------------------------------------
 
-function readBody(req: http.IncomingMessage): Promise<string> {
+function readBody(req: http.IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -371,6 +402,48 @@ function sendJson(
   const json = JSON.stringify(body);
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(json);
+}
+
+/** A body that is neither valid OTLP/JSON nor OTLP/protobuf: the sender's fault, so a 400. */
+class MalformedBody extends Error {}
+
+interface OtlpRequest<T> {
+  body: T;
+  protobuf: boolean;
+}
+
+/** Most OpenTelemetry SDKs default to `http/protobuf`. Both encodings feed the same parsers. */
+async function readOtlpRequest<T>(
+  req: http.IncomingMessage,
+  decodeProtobuf: (body: Uint8Array) => object,
+): Promise<OtlpRequest<T>> {
+  const compressed = await readBody(req);
+  const protobuf = isProtobufContentType(req.headers['content-type']);
+  try {
+    const raw = await decompressOtlpBody(
+      compressed,
+      req.headers['content-encoding'],
+    );
+    // SAFETY: an OTLP exporter is the only caller, and every field the parsers
+    // read is optional, so a payload of another shape yields no records rather
+    // than a bad read.
+    const body = (
+      protobuf ? decodeProtobuf(raw) : JSON.parse(raw.toString('utf8'))
+    ) as T;
+    return { body, protobuf };
+  } catch (error) {
+    throw new MalformedBody(String(error));
+  }
+}
+
+/** OTLP answers in the encoding it was sent; an empty protobuf response is zero bytes. */
+function sendAck(res: http.ServerResponse, protobuf: boolean): void {
+  if (protobuf) {
+    res.writeHead(200, { 'Content-Type': 'application/x-protobuf' });
+    res.end();
+    return;
+  }
+  sendJson(res, 200, {});
 }
 
 export class OtlpReceiver {
@@ -396,44 +469,47 @@ export class OtlpReceiver {
       const { method, url } = req;
 
       if (method === 'POST' && url === '/v1/traces') {
-        const raw = await readBody(req);
-        // SAFETY: an OTLP exporter is the only caller, and every field the
-        // parser reads is optional, so a payload of another shape yields no
-        // traces rather than a bad read.
-        const body = JSON.parse(raw) as OtlpTracesPayload;
+        const { body, protobuf } = await readOtlpRequest<OtlpTracesPayload>(
+          req,
+          decodeOtlpTraceRequest,
+        );
         const spans = parseTraces(body, this.resolver);
         await this.store.insertSpans(spans);
-        sendJson(res, 200, {});
+        sendAck(res, protobuf);
         return;
       }
 
       if (method === 'POST' && url === '/v1/metrics') {
-        const raw = await readBody(req);
-        // SAFETY: an OTLP exporter is the only caller, and every field the
-        // parser reads is optional, so a payload of another shape yields no
-        // metrics rather than a bad read.
-        const body = JSON.parse(raw) as OtlpMetricsPayload;
+        const { body, protobuf } = await readOtlpRequest<OtlpMetricsPayload>(
+          req,
+          decodeOtlpMetricsRequest,
+        );
         const metrics = parseMetrics(body);
         await this.store.insertMetrics(metrics);
-        sendJson(res, 200, {});
+        sendAck(res, protobuf);
         return;
       }
 
       if (method === 'POST' && url === '/v1/logs') {
-        const raw = await readBody(req);
-        // SAFETY: an OTLP exporter is the only caller, and every field the
-        // parser reads is optional, so a payload of another shape yields no
-        // logs rather than a bad read.
-        const body = JSON.parse(raw) as OtlpLogsPayload;
+        const { body, protobuf } = await readOtlpRequest<OtlpLogsPayload>(
+          req,
+          decodeOtlpLogsRequest,
+        );
         const logs = parseLogs(body);
         await this.store.insertLogs(logs);
-        sendJson(res, 200, {});
+        sendAck(res, protobuf);
         return;
       }
 
       sendJson(res, 404, { error: 'Not found' });
     } catch (error) {
-      sendJson(res, 500, { error: String(error) });
+      const status = error instanceof MalformedBody ? 400 : 500;
+      if (isProtobufContentType(req.headers['content-type'])) {
+        res.writeHead(status, { 'Content-Type': 'application/x-protobuf' });
+        res.end(encodeOtlpError(String(error)));
+        return;
+      }
+      sendJson(res, status, { error: String(error) });
     }
   }
 

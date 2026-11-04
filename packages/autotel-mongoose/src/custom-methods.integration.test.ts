@@ -365,7 +365,7 @@ describe('custom method instrumentation', () => {
     }
   });
 
-  // Callback-style methods (e.g. curve's `doc.checkValidationErrors(cb)`) return
+  // Callback-style methods (e.g. `doc.checkValidationErrors(cb)`) return
   // synchronously and do their real work via the callback. The span must stay
   // open and active across the callback so DB calls made inside it nest under
   // the method span, instead of finalizing immediately on the sync return.

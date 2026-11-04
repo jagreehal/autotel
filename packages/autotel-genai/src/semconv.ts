@@ -2,8 +2,8 @@
  * OpenTelemetry GenAI semantic conventions — canonical constants.
  *
  * Source of truth for `gen_ai.*` attribute keys, operation names, provider
- * names, and span-naming rules, aligned to the semantic-conventions snapshot
- * in `/Users/jreehal/dev/temp/semantic-conventions-genai`.
+ * names, and span-naming rules, aligned to the OpenTelemetry semantic
+ * conventions.
  *
  * Everything here is the canonical underscore namespace (`gen_ai.*`). There is
  * no legacy `gen.ai.*` / `prompt_tokens` / `completion_tokens` surface — this

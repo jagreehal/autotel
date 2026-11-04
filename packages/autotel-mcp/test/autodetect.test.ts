@@ -29,6 +29,28 @@ describe('autodetect', () => {
     expect(calls).toContain('http://loki.local/ready');
   });
 
+  it('finds a Jaeger that only serves /api/v3, as 2.22 does', async () => {
+    originalFetch = globalThis.fetch;
+    installFetchHandler(async (url) =>
+      url.endsWith('/api/v3/services')
+        ? new Response('{"services":[]}', { status: 200 })
+        : new Response('404 page not found', { status: 404 }),
+    );
+
+    const [jaeger] = await probeAll({ jaeger: 'http://jaeger.local' });
+
+    expect(jaeger?.reachable).toBe(true);
+  });
+
+  it('does not mistake a server without either Jaeger API for Jaeger', async () => {
+    originalFetch = globalThis.fetch;
+    installFetchHandler(async () => new Response('not found', { status: 404 }));
+
+    const [jaeger] = await probeAll({ jaeger: 'http://jaeger.local' });
+
+    expect(jaeger?.reachable).toBe(false);
+  });
+
   it('marks unreachable backends as reachable=false without throwing', async () => {
     originalFetch = globalThis.fetch;
     installFetchHandler(async (url) => {

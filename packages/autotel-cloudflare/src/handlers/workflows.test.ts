@@ -269,7 +269,7 @@ describe('Workflow Instrumentation', () => {
         async run(_event: any, _step: any) {
           const log = getWorkflowLogger();
           log.set({ workflow: { id: 'wf-logger' } });
-          log.info('workflow started', { provider: { name: 'curvepay' } });
+          log.info('workflow started', { provider: { name: 'acmepay' } });
           return log.emitNow({ outcome: 'running' });
         }
       }
@@ -301,7 +301,7 @@ describe('Workflow Instrumentation', () => {
       });
       expect(mockSpan.addEvent).toHaveBeenCalledWith('log.info', {
         message: 'workflow started',
-        'provider.name': 'curvepay',
+        'provider.name': 'acmepay',
       });
 
       getActiveSpanSpy.mockRestore();

@@ -135,11 +135,11 @@ describe('getExecutionLogger', () => {
     const ctx = createMockContext();
     const log = getExecutionLogger(ctx);
 
-    log.set({ provider: { name: 'curvepay' } });
+    log.set({ provider: { name: 'acmepay' } });
     log.info('chunk read', { chunk: { size: 25 } });
 
     expect(log.getContext()).toEqual({
-      provider: { name: 'curvepay' },
+      provider: { name: 'acmepay' },
       chunk: { size: 25 },
     });
   });

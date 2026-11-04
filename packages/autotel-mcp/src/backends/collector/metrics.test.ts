@@ -96,4 +96,74 @@ describe('metric dimensions survive ingest and query', () => {
     });
     expect(all.items[0]?.points).toHaveLength(2);
   });
+
+  describe.each([
+    ['exponential histogram', 'exponentialHistogram'],
+    ['summary', 'summary'],
+  ])('%s data points', (_, kind) => {
+    it('reports the mean, as a histogram does', () => {
+      const [series] = parseMetrics({
+        resourceMetrics: [
+          {
+            scopeMetrics: [
+              {
+                metrics: [
+                  {
+                    name: 'latency',
+                    [kind]: {
+                      dataPoints: [
+                        { timeUnixNano: '1000000', sum: 3, count: '4' },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(series?.metricName).toBe('latency');
+      expect(series?.points[0]?.value).toBe(0.75);
+    });
+  });
+
+  describe('histogram data points', () => {
+    const histogram = (point: { sum?: number; count?: string | number }) =>
+      parseMetrics({
+        resourceMetrics: [
+          {
+            scopeMetrics: [
+              {
+                metrics: [
+                  {
+                    name: 'http.server.request.duration',
+                    histogram: {
+                      dataPoints: [{ timeUnixNano: '1000000', ...point }],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      })[0]?.points[0]?.value;
+
+    it('reports the mean, since a histogram has no single value', () => {
+      expect(histogram({ sum: 3, count: 4 })).toBe(0.75);
+    });
+
+    it('reads count as OTLP/JSON sends it, a decimal string', () => {
+      expect(histogram({ sum: 3, count: '4' })).toBe(0.75);
+    });
+
+    it('is 0 with no observations, not NaN', () => {
+      expect(histogram({ sum: 0, count: 0 })).toBe(0);
+      expect(histogram({ count: '0' })).toBe(0);
+    });
+
+    it('is 0 when the optional sum is absent, as it can be for negative measurements', () => {
+      expect(histogram({ count: 4 })).toBe(0);
+    });
+  });
 });

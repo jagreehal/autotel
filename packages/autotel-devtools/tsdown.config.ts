@@ -22,6 +22,9 @@ export default defineConfig({
     // same fingerprint, so one failure is one issue wherever it is viewed.
     'issues/index': 'src/issues/index.ts',
     'server/sourcemap': 'src/server/sourcemap.ts',
+    // The OTLP/protobuf decoder is shared: autotel-mcp's collector takes the same
+    // bodies, so an exporter sees one behaviour from either receiver.
+    'server/otlp-proto': 'src/server/otlp-proto.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

@@ -4,7 +4,7 @@ import type { BackendCapabilities } from '../types';
 
 export function buildVerificationGuide(): string {
   return [
-    'Primary backend: Jaeger from /Users/jreehal/dev/curve/payments-dbos/docker-compose-jaeger.yml.',
+    'Primary backend: a local Jaeger.',
     'Smoke path: npm run smoke:jaeger.',
     'Fixture mode: BACKEND_MODE=fixture npm run start:http with ./fixtures/telemetry.json.',
     'Unit tests cover config, module logic, Jaeger payload normalization, and trace filtering.',

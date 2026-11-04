@@ -10,17 +10,14 @@ import {
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  BadRequest,
-  readJsonBody,
-  readRawBody,
-  isProtobufContentType,
-  sendJson,
-} from './otlp';
+import { BadRequest, readJsonBody, readRawBody, sendJson } from './otlp';
 import {
   decodeOtlpTraceRequest,
   decodeOtlpLogsRequest,
   decodeOtlpMetricsRequest,
+  decompressOtlpBody,
+  encodeOtlpError,
+  isProtobufContentType,
 } from './otlp-proto';
 import { DEVTOOLS_IDENTITY } from './identity';
 import { allowSensitiveRequest } from './origin-guard';
@@ -40,11 +37,32 @@ function sendOtlpError(
   req: IncomingMessage,
   e: unknown,
 ): void {
+  const message = e instanceof Error ? e.message : String(e);
+  if (isProtobufContentType(req.headers['content-type'])) {
+    res.writeHead(400, { 'Content-Type': 'application/x-protobuf' });
+    res.end(encodeOtlpError(`Invalid OTLP payload: ${message}`));
+    return;
+  }
   sendJson(res, 400, {
     error: 'Invalid OTLP payload',
-    message: e instanceof Error ? e.message : String(e),
+    message,
     contentType: req.headers['content-type'] ?? null,
   });
+}
+
+// OTLP answers in the encoding it was sent, and a protobuf success is an empty
+// `Export*ServiceResponse`: zero bytes. So only JSON clients see the counts.
+function sendOtlpAck(
+  res: ServerResponse,
+  req: IncomingMessage,
+  accepted: Record<string, number>,
+): void {
+  if (isProtobufContentType(req.headers['content-type'])) {
+    res.writeHead(200, { 'Content-Type': 'application/x-protobuf' });
+    res.end();
+    return;
+  }
+  sendJson(res, 200, accepted);
 }
 
 // The last word on a route that throws. The 'request' listener is async, so a
@@ -80,10 +98,14 @@ async function readOtlpPayload(
   req: IncomingMessage,
   signal: OtlpSignal,
 ): Promise<unknown> {
+  const body = await decompressOtlpBody(
+    await readRawBody(req),
+    req.headers['content-encoding'],
+  );
   if (isProtobufContentType(req.headers['content-type'])) {
-    return PROTOBUF_DECODERS[signal](await readRawBody(req));
+    return PROTOBUF_DECODERS[signal](body);
   }
-  return readJsonBody(req);
+  return JSON.parse(body.toString());
 }
 
 export interface HttpServerOptions {
@@ -428,7 +450,7 @@ export function attachDevtoolsRoutes(
       try {
         const payload = await readOtlpPayload(req, 'traces');
         const acceptedTraces = devtools.ingestOtlp('traces', payload);
-        sendJson(res, 200, { acceptedTraces });
+        sendOtlpAck(res, req, { acceptedTraces });
       } catch (e) {
         sendOtlpError(res, req, e);
       }
@@ -440,7 +462,7 @@ export function attachDevtoolsRoutes(
       try {
         const payload = await readOtlpPayload(req, 'logs');
         const acceptedLogs = devtools.ingestOtlp('logs', payload);
-        sendJson(res, 200, { acceptedLogs });
+        sendOtlpAck(res, req, { acceptedLogs });
       } catch (e) {
         sendOtlpError(res, req, e);
       }
@@ -452,7 +474,7 @@ export function attachDevtoolsRoutes(
       try {
         const payload = await readOtlpPayload(req, 'metrics');
         const acceptedMetrics = devtools.ingestOtlp('metrics', payload);
-        sendJson(res, 200, { acceptedMetrics });
+        sendOtlpAck(res, req, { acceptedMetrics });
       } catch (e) {
         sendOtlpError(res, req, e);
       }

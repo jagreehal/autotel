@@ -19,7 +19,7 @@ npx autotel-devtools
 
 Point any OTel-instrumented app at it. The endpoints accept **both OTLP/JSON and
 OTLP/protobuf**, chosen from the request `Content-Type`, so protobuf-default SDKs
-(Python/Java/Go) work with no extra config:
+(Python/Java/Go) work with no extra config. Both accept `Content-Encoding: gzip`:
 
 ```bash
 # JS (defaults to JSON, or set http/protobuf — both work)
@@ -73,7 +73,7 @@ export const loadUser = withTracing({ name: 'user.load' })(
 
 | Route                                              | What                                                               |
 | -------------------------------------------------- | ------------------------------------------------------------------ |
-| `POST /v1/traces` · `/v1/logs` · `/v1/metrics`     | OTLP receivers: JSON or protobuf (`application/x-protobuf`)        |
+| `POST /v1/traces` · `/v1/logs` · `/v1/metrics`     | OTLP receivers: JSON or protobuf, gzipped or not                   |
 | `GET /`                                            | Dashboard UI (see Views below)                                     |
 | `POST /api/query/{traces,logs,errors,metrics}`     | Server-side query over the durable store                           |
 | `POST /api/query/webmcp`                           | WebMCP tool surface, folded server-side over every page of results |
