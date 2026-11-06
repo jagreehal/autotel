@@ -39,10 +39,12 @@
 // namespace import for browser-bundler compat — see node-require.ts
 import * as nodeFs from 'node:fs';
 import path from 'node:path';
-import type { AttributeValue, Context } from '@opentelemetry/api';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
-import type { LogRecordProcessor, SdkLogRecord } from '@opentelemetry/sdk-logs';
-import type { AnyValue } from '@opentelemetry/api-logs';
+import type { AttributeValue, Context, AnyValue } from '@opentelemetry/api';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
+import type {
+  LogRecordProcessor,
+  ReadWriteLogRecord,
+} from '@opentelemetry/sdk-logs';
 import type {
   PushMetricExporter,
   ResourceMetrics,
@@ -500,7 +502,7 @@ export function policySpanFilter(span: ReadableSpan): boolean {
 
 // --- logs -------------------------------------------------------------------
 
-function logView(record: SdkLogRecord): RecordView {
+function logView(record: ReadWriteLogRecord): RecordView {
   return {
     field(name) {
       switch (name) {
@@ -538,7 +540,7 @@ function logView(record: SdkLogRecord): RecordView {
 }
 
 function applyField(
-  record: SdkLogRecord,
+  record: ReadWriteLogRecord,
   field: PolicyField,
   apply: (target: UnknownRecord, key: string) => void,
   applyBody: () => void,
@@ -557,7 +559,7 @@ function applyField(
 }
 
 function applyTransform(
-  record: SdkLogRecord,
+  record: ReadWriteLogRecord,
   transform: PolicyLogTransform,
 ): void {
   // Fixed spec order: remove → redact → rename → add
@@ -631,7 +633,7 @@ function applyTransform(
 export class PolicyLogRecordProcessor implements LogRecordProcessor {
   constructor(private readonly wrapped: LogRecordProcessor) {}
 
-  onEmit(logRecord: SdkLogRecord, context?: Context): void {
+  onEmit(logRecord: ReadWriteLogRecord, context?: Context): void {
     try {
       const view = logView(logRecord);
       const keeps: number[] = [];

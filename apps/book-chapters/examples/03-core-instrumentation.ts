@@ -17,7 +17,7 @@ async function main() {
 
   init({
     service: 'book-03',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // 1. Reusable named function

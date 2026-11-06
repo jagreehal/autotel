@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Kareem from 'kareem';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
+  TracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+} from '@opentelemetry/sdk-trace';
 import type { Tracer } from 'autotel';
 import { wrapHookHandler } from './instrumentation';
 import type { ResolvedConfig } from './types';
@@ -18,8 +18,8 @@ import type { ResolvedConfig } from './types';
 //   3. synchronous single-arg data hooks actually end their span.
 
 const exporter = new InMemorySpanExporter();
-const provider = new NodeTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(exporter)],
+const provider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
 });
 const tracer: Tracer = provider.getTracer('autotel-mongoose-hooks-test');
 

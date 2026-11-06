@@ -24,7 +24,7 @@
  */
 
 import type { TailSampleFn, LocalTrace } from '../types';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 
 export interface AdaptiveSamplerOptions {
   /**

@@ -11,7 +11,7 @@ You are an autotel migration specialist. Convert vanilla OpenTelemetry SDK code 
 
 The user has existing code with either:
 
-1. Vanilla OpenTelemetry SDK instrumentation (`@opentelemetry/sdk-trace-node`, `tracer.startActiveSpan()`, manual `span.end()`)
+1. Vanilla OpenTelemetry SDK instrumentation (`@opentelemetry/sdk-trace`, `tracer.startActiveSpan()`, manual `span.end()`)
 2. Scattered `console.log` / `console.error` calls for observability
 3. A mix of both
 
@@ -29,9 +29,9 @@ Search the target files for these patterns:
 
 **Vanilla OTel SDK patterns:**
 
-- `@opentelemetry/sdk-trace-node` or `@opentelemetry/sdk-trace-base` imports
+- `@opentelemetry/sdk-trace` or `@opentelemetry/sdk-trace` imports
 - `@opentelemetry/api` imports (`trace.getTracer()`, `tracer.startActiveSpan()`)
-- `NodeSDK`, `NodeTracerProvider` setup
+- `NodeSDK`, `TracerProvider` setup
 - `span.end()`, `span.setAttribute()`, `span.recordException()`, `span.setStatus()`
 - `NODE_OPTIONS="--require @opentelemetry"` in scripts
 - `registerInstrumentations()` calls
@@ -220,7 +220,7 @@ export const handleCheckout = trace((ctx) => async (req, res) => {
 
 After migration:
 
-1. **Remove old OTel SDK setup**: `NodeSDK`, `NodeTracerProvider`, `tracer.getTracer()`, manual exporters
+1. **Remove old OTel SDK setup**: `NodeSDK`, `TracerProvider`, `tracer.getTracer()`, manual exporters
 2. **Remove span lifecycle code**: `span.end()`, `span.setStatus()`, `SpanStatusCode` imports
 3. **Remove scattered console.log**: replaced by request logger
 4. **Keep auto-instrumentations**: if using `@opentelemetry/auto-instrumentations-node`, configure them in `autotel.yaml` under `autoInstrumentations` instead

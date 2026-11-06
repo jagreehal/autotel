@@ -12,8 +12,11 @@ import type {
   Instrumentation,
   InstrumentationConfig,
 } from '@opentelemetry/instrumentation';
-import type { MeterProvider, TracerProvider } from '@opentelemetry/api';
-import type { LoggerProvider } from '@opentelemetry/api-logs';
+import type {
+  MeterProvider,
+  TracerProvider,
+  LoggerProvider,
+} from '@opentelemetry/api';
 import type { UnknownRecord } from './values';
 
 /** Pino's own field bag: what LogFn takes, mirrored by this fake logger. */

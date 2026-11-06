@@ -526,7 +526,7 @@ const handleRequest = trace(async (req) => {
 import {
   TraceIdRatioBasedSampler,
   ParentBasedSampler,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 const sdk = new opentelemetry.NodeSDK({
   // Sample 10% of all requests
@@ -645,8 +645,8 @@ import {
   ATTR_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
 import {
   PrismaInstrumentation,
   registerInstrumentations,
@@ -654,12 +654,14 @@ import {
 import { resourceFromAttributes } from '@opentelemetry/resources';
 
 // Configure the trace provider
-const provider = new NodeTracerProvider({
+const provider = new TracerProvider({
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: 'my-app',
     [ATTR_SERVICE_VERSION]: '1.0.0',
   }),
-  spanProcessors: [new SimpleSpanProcessor(new OTLPTraceExporter())],
+  spanProcessors: [
+    new SimpleSpanProcessor({ exporter: new OTLPTraceExporter() }),
+  ],
 });
 
 // Register Prisma instrumentations
@@ -742,7 +744,7 @@ createUser                           (your function)
 **What Changed:**
 
 - Reduced from ~50 lines to ~10 lines
-- No manual `NodeTracerProvider` or `SimpleSpanProcessor` setup
+- No manual `TracerProvider` or `SimpleSpanProcessor` setup
 - No manual `registerInstrumentations()` call
 - Automatic span lifecycle (no try/catch for telemetry)
 - Built-in tail sampling (10% baseline, 100% errors)
@@ -778,18 +780,20 @@ pnpm start
 import { trace, withTracing, SpanKind } from '@opentelemetry/api';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
+import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
 
 // Configure tracing
-const provider = new NodeTracerProvider({
+const provider = new TracerProvider({
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: 'my-app',
   }),
-  spanProcessors: [new SimpleSpanProcessor(new OTLPTraceExporter())],
+  spanProcessors: [
+    new SimpleSpanProcessor({ exporter: new OTLPTraceExporter() }),
+  ],
 });
 provider.register();
 
@@ -904,7 +908,7 @@ const result = await db.transaction(async (tx) => {
 **What Changed:**
 
 - Reduced from ~60 lines to ~10 lines (83% reduction)
-- No manual `NodeTracerProvider` or `SimpleSpanProcessor` setup
+- No manual `TracerProvider` or `SimpleSpanProcessor` setup
 - No manual span management (no `startSpan()` / `end()`)
 - **SQL queries automatically captured** (hard to do manually in Drizzle)
 - Automatic error handling and status codes
@@ -1095,14 +1099,15 @@ Context propagation works automatically with `trace()`, `span()`, and `instrumen
 **Before**:
 
 ```typescript
-import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { InMemorySpanExporter } from '@opentelemetry/sdk-trace';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
+import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
 
 const exporter = new InMemorySpanExporter();
-const provider = new NodeTracerProvider();
-provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
-provider.register();
+const provider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
+});
+trace.setGlobalTracerProvider(provider);
 
 // Run tests
 await myFunction();
@@ -1115,7 +1120,7 @@ expect(spans).toHaveLength(1);
 **After**:
 
 ```typescript
-import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
+import { InMemorySpanExporter } from '@opentelemetry/sdk-trace';
 import { init } from 'autotel';
 
 const exporter = new InMemorySpanExporter();
@@ -1177,7 +1182,7 @@ Work through this checklist as you migrate.
 
 ### Phase 6: Migrate Testing
 
-- [ ] Replace test span exporters with `InMemorySpanExporter` from `@opentelemetry/sdk-trace-base`
+- [ ] Replace test span exporters with `InMemorySpanExporter` from `@opentelemetry/sdk-trace`
 - [ ] Update test assertions (span names, attributes)
 - [ ] Verify context propagation in tests
 

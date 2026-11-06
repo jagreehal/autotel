@@ -36,7 +36,9 @@ export const SCHEMA_SQL = `
     unit TEXT,
     timestamp_unix_ms INTEGER NOT NULL,
     value REAL NOT NULL,
-    attributes TEXT NOT NULL DEFAULT '{}'
+    attributes TEXT NOT NULL DEFAULT '{}',
+    temporality TEXT,
+    start_time_unix_ms INTEGER
   );
 
   CREATE INDEX IF NOT EXISTS idx_metrics_name ON metric_points(metric_name);

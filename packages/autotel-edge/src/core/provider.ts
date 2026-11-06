@@ -2,12 +2,9 @@
  * Tracer provider for edge environments
  */
 
-import { trace } from '@opentelemetry/api';
+import { trace, type TracerOptions } from '@opentelemetry/api';
 import type { Resource } from '@opentelemetry/resources';
-import type {
-  SpanProcessor,
-  TracerConfig,
-} from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace';
 import { WorkerTracer } from './tracer';
 import { ensureGlobalContextManager } from './context';
 
@@ -30,7 +27,7 @@ export class WorkerTracerProvider {
   getTracer(
     _name: string,
     _version?: string,
-    _config?: TracerConfig,
+    _options?: TracerOptions,
   ): WorkerTracer {
     return this.tracer;
   }

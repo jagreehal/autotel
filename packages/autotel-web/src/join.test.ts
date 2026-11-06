@@ -2,10 +2,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SpanStatusCode } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   type ReadableSpan,
   type SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { clearBaggage, getBaggageHeader } from './baggage';
 import {
   currentSpanContext,
@@ -30,7 +30,7 @@ function tracerWith(...processors: SpanProcessor[]) {
     forceFlush: () => Promise.resolve(),
     shutdown: () => Promise.resolve(),
   };
-  const provider = new BasicTracerProvider({
+  const provider = new TracerProvider({
     spanProcessors: [...processors, recorder],
   });
   return { tracer: provider.getTracer('test'), ended };

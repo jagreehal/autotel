@@ -9,7 +9,7 @@ async function main() {
 
   init({
     service: 'book-06',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // track(): fire-and-forget product/analytics events

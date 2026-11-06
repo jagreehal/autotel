@@ -58,7 +58,7 @@
  * const exporter = new InMemorySpanExporter()
  * init({
  *   service: 'test',
- *   spanProcessor: new SimpleSpanProcessor(exporter),
+ *   spanProcessor: new SimpleSpanProcessor({ exporter }),
  * })
  *
  * // Run code under test
@@ -117,7 +117,7 @@ export {
    * ```
    */
   InMemorySpanExporter,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 /**
  * Pretty console exporter - colorized, hierarchical span output.

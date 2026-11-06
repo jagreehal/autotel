@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { returnsInstead, sdkDouble } from './testing/doubles.js';
 import { toError } from './values';
 import type { AutotelConfig } from './autotel-config';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 
 // @types/node narrows signal listeners to per-signal overloads, so iterating a
 // `NodeJS.Signals` union needs a plain function type here.

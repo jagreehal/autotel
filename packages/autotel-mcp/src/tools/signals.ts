@@ -3,6 +3,14 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
 import { resolveTimeRange } from '../modules/time-range';
 import {
+  readEntityHistory,
+  readStateTransitions,
+  type EntityHistoryInput,
+  type StateTransitionsInput,
+} from '../modules/state-transitions';
+import { toErrorMessage } from '../modules/error-envelope';
+import {
+  respondError,
   respondSafe,
   tagValueSchema,
   toMetricSearchQuery,
@@ -12,6 +20,14 @@ import {
   READ_ONLY,
   limitHint,
 } from './shared';
+
+/** State evidence is read over days, so this reaches past the usual 24 hours. */
+const lookbackSchema = z.coerce
+  .number()
+  .int()
+  .positive()
+  .max(30 * 24 * 60)
+  .optional();
 
 export function registerSignalTools(
   server: McpServer,
@@ -89,6 +105,37 @@ function registerMetricTools(
         return { series, totalCount: series.length };
       }, 'get_metric_series'),
   );
+
+  server.registerTool(
+    'get_state_transitions',
+    {
+      description:
+        'Count persisted state transitions (the autotel.state.transitions metric written by transition()) per entity, field, from, to, via and service. `from` and `to` here are state names, not times; use lookbackMinutes for the window. `instrumented` lists each entity and field with any series in the window. Absence means not instrumented or not seen, never that a transition cannot happen. Counts are best-effort evidence, not an authoritative number. The result is the autotel-transitions/v0.1.0 document itself, with no ok/data envelope.',
+      annotations: READ_ONLY,
+      inputSchema: z.object({
+        entity: z.string().min(1).optional(),
+        field: z.string().min(1).optional(),
+        serviceName: z.string().min(1).optional(),
+        from: z.string().min(1).optional(),
+        to: z.string().min(1).optional(),
+        lookbackMinutes: lookbackSchema,
+      }),
+    },
+    async (input: StateTransitionsInput) => {
+      try {
+        const document = await readStateTransitions(backend, input);
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(document, null, 2) },
+          ],
+        };
+      } catch (error) {
+        return respondError({
+          message: `[get_state_transitions] ${toErrorMessage(error)}`,
+        });
+      }
+    },
+  );
 }
 
 function registerLogTools(server: McpServer, backend: TelemetryBackend): void {
@@ -125,5 +172,25 @@ function registerLogTools(server: McpServer, backend: TelemetryBackend): void {
         });
         return { ...result, ...limitHint(result.items.length, limit) };
       }, 'search_logs'),
+  );
+
+  server.registerTool(
+    'get_entity_history',
+    {
+      description:
+        "Read one entity instance's state transitions, oldest first, from the state.transition log records written by transition({ history: true, id }). History is off by default, so a backend with no records usually means it was not enabled for this entity; the result says so in `message`. Defaults to the last 24 hours.",
+      annotations: READ_ONLY,
+      inputSchema: z.object({
+        entity: z.string().min(1),
+        id: z.string().min(1),
+        field: z.string().min(1).optional(),
+        lookbackMinutes: lookbackSchema,
+      }),
+    },
+    async (input: EntityHistoryInput) =>
+      respondSafe(
+        () => readEntityHistory(backend, input),
+        'get_entity_history',
+      ),
   );
 }

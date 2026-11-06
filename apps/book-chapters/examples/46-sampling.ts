@@ -27,7 +27,7 @@ async function main() {
   // AttributeRedactingProcessor wraps any processor and scrubs PII from
   // finished spans. Presets: 'default' | 'strict' | 'pci-dss'.
   const redacting = new AttributeRedactingProcessor(
-    new SimpleSpanProcessor(exporter),
+    new SimpleSpanProcessor({ exporter }),
     { redactor: 'default' },
   );
 

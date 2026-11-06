@@ -12,7 +12,7 @@
 import type { ExportResult } from '@opentelemetry/core';
 import { ExportResultCode } from '@opentelemetry/core';
 import { JsonTraceSerializer } from '@opentelemetry/otlp-transformer';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 
 import { cloudWatchTracesEndpoint } from './endpoints';
 import {
@@ -37,7 +37,7 @@ export interface CloudWatchTraceExporterConfig {
  * OTLP/JSON exporter for CloudWatch's traces endpoint.
  *
  * Use with `BatchSpanProcessor` or `SimpleSpanProcessor` from
- * `@opentelemetry/sdk-trace-base`. For Lambda, `SimpleSpanProcessor`
+ * `@opentelemetry/sdk-trace`. For Lambda, `SimpleSpanProcessor`
  * (synchronous export per span) is fine for small workloads;
  * `BatchSpanProcessor` is better for higher-throughput functions but
  * needs `forceFlush()` before the handler returns.

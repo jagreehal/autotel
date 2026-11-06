@@ -297,5 +297,5 @@ worth knowing, all found by running against the real thing:
 npm install autotel-langfuse
 ```
 
-Peer: `@opentelemetry/sdk-trace-base >= 2`. Runtime dependency:
+Peer: `@opentelemetry/sdk-trace >= 2`. Runtime dependency:
 `@opentelemetry/api`. That is the entire dependency list, on purpose.

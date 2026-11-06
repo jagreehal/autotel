@@ -1314,7 +1314,7 @@ if (ctx) {
 
 ## SSR Safety
 
-autotel-web is **SSR-safe** by design. All browser APIs (WebTracerProvider, ZoneContextManager) are accessed inside `init()`, not at module load time.
+autotel-web is **SSR-safe** by design. All browser APIs (TracerProvider, ZoneContextManager) are accessed inside `init()`, not at module load time.
 
 ### Safe: ✅
 
@@ -1378,7 +1378,7 @@ The backend does all the real work, which is where you want detailed telemetry a
 
 ## Why Not Use OpenTelemetry in the Browser?
 
-The official OpenTelemetry browser SDK (`@opentelemetry/sdk-trace-web`) is a **full-featured tracing implementation** with:
+The official OpenTelemetry browser SDK (`@opentelemetry/sdk-trace`) is a **full-featured tracing implementation** with:
 
 - Real span creation and lifecycle management
 - Context propagation via Zone.js (~15KB)

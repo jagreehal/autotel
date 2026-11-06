@@ -7,9 +7,9 @@ import Kareem from 'kareem2';
 import { otelTrace, context } from 'autotel';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
+  TracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+} from '@opentelemetry/sdk-trace';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import type { Tracer } from 'autotel';
 import { wrapHookHandler } from './instrumentation';
@@ -19,8 +19,8 @@ import type { ResolvedConfig } from './types';
 // context manager, so span parent/child relationships across async boundaries
 // are meaningful and can be asserted.
 const exporter = new InMemorySpanExporter();
-const provider = new NodeTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(exporter)],
+const provider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
 });
 const contextManager = new AsyncLocalStorageContextManager().enable();
 

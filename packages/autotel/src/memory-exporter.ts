@@ -22,7 +22,7 @@
  * ```
  */
 import type { Attributes, SpanStatus } from '@opentelemetry/api';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 
 /** One finished span, flattened to the fields an assertion usually wants. */
 export interface RecordedSpan {

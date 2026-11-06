@@ -103,7 +103,7 @@ renderTerminal(
 Wrap a `BatchSpanProcessor` so spans go to both the terminal dashboard and your OTLP backend:
 
 ```typescript
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import {
   StreamingSpanProcessor,
@@ -113,7 +113,7 @@ import {
 const exporter = new OTLPTraceExporter({
   url: 'http://localhost:4318/v1/traces',
 });
-const batchProcessor = new BatchSpanProcessor(exporter);
+const batchProcessor = new BatchSpanProcessor({ exporter });
 const streamingProcessor = new StreamingSpanProcessor(batchProcessor);
 
 // Subscribe manually (without renderTerminal)
@@ -261,4 +261,4 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4319
 
 ## Version
 
-Targets autotel-terminal v17.0.8. Requires `autotel` (peer), `@opentelemetry/api ^1.9.0`, `@opentelemetry/sdk-trace-base ^2.6.0`. Node.js 22+. Uses Ink v6 / React 19 internally.
+Targets autotel-terminal v17.0.8. Requires `autotel` (peer), `@opentelemetry/api ^1.10.0`, `@opentelemetry/sdk-trace ^3.1.0`. Node.js 22.15+. Uses Ink v6 / React 19 internally.

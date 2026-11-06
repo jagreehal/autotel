@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { context, trace, SpanStatusCode } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
   type ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { parseConfig, setConfig } from './config';
 import { logTemplate, LOG_FLOOD_EXCEPTION } from './console-signals';
 import { getExecutionLogger } from '../execution-logger';
@@ -18,8 +18,8 @@ import {
 } from './native-bridge';
 
 const exporter = new InMemorySpanExporter();
-const tracer = new BasicTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(exporter)],
+const tracer = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
 }).getTracer('test');
 
 const errorSpy = vi.fn();

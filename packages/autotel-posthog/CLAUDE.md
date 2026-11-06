@@ -13,7 +13,7 @@ You are working on the PostHog join package. You understand PostHog's browser AP
 - **Testing**: vitest
 - **Key Dependencies**:
   - `@opentelemetry/api` — the only runtime dependency
-  - `@opentelemetry/sdk-trace-base` >= 2 — peer dependency
+  - `@opentelemetry/sdk-trace` >= 3: peer dependency
 
 **`posthog-js` is a required peer dependency and the source of the types.** `src/posthog-like.ts` derives its surface with `Partial<Pick<PostHog, ...>>` from `posthog-js` itself, so a renamed method or changed signature is a compile error here rather than an `undefined` read in someone's browser. `src/contract.test.ts` holds it to that at runtime too, against the pinned dev copy.
 

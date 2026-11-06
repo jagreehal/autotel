@@ -14,7 +14,7 @@ You are working on the Langfuse compatibility package. You understand the OpenTe
 - **Testing**: vitest
 - **Key Dependencies**:
   - `@opentelemetry/api` — the only runtime dependency
-  - `@opentelemetry/sdk-trace-base` >= 2 — peer dependency
+  - `@opentelemetry/sdk-trace` >= 3: peer dependency
 
 **No Langfuse package is a dependency, and that is the point.** A wire contract a test can hold to is a smaller thing to keep in step than an SDK's release cadence. Adding `@langfuse/tracing`, `@langfuse/otel` or `@langfuse/client` would undo the main claim this package makes.
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { context, trace } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
-import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
 import type { BeforeSendFn } from 'posthog-js';
 import { rememberRequestSpan } from 'autotel-web/join';
 import { autotelBeforeSend, traceProperties } from './before-send';
@@ -48,7 +48,7 @@ afterEach(() => {
 
 describe('traceProperties()', () => {
   it('reads the ids while the span is still active', () => {
-    const provider = new BasicTracerProvider();
+    const provider = new TracerProvider();
     const tracer = provider.getTracer('test');
 
     const [span, properties] = tracer.startActiveSpan(
@@ -106,7 +106,7 @@ describe('warning by default', () => {
     process.env.NODE_ENV = 'development';
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const posthog = fakePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog)],
     });
     const tracer = provider.getTracer('test');
@@ -124,7 +124,7 @@ describe('warning by default', () => {
     process.env.NODE_ENV = 'production';
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const posthog = fakePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog)],
     });
     const tracer = provider.getTracer('test');
@@ -142,7 +142,7 @@ describe('warning by default', () => {
     process.env.NODE_ENV = 'development';
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const posthog = fakePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog, { debug: false })],
     });
     const tracer = provider.getTracer('test');

@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import { context, trace } from '@opentelemetry/api';
-import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
-import { StackContextManager } from '@opentelemetry/sdk-trace-web';
+import { TracerProvider, StackContextManager } from '@opentelemetry/sdk-trace';
 import { PostHog } from 'posthog-js';
 import { joinPostHog } from './join';
 
@@ -71,7 +70,7 @@ describe('the join, against the real posthog-js', () => {
   it('stamps an event captured after an await', async () => {
     browserContext();
     const posthog = offlinePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog)],
     });
     const captured = recorder(posthog);
@@ -99,7 +98,7 @@ describe('the join, against the real posthog-js', () => {
   it('reads the session id the real library minted', () => {
     browserContext();
     const posthog = offlinePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog)],
     });
 

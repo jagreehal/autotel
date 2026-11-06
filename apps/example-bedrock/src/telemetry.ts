@@ -5,7 +5,7 @@
  * and, always, to an in-memory exporter this example prints and checks.
  */
 import { init } from 'autotel';
-import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
+import { InMemorySpanExporter } from '@opentelemetry/sdk-trace';
 import {
   BEDROCK_PRICING,
   bedrockCompatibility,

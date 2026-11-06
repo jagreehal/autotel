@@ -16,7 +16,7 @@ import {
   SamplingDecision,
   type Sampler,
   type SamplingResult,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { sampleByKey } from './sampling';
 import { getSessionAttributes, samplingKeyFor } from './session';
 import { SESSION } from './semconv';

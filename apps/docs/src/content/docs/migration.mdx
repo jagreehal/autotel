@@ -486,7 +486,7 @@ const handleRequest = trace(async (req) => {
 import {
   TraceIdRatioBasedSampler,
   ParentBasedSampler,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 const sdk = new opentelemetry.NodeSDK({
   // Sample 10% of all requests
@@ -731,14 +731,15 @@ Context propagation works automatically with `trace()`, `span()`, and `instrumen
 **Before**:
 
 ```typescript
-import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { InMemorySpanExporter } from '@opentelemetry/sdk-trace';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
+import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
 
 const exporter = new InMemorySpanExporter();
-const provider = new NodeTracerProvider();
-provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
-provider.register();
+const provider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
+});
+trace.setGlobalTracerProvider(provider);
 
 // Run tests
 await myFunction();
@@ -751,7 +752,7 @@ expect(spans).toHaveLength(1);
 **After**:
 
 ```typescript
-import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
+import { InMemorySpanExporter } from '@opentelemetry/sdk-trace';
 import { init } from 'autotel';
 
 const exporter = new InMemorySpanExporter();
@@ -813,7 +814,7 @@ Use this checklist for a smooth migration:
 
 ### Phase 6: Migrate Testing
 
-- [ ] Replace test span exporters with `InMemorySpanExporter` from `@opentelemetry/sdk-trace-base`
+- [ ] Replace test span exporters with `InMemorySpanExporter` from `@opentelemetry/sdk-trace`
 - [ ] Update test assertions (span names, attributes)
 - [ ] Verify context propagation in tests
 

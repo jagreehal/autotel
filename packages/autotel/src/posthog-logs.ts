@@ -1,10 +1,14 @@
 import type {
   LogRecordExporter,
   LogRecordProcessor,
-  SdkLogRecord,
+  ReadWriteLogRecord,
 } from '@opentelemetry/sdk-logs';
-import type { Attributes, AttributeValue, Context } from '@opentelemetry/api';
-import type { AnyValue } from '@opentelemetry/api-logs';
+import type {
+  Attributes,
+  AttributeValue,
+  Context,
+  AnyValue,
+} from '@opentelemetry/api';
 import { safeRequire } from './node-require';
 import { asString } from './values';
 import type { AttributeRedactorFn } from './attribute-redacting-processor';
@@ -163,7 +167,7 @@ function failedView(): Redacted {
 export class RedactingLogRecordProcessor implements LogRecordProcessor {
   /** Sticky redactions per record and redactor; see the walker. */
   private static readonly sticky = new WeakMap<
-    SdkLogRecord,
+    ReadWriteLogRecord,
     Map<AttributeRedactorFn, Map<string, AnyValue>>
   >();
 
@@ -174,7 +178,7 @@ export class RedactingLogRecordProcessor implements LogRecordProcessor {
     private isSensitiveKey: (key: string) => boolean = () => false,
   ) {}
 
-  onEmit(logRecord: SdkLogRecord, context?: Context): void {
+  onEmit(logRecord: ReadWriteLogRecord, context?: Context): void {
     const byRedactor =
       RedactingLogRecordProcessor.sticky.get(logRecord) ??
       new Map<AttributeRedactorFn, Map<string, AnyValue>>();
@@ -199,7 +203,7 @@ export class RedactingLogRecordProcessor implements LogRecordProcessor {
     // SAFETY: a view inherits every field and method of the record; only the
     // body and attributes are its own, so writes through the setters land on
     // the view (metadata) or are routed to the record (body, attributes).
-    const view = Object.create(logRecord) as SdkLogRecord;
+    const view = Object.create(logRecord) as ReadWriteLogRecord;
     const viewAttributes = () => view.attributes as Record<string, AnyValue>;
     Object.defineProperty(view, 'attributes', {
       value: first.redacted.attributes,
@@ -317,7 +321,7 @@ export class RedactingLogRecordProcessor implements LogRecordProcessor {
   }
 
   private redactRecord(
-    logRecord: SdkLogRecord,
+    logRecord: ReadWriteLogRecord,
     sticky: Map<string, AnyValue>,
   ): RedactedRecord {
     const original = logRecord.attributes as Record<string, AnyValue>;

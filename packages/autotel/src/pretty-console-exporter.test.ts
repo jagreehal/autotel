@@ -13,11 +13,8 @@ import {
   type Span,
 } from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
-import {
-  BasicTracerProvider,
-  SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
+import { TracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
 import { readableSpanDouble } from './testing/doubles';
 
 /**
@@ -494,8 +491,8 @@ describe('PrettyConsoleExporter', () => {
 
     // No context manager is registered here, so parents are passed explicitly.
     function tracerWith(exporter: PrettyConsoleExporter) {
-      const tracer = new BasicTracerProvider({
-        spanProcessors: [new SimpleSpanProcessor(exporter)],
+      const tracer = new TracerProvider({
+        spanProcessors: [new SimpleSpanProcessor({ exporter })],
       }).getTracer('test');
       return (name: string, parent?: Span) =>
         tracer.startSpan(

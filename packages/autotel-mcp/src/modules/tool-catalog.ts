@@ -139,6 +139,18 @@ export function buildToolCatalog(): ToolCatalogEntry[] {
       intent: 'inspect logs',
     },
     {
+      name: 'get_state_transitions',
+      description:
+        'Count persisted state transitions per entity, field, from, to, via and service over a window.',
+      intent: 'compare documented flows with runtime evidence',
+    },
+    {
+      name: 'get_entity_history',
+      description:
+        "Read one entity instance's state.transition log records, oldest first.",
+      intent: 'follow one instance through its states',
+    },
+    {
       name: 'discover_services',
       description:
         'Discover services with cross-signal metadata and usage shape.',

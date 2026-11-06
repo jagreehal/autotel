@@ -1,10 +1,12 @@
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import { context, trace } from '@opentelemetry/api';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import mongoose from 'mongoose';
 import {
-  NodeTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+} from '@opentelemetry/sdk-trace';
 import { instrumentMongoose } from './instrumentation';
 import {
   ATTR_MONGOOSE_METHOD_TYPE,
@@ -21,16 +23,19 @@ const supportsLocalServer = await canListenOnLoopback();
 
 let mongod: TestMongo | undefined;
 let exporter: InMemorySpanExporter;
-let provider: NodeTracerProvider;
+let provider: TracerProvider;
 let uri: string;
 let modelCounter = 0;
 
 beforeAll(async () => {
   exporter = new InMemorySpanExporter();
-  provider = new NodeTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  provider = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
-  provider.register();
+  trace.setGlobalTracerProvider(provider);
+  context.setGlobalContextManager(
+    new AsyncLocalStorageContextManager().enable(),
+  );
 
   if (!supportsLocalServer) {
     return;

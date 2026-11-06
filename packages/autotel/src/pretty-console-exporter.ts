@@ -27,7 +27,7 @@
  * ```
  */
 
-import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 /**

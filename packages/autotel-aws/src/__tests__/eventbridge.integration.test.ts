@@ -52,7 +52,7 @@ describe.skipIf(!isLocalStackAvailable)('EventBridge Integration Tests', () => {
     exporter = new InMemorySpanExporter();
     init({
       service: 'eventbridge-integration-test',
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
 
     // Create test event bus

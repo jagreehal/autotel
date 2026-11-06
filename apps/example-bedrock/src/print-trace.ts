@@ -1,5 +1,5 @@
 import { SpanKind, SpanStatusCode, type HrTime } from '@opentelemetry/api';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 
 const KIND_LABEL = {
   [SpanKind.INTERNAL]: 'internal',

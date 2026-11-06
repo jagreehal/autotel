@@ -4,8 +4,8 @@ import {
   propagation,
   trace,
   type Context,
+  logs,
 } from '@opentelemetry/api';
-import { logs } from '@opentelemetry/api-logs';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import {
@@ -17,7 +17,8 @@ import {
   AlwaysOffSampler,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+  type ReadableSpan,
+} from '@opentelemetry/sdk-trace';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AutotelSdk } from './sdk';
@@ -70,7 +71,7 @@ function tracerSdk(extra: ConstructorParameters<typeof AutotelSdk>[0] = {}) {
   const exporter = new InMemorySpanExporter();
   sdk = new AutotelSdk({
     serviceName: 'sdk-test',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
     ...extra,
   });
   sdk.start();
@@ -264,7 +265,10 @@ describe('AutotelSdk', () => {
     const exporter = recorder<{ name: string }>();
     sdk = new AutotelSdk({
       serviceName: 'sdk-test',
-      spanProcessors: [new SimpleSpanProcessor(exporter as never)],
+      spanProcessors: [
+        // SAFETY: the double implements the exporter methods this test reaches.
+        new SimpleSpanProcessor({ exporter: exporter as never }),
+      ],
     });
     sdk.start();
     trace.getTracer('t').startSpan('op').end();
@@ -273,5 +277,28 @@ describe('AutotelSdk', () => {
     await expect(sdk.shutdown()).resolves.toBeUndefined();
     expect(exporter.seen.map((s) => s.name)).toEqual(['op']);
     sdk = undefined;
+  });
+});
+
+describe('AutotelSdk span limits from the environment', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('applies OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT to real spans', async () => {
+    vi.stubEnv('OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT', '1');
+    const exporter = recorder<ReadableSpan>();
+    sdk = new AutotelSdk({
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
+    });
+    sdk.start();
+
+    const span = trace.getTracer('limits').startSpan('limited');
+    span.setAttribute('kept', 1);
+    span.setAttribute('dropped', 2);
+    span.end();
+    await sdk.shutdown();
+
+    expect(Object.keys(exporter.seen[0]!.attributes)).toEqual(['kept']);
   });
 });

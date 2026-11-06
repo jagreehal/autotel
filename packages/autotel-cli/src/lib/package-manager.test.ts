@@ -85,9 +85,9 @@ describe('package-manager', () => {
     it('should generate npm install command', () => {
       const cmd = getInstallCommand('npm', [
         'autotel',
-        '@opentelemetry/sdk-trace-base',
+        '@opentelemetry/sdk-trace',
       ]);
-      expect(cmd).toBe('npm install autotel @opentelemetry/sdk-trace-base');
+      expect(cmd).toBe('npm install autotel @opentelemetry/sdk-trace');
     });
 
     it('should generate npm install --save-dev command', () => {

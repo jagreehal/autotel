@@ -9,7 +9,7 @@ async function main() {
 
   init({
     service: 'book-04',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // Before: scattered console.log

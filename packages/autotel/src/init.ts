@@ -5,6 +5,7 @@
  * Replaces initInstrumentation() and separate events config.
  */
 
+import { batchSpanOptionsFromEnv } from './env-config';
 import type { Instrumentation } from '@opentelemetry/instrumentation';
 import {
   AutotelSdk,
@@ -22,7 +23,7 @@ import {
   SamplingDecision,
   type Sampler as OtelSampler,
   type SamplingResult,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
   ATTR_SERVICE_NAME,
@@ -294,6 +295,27 @@ export function isLoggerLocked(): boolean {
 }
 
 /**
+ * The deployment environment, from the most specific place it was set: the
+ * `environment` option, then either key in `resourceAttributes` (which includes
+ * `OTEL_RESOURCE_ATTRIBUTES`) or a caller's `resource`, then NODE_ENV.
+ */
+function resolveDeploymentEnvironment(config: AutotelConfig): string {
+  const fromAttributes = (attributes: Attributes | undefined) => {
+    const value =
+      attributes?.['deployment.environment.name'] ??
+      attributes?.['deployment.environment'];
+    return value ? String(value) : undefined;
+  };
+  return (
+    config.environment ||
+    fromAttributes(config.resourceAttributes) ||
+    fromAttributes(config.resource?.attributes) ||
+    process.env.NODE_ENV ||
+    'development'
+  );
+}
+
+/**
  * Initialize autotel - Write Once, Observe Everywhere
  *
  * Follows OpenTelemetry standards: opinionated defaults with full flexibility
@@ -316,11 +338,11 @@ export function isLoggerLocked(): boolean {
  *
  * @example Observe in Jaeger
  * ```typescript
- * import { JaegerExporter } from '@opentelemetry/exporter-jaeger'
+ * import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
  *
  * init({
  *   service: 'my-app',
- *   spanExporter: new JaegerExporter({ endpoint: 'http://localhost:14268/api/traces' })
+ *   spanExporter: new OTLPTraceExporter({ url: 'http://localhost:4318/v1/traces' })
  * })
  * ```
  *
@@ -346,11 +368,11 @@ export function isLoggerLocked(): boolean {
  *
  * @example Console output (dev)
  * ```typescript
- * import { ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
+ * import { ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace'
  *
  * init({
  *   service: 'my-app',
- *   spanProcessor: new SimpleSpanProcessor(new ConsoleSpanExporter())
+ *   spanProcessor: new SimpleSpanProcessor({ exporter: new ConsoleSpanExporter() })
  * })
  * ```
  */
@@ -429,8 +451,7 @@ export function init(cfg: AutotelConfig): void {
   // Only use endpoint if explicitly configured (no default fallback)
   let endpoint = mergedConfig.endpoint ?? devtoolsConfig.endpoint;
   const version = mergedConfig.version || detectVersion();
-  const environment =
-    mergedConfig.environment || process.env.NODE_ENV || 'development';
+  const environment = resolveDeploymentEnvironment(mergedConfig);
   const metricsEnabled = resolveMetricsFlag(mergedConfig.metrics);
   const canonicalLogger = mergedConfig.canonicalLogLines?.logger;
   const hasCanonicalLogger = Array.isArray(canonicalLogger)
@@ -514,9 +535,6 @@ export function init(cfg: AutotelConfig): void {
   let resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: mergedConfig.service,
     [ATTR_SERVICE_VERSION]: version,
-    // Support both old and new OpenTelemetry semantic conventions for environment
-    'deployment.environment': environment, // Deprecated but widely supported
-    'deployment.environment.name': environment, // OTel v1.27.0+ standard
   });
 
   // `host.name` is the convention, and what Datadog and every other backend
@@ -536,6 +554,16 @@ export function init(cfg: AutotelConfig): void {
       resourceFromAttributes(mergedConfig.resourceAttributes),
     );
   }
+
+  // Both keys carry the one resolved value: `deployment.environment.name` and
+  // the older `deployment.environment` that many backends still read. Merged
+  // last, so neither key keeps a value of its own.
+  resource = resource.merge(
+    resourceFromAttributes({
+      'deployment.environment': environment,
+      'deployment.environment.name': environment,
+    }),
+  );
 
   const otlpDestinations = resolveOtlpDestinations(mergedConfig, endpoint);
 
@@ -602,10 +630,13 @@ export function init(cfg: AutotelConfig): void {
     // User provided custom exporters (wrap each with tail sampling)
     for (const exporter of configuredSpanExporters) {
       spanProcessors.push(
-        new TailSamplingSpanProcessor(new BatchSpanProcessor(exporter), {
-          ...mergedConfig.tailSampling,
-          sampler: autotelSampler,
-        }),
+        new TailSamplingSpanProcessor(
+          new BatchSpanProcessor({ exporter, ...batchSpanOptionsFromEnv() }),
+          {
+            ...mergedConfig.tailSampling,
+            sampler: autotelSampler,
+          },
+        ),
       );
     }
   } else {
@@ -622,10 +653,16 @@ export function init(cfg: AutotelConfig): void {
       });
 
       spanProcessors.push(
-        new TailSamplingSpanProcessor(new BatchSpanProcessor(traceExporter), {
-          ...mergedConfig.tailSampling,
-          sampler: autotelSampler,
-        }),
+        new TailSamplingSpanProcessor(
+          new BatchSpanProcessor({
+            exporter: traceExporter,
+            ...batchSpanOptionsFromEnv(),
+          }),
+          {
+            ...mergedConfig.tailSampling,
+            sampler: autotelSampler,
+          },
+        ),
       );
     }
   }
@@ -649,10 +686,14 @@ export function init(cfg: AutotelConfig): void {
 
   if (debugMode === 'pretty') {
     // Pretty debug: colorized, hierarchical output
-    spanProcessors.push(new SimpleSpanProcessor(new PrettyConsoleExporter()));
+    spanProcessors.push(
+      new SimpleSpanProcessor({ exporter: new PrettyConsoleExporter() }),
+    );
   } else if (debugMode === true) {
     // Raw debug: JSON output
-    spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
+    spanProcessors.push(
+      new SimpleSpanProcessor({ exporter: new ConsoleSpanExporter() }),
+    );
   }
 
   // Add canonical log line processor BEFORE wrapping processors
@@ -1098,6 +1139,12 @@ export function init(cfg: AutotelConfig): void {
   }
   sdk = next;
   sdk.start();
+  if (sdk instanceof AutotelSdk && sdk.tracerProviderRefused) {
+    setupWarn(
+      "[autotel] Another tracer provider is already registered, so autotel's spans will not be exported. " +
+        'Something else started an OpenTelemetry SDK before init(): turn it off, or call init() first.',
+    );
+  }
   const instrumentations = (finalInstrumentations ?? []).flat();
   adoptInstrumentations(
     instrumentationsInUse.filter((i) => !instrumentations.includes(i)),

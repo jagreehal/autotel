@@ -92,6 +92,12 @@ export interface MetricSeriesQuery {
   endTimeUnixMs?: number;
   serviceName?: string;
   limit?: number;
+  /**
+   * Attributes the series must keep apart, for a counter read as counts.
+   * A backend that aggregates at query time (Datadog) sums within this grouping
+   * and answers with `temporality: 'delta'`. Others return every series anyway.
+   */
+  groupBy?: string[];
 }
 
 export interface LogSearchQuery {
@@ -110,6 +116,8 @@ export interface LogSearchQuery {
 export interface MetricPoint {
   timestampUnixMs: number;
   value: number;
+  /** When a cumulative series began counting, where the backend keeps it. */
+  startTimeUnixMs?: number;
 }
 
 export interface MetricSeries {
@@ -117,6 +125,12 @@ export interface MetricSeries {
   unit?: string;
   points: MetricPoint[];
   attributes?: Record<string, TagValue>;
+  /**
+   * For a counter: whether each point is an increment (`delta`) or a running
+   * total (`cumulative`). Absent means not known, and is read as cumulative,
+   * the OTLP default.
+   */
+  temporality?: 'delta' | 'cumulative';
 }
 
 export interface LogRecord {

@@ -45,6 +45,9 @@ import { EventSubscriber, type EventPayload } from './event-subscriber-base';
 export const ARCHITECTURE_SNAPSHOT_SPEC =
   'autotel-architecture/v0.1.0' as const;
 
+/** The event `transition()` from `autotel` reaches subscribers as. */
+const STATE_TRANSITION_EVENT = 'state.transition';
+
 export type ArchitectureSnapshot = {
   spec: typeof ARCHITECTURE_SNAPSHOT_SPEC;
   generatedAt: string;
@@ -61,6 +64,24 @@ export type ArchitectureSnapshot = {
    * and `traceStep` spans. Present once the `spanProcessor` sees a workflow.
    */
   workflows?: Record<string, WorkflowObservation>;
+  /**
+   * State transitions seen through `transition()`, aggregated with no entity
+   * ids. Present once one is seen. Absence means none was seen, not that the
+   * entity cannot change state.
+   */
+  transitions?: TransitionObservation[];
+};
+
+/** One observed move between two states of an entity's field. */
+export type TransitionObservation = {
+  entity: string;
+  field: string;
+  from: string;
+  to: string;
+  via: string;
+  count: number;
+  firstSeen: string;
+  lastSeen: string;
 };
 
 export type WorkflowObservation = {
@@ -180,12 +201,7 @@ export interface ConsumerSpanLike {
 }
 
 /** What a span or resource attribute can hold once recorded. */
-export type SpanAttributeValue =
-  | string
-  | number
-  | boolean
-  | Array<string | number | boolean | null | undefined>
-  | undefined;
+export type SpanAttributeValue = unknown;
 
 /** The SpanProcessor shape `init({ spanProcessors })` accepts. */
 export interface ConsumerSpanProcessor {
@@ -505,6 +521,7 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
   private readonly workflows = new Map<string, WorkflowTally>();
   /** Step spans waiting for the workflow span they ran under to end. */
   private readonly stepRuns = new Map<string, StepRun[]>();
+  private readonly transitions = new Map<string, TransitionObservation>();
   private consumersMeasured = false;
   private processor?: ConsumerSpanProcessor;
 
@@ -658,10 +675,57 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
     }
   }
 
+  /**
+   * Transitions stay out of `events`: they are not a message anything
+   * publishes, and their field stats would sample state values.
+   */
+  private recordTransition(payload: EventPayload): void {
+    const attrs = payload.attributes ?? {};
+    const [entity, field, from, to] = [
+      attrs['state.entity'],
+      attrs['state.field'],
+      attrs['state.from'],
+      attrs['state.to'],
+    ];
+    if (
+      typeof entity !== 'string' ||
+      typeof field !== 'string' ||
+      typeof from !== 'string' ||
+      typeof to !== 'string'
+    ) {
+      return;
+    }
+    const via =
+      typeof attrs['state.via'] === 'string' ? attrs['state.via'] : 'unknown';
+    const key = JSON.stringify([entity, field, from, to, via]);
+    const seen = payload.timestamp;
+    const existing = this.transitions.get(key);
+    if (existing) {
+      existing.count += 1;
+      if (seen < existing.firstSeen) existing.firstSeen = seen;
+      if (seen > existing.lastSeen) existing.lastSeen = seen;
+      return;
+    }
+    this.transitions.set(key, {
+      entity,
+      field,
+      from,
+      to,
+      via,
+      count: 1,
+      firstSeen: seen,
+      lastSeen: seen,
+    });
+  }
+
   protected async sendToDestination(payload: EventPayload): Promise<void> {
     // Only `track()` events feed the architecture snapshot. Funnels, outcomes,
     // and value metrics belong to product analytics, not the architecture model.
     if (payload.type !== 'event') return;
+    if (payload.name === STATE_TRANSITION_EVENT) {
+      this.recordTransition(payload);
+      return;
+    }
 
     const existing = this.observations.get(payload.name);
     const now = payload.timestamp;
@@ -846,6 +910,15 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
             ]),
         ),
       }),
+      ...(this.transitions.size > 0 && {
+        transitions: [...this.transitions]
+          .toSorted(([a], [b]) => a.localeCompare(b))
+          .map(([, observed]) => ({
+            ...observed,
+            firstSeen: freezeTimestamps ?? observed.firstSeen,
+            lastSeen: freezeTimestamps ?? observed.lastSeen,
+          })),
+      }),
     };
   }
 
@@ -872,6 +945,7 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
     this.receipts.clear();
     this.workflows.clear();
     this.stepRuns.clear();
+    this.transitions.clear();
   }
 }
 

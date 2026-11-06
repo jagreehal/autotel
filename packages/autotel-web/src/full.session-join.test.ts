@@ -6,10 +6,7 @@
  * clicks, vitals and console logs from the same visit.
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type {
-  ReadableSpan,
-  SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace';
 import { flushSpans, recordEvent, resetForTesting } from './span-exporter';
 import { initFull, resetFullForTesting, span } from './full';
 import { enrichSpans, resetJoinForTesting } from './join';

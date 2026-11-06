@@ -59,6 +59,8 @@ export function buildCapabilitiesDocument(
           'list_metrics',
           'get_metric_series',
           'search_logs',
+          'get_state_transitions',
+          'get_entity_history',
           'discover_trace_fields',
           'discover_log_fields',
         ],

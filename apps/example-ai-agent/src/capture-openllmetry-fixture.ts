@@ -125,7 +125,7 @@ async function main(): Promise<void> {
 
   await shutdown();
 
-  // SAFETY: the in-memory exporter and this file resolve @opentelemetry/sdk-trace-base
+  // SAFETY: the in-memory exporter and this file resolve @opentelemetry/sdk-trace
   // through different dependency paths, so the ReadableSpan they each name is the same
   // shape under two identities. Only the fields toSpanData reads are touched.
   const spans = exporter.getFinishedSpans() as ReadableSpan[];

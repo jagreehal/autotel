@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import type { EventAttributes } from 'autotel/event-subscriber';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { init, shutdown, trace } from 'autotel';
+import { init, shutdown, trace, transition } from 'autotel';
 import { traceStep, traceWorkflow } from 'autotel/workflow';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -633,5 +633,80 @@ describe('ArchitectureSnapshotSubscriber workflow measurement', () => {
   it('writes no workflows key when no workflow ran', async () => {
     await sub.trackEvent('order.placed', { orderId: 'o-1' });
     expect(sub.toSnapshot({ now: FIXED_NOW })).not.toHaveProperty('workflows');
+  });
+});
+
+describe('state transitions', () => {
+  const paid = (at: string) =>
+    event(
+      'state.transition',
+      {
+        'state.entity': 'order',
+        'state.field': 'status',
+        'state.from': 'pending',
+        'state.to': 'paid',
+        'state.via': 'checkout',
+      },
+      { at },
+    );
+
+  it('aggregates transitions with counts and first and last seen', async () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    await sub['sendToDestination'](paid('2026-05-21T18:02:00.000Z'));
+    await sub['sendToDestination'](paid('2026-05-21T18:01:00.000Z'));
+    await sub['sendToDestination'](paid('2026-05-21T18:03:00.000Z'));
+
+    const snapshot = sub.toSnapshot({ now: FIXED_NOW });
+    expect(snapshot.spec).toBe(ARCHITECTURE_SNAPSHOT_SPEC);
+    expect(snapshot.transitions).toEqual([
+      {
+        entity: 'order',
+        field: 'status',
+        from: 'pending',
+        to: 'paid',
+        via: 'checkout',
+        count: 3,
+        firstSeen: '2026-05-21T18:01:00.000Z',
+        lastSeen: '2026-05-21T18:03:00.000Z',
+      },
+    ]);
+    expect(snapshot.events['state.transition']).toBeUndefined();
+  });
+
+  it('leaves the field out of a snapshot that saw none', () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    expect(sub.toSnapshot({ now: FIXED_NOW })).not.toHaveProperty(
+      'transitions',
+    );
+  });
+
+  it('observes transition() end to end, with no ids', async () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    init({ service: 'orders', subscribers: [sub] });
+
+    const move = {
+      entity: 'order',
+      field: 'status',
+      from: 'pending',
+      to: 'paid',
+      via: 'checkout',
+      history: true,
+    };
+    transition({ ...move, id: 'order-1' });
+    transition({ ...move, id: 'order-2' });
+    await shutdown();
+
+    const snapshot = sub.toSnapshot({ now: FIXED_NOW });
+    expect(snapshot.transitions).toMatchObject([
+      { entity: 'order', to: 'paid', via: 'checkout', count: 2 },
+    ]);
+    expect(JSON.stringify(snapshot)).not.toContain('order-1');
+  });
+
+  it('forgets transitions on reset', async () => {
+    const sub = new ArchitectureSnapshotSubscriber({ service: 'orders' });
+    await sub['sendToDestination'](paid('2026-05-21T18:02:00.000Z'));
+    sub.reset();
+    expect(sub.toSnapshot({ now: FIXED_NOW }).transitions).toBeUndefined();
   });
 });

@@ -14,7 +14,7 @@ import type {
   Sampler,
   SpanExporter,
   SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 // Re-export commonly used types
 
@@ -333,4 +333,4 @@ export {
   type Span,
   type SpanOptions,
 } from '@opentelemetry/api';
-export { type ReadableSpan } from '@opentelemetry/sdk-trace-base';
+export { type ReadableSpan } from '@opentelemetry/sdk-trace';

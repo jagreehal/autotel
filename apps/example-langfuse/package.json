@@ -9,7 +9,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api": "^1.10.0",
     "ai": "7.0.143",
     "ai-sdk-ollama": "4.5.1",
     "autotel": "workspace:*",

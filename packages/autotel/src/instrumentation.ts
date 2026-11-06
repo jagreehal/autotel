@@ -1,8 +1,9 @@
+import { batchSpanOptionsFromEnv } from './env-config';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
 import { getLogger } from './init';
 import {
@@ -261,18 +262,23 @@ export async function initInstrumentation(
 
   // Enables tail sampling via autotel.sampling.tail.keep attribute
   const spanProcessor = new TailSamplingSpanProcessor(
-    new BatchSpanProcessor(traceExporter),
+    new BatchSpanProcessor({
+      exporter: traceExporter,
+      ...batchSpanOptionsFromEnv(),
+    }),
   );
 
   const sdk = new NodeSDK({
     resource,
-    spanProcessor, // Use our wrapped processor instead of traceExporter directly
-    metricReader: new PeriodicExportingMetricReader({
-      exporter: new OTLPMetricExporter({
-        url: `${config.otlpEndpoint || 'http://localhost:4318'}/v1/metrics`,
-        headers: otlpHeaders,
+    spanProcessors: [spanProcessor], // Our wrapped processor, not traceExporter directly
+    metricReaders: [
+      new PeriodicExportingMetricReader({
+        exporter: new OTLPMetricExporter({
+          url: `${config.otlpEndpoint || 'http://localhost:4318'}/v1/metrics`,
+          headers: otlpHeaders,
+        }),
       }),
-    }),
+    ],
     logRecordProcessors: [
       new BatchLogRecordProcessor({
         exporter: new OTLPLogExporter({

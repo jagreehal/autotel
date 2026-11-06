@@ -73,6 +73,7 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
   - [Business Metrics \& Product Events](#business-metrics--product-events)
     - [OpenTelemetry Metrics (Metric class + helpers)](#opentelemetry-metrics-metric-class--helpers)
     - [Product Events (PostHog, Mixpanel, Amplitude, …)](#product-events-posthog-mixpanel-amplitude-)
+  - [State Transitions](#state-transitions)
   - [Logging with Trace Context](#logging-with-trace-context)
     - [Using Pino (recommended)](#using-pino-recommended)
     - [Using Winston](#using-winston)
@@ -310,18 +311,20 @@ init({
 init({
   service: 'my-app',
   // Custom pipeline with your own exporters/readers
-  spanProcessor: new BatchSpanProcessor(
-    new JaegerExporter({ endpoint: 'http://otel:14268/api/traces' }),
-  ),
+  spanProcessor: new BatchSpanProcessor({
+    exporter: new OTLPTraceExporter({ url: 'http://otel:4318/v1/traces' }),
+  }),
   metricReader: new PeriodicExportingMetricReader({
     exporter: new OTLPMetricExporter({
       url: 'https://metrics.example.com/v1/metrics',
     }),
   }),
   logRecordProcessors: [
-    new BatchLogRecordProcessor(
-      new OTLPLogExporter({ url: 'https://logs.example.com/v1/logs' }),
-    ),
+    new BatchLogRecordProcessor({
+      exporter: new OTLPLogExporter({
+        url: 'https://logs.example.com/v1/logs',
+      }),
+    }),
   ],
   instrumentations: [new HttpInstrumentation()],
 });
@@ -1123,7 +1126,7 @@ const enrichedResource = mergeServiceResource(baseResource, {
 });
 
 // Use with custom TracerProvider
-const provider = new NodeTracerProvider({ resource: enrichedResource });
+const provider = new SdkTracerProvider({ resource: enrichedResource });
 ```
 
 ## Event-Driven Architectures
@@ -1633,6 +1636,46 @@ marketingEvents.trackEvent('campaign.viewed', { campaignId: '123' });
 - If neither configured → events logged only (graceful degradation)
 
 Auto-enrichment adds `traceId`, `spanId`, `correlationId`, `operation.name`, `service.version`, and `deployment.environment` to every event payload without manual wiring.
+
+## State Transitions
+
+In most systems a state change is a status write in a database, not an event. `transition()` records one, and the record does not depend on trace sampling, so it holds up where production keeps a small share of traces.
+
+```typescript
+import { transition } from 'autotel';
+
+const { modifiedCount } = await orders.updateOne(
+  { _id: id, status: 'pending' },
+  { $set: { status: 'paid' } },
+);
+
+if (modifiedCount === 1) {
+  transition({
+    entity: 'order',
+    field: 'status',
+    from: 'pending',
+    to: 'paid',
+    via: 'checkout',
+  });
+}
+```
+
+Call it **after the write succeeded, and only when a document actually changed**. It records a persisted transition. An attempted transition is not this signal.
+
+| Signal                        | When                                | Carries the id?           |
+| ----------------------------- | ----------------------------------- | ------------------------- |
+| `autotel.state.transitions`   | Always, sampled or not, span or not | Never                     |
+| `state.transition` span event | A recording span is active          | Only with `history: true` |
+| `state.transition` log record | `history: true` and `id` given      | Yes, as `state.id`        |
+| `state.transition` event      | `init()` configured `subscribers`   | Never                     |
+
+The counter's attributes are `state.entity`, `state.field`, `state.from`, `state.to` and `state.via` (default `unknown`). Each one multiplies the metric's series, so keep them to a small fixed vocabulary. The id is never a metric attribute.
+
+`history: true` keeps one instance's history in your log backend, under that backend's existing access control. It is off by default, adds no new store, and needs log export configured in `init()`.
+
+`transition()` never throws, so telemetry cannot break the write path. Counts are best-effort evidence, not an authoritative number: a process that dies before its next export loses what it had not sent.
+
+Subscribers receive every transition through `track()`, including analytics destinations you may be billed per event for. Use `autotel-subscribers`' middleware to filter `state.transition` out where it does not belong.
 
 ## Logging with Trace Context
 
@@ -2152,7 +2195,7 @@ init({
 
 OpenTelemetry's auto-instrumentation packages require special setup depending on your module system:
 
-**ESM Setup (Recommended for Node 18.19+)**
+**ESM Setup**
 
 Use `autotel/register` for clean ESM instrumentation without complex `NODE_OPTIONS`:
 
@@ -2204,14 +2247,6 @@ node --require ./instrumentation.js src/server.js
 
 ```bash
 OTEL_SERVICE_NAME=my-app tsx --import autotel/auto src/index.ts
-```
-
-**Legacy ESM (Node 18.0-18.18)**
-
-If you can't use `autotel/register`, use the `--experimental-loader` flag:
-
-```bash
-NODE_OPTIONS="--experimental-loader=@opentelemetry/instrumentation/hook.mjs --import ./instrumentation.ts" tsx src/server.ts
 ```
 
 **Note:** The loader hook is an OpenTelemetry upstream requirement for ESM, not an autotel limitation. See [OpenTelemetry ESM docs](https://opentelemetry.io/docs/languages/js/getting-started/nodejs/#esm-support) for details.
@@ -3001,7 +3036,7 @@ Use `ConsoleSpanExporter` to print all spans to the console in real-time. This i
 
 ```typescript
 import { init } from 'autotel';
-import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base';
+import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace';
 
 init({
   service: 'my-app',
@@ -3023,13 +3058,13 @@ import { init } from 'autotel';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 const exporter = new InMemorySpanExporter();
 
 init({
   service: 'test',
-  spanProcessor: new SimpleSpanProcessor(exporter),
+  spanProcessor: new SimpleSpanProcessor({ exporter }),
 });
 
 // After running your code...

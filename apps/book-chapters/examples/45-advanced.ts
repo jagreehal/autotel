@@ -13,7 +13,7 @@ async function main() {
 
   init({
     service: 'book-45',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // 1. Deterministic trace IDs: same seed → same 128-bit ID

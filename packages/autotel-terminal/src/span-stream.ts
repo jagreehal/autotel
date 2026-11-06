@@ -6,7 +6,7 @@
  */
 
 import type { SpanAttributes } from './attrs.js';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 import { SpanStatusCode, SpanKind } from 'autotel';
 import type { StreamingSpanProcessor } from './streaming-processor';
 

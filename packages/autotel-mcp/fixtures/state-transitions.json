@@ -1,0 +1,147 @@
+{
+  "metrics": [
+    {
+      "metricName": "autotel.state.transitions",
+      "unit": "1",
+      "temporality": "delta",
+      "points": [
+        {
+          "timestampUnixMs": 1000,
+          "value": 5
+        },
+        {
+          "timestampUnixMs": 2000,
+          "value": 7
+        }
+      ],
+      "attributes": {
+        "service.name": "api",
+        "state.entity": "order",
+        "state.field": "status",
+        "state.from": "pending",
+        "state.to": "paid",
+        "state.via": "checkout"
+      }
+    },
+    {
+      "metricName": "autotel.state.transitions",
+      "unit": "1",
+      "temporality": "cumulative",
+      "points": [
+        {
+          "timestampUnixMs": -7200000,
+          "value": 10
+        },
+        {
+          "timestampUnixMs": 2000,
+          "value": 13
+        },
+        {
+          "timestampUnixMs": 3000,
+          "value": 2
+        }
+      ],
+      "attributes": {
+        "service.name": "api",
+        "service.instance.id": "one",
+        "state.entity": "order",
+        "state.field": "status",
+        "state.from": "paid",
+        "state.to": "shipped",
+        "state.via": "fulfilment"
+      }
+    },
+    {
+      "metricName": "autotel.state.transitions",
+      "unit": "1",
+      "temporality": "cumulative",
+      "points": [
+        {
+          "timestampUnixMs": -7200000,
+          "value": 4
+        },
+        {
+          "timestampUnixMs": 2000,
+          "value": 5
+        }
+      ],
+      "attributes": {
+        "service.name": "api",
+        "service.instance.id": "two",
+        "state.entity": "order",
+        "state.field": "status",
+        "state.from": "paid",
+        "state.to": "shipped",
+        "state.via": "fulfilment"
+      }
+    },
+    {
+      "metricName": "autotel.state.transitions",
+      "unit": "1",
+      "temporality": "cumulative",
+      "points": [
+        {
+          "timestampUnixMs": -7200000,
+          "value": 9
+        },
+        {
+          "timestampUnixMs": 2000,
+          "value": 9
+        }
+      ],
+      "attributes": {
+        "service.name": "billing",
+        "state.entity": "invoice",
+        "state.field": "state",
+        "state.from": "draft",
+        "state.to": "sent",
+        "state.via": "unknown"
+      }
+    }
+  ],
+  "logs": [
+    {
+      "timestampUnixMs": 1793000060000,
+      "severityText": "INFO",
+      "body": "state.transition",
+      "serviceName": "api",
+      "traceId": "fixture-trace-2",
+      "attributes": {
+        "state.entity": "order",
+        "state.field": "status",
+        "state.id": "123",
+        "state.from": "paid",
+        "state.to": "shipped",
+        "state.via": "fulfilment"
+      }
+    },
+    {
+      "timestampUnixMs": 1793000000000,
+      "severityText": "INFO",
+      "body": "state.transition",
+      "serviceName": "api",
+      "attributes": {
+        "state.entity": "order",
+        "state.field": "status",
+        "state.id": "123",
+        "state.from": "pending",
+        "state.to": "paid",
+        "state.via": "checkout"
+      }
+    },
+    {
+      "timestampUnixMs": 1793000030000,
+      "severityText": "INFO",
+      "body": "state.transition",
+      "serviceName": "api",
+      "attributes": {
+        "state.entity": "order",
+        "state.field": "status",
+        "state.id": "456",
+        "state.from": "pending",
+        "state.to": "paid",
+        "state.via": "checkout"
+      }
+    }
+  ]
+}

@@ -35,7 +35,7 @@ export default defineConfig({
     neverBundle: [
       'ws',
       '@opentelemetry/api',
-      '@opentelemetry/sdk-trace-base',
+      '@opentelemetry/sdk-trace',
       '@opentelemetry/sdk-logs',
       '@opentelemetry/core',
       'autotel',

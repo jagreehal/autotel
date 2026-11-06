@@ -6,12 +6,12 @@ An MCP server that gives AI agents the ability to investigate OpenTelemetry trac
 
 - **Backend-agnostic.** Built-in OTLP collector on port 4318 accepts data from any OTel-instrumented app.
 - **All three signals.** Traces, metrics, and logs: with cross-signal correlation.
-- **Agent-optimized.** 51 tools designed for progressive investigation: discover → diagnose → correlate → root cause.
+- **Agent-optimized.** 53 tools designed for progressive investigation: discover → diagnose → correlate → root cause.
 - **Zero infrastructure.** In-memory by default, persistent with `--persist`.
 
 ### Requirements
 
-- Node.js 20 or newer
+- Node.js 22.15 or newer
 - An MCP client: Claude Code, Claude Desktop, VS Code, Cursor, Windsurf, Goose, or any other MCP client
 
 ## Getting started
@@ -230,7 +230,7 @@ AI Agent ──MCP──────────┘
 
 1. Your instrumented app sends traces/metrics/logs via OTLP to `http://localhost:4318`
 2. autotel-mcp stores the data in libsql (in-memory by default)
-3. Your AI agent connects via MCP and investigates using 51 tools
+3. Your AI agent connects via MCP and investigates using 53 tools
 
 ## Backends
 
@@ -521,7 +521,7 @@ them can run an investigation without stopping to ask about each query.
 
 ## Tools
 
-51 tools organized by investigation workflow, when the backend serves traces,
+53 tools organized by investigation workflow, when the backend serves traces,
 metrics and logs. Tools for a signal the backend lacks are not registered.
 
 Every tool rejects an argument it does not take, naming it. A result that stops at its
@@ -621,11 +621,13 @@ Every backend returns nested attributes as dotted keys (`nested.id: 1`) and arra
 </details>
 
 <details>
-<summary><b>Signals (3)</b></summary>
+<summary><b>Signals (5)</b></summary>
 
 - **list_metrics**: Available metric series (names and metadata)
 - **get_metric_series**: Data points for one metric over a time window
 - **search_logs**: Log search by severity, service, trace ID, text
+- **get_state_transitions**: Persisted state transitions per entity, field, from, to, via and service, from the `autotel.state.transitions` metric. Answers the `autotel-transitions/v0.1.0` document with no `ok`/`data` envelope. `instrumented` lists each entity and field with any series in the window; a transition's absence means not instrumented or not seen. Counts are best-effort. On Datadog, tag values come back normalized (lower case, so `Paid` reads `paid`). A collector receiving delta temporality reads as cumulative, because it does not store temporality, so its counts are unreliable
+- **get_entity_history**: One instance's `state.transition` log records, oldest first, written by `transition({ history: true, id })`. Says so when the backend has none. Loki cannot serve it yet: its search turns attributes into stream labels, and `state.entity` is not a valid label
 
 </details>
 

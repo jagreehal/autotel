@@ -10,7 +10,7 @@ async function main() {
 
   init({
     service: 'book-14',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // traceHTTP uses (ctx) => fn pattern with HTTP semantic conventions

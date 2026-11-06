@@ -1,5 +1,4 @@
-import { context, metrics, propagation, trace } from '@opentelemetry/api';
-import { logs } from '@opentelemetry/api-logs';
+import { context, metrics, propagation, trace, logs } from '@opentelemetry/api';
 import {
   BatchLogRecordProcessor,
   InMemoryLogRecordExporter,
@@ -8,7 +7,7 @@ import {
 import {
   BatchSpanProcessor,
   InMemorySpanExporter,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSdk, init } from './init';
 import { flush, shutdown } from './shutdown';
@@ -35,7 +34,10 @@ function setup() {
     instrumentations: [],
     flushOnExit: false,
     spanProcessors: [
-      new BatchSpanProcessor(spans, { scheduledDelayMillis: 600_000 }),
+      new BatchSpanProcessor({
+        exporter: spans,
+        scheduledDelayMillis: 600_000,
+      }),
     ],
     logRecordProcessors: [
       new BatchLogRecordProcessor({

@@ -27,7 +27,7 @@
  * Imports no Datadog package: RUM is read structurally.
  */
 
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace';
 import { currentSpanContext, enrichSpans } from 'autotel-web/join';
 import {
   asIdentifier,

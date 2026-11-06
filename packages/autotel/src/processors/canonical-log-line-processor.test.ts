@@ -3,16 +3,16 @@ import {
   CanonicalLogLineProcessor,
   type CanonicalLogLineEvent,
 } from './canonical-log-line-processor';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 import { asString, type UnknownRecord } from '../values';
 import {
   SpanKind,
   SpanStatusCode,
   type Attributes,
   type AttributeValue,
+  logs,
 } from '@opentelemetry/api';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import { logs } from '@opentelemetry/api-logs';
 import type { Logger } from '../logger';
 import {
   loggerDouble,

@@ -59,8 +59,8 @@ export const processOrder = withTracing({})((ctx) => async (order: Order) => {
 For library authors who want to use Autotel without interfering with the application's global OTel setup:
 
 ```typescript
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { setAutotelTracerProvider } from 'autotel/tracer-provider';
 
@@ -68,8 +68,9 @@ import { setAutotelTracerProvider } from 'autotel/tracer-provider';
 const exporter = new OTLPTraceExporter({
   url: 'https://your-backend.com/v1/traces',
 });
-const provider = new NodeTracerProvider();
-provider.addSpanProcessor(new BatchSpanProcessor(exporter));
+const provider = new TracerProvider({
+  spanProcessors: [new BatchSpanProcessor({ exporter })],
+});
 
 // Set as Autotel's provider (isolated from global OTel)
 setAutotelTracerProvider(provider);

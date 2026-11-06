@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^8.7.3",
-    "@opentelemetry/otlp-transformer": "^0.223.0",
+    "@opentelemetry/otlp-transformer": "^0.301.0",
     "autotel-mcp": "workspace:*",
     "chalk": "^6.0.1",
     "commander": "^15.0.0",
@@ -47,7 +47,7 @@
     "vitest": "^5.0.5"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.15.0"
   },
   "keywords": [
     "opentelemetry",

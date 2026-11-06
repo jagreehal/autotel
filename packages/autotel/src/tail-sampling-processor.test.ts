@@ -12,7 +12,8 @@ import {
 import type {
   SpanProcessor,
   ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+  Span,
+} from '@opentelemetry/sdk-trace';
 import {
   ROOT_CONTEXT,
   SpanStatusCode,
@@ -21,12 +22,11 @@ import {
   type Attributes,
 } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { FilteringSpanProcessor } from './filtering-span-processor';
-import type { Span } from '@opentelemetry/sdk-trace-base';
 
 // Mock span processor
 class MockSpanProcessor implements SpanProcessor {
@@ -568,10 +568,10 @@ describe('spanFilter beside a remote parent', () => {
   // the bubble must not take the request with it.
   it('drops only the filtered local root, not its siblings or their children', async () => {
     const exporter = new InMemorySpanExporter();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [
         new FilteringSpanProcessor(
-          new TailSamplingSpanProcessor(new SimpleSpanProcessor(exporter)),
+          new TailSamplingSpanProcessor(new SimpleSpanProcessor({ exporter })),
           { filter: (span) => span.attributes['next.bubble'] !== true },
         ),
       ],
@@ -608,10 +608,10 @@ describe('spanFilter beside a remote parent', () => {
     // How autotel-genai parents its late `signals` span: a bare span context,
     // after the parent has ended and its trace has been decided.
     const exporter = new InMemorySpanExporter();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [
         new FilteringSpanProcessor(
-          new TailSamplingSpanProcessor(new SimpleSpanProcessor(exporter)),
+          new TailSamplingSpanProcessor(new SimpleSpanProcessor({ exporter })),
           { filter: (span) => span.name !== 'health' },
         ),
       ],

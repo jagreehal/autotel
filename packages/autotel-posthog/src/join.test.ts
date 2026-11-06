@@ -2,8 +2,8 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { context, trace as otelTrace } from '@opentelemetry/api';
 import type { AttributeValue, Attributes } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
-import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 import type { BeforeSendFn } from 'posthog-js';
 import { clearBaggage, getBaggageEntries } from 'autotel-web/baggage';
 
@@ -217,7 +217,7 @@ describe('session baggage', () => {
     // happen — the fetch came back, the card was declined — and without a
     // fallback every one of them ships with no trace on it.
     const posthog = fakePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog)],
     });
     const span = provider.getTracer('test').startSpan('checkout.click');
@@ -235,7 +235,7 @@ describe('session baggage', () => {
 
   it('prefers the active context over the fallback', () => {
     const posthog = fakePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog)],
     });
     const tracer = provider.getTracer('test');
@@ -257,7 +257,7 @@ describe('session baggage', () => {
     // A finished span is not where the user is. Stamping it would point the
     // reader at an operation that was already over when the event happened.
     const posthog = fakePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog)],
     });
     const span = provider.getTracer('test').startSpan('checkout.click');
@@ -274,7 +274,7 @@ describe('session baggage', () => {
 
   it('keeps the outer span while an inner one ends', () => {
     const posthog = fakePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog)],
     });
     const tracer = provider.getTracer('test');
@@ -298,7 +298,7 @@ describe('session baggage', () => {
     // recent" here is not a wrong span — it is a wrong trace, and a reader
     // following it lands in an unrelated request. Nothing beats wrong.
     const posthog = fakePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog)],
     });
     const tracer = provider.getTracer('test');
@@ -320,7 +320,7 @@ describe('session baggage', () => {
 
   it('still answers once the other trace has finished', () => {
     const posthog = fakePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog)],
     });
     const tracer = provider.getTracer('test');
@@ -344,7 +344,7 @@ describe('session baggage', () => {
     // the life of the page.
     const posthog = fakePostHog();
     const join = joinPostHog(posthog);
-    const provider = new BasicTracerProvider({ spanProcessors: [join] });
+    const provider = new TracerProvider({ spanProcessors: [join] });
     const tracer = provider.getTracer('test');
 
     for (let index = 0; index < 5000; index += 1) {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { context as api_context, trace } from '@opentelemetry/api';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace';
 import { WorkerTracer } from './tracer';
 import { WorkerTracerProvider } from './provider';
 import {

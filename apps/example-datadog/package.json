@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@datadog/browser-rum": "7.16.1",
-    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api": "^1.10.0",
     "autotel": "workspace:*",
     "autotel-backends": "workspace:*",
     "autotel-datadog": "workspace:*",

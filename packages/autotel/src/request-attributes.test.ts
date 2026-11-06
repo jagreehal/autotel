@@ -6,7 +6,7 @@ import {
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { requestCtx, span, trace, withNewContext } from './functional';
 import { init } from './init';
@@ -28,7 +28,7 @@ describe('requestCtx attributes on the spans a request starts', () => {
     init({
       service: 'request-attributes-test',
       sampling: 'development',
-      spanProcessor: new SimpleSpanProcessor(exporter),
+      spanProcessor: new SimpleSpanProcessor({ exporter }),
       attributeRedactor: { keyPatterns: [/^secret$/] },
     });
   });
@@ -73,10 +73,10 @@ describe('requestCtx attributes on the spans a request starts', () => {
       import assert from 'node:assert/strict';
       import { setImmediate } from 'node:timers/promises';
       import { ROOT_CONTEXT, trace } from '@opentelemetry/api';
-      import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
+      import { TracerProvider } from '@opentelemetry/sdk-trace';
       import { RequestAttributesSpanProcessor, rememberRequestAttributes }
         from ${JSON.stringify(new URL('request-attributes.ts', import.meta.url).href)};
-      const provider = new BasicTracerProvider({
+      const provider = new TracerProvider({
         spanProcessors: [new RequestAttributesSpanProcessor()],
       });
       const tracer = provider.getTracer('retention-test');

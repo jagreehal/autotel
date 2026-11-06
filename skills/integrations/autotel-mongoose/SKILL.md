@@ -178,6 +178,20 @@ Hook spans use `SpanKind.INTERNAL` and carry `hook.type`, `hook.operation`, `hoo
 
 Internal Mongoose hooks (those starting with `_` or `$`, or containing known internal patterns like `this.$__`) are automatically skipped.
 
+### State transitions from a change stream
+
+Prefer `transition()` from `autotel` beside the write. `watchTransitions()` covers writes you cannot change. It needs a replica set, MongoDB 6.0+ and pre-images on the collection. `via` is `unknown`, and a change with no pre-image counts in `skipped`.
+
+```typescript
+import { watchTransitions } from 'autotel-mongoose';
+
+const watcher = watchTransitions(Order, {
+  entity: 'order',
+  field: 'status',
+  onError: (error) => logger.error({ error }, 'transition watcher failed'),
+});
+```
+
 ### Idempotency
 
 `instrumentMongoose` is idempotent. Multiple calls on the same `mongoose` instance are safe; the `__autotelMongooseInstrumented` flag prevents double-patching.

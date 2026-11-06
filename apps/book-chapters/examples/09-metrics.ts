@@ -16,7 +16,7 @@ async function main() {
 
   init({
     service: 'book-09',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // Create a counter

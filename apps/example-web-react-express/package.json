@@ -11,8 +11,8 @@
     "smoke": "node smoke.mjs"
   },
   "dependencies": {
-    "@opentelemetry/instrumentation-express": "0.71.1",
-    "@opentelemetry/instrumentation-http": "0.223.0",
+    "@opentelemetry/instrumentation-express": "0.73.0",
+    "@opentelemetry/instrumentation-http": "0.301.0",
     "autotel": "workspace:*",
     "autotel-posthog": "workspace:*",
     "autotel-web": "workspace:*",

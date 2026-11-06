@@ -349,6 +349,46 @@ The attribute names come from `autotel-db` and are shared with
 `autotel-drizzle`'s Postgres plans, so `db.plan.full_scan: true` finds a
 MongoDB `COLLSCAN` and a Postgres `Seq Scan` alike.
 
+## Watching Transitions (prototype)
+
+Calling `transition()` from `autotel` beside the write is the better signal. `watchTransitions()` is for writes you cannot change: it reads a change stream and records through `transition()`.
+
+```typescript
+import { watchTransitions } from 'autotel-mongoose';
+
+await db.command({
+  collMod: 'orders',
+  changeStreamPreAndPostImages: { enabled: true },
+});
+
+const watcher = watchTransitions(Order, {
+  entity: 'order',
+  field: 'status',
+  onTransition: ({ id, from, to }) => audit(id, from, to),
+  onError: (error) => logger.error({ error }, 'transition watcher failed'),
+});
+
+watcher.recorded; // transitions recorded
+watcher.skipped; // changes to the field it could not read
+await watcher.close();
+```
+
+It takes a Mongoose model or a driver collection. An update counts when it writes the field, a replace when the field's value differs. Inserts and deletes are not transitions and are ignored.
+
+Limitations:
+
+- **`via` is always `unknown`.** A database cannot know the business operation.
+- **Needs a replica set, MongoDB 6.0+ and pre-images on the collection.** Pre-images add storage and write load, and expire with the collection's retention settings.
+- **A missing pre-image records nothing.** `from` is never guessed. The change is counted in `skipped`. If `skipped` rises while `recorded` stays flat, pre-images are not enabled.
+- **Each watcher counts every change.** Run one per collection. Two processes watching the same collection double the count.
+- **Do not combine with `transition()` for the same field.** Both would count the write.
+- **Downtime loses changes.** No resume token is stored, so a restart starts from now.
+- **It does not restart.** A failed stream reports to `onError` and stops. Without `onError` the failure is silent.
+- **Every update to the collection reaches the process**, with its pre-image, because filtering happens here. Expect the cost to follow the collection's write rate, not its transition rate.
+- **It sees all writers**, including migrations and manual fixes, as transitions.
+- **Removing the field is not recorded**, and neither is a non-scalar or `null` state: those count as `skipped`, removal does not count at all.
+- **No per-document history.** Ids go to `onTransition`, not to `history: true`.
+
 ## Exported API
 
 - `instrumentMongoose(mongoose, config?)`

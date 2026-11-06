@@ -12,7 +12,7 @@ import {
   type AttributeValue,
 } from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
-import type { Sampler } from '@opentelemetry/sdk-trace-base';
+import type { Sampler } from '@opentelemetry/sdk-trace';
 import type { TraceContext } from './core/trace-context';
 import {
   createTraceContext,

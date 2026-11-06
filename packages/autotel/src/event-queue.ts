@@ -16,8 +16,8 @@ import type {
   Histogram,
   ObservableGauge,
   Attributes,
+  ObservableResult,
 } from '@opentelemetry/api';
-import type { ObservableResult } from '@opentelemetry/api';
 import type {
   EventSubscriber,
   EventAttributes,

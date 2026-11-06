@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { SpanStatusCode, context, trace } from '@opentelemetry/api';
 import { OpenSpanTracker } from './open-spans';
 
@@ -11,8 +11,8 @@ describe('OpenSpanTracker', () => {
   it('ends open spans on a crash, children first, with the error on the root', () => {
     const exporter = new InMemorySpanExporter();
     const tracker = new OpenSpanTracker();
-    const tracer = new BasicTracerProvider({
-      spanProcessors: [tracker, new SimpleSpanProcessor(exporter)],
+    const tracer = new TracerProvider({
+      spanProcessors: [tracker, new SimpleSpanProcessor({ exporter })],
     }).getTracer('t');
     const job = tracer.startSpan('job');
     const done = tracer.startSpan('done');

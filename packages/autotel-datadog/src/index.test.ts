@@ -2,10 +2,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SpanStatusCode } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   type ReadableSpan,
   type SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { datadogRum } from '@datadog/browser-rum';
 import { clearBaggage, getBaggageEntries } from 'autotel-web/baggage';
 import { rememberRequestSpan, resetJoinForTesting } from 'autotel-web/join';
@@ -48,7 +48,7 @@ function setup(rum: DatadogRumLike, options: JoinDatadogOptions = {}) {
     forceFlush: () => Promise.resolve(),
     shutdown: () => Promise.resolve(),
   };
-  const tracer = new BasicTracerProvider({
+  const tracer = new TracerProvider({
     spanProcessors: [join, recorder],
   }).getTracer('t');
   return { join, tracer, ended };

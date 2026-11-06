@@ -7,7 +7,7 @@
  * built. Nothing here reads autotel's configuration state.
  */
 
-import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { SpanExporter } from '@opentelemetry/sdk-trace';
 import type { PushMetricExporter } from '@opentelemetry/sdk-metrics';
 import type { LogRecordExporter } from '@opentelemetry/sdk-logs';
 import { OTLPMetricExporter as OTLPMetricExporterHTTP } from '@opentelemetry/exporter-metrics-otlp-http';

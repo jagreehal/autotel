@@ -114,6 +114,7 @@ interface DevtoolsMetricSeries {
   name: string;
   unit?: string;
   kind: string;
+  temporality?: 'delta' | 'cumulative';
   service: string;
   attributes: Record<string, unknown>;
   points: DevtoolsMetricPoint[];
@@ -606,7 +607,8 @@ export class DevtoolsBackend implements TelemetryBackend {
     return filtered.slice(0, query?.limit ?? 20).map((s) => ({
       metricName: s.name,
       unit: s.unit,
-      attributes: normalizeTags(s.attributes),
+      temporality: s.temporality,
+      attributes: { ...normalizeTags(s.attributes), service: s.service },
       points: s.points.map((point) => ({
         timestampUnixMs: point.timestamp,
         // A histogram point has no single value; its count is the closest

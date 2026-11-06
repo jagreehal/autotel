@@ -13,7 +13,7 @@ import type {
   ReadableSpan,
   Span,
   SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 export class OpenSpanTracker implements SpanProcessor {
   private readonly open = new Set<Span>();

@@ -29,7 +29,7 @@
 import { createRequire } from 'node:module';
 import type { AutotelConfig } from 'autotel';
 
-/** Minimal SpanExporter-compatible interface (avoids @opentelemetry/sdk-trace-base peer at build time). */
+/** Minimal SpanExporter-compatible interface (avoids @opentelemetry/sdk-trace peer at build time). */
 interface SpanExporterLike {
   export(
     spans: unknown[],

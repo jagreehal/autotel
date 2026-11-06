@@ -16,7 +16,7 @@ vi.mock('./node-require', () => ({
 }));
 
 import type { Attributes } from '@opentelemetry/api';
-import { SeverityNumber } from '@opentelemetry/api-logs';
+import { SeverityNumber } from '@opentelemetry/api';
 import { createRequire } from 'node:module';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
@@ -25,7 +25,7 @@ import {
   LoggerProvider,
   SimpleLogRecordProcessor,
   type LogRecordProcessor,
-  type SdkLogRecord,
+  type ReadWriteLogRecord,
 } from '@opentelemetry/sdk-logs';
 import {
   buildPostHogLogProcessors,
@@ -140,17 +140,17 @@ describe('buildPostHogLogProcessors', () => {
 });
 
 describe('RedactingLogRecordProcessor', () => {
-  function redact(record: Pick<SdkLogRecord, 'body' | 'attributes'>) {
+  function redact(record: Pick<ReadWriteLogRecord, 'body' | 'attributes'>) {
     const emitted: unknown[] = [];
     const wrapped = {
-      onEmit: (logRecord: SdkLogRecord) => emitted.push(logRecord),
+      onEmit: (logRecord: ReadWriteLogRecord) => emitted.push(logRecord),
     } as unknown as LogRecordProcessor;
     new RedactingLogRecordProcessor(
       wrapped,
       createAttributeRedactor('default'),
       createSensitiveKeyTest('default'),
-    ).onEmit(record as SdkLogRecord);
-    return emitted[0] as Pick<SdkLogRecord, 'body' | 'attributes'>;
+    ).onEmit(record as ReadWriteLogRecord);
+    return emitted[0] as Pick<ReadWriteLogRecord, 'body' | 'attributes'>;
   }
 
   it('redacts by key, which only the span redactor did before', () => {
@@ -232,9 +232,9 @@ describe('RedactingLogRecordProcessor', () => {
   });
 
   it('redacts everything under a path that names an object', () => {
-    const emitted: SdkLogRecord[] = [];
+    const emitted: ReadWriteLogRecord[] = [];
     new RedactingLogRecordProcessor(
-      { onEmit: (r: SdkLogRecord) => emitted.push(r) } as never,
+      { onEmit: (r: ReadWriteLogRecord) => emitted.push(r) } as never,
       createAttributeRedactor({ builtins: false, paths: ['customer'] }),
       createSensitiveKeyTest({ builtins: false, paths: ['customer'] }),
     ).onEmit({
@@ -248,9 +248,9 @@ describe('RedactingLogRecordProcessor', () => {
   });
 
   it('gives sibling-dependent rules the original values, whatever the order', () => {
-    const emitted: SdkLogRecord[] = [];
+    const emitted: ReadWriteLogRecord[] = [];
     new RedactingLogRecordProcessor(
-      { onEmit: (r: SdkLogRecord) => emitted.push(r) } as never,
+      { onEmit: (r: ReadWriteLogRecord) => emitted.push(r) } as never,
       (key, value, attributes) => {
         if (key === 'classification') return 'masked';
         if (key === 'payload' && attributes?.classification === 'private') {
@@ -290,9 +290,9 @@ describe('RedactingLogRecordProcessor', () => {
   });
 
   it('fails closed when a redactor throws, and still forwards the record', () => {
-    const emitted: SdkLogRecord[] = [];
+    const emitted: ReadWriteLogRecord[] = [];
     new RedactingLogRecordProcessor(
-      { onEmit: (r: SdkLogRecord) => emitted.push(r) } as never,
+      { onEmit: (r: ReadWriteLogRecord) => emitted.push(r) } as never,
       () => {
         throw new Error('bad rule');
       },
@@ -306,9 +306,9 @@ describe('RedactingLogRecordProcessor', () => {
   });
 
   it('keeps child rules when a custom redactor transforms every value', () => {
-    const emitted: SdkLogRecord[] = [];
+    const emitted: ReadWriteLogRecord[] = [];
     new RedactingLogRecordProcessor(
-      { onEmit: (r: SdkLogRecord) => emitted.push(r) } as never,
+      { onEmit: (r: ReadWriteLogRecord) => emitted.push(r) } as never,
       (key, value) =>
         key.endsWith('password') ? '[REDACTED]' : `tag:${String(value)}`,
     ).onEmit({
@@ -324,9 +324,9 @@ describe('RedactingLogRecordProcessor', () => {
   it('lets a custom redactor declare which keys cover their whole object', () => {
     const exact = (key: string, value: unknown) =>
       key === 'password' ? '[REDACTED]' : (value as never);
-    const emitted: SdkLogRecord[] = [];
+    const emitted: ReadWriteLogRecord[] = [];
     new RedactingLogRecordProcessor(
-      { onEmit: (r: SdkLogRecord) => emitted.push(r) } as never,
+      { onEmit: (r: ReadWriteLogRecord) => emitted.push(r) } as never,
       exact,
       createSensitiveKeyTest({ redactor: exact, keyPatterns: [/^password$/] }),
     ).onEmit({
@@ -343,9 +343,9 @@ describe('RedactingLogRecordProcessor', () => {
   it('never infers key sensitivity from what a custom redactor returns', () => {
     const echo = (key: string, value: unknown) =>
       key === 'customer.password' ? '[REDACTED]' : `${key}:${String(value)}`;
-    const emitted: SdkLogRecord[] = [];
+    const emitted: ReadWriteLogRecord[] = [];
     new RedactingLogRecordProcessor(
-      { onEmit: (r: SdkLogRecord) => emitted.push(r) } as never,
+      { onEmit: (r: ReadWriteLogRecord) => emitted.push(r) } as never,
       echo,
       createSensitiveKeyTest({ redactor: echo }),
     ).onEmit({
@@ -361,16 +361,16 @@ describe('RedactingLogRecordProcessor', () => {
   describe('several processors on one record', () => {
     const prefix = (_key: string, value: unknown) =>
       typeof value === 'string' ? `tag:${value}` : (value as never);
-    const capture = (into: SdkLogRecord[]) =>
-      ({ onEmit: (r: SdkLogRecord) => into.push(r) }) as never;
+    const capture = (into: ReadWriteLogRecord[]) =>
+      ({ onEmit: (r: ReadWriteLogRecord) => into.push(r) }) as never;
 
     it('never redacts a value twice, and leaves the shared record as written', () => {
-      const first: SdkLogRecord[] = [];
-      const second: SdkLogRecord[] = [];
+      const first: ReadWriteLogRecord[] = [];
+      const second: ReadWriteLogRecord[] = [];
       const record = {
         body: 'x',
         attributes: { id: 'a1', people: [{ name: 'Ann' }] },
-      } as unknown as SdkLogRecord;
+      } as unknown as ReadWriteLogRecord;
 
       new RedactingLogRecordProcessor(capture(first), prefix).onEmit(record);
       new RedactingLogRecordProcessor(capture(second), prefix).onEmit(record);
@@ -401,13 +401,13 @@ describe('RedactingLogRecordProcessor', () => {
         }
         return value as never;
       };
-      const received: SdkLogRecord[] = [];
+      const received: ReadWriteLogRecord[] = [];
       const record = {
         body: 'x',
         attributes: { classes: ['public', 'private'], payload: 'diagnosis' },
-      } as unknown as SdkLogRecord;
+      } as unknown as ReadWriteLogRecord;
       const dropFirst = {
-        onEmit: (r: SdkLogRecord) => {
+        onEmit: (r: ReadWriteLogRecord) => {
           (r.attributes.classes as unknown[]).shift();
         },
       } as never;
@@ -427,7 +427,7 @@ describe('RedactingLogRecordProcessor', () => {
     }> = [];
     const redactor = createAttributeRedactor('default');
     const escalate = {
-      onEmit: (r: SdkLogRecord) => {
+      onEmit: (r: ReadWriteLogRecord) => {
         r.severityNumber = SeverityNumber.ERROR;
         r.severityText = 'ERROR';
         r.eventName = 'security.alert';
@@ -436,7 +436,7 @@ describe('RedactingLogRecordProcessor', () => {
       forceFlush: () => Promise.resolve(),
     };
     const capture = {
-      onEmit: (r: SdkLogRecord) =>
+      onEmit: (r: ReadWriteLogRecord) =>
         received.push({
           severity: r.severityNumber,
           text: r.severityText,
@@ -472,14 +472,14 @@ describe('RedactingLogRecordProcessor', () => {
     const received: Array<{ attributes: object; dropped: number }> = [];
     const redactor = createAttributeRedactor('default');
     const adds = (key: string) => ({
-      onEmit: (r: SdkLogRecord) => {
+      onEmit: (r: ReadWriteLogRecord) => {
         r.setAttribute(key, 'yes');
       },
       shutdown: () => Promise.resolve(),
       forceFlush: () => Promise.resolve(),
     });
     const capture = {
-      onEmit: (r: SdkLogRecord) =>
+      onEmit: (r: ReadWriteLogRecord) =>
         received.push({
           attributes: { ...r.attributes },
           dropped: r.droppedAttributesCount,
@@ -504,7 +504,7 @@ describe('RedactingLogRecordProcessor', () => {
   it('never shows a processor the original when its setAttribute is rejected (real SDK)', () => {
     const seen: unknown[] = [];
     const probe = {
-      onEmit: (r: SdkLogRecord) => {
+      onEmit: (r: ReadWriteLogRecord) => {
         // A function is not a log attribute value, so the SDK rejects it
         // and keeps the original.
         r.setAttribute('password', (() => 'x') as never);
@@ -542,14 +542,14 @@ describe('RedactingLogRecordProcessor', () => {
     };
     const received: unknown[] = [];
     const classify = {
-      onEmit: (r: SdkLogRecord) => {
+      onEmit: (r: ReadWriteLogRecord) => {
         r.setAttribute('classification', 'private');
       },
       shutdown: () => Promise.resolve(),
       forceFlush: () => Promise.resolve(),
     };
     const capture = {
-      onEmit: (r: SdkLogRecord) => received.push({ ...r.attributes }),
+      onEmit: (r: ReadWriteLogRecord) => received.push({ ...r.attributes }),
       shutdown: () => Promise.resolve(),
       forceFlush: () => Promise.resolve(),
     };
@@ -578,7 +578,7 @@ describe('RedactingLogRecordProcessor', () => {
     };
     const seen: unknown[] = [];
     const sets = {
-      onEmit: (r: SdkLogRecord) => {
+      onEmit: (r: ReadWriteLogRecord) => {
         r.setAttribute('token', 'abc123');
         seen.push(r.attributes.token);
       },
@@ -608,7 +608,7 @@ describe('RedactingLogRecordProcessor', () => {
     };
     const seen: unknown[] = [];
     const classify = {
-      onEmit: (r: SdkLogRecord) => {
+      onEmit: (r: ReadWriteLogRecord) => {
         r.setAttribute('classification', 'private');
         seen.push({ body: r.body, ...r.attributes });
       },
@@ -639,7 +639,7 @@ describe('RedactingLogRecordProcessor', () => {
         : (value as never);
     const seen: unknown[] = [];
     const processor = {
-      onEmit: (r: SdkLogRecord) => {
+      onEmit: (r: ReadWriteLogRecord) => {
         (r.attributes.payload as Record<string, unknown>).tag = 'new';
         r.setAttribute('classification', 'private');
         seen.push(structuredClone(r.attributes));
@@ -673,19 +673,19 @@ describe('RedactingLogRecordProcessor', () => {
  */
 describe('RedactingLogRecordProcessor contract (real SDK)', () => {
   type Seen = { body: unknown; attributes: Record<string, unknown> };
-  const proc = (onEmit: (r: SdkLogRecord) => void) => ({
+  const proc = (onEmit: (r: ReadWriteLogRecord) => void) => ({
     onEmit,
     shutdown: () => Promise.resolve(),
     forceFlush: () => Promise.resolve(),
   });
-  const snapshot = (r: SdkLogRecord): Seen => ({
+  const snapshot = (r: ReadWriteLogRecord): Seen => ({
     body: structuredClone(r.body),
     attributes: structuredClone({ ...r.attributes }),
   });
 
   /** Emit one record through processors, each wrapped with the same rules. */
   function run(
-    steps: Array<(r: SdkLogRecord) => void>,
+    steps: Array<(r: ReadWriteLogRecord) => void>,
     record: Parameters<ReturnType<LoggerProvider['getLogger']>['emit']>[0],
     redact: AttributeRedactorFn = createAttributeRedactor('default'),
     keys = createSensitiveKeyTest('default'),

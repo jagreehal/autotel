@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   AlwaysOffSampler,
   AlwaysOnSampler,
   ParentBasedSampler,
   TraceIdRatioBasedSampler,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import {
   resolveOtelEnv,
   parseResourceAttributes,
@@ -12,6 +12,8 @@ import {
   createSamplerFromEnv,
   envToConfig,
   resolveConfigFromEnv,
+  spanLimitsFromEnv,
+  batchSpanOptionsFromEnv,
 } from './env-config';
 
 describe('env-config', () => {
@@ -318,6 +320,77 @@ describe('env-config', () => {
       const config = resolveConfigFromEnv();
 
       expect(config.otelSampler).toBeInstanceOf(ParentBasedSampler);
+    });
+  });
+});
+
+describe('SDK settings the 3.x tracer no longer reads', () => {
+  const names = [
+    'OTEL_ATTRIBUTE_COUNT_LIMIT',
+    'OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT',
+    'OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT',
+    'OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT',
+    'OTEL_SPAN_LINK_COUNT_LIMIT',
+    'OTEL_SPAN_EVENT_COUNT_LIMIT',
+    'OTEL_SPAN_ATTRIBUTE_PER_EVENT_COUNT_LIMIT',
+    'OTEL_SPAN_ATTRIBUTE_PER_LINK_COUNT_LIMIT',
+    'OTEL_BSP_MAX_EXPORT_BATCH_SIZE',
+    'OTEL_BSP_MAX_QUEUE_SIZE',
+    'OTEL_BSP_SCHEDULE_DELAY',
+    'OTEL_BSP_EXPORT_TIMEOUT',
+  ];
+  beforeEach(() => {
+    for (const name of names) vi.stubEnv(name, '');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('sets nothing when nothing is configured, so SDK defaults stay', () => {
+    expect(spanLimitsFromEnv()).toEqual({});
+    expect(batchSpanOptionsFromEnv()).toEqual({});
+  });
+
+  it('reads every span limit', () => {
+    vi.stubEnv('OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT', '1');
+    vi.stubEnv('OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT', '2');
+    vi.stubEnv('OTEL_SPAN_LINK_COUNT_LIMIT', '3');
+    vi.stubEnv('OTEL_SPAN_EVENT_COUNT_LIMIT', '4');
+    vi.stubEnv('OTEL_SPAN_ATTRIBUTE_PER_EVENT_COUNT_LIMIT', '5');
+    vi.stubEnv('OTEL_SPAN_ATTRIBUTE_PER_LINK_COUNT_LIMIT', '6');
+
+    expect(spanLimitsFromEnv()).toEqual({
+      attributeValueLengthLimit: 1,
+      attributeCountLimit: 2,
+      linkCountLimit: 3,
+      eventCountLimit: 4,
+      attributePerEventCountLimit: 5,
+      attributePerLinkCountLimit: 6,
+    });
+  });
+
+  it('falls back to the general limit, and prefers the span one', () => {
+    vi.stubEnv('OTEL_ATTRIBUTE_COUNT_LIMIT', '7');
+    vi.stubEnv('OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT', '8');
+    vi.stubEnv('OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT', '9');
+
+    expect(spanLimitsFromEnv()).toEqual({
+      attributeCountLimit: 9,
+      attributeValueLengthLimit: 8,
+    });
+  });
+
+  it('reads every batch setting', () => {
+    vi.stubEnv('OTEL_BSP_MAX_EXPORT_BATCH_SIZE', '1');
+    vi.stubEnv('OTEL_BSP_MAX_QUEUE_SIZE', '2');
+    vi.stubEnv('OTEL_BSP_SCHEDULE_DELAY', '3');
+    vi.stubEnv('OTEL_BSP_EXPORT_TIMEOUT', '4');
+
+    expect(batchSpanOptionsFromEnv()).toEqual({
+      maxExportBatchSize: 1,
+      maxQueueSize: 2,
+      scheduledDelayMillis: 3,
+      exportTimeoutMillis: 4,
     });
   });
 });

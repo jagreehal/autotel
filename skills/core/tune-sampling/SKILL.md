@@ -116,7 +116,7 @@ init({
   service: 'my-app',
   sampling: 'production',
   spanProcessors: [
-    new TailSamplingSpanProcessor(new BatchSpanProcessor(exporter)),
+    new TailSamplingSpanProcessor(new BatchSpanProcessor({ exporter })),
   ],
 });
 ```

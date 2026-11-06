@@ -18,7 +18,7 @@ async function main() {
 
   init({
     service: 'book-01',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // Functional API: wrap a reusable function

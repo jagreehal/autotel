@@ -19,7 +19,7 @@ Most backends accept OTLP HTTP/JSON or protobuf, so you just point `init({ endpo
 Implement the OTel `SpanExporter` interface, then hand it to `init({ spanExporters })`. Autotel wraps each entry in a `TailSamplingSpanProcessor` and a `BatchSpanProcessor`, so you get batching and tail-sampling for free.
 
 ```ts
-import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace';
 import { ExportResultCode, type ExportResult } from '@opentelemetry/core';
 import { init } from 'autotel';
 
@@ -61,14 +61,11 @@ Use `globalThis.fetch`, not `node:http`, so the exporter also runs on Workers an
 To transform spans rather than transport them, pass a `SpanProcessor` to `init({ spanProcessors })`. Do the work in `onEnd`, where all attributes are set.
 
 ```ts
-import type {
-  SpanProcessor,
-  ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor, ReadableSpan } from '@opentelemetry/sdk-trace';
 import {
   SimpleSpanProcessor,
   ConsoleSpanExporter,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { init } from 'autotel';
 
 const redactor: SpanProcessor = {
@@ -86,7 +83,7 @@ init({
   service: 'my-app',
   spanProcessors: [
     redactor,
-    new SimpleSpanProcessor(new ConsoleSpanExporter()),
+    new SimpleSpanProcessor({ exporter: new ConsoleSpanExporter() }),
   ],
 });
 ```

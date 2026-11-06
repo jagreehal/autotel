@@ -123,6 +123,15 @@ export {
 
 // Global track function
 export { track, getEventQueue } from './track';
+
+// State transitions: persisted status writes, independent of trace sampling
+export {
+  transition,
+  STATE_TRANSITIONS_METRIC,
+  STATE_TRANSITION_EVENT,
+  STATE_ATTRIBUTE,
+  type TransitionInput,
+} from './transition';
 export {
   defineEvent,
   type SchemaLike,

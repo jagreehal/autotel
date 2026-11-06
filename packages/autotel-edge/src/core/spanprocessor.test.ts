@@ -3,7 +3,7 @@ import {
   SpanProcessorWithFlush,
   TailSamplingSpanProcessor,
 } from './spanprocessor';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 
 describe('SpanProcessorWithFlush', () => {

@@ -17,7 +17,7 @@ async function main() {
 
   init({
     service: 'book-05',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // Structured errors carry machine-parseable context

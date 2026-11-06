@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   BatchSpanProcessor,
   InMemorySpanExporter,
   type ReadableSpan,
   type SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { EnrichedSpanProcessor } from './enriched-span-processor';
 
 /** Ends a span of its own after the span it saw, like an async judgment. */
-function lateSpanEnricher(provider: { current?: BasicTracerProvider }) {
+function lateSpanEnricher(provider: { current?: TracerProvider }) {
   const pending = new Set<Promise<void>>();
   const enricher: SpanProcessor = {
     onStart() {},
@@ -38,11 +38,11 @@ async function exportedOnShutdown(
     exported.push(...spans.map((s) => s.name));
     original(spans, done);
   };
-  const ref: { current?: BasicTracerProvider } = {};
-  const provider = new BasicTracerProvider({
+  const ref: { current?: TracerProvider } = {};
+  const provider = new TracerProvider({
     spanProcessors: build(
       lateSpanEnricher(ref),
-      new BatchSpanProcessor(exporter),
+      new BatchSpanProcessor({ exporter }),
     ),
   });
   ref.current = provider;

@@ -14,9 +14,16 @@ export default defineConfig({
   dts: false,
   // CRITICAL: bundle autotel-devtools (and subexports) into dist.
   // The .vsix has no node_modules; runtime resolution will fail otherwise.
-  esbuildOptions(options) {
-    options.conditions = ['require', 'node', 'default'];
-  },
+  // Resolve ESM builds even though the output is CJS: a package's `require`
+  // build can't be tree-shaken, and semantic-conventions' CJS build alone adds
+  // about 250 KiB of unused constants.
+  inputOptions: (options) => ({
+    ...options,
+    resolve: {
+      ...options.resolve,
+      conditionNames: ['node', 'import', 'module', 'default'],
+    },
+  }),
   deps: {
     neverBundle: ['vscode'],
     alwaysBundle: [/^autotel-devtools($|\/)/],

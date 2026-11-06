@@ -39,8 +39,8 @@ import {
   trace,
   type Sampler,
   type TextMapPropagator,
+  logs,
 } from '@opentelemetry/api';
-import { logs } from '@opentelemetry/api-logs';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import {
   CompositePropagator,
@@ -67,10 +67,8 @@ import {
   type LogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
 import { MeterProvider, type IMetricReader } from '@opentelemetry/sdk-metrics';
-import {
-  BasicTracerProvider,
-  type SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+import { TracerProvider, type SpanProcessor } from '@opentelemetry/sdk-trace';
+import { spanLimitsFromEnv } from './env-config';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
 /**
@@ -98,7 +96,7 @@ export interface AutotelSdkLike {
   shutdown(): Promise<void>;
   /** Undo what start() registered, so another SDK can register. */
   releaseGlobals?(): void;
-  getTracerProvider?(): BasicTracerProvider | undefined;
+  getTracerProvider?(): TracerProvider | undefined;
 }
 
 const DIAG_LEVELS: Record<string, DiagLogLevel> = {
@@ -178,9 +176,11 @@ export function adoptInstrumentations(
 
 export class AutotelSdk implements AutotelSdkLike {
   private readonly disabled: boolean;
-  private tracerProvider: BasicTracerProvider | undefined;
+  private tracerProvider: TracerProvider | undefined;
   private meterProvider: MeterProvider | undefined;
   private loggerProvider: LoggerProvider | undefined;
+  /** Another provider held the global, so spans never reach this pipeline. */
+  tracerProviderRefused = false;
   /** One undo per global start() registered. */
   private readonly registered: Array<() => void> = [];
 
@@ -241,13 +241,16 @@ export class AutotelSdk implements AutotelSdkLike {
     // recording span.
     // Keys are only set when defined: the provider deep-merges this over its
     // env-derived defaults, and an explicit `undefined` would erase them.
-    this.tracerProvider = new BasicTracerProvider({
+    this.tracerProvider = new TracerProvider({
       resource,
       spanProcessors: o.spanProcessors ?? [],
+      spanLimits: spanLimitsFromEnv(),
       ...(o.sampler && { sampler: o.sampler }),
     });
     if (trace.setGlobalTracerProvider(this.tracerProvider)) {
       this.registered.push(() => trace.disable());
+    } else {
+      this.tracerProviderRefused = true;
     }
 
     // Prisma's instrumentation publishes the provider it holds when enable()
@@ -267,11 +270,7 @@ export class AutotelSdk implements AutotelSdkLike {
         resource,
         processors: logProcessors,
       });
-      // The logs API returns the provider it kept, not a success flag.
-      if (
-        logs.setGlobalLoggerProvider(this.loggerProvider) ===
-        this.loggerProvider
-      ) {
+      if (logs.setGlobalLoggerProvider(this.loggerProvider)) {
         this.registered.push(() => logs.disable());
       }
     }
@@ -281,7 +280,7 @@ export class AutotelSdk implements AutotelSdkLike {
     for (const undo of this.registered.splice(0)) undo();
   }
 
-  getTracerProvider(): BasicTracerProvider | undefined {
+  getTracerProvider(): TracerProvider | undefined {
     return this.tracerProvider;
   }
 

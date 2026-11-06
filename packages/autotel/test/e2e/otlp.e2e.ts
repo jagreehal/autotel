@@ -16,10 +16,7 @@
  */
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import {
-  BasicTracerProvider,
-  SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+import { TracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { expect } from 'vitest';
 import { describeIfEnv, itWithCorrelationId, makeAttributes } from './_shared';
@@ -48,9 +45,9 @@ describeIfEnv(
       'collector accepts a single span',
       async (correlationId) => {
         const exporter = new OTLPTraceExporter({ url: endpoint, headers });
-        const provider = new BasicTracerProvider({
+        const provider = new TracerProvider({
           resource: resourceFromAttributes({ 'service.name': serviceName }),
-          spanProcessors: [new SimpleSpanProcessor(exporter)],
+          spanProcessors: [new SimpleSpanProcessor({ exporter })],
         });
 
         const tracer = provider.getTracer('autotel-e2e');
@@ -73,9 +70,9 @@ describeIfEnv(
       'collector accepts a multi-span trace',
       async (correlationId) => {
         const exporter = new OTLPTraceExporter({ url: endpoint, headers });
-        const provider = new BasicTracerProvider({
+        const provider = new TracerProvider({
           resource: resourceFromAttributes({ 'service.name': serviceName }),
-          spanProcessors: [new SimpleSpanProcessor(exporter)],
+          spanProcessors: [new SimpleSpanProcessor({ exporter })],
         });
 
         const tracer = provider.getTracer('autotel-e2e');

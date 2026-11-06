@@ -10,6 +10,7 @@
 import {
   trace as otelTrace,
   context,
+  propagation,
   SpanStatusCode,
   type Attributes,
 } from '@opentelemetry/api';
@@ -17,11 +18,12 @@ import type {
   Sampler,
   SpanExporter,
   SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import {
   BatchSpanProcessor,
-  WebTracerProvider,
-} from '@opentelemetry/sdk-trace-web';
+  StackContextManager,
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
@@ -382,13 +384,13 @@ export interface AutotelWebFullConfig extends ReleaseConfig {
 }
 
 let isFullInitialized = false;
-let provider: WebTracerProvider | undefined;
+let provider: TracerProvider | undefined;
 let originalFetch: typeof fetch | undefined;
 
 /**
  * Initialize full browser tracing (spans + optional export).
  *
- * Call once, client-side only. Uses OpenTelemetry WebTracerProvider; no Zone.js.
+ * Call once, client-side only. Uses OpenTelemetry TracerProvider; no Zone.js.
  *
  * @example
  * ```ts
@@ -445,7 +447,8 @@ export function initFull(config: AutotelWebFullConfig): void {
       }),
     );
     spanProcessors.push(
-      new BatchSpanProcessor(exporter, {
+      new BatchSpanProcessor({
+        exporter,
         scheduledDelayMillis: 1000,
         maxExportBatchSize: 64,
       }),
@@ -472,15 +475,15 @@ export function initFull(config: AutotelWebFullConfig): void {
     ? configured
     : withoutResourceFetch(configured);
 
-  provider = new WebTracerProvider({
+  provider = new TracerProvider({
     resource,
     spanProcessors,
     ...(sampler && { sampler }),
   });
-  provider.register({
-    propagator: new W3CTraceContextPropagator(),
-    // No contextManager: use default (no Zone.js). Async context is best-effort.
-  });
+  otelTrace.setGlobalTracerProvider(provider);
+  propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+  // No Zone.js, so async context is best-effort.
+  context.setGlobalContextManager(new StackContextManager().enable());
 
   const instrumentations: Array<
     | DocumentLoadInstrumentation

@@ -56,7 +56,7 @@ function ensureCollector(): TestSpanCollector {
       // TracerProvider interface - only on the SDK's implementation of it, which
       // is what autotel installs.
       (provider as TracerProviderWithProcessor).addSpanProcessor(
-        new SimpleSpanProcessor(collector),
+        new SimpleSpanProcessor({ exporter: collector }),
       );
     }
   }

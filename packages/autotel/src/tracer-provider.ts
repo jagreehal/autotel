@@ -117,8 +117,8 @@ function getGlobalState(): AutotelGlobalState {
  *
  * @example Library with embedded Autotel
  * ```typescript
- * import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
- * import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
+ * import { TracerProvider as SdkTracerProvider } from '@opentelemetry/sdk-trace'
+ * import { BatchSpanProcessor } from '@opentelemetry/sdk-trace'
  * import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
  * import { setAutolem
 
@@ -129,8 +129,9 @@ etryTracerProvider } from 'autotel/tracer-provider'
  *   url: 'https://your-backend.com/v1/traces'
  * })
  *
- * const provider = new NodeTracerProvider()
- * provider.addSpanProcessor(new BatchSpanProcessor(exporter))
+ * const provider = new SdkTracerProvider({
+ *   spanProcessors: [new BatchSpanProcessor({ exporter })],
+ * })
  *
  * // Set as Autotel's isolated provider (doesn't call provider.register())
  * setAutotelTracerProvider(provider)
@@ -141,14 +142,15 @@ etryTracerProvider } from 'autotel/tracer-provider'
  *
  * @example Testing with isolated provider
  * ```typescript
- * import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
- * import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base'
+ * import { TracerProvider as SdkTracerProvider } from '@opentelemetry/sdk-trace'
+ * import { InMemorySpanExporter } from '@opentelemetry/sdk-trace'
  * import { setAutotelTracerProvider } from 'autotel/tracer-provider'
  *
  * // Test setup
  * const exporter = new InMemorySpanExporter()
- * const provider = new NodeTracerProvider()
- * provider.addSpanProcessor(new SimpleSpanProcessor(exporter))
+ * const provider = new SdkTracerProvider({
+ *   spanProcessors: [new SimpleSpanProcessor({ exporter })],
+ * })
  *
  * setAutotelTracerProvider(provider)
  *
@@ -161,14 +163,17 @@ etryTracerProvider } from 'autotel/tracer-provider'
  *
  * @example Multiple subsystems with different exporters
  * ```typescript
- * import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
+ * import { TracerProvider as SdkTracerProvider } from '@opentelemetry/sdk-trace'
  * import { setAutotelTracerProvider } from 'autotel/tracer-provider'
  *
  * // Payment subsystem - send to payment team's backend
- * const paymentProvider = new NodeTracerProvider()
- * paymentProvider.addSpanProcessor(new BatchSpanProcessor(
- *   new OTLPTraceExporter({ url: 'https://payment-team-backend.com/v1/traces' })
- * ))
+ * const paymentProvider = new SdkTracerProvider({
+ *   spanProcessors: [
+ *     new BatchSpanProcessor({
+ *       exporter: new OTLPTraceExporter({ url: 'https://payment-team-backend.com/v1/traces' }),
+ *     }),
+ *   ],
+ * })
  *
  * // In payment module initialization
  * setAutotelTracerProvider(paymentProvider)

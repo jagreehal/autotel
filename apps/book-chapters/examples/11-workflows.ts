@@ -10,7 +10,7 @@ async function main() {
 
   init({
     service: 'book-11',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // Each step is a plain async function wrapped by traceStep(config)(fn).

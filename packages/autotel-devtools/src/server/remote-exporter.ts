@@ -20,7 +20,7 @@
  * ```
  */
 
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 import type { ExportResult, ExportResultCode } from '@opentelemetry/core';
 import type { TraceData, SpanData } from './types';
 import type { SpanAttributes } from '../widget/types.js';
@@ -247,10 +247,8 @@ export class DevtoolsRemoteExporter implements SpanExporter {
     const startTime = span.startTime[0] * 1000 + span.startTime[1] / 1_000_000;
     const endTime = span.endTime[0] * 1000 + span.endTime[1] / 1_000_000;
 
-    const attributes: SpanAttributes = {};
-    for (const [key, value] of Object.entries(span.attributes)) {
-      attributes[key] = value;
-    }
+    // SAFETY: the SDK only keeps AnyValue attributes, which SpanAttributes spells out.
+    const attributes = { ...span.attributes } as SpanAttributes;
 
     let status: 'OK' | 'ERROR' | 'UNSET';
     switch (span.status.code) {
@@ -274,9 +272,8 @@ export class DevtoolsRemoteExporter implements SpanExporter {
     const events = span.events.map((event) => ({
       name: event.name,
       timestamp: event.time[0] * 1000 + event.time[1] / 1_000_000,
-      attributes: event.attributes
-        ? Object.fromEntries(Object.entries(event.attributes))
-        : undefined,
+      // SAFETY: the SDK only keeps AnyValue attributes, which SpanAttributes spells out.
+      attributes: event.attributes as SpanAttributes | undefined,
     }));
 
     return {

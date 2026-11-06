@@ -74,13 +74,13 @@
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
   "license": "Apache-2.0",
   "dependencies": {
-    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api": "^1.10.0",
     "autotel": "workspace:*",
     "autotel-kafka": "workspace:*"
   },
   "peerDependencies": {
     "@google-cloud/bigquery": ">=9.3.0",
-    "@opentelemetry/instrumentation-amqplib": ">=0.70.0"
+    "@opentelemetry/instrumentation-amqplib": ">=0.72.0"
   },
   "peerDependenciesMeta": {
     "@google-cloud/bigquery": {

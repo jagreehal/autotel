@@ -47,7 +47,7 @@ export default defineConfig({
       '@aws-sdk/credential-providers',
       '@aws-crypto/sha256-js',
       '@opentelemetry/otlp-transformer',
-      '@opentelemetry/sdk-trace-base',
+      '@opentelemetry/sdk-trace',
       '@opentelemetry/sdk-logs',
       '@opentelemetry/sdk-metrics',
       '@opentelemetry/core',

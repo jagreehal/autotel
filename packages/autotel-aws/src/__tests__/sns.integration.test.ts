@@ -52,7 +52,7 @@ describe.skipIf(!isLocalStackAvailable)('SNS Integration Tests', () => {
     exporter = new InMemorySpanExporter();
     init({
       service: 'sns-integration-test',
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
 
     // Create test topic

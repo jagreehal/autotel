@@ -11,9 +11,9 @@
  * init({
  *   service: 'my-app',
  *   logRecordProcessors: [
- *     new BatchLogRecordProcessor(
- *       new DevtoolsLogExporter({ endpoint: 'http://localhost:8082' })
- *     ),
+ *     new BatchLogRecordProcessor({
+ *       exporter: new DevtoolsLogExporter({ endpoint: 'http://localhost:8082' }),
+ *     }),
  *   ],
  * });
  * ```

@@ -38,13 +38,12 @@
  * ```
  */
 
-import type { Attributes } from '@opentelemetry/api';
-import type { Context } from '@opentelemetry/api';
+import type { Attributes, Context } from '@opentelemetry/api';
 import type {
   ReadableSpan,
   Span,
   SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import type { JsonValue, ProviderResponseView } from 'autotel-genai/observer';
 import { parseBedrockModelId } from './model-id.js';
 

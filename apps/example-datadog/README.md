@@ -19,7 +19,7 @@ All configuration is done via environment variables (`DATADOG_API_KEY` and `DATA
    - Get your API key from [Organization Settings → API Keys](https://app.datadoghq.com/organization-settings/api-keys)
 
 2. **Node.js**
-   - Node.js 18+ installed
+   - Node.js 22.15+ installed
    - pnpm package manager
 
 ## Quick Start
@@ -437,12 +437,12 @@ init({
 
   // Optional: logs still work with Agent
   logRecordProcessors: [
-    new BatchLogRecordProcessor(
-      new OTLPLogExporter({
+    new BatchLogRecordProcessor({
+      exporter: new OTLPLogExporter({
         url: 'http://localhost:4318/v1/logs',
         // No headers needed
       }),
-    ),
+    }),
   ],
 });
 ```

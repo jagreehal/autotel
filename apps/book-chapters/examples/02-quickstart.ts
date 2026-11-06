@@ -10,7 +10,7 @@ async function main() {
   // init() is one synchronous call
   init({
     service: 'book-02-quickstart',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
   console.log('✓ init() sets up the OTel SDK');
 

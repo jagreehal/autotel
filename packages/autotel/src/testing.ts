@@ -103,7 +103,7 @@ export {
  * import { SimpleSpanProcessor } from 'autotel/processors'
  *
  * const exporter = new InMemorySpanExporter()
- * init({ service: 'test', spanProcessor: new SimpleSpanProcessor(exporter) })
+ * init({ service: 'test', spanProcessor: new SimpleSpanProcessor({ exporter }) })
  * ```
  */
 

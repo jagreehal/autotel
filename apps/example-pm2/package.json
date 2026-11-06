@@ -1,0 +1,23 @@
+{
+  "name": "@jagreehal/example-pm2",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "verify": "tsx src/verify.ts"
+  },
+  "dependencies": {
+    "@opentelemetry/exporter-trace-otlp-http": "0.301.0",
+    "autotel": "workspace:*",
+    "pm2-io-otel": "7.0.0"
+  },
+  "devDependencies": {
+    "@opentelemetry/core": "3.1.0",
+    "@opentelemetry/sdk-trace": "3.1.0",
+    "@types/node": "26.6.5",
+    "pm2": "7.1.2",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}

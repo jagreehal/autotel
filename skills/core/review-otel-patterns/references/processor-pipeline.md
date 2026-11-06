@@ -68,9 +68,11 @@ init({
   service: 'checkout',
   spanProcessors: [
     new FilteringSpanProcessor(
-      new BatchSpanProcessor(
-        new OTLPTraceExporter({ url: 'http://localhost:4318/v1/traces' }),
-      ),
+      new BatchSpanProcessor({
+        exporter: new OTLPTraceExporter({
+          url: 'http://localhost:4318/v1/traces',
+        }),
+      }),
       { filter: (span) => !span.name.includes('/health') },
     ),
   ],
@@ -121,25 +123,25 @@ export const config = defineConfig({
 ## Edge: multi-backend export
 
 ```typescript
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 import {
   OTLPExporter,
   composeSpanProcessors,
   defineConfig,
 } from 'autotel-edge';
 
-const honeycomb = new BatchSpanProcessor(
-  new OTLPExporter({
+const honeycomb = new BatchSpanProcessor({
+  exporter: new OTLPExporter({
     url: 'https://api.honeycomb.io/v1/traces', // edge exporter URLs are used as-is
     headers: { 'x-honeycomb-team': process.env.HONEYCOMB_KEY! },
   }),
-);
-const grafana = new BatchSpanProcessor(
-  new OTLPExporter({
+});
+const grafana = new BatchSpanProcessor({
+  exporter: new OTLPExporter({
     url: `${process.env.GRAFANA_OTLP_URL!}/v1/traces`,
     headers: { authorization: `Basic ${process.env.GRAFANA_AUTH!}` },
   }),
-);
+});
 
 export const config = defineConfig({
   service: { name: 'checkout' },

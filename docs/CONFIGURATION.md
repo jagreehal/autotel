@@ -33,6 +33,14 @@ Autotel reads standard OpenTelemetry environment variables. You can change confi
   - Common attributes: `service.version`, `deployment.environment`, `team`, `region`
   - Example: `service.version=1.0.0,deployment.environment=production`
 
+**SDK Limits:**
+
+`init()` reads the OpenTelemetry limit and batching variables and passes them to the SDK:
+
+- `OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT`, `OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT`, `OTEL_SPAN_EVENT_COUNT_LIMIT`, `OTEL_SPAN_LINK_COUNT_LIMIT`, `OTEL_SPAN_ATTRIBUTE_PER_EVENT_COUNT_LIMIT`, `OTEL_SPAN_ATTRIBUTE_PER_LINK_COUNT_LIMIT`
+- `OTEL_ATTRIBUTE_COUNT_LIMIT`, `OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT` - general limits; a span-specific limit wins
+- `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BSP_EXPORT_TIMEOUT`, `OTEL_BSP_MAX_QUEUE_SIZE`, `OTEL_BSP_MAX_EXPORT_BATCH_SIZE`
+
 ### Configuration Precedence
 
 Configuration resolves in this priority order, highest to lowest:

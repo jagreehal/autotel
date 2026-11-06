@@ -50,7 +50,7 @@ import { otelTestCollector } from 'autotel-vitest';
 
 init({
   service: 'unit-tests',
-  spanProcessors: [new SimpleSpanProcessor(otelTestCollector)],
+  spanProcessors: [new SimpleSpanProcessor({ exporter: otelTestCollector })],
 });
 ```
 

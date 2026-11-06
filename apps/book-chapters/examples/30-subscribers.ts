@@ -29,7 +29,7 @@ async function main() {
   // without touching call sites.
   init({
     service: 'book-30',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
     subscribers: [consoleSubscriber],
   });
 

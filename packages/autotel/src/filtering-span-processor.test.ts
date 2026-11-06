@@ -10,9 +10,9 @@ import {
 import type {
   SpanProcessor,
   ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+  Span,
+} from '@opentelemetry/sdk-trace';
 import type { Context, Attributes } from '@opentelemetry/api';
-import type { Span } from '@opentelemetry/sdk-trace-base';
 import { readableSpanDouble } from './testing/doubles';
 
 /**

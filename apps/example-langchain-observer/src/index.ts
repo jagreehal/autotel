@@ -14,10 +14,10 @@ import { tool } from '@langchain/core/tools';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOllama } from '@langchain/ollama';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import {
   createGenAiObserver,
   createLangChainObserver,
@@ -31,8 +31,8 @@ const BASE_URL = process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434';
 
 async function main(): Promise<void> {
   const exporter = new InMemorySpanExporter();
-  const provider = new BasicTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  const provider = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
   const tracer = provider.getTracer('langchain-observer-example');
 

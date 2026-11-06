@@ -3,7 +3,7 @@ import { propagation } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { span, trace } from './functional';
 import { init } from './init';
 import { shutdown } from './shutdown';
@@ -18,7 +18,7 @@ function setup(traceContextFromEnv?: boolean) {
   init({
     service: 'env-carrier',
     sampling: 'development',
-    spanProcessor: new SimpleSpanProcessor(exporter),
+    spanProcessor: new SimpleSpanProcessor({ exporter }),
     traceContextFromEnv,
   });
   return exporter;

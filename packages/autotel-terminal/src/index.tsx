@@ -27,7 +27,7 @@
  * import { createTerminalSpanStream } from 'autotel-terminal'
  * import { BatchSpanProcessor } from 'autotel/processors'
  *
- * const processor = new StreamingSpanProcessor(new BatchSpanProcessor(exporter))
+ * const processor = new StreamingSpanProcessor(new BatchSpanProcessor({ exporter }))
  * const stream = createTerminalSpanStream(processor)
  * renderTerminal({}, stream)
  * ```
@@ -2515,7 +2515,7 @@ export type { TerminalLogStream } from './log-stream';
 export type { TerminalLogEvent } from './lib/log-model';
 
 // Re-export OpenTelemetry types for advanced users
-export type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+export type { ReadableSpan } from '@opentelemetry/sdk-trace';
 export { SpanStatusCode, SpanKind } from 'autotel';
 
 // Re-export PrettyConsoleExporter for convenience

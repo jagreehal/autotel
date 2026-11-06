@@ -15,7 +15,7 @@ async function main() {
 
   init({
     service: 'book-38',
-    spanProcessors: [new SimpleSpanProcessor(devtools.exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter: devtools.exporter })],
   });
 
   const greet = trace('greet', (name: string) => `Hello, ${name}!`);

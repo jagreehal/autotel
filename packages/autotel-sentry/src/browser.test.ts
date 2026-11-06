@@ -2,10 +2,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SpanStatusCode } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   type ReadableSpan,
   type SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { resetJoinForTesting } from 'autotel-web/join';
 import {
   joinSentry,
@@ -55,7 +55,7 @@ function setup(sentry: SentryLike, options: JoinSentryOptions = {}) {
     forceFlush: () => Promise.resolve(),
     shutdown: () => Promise.resolve(),
   };
-  const tracer = new BasicTracerProvider({
+  const tracer = new TracerProvider({
     spanProcessors: [
       joinSentry(sentry, { debug: false, ...options }),
       recorder,

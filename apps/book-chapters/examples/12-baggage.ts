@@ -9,7 +9,7 @@ async function main() {
 
   init({
     service: 'book-12',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // Downstream service: reads baggage from context. No arguments were

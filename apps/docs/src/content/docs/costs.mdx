@@ -185,7 +185,7 @@ init({
   service: 'checkout-api',
   sampling: 'production',
   spanProcessors: [
-    new TailSamplingSpanProcessor(new BatchSpanProcessor(exporter), {
+    new TailSamplingSpanProcessor(new BatchSpanProcessor({ exporter }), {
       traceTimeoutMs: 10_000,
       maxBufferedSpans: 50_000,
     }),

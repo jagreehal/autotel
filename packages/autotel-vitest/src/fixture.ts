@@ -40,7 +40,7 @@ const TRACER_VERSION = '0.1.0';
  *
  * init({
  *   service: 'unit-tests',
- *   spanProcessors: [new SimpleSpanProcessor(otelTestCollector)],
+ *   spanProcessors: [new SimpleSpanProcessor({ exporter: otelTestCollector })],
  * });
  * ```
  */
@@ -101,7 +101,7 @@ function ensureCollector(): TestSpanCollector {
       // SAFETY: the guard above established the method exists; it is on the SDK's
       // provider implementation rather than on the TracerProvider interface.
       (provider as TracerProviderWithProcessor).addSpanProcessor(
-        new SimpleSpanProcessor(otelTestCollector),
+        new SimpleSpanProcessor({ exporter: otelTestCollector }),
       );
     }
   }

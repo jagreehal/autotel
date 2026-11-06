@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
 import { instrument, withBaggage } from './functional';
 import { init } from './init';
@@ -22,7 +22,7 @@ describe('debug capture through baggage', () => {
     init({
       service: 'debug-capture-test',
       spanProcessor: new TailSamplingSpanProcessor(
-        new SimpleSpanProcessor(exporter),
+        new SimpleSpanProcessor({ exporter }),
       ),
     });
   });

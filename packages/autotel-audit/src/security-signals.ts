@@ -36,7 +36,7 @@ import { applySecurityEventAttributes } from './security.js';
  * exist, survive sampling, and stay queryable under a stable schema.
  */
 
-// Structural subset of @opentelemetry/sdk-trace-base types — kept local so
+// Structural subset of @opentelemetry/sdk-trace types, kept local so
 // autotel-audit adds no new dependencies. Objects returned here satisfy the
 // real SpanProcessor interface structurally (must mirror @opentelemetry/api's
 // AttributeValue, including nullable array entries).

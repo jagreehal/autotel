@@ -4,11 +4,11 @@
  */
 import { trace } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
   type ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 const exporter = new InMemorySpanExporter();
 let registered = false;
@@ -17,8 +17,8 @@ let registered = false;
 export function captureSpans(): InMemorySpanExporter {
   if (!registered) {
     trace.setGlobalTracerProvider(
-      new BasicTracerProvider({
-        spanProcessors: [new SimpleSpanProcessor(exporter)],
+      new TracerProvider({
+        spanProcessors: [new SimpleSpanProcessor({ exporter })],
       }),
     );
     registered = true;

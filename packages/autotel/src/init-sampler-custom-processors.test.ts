@@ -3,7 +3,7 @@ import { context, trace as otelTrace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 /**
  * `spanProcessors` replaces the pipeline autotel builds, tail sampling
@@ -48,8 +48,8 @@ describe('a tail sampler with custom spanProcessors', () => {
       service: 'unwrapped',
       sampling: 'production',
       spanProcessors: [
-        new SimpleSpanProcessor(exporter),
-        new SimpleSpanProcessor(new InMemorySpanExporter()),
+        new SimpleSpanProcessor({ exporter }),
+        new SimpleSpanProcessor({ exporter: new InMemorySpanExporter() }),
       ],
     });
 
@@ -76,9 +76,11 @@ describe('a tail sampler with custom spanProcessors', () => {
       service: 'wrapped',
       sampling: 'production',
       spanProcessors: [
-        new SimpleSpanProcessor(audit),
+        new SimpleSpanProcessor({ exporter: audit }),
         new FilteringSpanProcessor(
-          new TailSamplingSpanProcessor(new SimpleSpanProcessor(ops)),
+          new TailSamplingSpanProcessor(
+            new SimpleSpanProcessor({ exporter: ops }),
+          ),
           { filter: () => true },
         ),
       ],
@@ -101,7 +103,9 @@ describe('a tail sampler with custom spanProcessors', () => {
     init({
       service: 'dev',
       sampling: 'development',
-      spanProcessors: [new SimpleSpanProcessor(new InMemorySpanExporter())],
+      spanProcessors: [
+        new SimpleSpanProcessor({ exporter: new InMemorySpanExporter() }),
+      ],
     });
 
     expect(warnings(warn)).toHaveLength(0);
@@ -244,7 +248,7 @@ describe('sampling applies to whole traces, auto-instrumented ones included', ()
       service: 'custom-tail',
       sampling: 'errors-only',
       spanProcessors: [
-        new TailSamplingSpanProcessor(new SimpleSpanProcessor(exporter)),
+        new TailSamplingSpanProcessor(new SimpleSpanProcessor({ exporter })),
       ],
     });
     const tracer = otelTrace.getTracer('auto');

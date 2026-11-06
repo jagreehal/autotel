@@ -12,7 +12,9 @@ import { SimpleSpanProcessor } from 'autotel/processors';
 // Initialize OpenTelemetry with console exporter for demo
 init({
   service: 'mcp-weather-client',
-  spanProcessor: new SimpleSpanProcessor(new ConsoleSpanExporter()),
+  spanProcessor: new SimpleSpanProcessor({
+    exporter: new ConsoleSpanExporter(),
+  }),
 });
 
 console.log('=== MCP Weather Client Example ===\n');
