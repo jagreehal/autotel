@@ -1,5 +1,12 @@
 # autotel-builtin-ai
 
+## 4.0.2
+
+### Patch Changes
+
+- Updated dependencies [039f92c]
+  - autotel-web@3.0.0
+
 ## 4.0.1
 
 ### Patch Changes

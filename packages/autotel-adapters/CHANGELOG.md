@@ -1,5 +1,13 @@
 # autotel-adapters
 
+## 3.1.5
+
+### Patch Changes
+
+- Updated dependencies [039f92c]
+  - autotel@9.0.0
+  - autotel-edge@7.0.0
+
 ## 3.1.4
 
 ### Patch Changes
