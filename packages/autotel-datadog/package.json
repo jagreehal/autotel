@@ -11,6 +11,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./names": {
+      "types": "./dist/names.d.ts",
+      "import": "./dist/names.js",
+      "require": "./dist/names.cjs"
     }
   },
   "files": [
@@ -28,8 +33,14 @@
     "clean": "rimraf dist"
   },
   "peerDependencies": {
+    "@opentelemetry/api": ">=1.10.0",
     "@opentelemetry/sdk-trace": ">=3.1.0",
     "autotel-web": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "autotel-web": {
+      "optional": true
+    }
   },
   "keywords": [
     "opentelemetry",

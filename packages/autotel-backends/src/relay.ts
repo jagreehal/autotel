@@ -51,8 +51,14 @@ export interface OtlpRelayOptions {
 /** OTLP signals a page exports. Metrics stay server-side. */
 const SIGNALS = ['traces', 'logs'] as const;
 
-/** The only request headers forwarded: what the payload needs to be read. */
-const FORWARDED = ['content-type', 'content-encoding'] as const;
+/** Request headers a page may set: what the payload needs to be read. */
+const ALLOWED = ['content-type', 'content-encoding'] as const;
+
+/**
+ * The only request headers forwarded. `user-agent` is the browser's own, so a
+ * backend that reads the client from it sees the browser rather than the relay.
+ */
+const FORWARDED = [...ALLOWED, 'user-agent'] as const;
 
 /**
  * The request body, or undefined once it passes `limit` bytes. Stops reading
@@ -202,7 +208,7 @@ export function otlpRelay(
         headers: {
           ...cors,
           'access-control-allow-methods': 'POST',
-          'access-control-allow-headers': FORWARDED.join(', '),
+          'access-control-allow-headers': ALLOWED.join(', '),
           'access-control-max-age': '86400',
         },
       });

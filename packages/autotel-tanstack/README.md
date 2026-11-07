@@ -48,6 +48,7 @@ Configure global middleware in `start.ts` using TanStack's native patterns:
 // src/start.ts
 import { createStart, createMiddleware } from '@tanstack/react-start';
 import { createTracingServerHandler } from 'autotel-tanstack/middleware';
+import { getRouter } from './router';
 import './instrumentation'; // Initialize autotel
 
 // Global request tracing middleware
@@ -55,6 +56,7 @@ const requestTracingMiddleware = createMiddleware().server(
   createTracingServerHandler({
     captureHeaders: ['x-request-id', 'user-agent'],
     excludePaths: ['/health', '/metrics'],
+    router: getRouter(), // name requests after their route
   }),
 );
 
@@ -191,6 +193,13 @@ const handler = createTracingServerHandler({
   // Paths to exclude from tracing
   excludePaths: ['/health', '/metrics', '/api/internal/*'],
 
+  // A router built from your route tree. Requests are named after the route
+  // they match (`GET /posts/$postId`), which becomes `http.route` on this span
+  // and on the HTTP server span. Without it, requests are named after the path.
+  // A router mounted with `basepath: '/app'` matches `/app/posts/1` and
+  // records `/app/posts/$postId`.
+  router: getRouter(),
+
   // Sampling strategy: 'always' | 'adaptive' | 'never'
   sampling: 'adaptive',
 
@@ -200,6 +209,20 @@ const handler = createTracingServerHandler({
   }),
 });
 ```
+
+### Request span names
+
+Server-function requests are named `METHOD /_serverFn`, with the function id
+in `tanstack.server_function.name`. Other requests take the route `router`
+matches, in TanStack's own syntax, and keep their path when they match none:
+
+| Request             | With `router`        | Without           |
+| ------------------- | -------------------- | ----------------- |
+| `GET /posts/123`    | `GET /posts/$postId` | `GET /posts/123`  |
+| `POST /_serverFn/x` | `POST /_serverFn`    | `POST /_serverFn` |
+| `GET /nope`         | `GET /nope`          | `GET /nope`       |
+
+`createTracedHandler` and `wrapStartHandler` take the same `router` option.
 
 ## Environment Variables
 

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
+import { SpanKind, trace as otelTrace } from '@opentelemetry/api';
 import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace';
 import { initFull, resetFullForTesting, span } from './full';
 
@@ -63,5 +64,53 @@ describe('spanEnrichers', () => {
     span('checkout', () => undefined);
 
     expect(calls).toEqual(['enricher', 'exporter']);
+  });
+});
+
+describe('client span names', () => {
+  it('names a fetch or XHR span `{method} {url.template}`', () => {
+    const exporterSide = recorder();
+    initFull({
+      service: 'web',
+      spanProcessor: exporterSide,
+      urlIdPatterns: [/^ord_\w+$/],
+    });
+
+    // The shape the fetch and XHR instrumentations start a span with.
+    otelTrace
+      .getTracer('instrumentation-fetch')
+      .startSpan('GET', {
+        kind: SpanKind.CLIENT,
+        attributes: {
+          'http.request.method': 'GET',
+          'url.full':
+            'https://api.example.com/clients/42/orders/ord_9f2k?limit=5',
+        },
+      })
+      .end();
+
+    const [span] = exporterSide.seen;
+    expect(span!.name).toBe('GET /clients/:id/orders/:id');
+    expect(span!.attributes['url.template']).toBe('/clients/:id/orders/:id');
+  });
+
+  it('keeps the method alone for a path with no id in it', () => {
+    const exporterSide = recorder();
+    initFull({ service: 'web', spanProcessor: exporterSide });
+
+    otelTrace
+      .getTracer('instrumentation-fetch')
+      .startSpan('GET', {
+        kind: SpanKind.CLIENT,
+        attributes: {
+          'http.request.method': 'GET',
+          'url.full': 'https://api.example.com/users/jane-doe/settings',
+        },
+      })
+      .end();
+
+    const [span] = exporterSide.seen;
+    expect(span!.name).toBe('GET');
+    expect(span!.attributes['url.template']).toBeUndefined();
   });
 });

@@ -38,6 +38,7 @@ initFull({
   captureResourceTiming: true, // one resourceFetch span per resource (default: on in production, off in development, where a dev server makes that hundreds per load)
   captureFetch: true, // fetch instrumentation (default: true)
   captureXHR: true, // XHR instrumentation (default: true)
+  urlIdPatterns: [/^ord_\w+$/], // more segments named :id in `GET /orders/:id` (ObjectId, UUID, numbers built in)
   captureErrors: true, // unhandled errors (default: true)
   captureWebVitals: true, // LCP, INP, CLS, FCP, TTFB (default: true)
   captureLongTasks: false, // main thread blocking tasks (default: false, opt-in)
@@ -187,6 +188,8 @@ are gone.
 | click        | `app.widget.click` + `app.widget.name` / `.id` / `app.screen.name` / `app.screen.coordinate.x`,`.y`      |
 | web vital    | `browser.web_vital` (one event per metric) + `browser.web_vital.name` / `.value` / `.rating`             |
 | long task    | `app.jank` + `app.jank.threshold`, `app.jank.duration`                                                   |
+| request      | span `{method} {url.template}` (full) / `browser {url.template}` (lean); ids become `:id`                |
+| exception    | span `exception` (caught) or `unhandled_error`; `error.type`, `chunk_load_error` for failed chunks       |
 | session      | `session.id`, `session.previous_id`; `session.start` / `session.end` events                              |
 | browser      | `browser.language`, `.platform`, `.mobile`, `.brands` (resource attributes)                              |
 | frustration  | `app.widget.click.frustration` + `app.widget.click.outcome` (`dead` \| `rage`)                           |
@@ -210,7 +213,10 @@ element, largest shift or INP target), phase durations in ms
 `navigation_type`, and for INP the script responsible
 (`longest_script.function`, `.url`, `.invoker`, `.subpart`). To find a slow
 interaction, filter `name = inp`, `rating = poor` and group by `target` or
-`longest_script.function`. `attributeRedactor` applies to selectors and URLs. `app.jank.period` and `app.jank.threshold` are in **seconds**:
+`longest_script.function`. `target` stops at an id or a `data-testid`, keeps at most two named classes per element (utility classes such
+as `[&_svg]:shrink-0` are dropped) and stays within 100 characters, so add a
+`data-testid` to make an element's target readable. `attributeRedactor` applies
+to selectors and URLs. `app.jank.period` and `app.jank.threshold` are in **seconds**:
 the browser's 50ms long-task threshold is `0.05`.
 
 ### Frustration signals (dead and rage clicks)

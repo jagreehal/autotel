@@ -33,7 +33,7 @@ describe('remotely delivered error suppression', () => {
       }),
     });
     captureException(noisy());
-    expect(spansNamed('unhandled_error')).toHaveLength(0);
+    expect(spansNamed('exception')).toHaveLength(0);
   });
 
   it('keeps everything else', () => {
@@ -46,7 +46,7 @@ describe('remotely delivered error suppression', () => {
       }),
     });
     captureException(new TypeError('real bug'));
-    expect(spansNamed('unhandled_error')).toHaveLength(1);
+    expect(spansNamed('exception')).toHaveLength(1);
   });
 
   it('adds to the local rules rather than replacing them', () => {

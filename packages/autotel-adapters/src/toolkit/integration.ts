@@ -220,8 +220,11 @@ function buildHandle<TCtx>(
   });
 
   // The adapter's span sits inside the request; the server span is what a
-  // backend groups by route, so it gets the route too.
-  if (extracted.route) setHttpServerRoute(extracted.route);
+  // backend groups by route, so it gets the route too, unless a framework
+  // instrumentation already recorded one.
+  if (extracted.route) {
+    setHttpServerRoute(extracted.route, { keepExisting: true });
+  }
 
   if (spec.storage) {
     attachForkToLogger(

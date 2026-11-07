@@ -210,6 +210,7 @@ export function recordSpan(
   startMs: number,
   endMs: number,
   attrs?: Record<string, string | number>,
+  failed?: boolean,
 ): void {
   if (exportEndpoint === undefined || !enabledSignals.has('traces')) return;
   if (!sampled()) return;
@@ -240,6 +241,8 @@ export function recordSpan(
     startTimeUnixNano: String(Math.round(startMs * 1_000_000)),
     endTimeUnixNano: String(Math.round(endMs * 1_000_000)),
     attributes,
+    // OTLP/JSON's enum value for ERROR. Unset otherwise, as the spec has it.
+    ...(failed && { status: { code: 2 } }),
   });
   // Flush immediately — browser spans are infrequent.
   flushSpans();

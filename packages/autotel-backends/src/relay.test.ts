@@ -27,7 +27,11 @@ describe('otlpRelay', () => {
 
     const response = await relay(
       post('https://app.example.com/otel/v1/traces', {
-        headers: { origin: 'https://app.example.com', cookie: 'session=1' },
+        headers: {
+          origin: 'https://app.example.com',
+          cookie: 'session=1',
+          'user-agent': 'Mozilla/5.0 (Macintosh) Firefox/140.0',
+        },
       }),
     );
 
@@ -38,6 +42,7 @@ describe('otlpRelay', () => {
       'dd-api-key': 'secret',
       'dd-otlp-source': 'llmobs',
       'content-type': 'application/json',
+      'user-agent': 'Mozilla/5.0 (Macintosh) Firefox/140.0',
     });
   });
 

@@ -1,32 +1,34 @@
 import { describe, expect, it, vi } from 'vitest';
-
-const { routeSpy } = vi.hoisted(() => ({ routeSpy: vi.fn(() => true) }));
-
-vi.mock('autotel', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('autotel')>()),
-  setHttpServerRoute: routeSpy,
-}));
-
+import { captureHttpServerRoute } from 'autotel/testing';
 import { defineFrameworkIntegration } from './integration';
 
+const integration = defineFrameworkIntegration<{ path: string }>({
+  name: 'test',
+  extractRequest: (ctx) => ({
+    method: 'GET',
+    path: ctx.path,
+    route: '/users/:id',
+  }),
+  attachLogger: vi.fn(),
+});
+
 describe('framework integration route', () => {
-  it('hands the matched route to the HTTP server span, and a later one too', async () => {
-    const integration = defineFrameworkIntegration<{ path: string }>({
-      name: 'test',
-      extractRequest: (ctx) => ({
-        method: 'GET',
-        path: ctx.path,
-        route: '/users/:id',
+  it('hands the matched route to the HTTP server span', async () => {
+    const route = await captureHttpServerRoute(() =>
+      integration.runTraced({ path: '/users/42' }, {}, async () => 'ok'),
+    );
+
+    expect(route).toBe('/users/:id');
+  });
+
+  it('hands a route set later in the request too', async () => {
+    const route = await captureHttpServerRoute(() =>
+      integration.runTraced({ path: '/users/42' }, {}, async (handle) => {
+        handle.setRoute('/v2/users/:id');
+        return 'ok';
       }),
-      attachLogger: vi.fn(),
-    });
+    );
 
-    await integration.runTraced({ path: '/users/42' }, {}, async (handle) => {
-      handle.setRoute('/v2/users/:id');
-
-      return 'ok';
-    });
-
-    expect(routeSpy.mock.calls).toEqual([['/users/:id'], ['/v2/users/:id']]);
+    expect(route).toBe('/v2/users/:id');
   });
 });

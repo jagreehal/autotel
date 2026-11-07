@@ -123,7 +123,7 @@ function findPackageRoot(): string {
 }
 
 const DEVTOOLS_FAVICON_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="🔭"><text x="50%" y="50%" transform="translate(0,10)" dy="-0.07em" text-anchor="middle" dominant-baseline="central" font-size="114">🔭</text></svg>';
+  '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="🔭" overflow="hidden"><style>text{fill:#111111}@media (prefers-color-scheme:dark){text{fill:#f5f5f5}}</style><text data-artwork="system-font" x="50%" y="50%" transform="translate(0,10)" dy="-0.07em" text-anchor="middle" dominant-baseline="central" font-size="114" font-family="sans-serif" font-weight="400">🔭</text></svg>';
 
 /**
  * The title is user-supplied (`--title` / `AUTOTEL_DEVTOOLS_TITLE`) and lands

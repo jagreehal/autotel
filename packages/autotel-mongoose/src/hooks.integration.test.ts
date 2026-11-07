@@ -42,8 +42,8 @@ beforeAll(async () => {
   mongod = await startMongo('hooks');
   const uri = mongod.uri;
 
-  // Instrument with hooks enabled BEFORE connecting/defining models
-  instrumentMongoose(mongooseInstance, { instrumentHooks: true });
+  // Instrument every hook, init included, BEFORE connecting/defining models
+  instrumentMongoose(mongooseInstance, { instrumentHooks: { exclude: [] } });
 
   await mongooseInstance.connect(uri);
 });
@@ -373,8 +373,14 @@ describe('instrumentHooks selector', () => {
     );
   }
 
-  it('traces every hook when true', async () => {
-    expect(await tracedHookNames(true)).toEqual(new Set(['init', 'save']));
+  it('traces every hook but init when true', async () => {
+    expect(await tracedHookNames(true)).toEqual(new Set(['save']));
+  });
+
+  it('traces every hook for an empty exclude list', async () => {
+    expect(await tracedHookNames({ exclude: [] })).toEqual(
+      new Set(['init', 'save']),
+    );
   });
 
   it('traces nothing when false', async () => {

@@ -76,6 +76,8 @@ Serving Hono from a Next.js catch-all? Keep `autotel-adapters` and `hono` on the
 
 Request spans follow the OpenTelemetry HTTP conventions. `http.route` holds the matched route template (`/users/:id`), the span is named `{METHOD} {route}` (or `{METHOD}` when no route matched), and `url.path` holds the raw path. A 5xx response ends the span with status ERROR.
 
+The adapters also hand the route to the HTTP server span `@opentelemetry/instrumentation-http` opened, so that span records `http.route` and is named `GET /users/:id` too, with framework instrumentation on or off. A fuller template already there, such as Express instrumentation's `/orgs/:orgId/users/:id` across nested routers, stays. A custom integration does the same with `setHttpServerRoute(route, { keepExisting: true })` from `autotel`, and tests it with `captureHttpServerRoute()` from `autotel/testing`.
+
 Next.js and Cloudflare Workers set only `url.path`. Pass `http.route` through `enrichRequest` and a name through `spanName`:
 
 ```typescript

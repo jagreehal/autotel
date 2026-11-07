@@ -24,6 +24,7 @@ import type { SpanFilterPredicate } from './filtering-span-processor';
 import type { FeatureFlagRecordOptions } from './feature-flags';
 import type { Policy } from './policy';
 import type { SpanNameNormalizerConfig } from './span-name-normalizer';
+import type { HttpClientUrlTemplate } from './http-client-url-template';
 import type {
   AttributeRedactorConfig,
   AttributeRedactorPreset,
@@ -222,6 +223,33 @@ export interface AutotelConfig {
     | string[]
     | boolean
     | Record<string, { enabled?: boolean } & Record<string, unknown>>;
+
+  /**
+   * Maps an outgoing HTTP request to its `url.template`, such as
+   * `/users/{id}`. The client span then carries `url.template` and is named
+   * `{method} {url.template}`, as the HTTP semantic conventions allow.
+   * Return `undefined` to keep the instrumentation's name, `{method}`.
+   *
+   * Applies to `@opentelemetry/instrumentation-http` and
+   * `@opentelemetry/instrumentation-undici` (Node's `fetch`), whether autotel
+   * loads them or you pass them in `instrumentations`. Your own `requestHook`
+   * runs after it.
+   *
+   * Return a template only for paths you recognise: a raw path in the span
+   * name gives every id a group of its own.
+   *
+   * @example
+   * ```typescript
+   * init({
+   *   service: 'checkout',
+   *   httpClientUrlTemplate: (url) =>
+   *     url.hostname === 'api.stripe.com'
+   *       ? url.pathname.replace(/\/(cus|pi)_\w+/g, '/{id}')
+   *       : undefined,
+   * });
+   * ```
+   */
+  httpClientUrlTemplate?: HttpClientUrlTemplate;
 
   /**
    * OTLP endpoint for traces/metrics/logs

@@ -1,38 +1,41 @@
-import { context, trace } from '@opentelemetry/api';
-import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
-import { RPCType, setRPCMetadata, type RPCMetadata } from '@opentelemetry/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { setHttpServerRoute } from './server-route';
+import { captureHttpServerRoute } from './testing';
 
 describe('setHttpServerRoute', () => {
-  const manager = new AsyncLocalStorageContextManager();
+  it('hands the route to the HTTP server span of the request', async () => {
+    let handed = false;
 
-  beforeAll(() => {
-    context.setGlobalContextManager(manager.enable());
-  });
-
-  afterAll(() => {
-    manager.disable();
-    context.disable();
-  });
-
-  it('hands the route to the HTTP server span of the request', () => {
-    const metadata: RPCMetadata = {
-      type: RPCType.HTTP,
-      span: trace.wrapSpanContext({
-        traceId: '1'.repeat(32),
-        spanId: '1'.repeat(16),
-        traceFlags: 1,
-      }),
-    };
-
-    const handed = context.with(
-      setRPCMetadata(context.active(), metadata),
-      () => setHttpServerRoute('/users/:id'),
-    );
+    const route = await captureHttpServerRoute(() => {
+      handed = setHttpServerRoute('/users/:id');
+    });
 
     expect(handed).toBe(true);
-    expect(metadata.route).toBe('/users/:id');
+    expect(route).toBe('/users/:id');
+  });
+
+  it('keeps the last route handed, through an await', async () => {
+    const route = await captureHttpServerRoute(async () => {
+      setHttpServerRoute('/users/:id');
+      await Promise.resolve();
+      setHttpServerRoute('/v2/users/:id');
+    });
+
+    expect(route).toBe('/v2/users/:id');
+  });
+
+  it('keeps a route already recorded when asked to', async () => {
+    let results: boolean[] = [];
+
+    const route = await captureHttpServerRoute(() => {
+      results = [
+        setHttpServerRoute('/orgs/:orgId/users/:id'),
+        setHttpServerRoute('/users/:id', { keepExisting: true }),
+      ];
+    });
+
+    expect(results).toEqual([true, false]);
+    expect(route).toBe('/orgs/:orgId/users/:id');
   });
 
   it('says so when no HTTP server span is listening', () => {

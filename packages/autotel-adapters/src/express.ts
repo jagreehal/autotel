@@ -20,6 +20,7 @@ export interface ExpressRequestLike {
   url?: string;
   path?: string;
   route?: { path?: string };
+  baseUrl?: string;
   headers?: Record<string, string | string[] | undefined>;
 }
 
@@ -140,7 +141,9 @@ export function withAutotel<
         {
           ...toRouteAdapterOptions(options),
           path: route,
-          route: routeTemplate(req),
+          // Under a mounted router `req.route.path` is relative to the mount,
+          // which could collide with a top-level route of the same shape.
+          route: req.baseUrl ? undefined : routeTemplate(req),
           requestLoggerOptions: options?.requestLoggerOptions,
           autoEmit: options?.autoEmit,
           finalize: () =>

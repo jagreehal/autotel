@@ -96,13 +96,14 @@ Spans are named after the operation that ran (`mongoose.users.pre.save`), and
 Mongoose's own hooks stay out of the way: a schema using `timestamps`,
 subdocuments or virtuals emits spans only for the hooks you wrote.
 
-To limit span volume, pass an include list or an `{ include?, exclude? }`
-selector. For example, `init` runs once for every hydrated document, so a find
-returning 500 documents means 500 spans:
+`true` traces every hook except `init`, which runs once for every hydrated
+document: a find returning 500 documents would mean 500 spans. To choose
+hooks, pass an include list or an `{ include?, exclude? }` selector; name
+`init`, or pass `{ exclude: [] }`, to trace it:
 
 ```typescript
 instrumentMongoose(mongoose, {
-  instrumentHooks: { exclude: ['init'] },
+  instrumentHooks: { exclude: [] },
 });
 ```
 

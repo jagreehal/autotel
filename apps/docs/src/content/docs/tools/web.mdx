@@ -49,8 +49,8 @@ signal. Pass `''` for same-origin, which needs a `/v1/traces` proxy.
 ### Spans
 
 - Navigation
-- Fetch/XHR, with timing
-- Unhandled errors
+- Fetch/XHR, with timing, named `{method} {url.template}`: `GET /clients/507f1f77bcf86cd799439011` becomes `GET /clients/:id`. MongoDB ObjectIds, UUIDs and numbers are recognised; add your own with `urlIdPatterns: [/^ord_\w+$/]`
+- Errors: `exception` for `captureException()` with no span in flight, `unhandled_error` for uncaught ones. A chunk that failed to load after a deploy gets `error.type: chunk_load_error` and one fingerprint
 - Network timing events
 
 ### Events

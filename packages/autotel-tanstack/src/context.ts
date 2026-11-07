@@ -3,7 +3,6 @@ import {
   propagation,
   trace as otelTrace,
   type Context,
-  ROOT_CONTEXT,
 } from '@opentelemetry/api';
 
 /**
@@ -34,6 +33,13 @@ export type HeadersInitType =
  * ```
  */
 export function extractContextFromRequest(request: Request): Context {
+  const active = context.active();
+
+  // Under the HTTP instrumentation the server span has already continued the
+  // caller's trace. Keep it as the parent, along with the request metadata
+  // that hands it the route.
+  if (otelTrace.getSpan(active)) return active;
+
   const carrier: Record<string, string> = {};
 
   // Extract W3C Trace Context headers
@@ -45,12 +51,9 @@ export function extractContextFromRequest(request: Request): Context {
   if (tracestate) carrier.tracestate = tracestate;
   if (baggage) carrier.baggage = baggage;
 
-  // Return ROOT_CONTEXT if no trace headers present
-  if (Object.keys(carrier).length === 0) {
-    return ROOT_CONTEXT;
-  }
+  if (Object.keys(carrier).length === 0) return active;
 
-  return propagation.extract(context.active(), carrier);
+  return propagation.extract(active, carrier);
 }
 
 /**

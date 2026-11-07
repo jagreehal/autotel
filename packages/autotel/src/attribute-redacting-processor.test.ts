@@ -262,6 +262,23 @@ describe('AttributeRedactingProcessor', () => {
         ).toEqual(['[REDACTED]', '[REDACTED]']);
       });
 
+      it('should redact bank details and date of birth by key', () => {
+        const redact = createAttributeRedactor('default');
+
+        expect(redact('beneficiary.acct_number', '12345678')).toBe(
+          '[REDACTED]',
+        );
+        expect(redact('accountNumber', '12345678')).toBe('[REDACTED]');
+        expect(redact('payee.iban', 'GB29NWBK60161331926819')).toBe(
+          '[REDACTED]',
+        );
+        expect(redact('bic_swift', 'NWBKGB2L')).toBe('[REDACTED]');
+        expect(redact('sort_code', '60-16-13')).toBe('[REDACTED]');
+        expect(redact('user.date_of_birth', '1990-01-01')).toBe('[REDACTED]');
+        expect(redact('dob', '1990-01-01')).toBe('[REDACTED]');
+        expect(redact('account.id', 'acc_1')).toBe('acc_1');
+      });
+
       it('should not redact keys that only contain a sensitive word', () => {
         const redact = createAttributeRedactor('default');
 

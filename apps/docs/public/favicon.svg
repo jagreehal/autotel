@@ -1,14 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="6" fill="#17181c"/>
-  <!-- Telescope body (red) -->
-  <rect x="7" y="5" width="17" height="6" rx="1.5" fill="#dc2626" transform="rotate(-35 15.5 8)"/>
-  <rect x="3" y="9" width="8" height="5" rx="1" fill="#b91c1c" transform="rotate(-35 7 11.5)"/>
-  <!-- Lens cap -->
-  <circle cx="22" cy="4" r="2.5" fill="#9ca3af"/>
-  <!-- Mount -->
-  <circle cx="14" cy="14" r="2.5" fill="#9ca3af"/>
-  <!-- Tripod -->
-  <line x1="14" y1="16.5" x2="9" y2="28" stroke="#6b7280" stroke-width="2.2" stroke-linecap="round"/>
-  <line x1="14" y1="16.5" x2="19" y2="28" stroke="#6b7280" stroke-width="2.2" stroke-linecap="round"/>
-  <line x1="14" y1="16.5" x2="14" y2="29" stroke="#6b7280" stroke-width="2.2" stroke-linecap="round"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="🔭" overflow="hidden"><style>text{fill:#111111}@media (prefers-color-scheme:dark){text{fill:#f5f5f5}}</style><text data-artwork="system-font" x="50%" y="50%" transform="translate(0,10)" dy="-0.07em" text-anchor="middle" dominant-baseline="central" font-size="114" font-family="sans-serif" font-weight="400">🔭</text></svg>

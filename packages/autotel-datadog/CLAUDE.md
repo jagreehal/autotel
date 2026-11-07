@@ -9,6 +9,7 @@ Joins autotel-web's traces to Datadog RUM on the same page. RUM keeps errors, se
 - **Id formats are Datadog's.** APM stores an OpenTelemetry trace id as the same 128-bit hex (`trace_id`), and span ids in decimal. So `context.trace_id` is hex, `context.span_id` is decimal (BigInt conversion). Checked against a live EU org.
 - **Spans side.** `session` = `getInternalContext().session_id` (assigned to `session.id`, sent as baggage); `user.id` from `getUser().id` (string or number only); `session.replay.url` on failed spans from `getSessionReplayLink()`. That link is always a URL: when nothing records it carries `?error-type=rum-not-tracked|incorrect-session-plan|replay-not-started`, which the join treats as "no link" and explains.
 - **Never drops an event.** `beforeSend` returns `true` always and is filled, not assigned: an app's own `context.trace_id` wins.
+- **`datadogNames()`** (`autotel-datadog/names`, any runtime, no `autotel-web`) sets Datadog's `resource.name` on MCP and HTTP client spans and `operation.name` on internal spans in `onEnding`, so it sees attributes set during the span. It never renames the OpenTelemetry span: HTTP client names keep the method alone, as the convention requires. A value already on the span wins. `init()`'s `spanEnrichers` forward `onEnding` for it.
 - **Structural type.** `DatadogRumLike` is hand-written; `index.test.ts` assigns the real `datadogRum` to it at compile time.
 
 ## Testing

@@ -24,7 +24,8 @@
  * - Spans carry the RUM session as `session.id` (also sent to your server as
  *   baggage), `user.id` from `setUser`, and on failure the session replay link.
  *
- * Imports no Datadog package: RUM is read structurally.
+ * Imports no Datadog package: RUM is read structurally. Needs `autotel-web`,
+ * an optional peer because `autotel-datadog/names` runs without it.
  */
 
 import type { SpanProcessor } from '@opentelemetry/sdk-trace';

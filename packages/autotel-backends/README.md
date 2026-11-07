@@ -244,7 +244,8 @@ initFull({ service: 'web', endpoint: '/otel' });
 
 It forwards `/v1/traces` and `/v1/logs` only, from the page's own origin only
 (`allowedOrigins` adds others, with CORS), bodies up to `maxBodyBytes` (1 MiB),
-and only `content-type` / `content-encoding` from the request: never cookies.
+and only `content-type`, `content-encoding` and `user-agent` from the request,
+so the backend sees the browser rather than the relay: never cookies.
 The backend's status comes back (so the exporter's retries work), its body
 does not.
 

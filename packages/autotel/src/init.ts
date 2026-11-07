@@ -145,6 +145,7 @@ import {
   resolveOtlpDestinations,
 } from './config-resolution';
 import {
+  applyAutotelDefaults,
   getAutoInstrumentations,
   getInstrumentationNames,
   isESMMode,
@@ -992,6 +993,11 @@ export function init(cfg: AutotelConfig): void {
     );
   }
 
+  applyAutotelDefaults(
+    mergedConfig.instrumentations,
+    mergedConfig.httpClientUrlTemplate,
+  );
+
   // Handle instrumentations: merge manual instrumentations with auto-instrumentations
   let finalInstrumentations: AutotelSdkOptions['instrumentations'] =
     mergedConfig.instrumentations ? [...mergedConfig.instrumentations] : [];
@@ -1037,6 +1043,7 @@ export function init(cfg: AutotelConfig): void {
         mergedConfig.autoInstrumentations,
         manualInstrumentationNames,
         devtoolsPort === undefined ? [] : [devtoolsPort],
+        mergedConfig.httpClientUrlTemplate,
       );
       if (Array.isArray(mergedConfig.autoInstrumentations)) {
         const missing = missingInstrumentations(

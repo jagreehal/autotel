@@ -44,8 +44,11 @@ import {
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import {
   CompositePropagator,
+  RPCType,
+  setRPCMetadata,
   W3CBaggagePropagator,
   W3CTraceContextPropagator,
+  type RPCMetadata,
 } from '@opentelemetry/core';
 import * as nodeAsyncHooks from 'node:async_hooks';
 import { type Logger } from './logger';
@@ -175,6 +178,28 @@ function ensureContextManager(): void {
   context.setGlobalContextManager(
     new AsyncLocalStorageContextManager().enable(),
   );
+}
+
+/**
+ * Run `operation` the way a request served under
+ * `@opentelemetry/instrumentation-http` runs, and return the route it handed
+ * to the HTTP server span with `setHttpServerRoute()`, or `undefined` when it
+ * handed none. For testing a framework integration's route handoff.
+ */
+export async function captureHttpServerRoute<T>(
+  operation: () => T | Promise<T>,
+): Promise<string | undefined> {
+  ensureContextManager();
+  const metadata: RPCMetadata = {
+    type: RPCType.HTTP,
+    span: otelTrace.wrapSpanContext({
+      traceId: '1'.repeat(32),
+      spanId: '1'.repeat(16),
+      traceFlags: 1,
+    }),
+  };
+  await context.with(setRPCMetadata(context.active(), metadata), operation);
+  return metadata.route;
 }
 
 /**

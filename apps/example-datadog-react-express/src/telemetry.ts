@@ -19,6 +19,7 @@ import { addReactError, reactPlugin } from '@datadog/browser-rum-react';
 import posthog from 'posthog-js';
 import type { ErrorInfo } from 'react';
 import { joinDatadog, type DatadogJoin } from 'autotel-datadog';
+import { datadogNames } from 'autotel-datadog/names';
 import { joinPostHog, traceProperties } from 'autotel-posthog';
 import {
   captureException,
@@ -125,7 +126,9 @@ initFull({
   captureConsoleLogs: true,
   // RUM's uploads through the proxy are telemetry too.
   ignoreUrls: env.VITE_DD_RUM_PROXY ? [env.VITE_DD_RUM_PROXY] : [],
-  spanEnrichers,
+  // Datadog's resource and operation names: documentLoad is its own
+  // operation rather than `Internal`.
+  spanEnrichers: [...spanEnrichers, datadogNames()],
 });
 
 /**

@@ -53,17 +53,16 @@ export interface InstrumentMongooseConfig {
   /**
    * Instrument Schema hooks — pre/post save, validate, etc. Default: `false`.
    *
-   * `true` traces every hook the application registers. Pass a selector to
-   * narrow it by hook name, which is the same shape `customMethods` uses:
+   * `true` traces every hook the application registers except `init`, which
+   * fires once per document a query hydrates: a find returning 500 documents
+   * would emit 500 spans, while `save` and `validate` fire once per operation.
+   * Pass a selector to choose by hook name, the same shape `customMethods` uses:
    *
    * ```ts
    * instrumentHooks: ['save', 'validate']      // only these
-   * instrumentHooks: { exclude: ['init'] }     // everything else
+   * instrumentHooks: { exclude: ['remove'] }   // everything else, init included
+   * instrumentHooks: { exclude: [] }           // every hook, init included
    * ```
-   *
-   * Worth narrowing for `init`: it fires once per document a query hydrates,
-   * so a find returning 500 documents emits 500 spans, while `save` and
-   * `validate` fire once per operation.
    */
   instrumentHooks?: MethodSelector;
 

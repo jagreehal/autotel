@@ -32,6 +32,7 @@ import {
   resetForTesting as resetExporter,
 } from './span-exporter';
 import { configureSession, endSessionOnUnload } from './session';
+import { urlTemplate } from './url-template';
 import {
   setBaggage as setBaggageInternal,
   clearBaggage,
@@ -74,6 +75,14 @@ export interface AutotelWebConfig extends ReleaseConfig {
    * Use '' (empty string) for same-origin (requires /v1/traces proxy).
    */
   endpoint?: string;
+
+  /**
+   * More path segments to treat as ids. Fetch spans are named after the path
+   * with each id segment replaced by `:id`, and carry it as `url.template`.
+   * MongoDB ObjectIds, UUIDs and numbers are recognised already; each pattern
+   * here is tested against one whole segment.
+   */
+  urlIdPatterns?: RegExp[];
 
   /**
    * Cross-origin destinations allowed to receive `traceparent` and `baggage`.
@@ -665,10 +674,11 @@ function patchFetch(): void {
       } catch {
         pathname = url;
       }
+      const template = urlTemplate(pathname, config?.urlIdPatterns);
       recordSpan(
         parsed.traceId,
         parsed.spanId,
-        `browser ${pathname}`,
+        `browser ${template}`,
         startTime,
         performance.timeOrigin + performance.now(),
         {
@@ -677,8 +687,13 @@ function patchFetch(): void {
           ...getBaggageEntries(),
           'http.request.method': method,
           'url.full': url,
+          'url.template': template,
           ...attrs,
         },
+        // A client span fails on a 4xx or 5xx, or when no response came back.
+        'error.type' in attrs ||
+          Number(attrs['http.response.status_code'] ?? 0) >= 400 ||
+          !('http.response.status_code' in attrs),
       );
     };
     return fetchPromise.then(
@@ -697,7 +712,7 @@ function patchFetch(): void {
         return response;
       },
       (error: unknown) => {
-        record({});
+        record({ 'error.type': errorType(error) });
         throw error;
       },
     );

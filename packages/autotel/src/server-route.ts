@@ -8,13 +8,22 @@ import { getRPCMetadata, RPCType } from '@opentelemetry/core';
  * ends, which is what lets a trace be joined to the API operation it served.
  * A framework span inside the request cannot do that for the server span.
  *
- * Returns false when no HTTP server span is listening, such as outside a
- * request or without the HTTP instrumentation.
+ * `keepExisting` leaves a route already recorded in place, such as the full
+ * template `@opentelemetry/instrumentation-express` builds across nested
+ * routers.
+ *
+ * Returns whether the route was handed: false when no HTTP server span is
+ * listening (outside a request, or without the HTTP instrumentation) or when
+ * `keepExisting` kept an earlier route.
  */
-export function setHttpServerRoute(route: string): boolean {
+export function setHttpServerRoute(
+  route: string,
+  options: { keepExisting?: boolean } = {},
+): boolean {
   const metadata = getRPCMetadata(context.active());
 
   if (metadata?.type !== RPCType.HTTP) return false;
+  if (options.keepExisting && metadata.route) return false;
 
   metadata.route = route;
 

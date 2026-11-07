@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { reportWebVital } from './web-vitals';
+import { reportWebVital, webVitalTarget } from './web-vitals';
 import { captureEvents, eventsNamed } from './test-events';
 
 describe('web vitals', () => {
@@ -291,5 +291,61 @@ describe('web vitals', () => {
     expect(event.attributes['browser.web_vital.resource_url']).toBe(
       'https://cdn.example.com/hero.jpg',
     );
+  });
+});
+
+describe('web vital target', () => {
+  const element = (html: string): Element => {
+    document.body.innerHTML = html;
+    return document.querySelector('[data-pick]')!;
+  };
+
+  it('stops at an id or a data-testid', () => {
+    expect(
+      webVitalTarget(
+        element('<main><button id="save" data-pick></button></main>'),
+      ),
+    ).toBe('#save');
+    expect(
+      webVitalTarget(
+        element(
+          '<div data-testid="cart"><button class="btn" data-pick></button></div>',
+        ),
+      ),
+    ).toBe('div[data-testid="cart"]>button.btn');
+    expect(
+      webVitalTarget(
+        element('<button data-testid=\'say "hi"\' data-pick></button>'),
+      ),
+    ).toBe('button[data-testid="say \\"hi\\""]');
+  });
+
+  it('leaves an aria-label, which can hold user content, out of the target', () => {
+    expect(
+      webVitalTarget(
+        element(
+          '<div class="row"><button class="delete" aria-label="Delete Jane Smith" data-pick></button></div>',
+        ),
+      ),
+    ).toBe('html>body>div.row>button.delete');
+  });
+
+  it('drops utility classes and stays short', () => {
+    const utilities = Array.from(
+      { length: 40 },
+      (_, i) => `[&_svg]:size-${i}`,
+    ).join(' ');
+    const target = webVitalTarget(
+      element(
+        `<section class="card"><button class="btn primary ${utilities}" data-pick></button></section>`,
+      ),
+    );
+    expect(target).toBe('html>body>section.card>button.btn.primary');
+    expect(target!.length).toBeLessThanOrEqual(100);
+  });
+
+  it('has nothing to say about a text node or nothing', () => {
+    expect(webVitalTarget(document.createTextNode('x'))).toBeUndefined();
+    expect(webVitalTarget(null)).toBeUndefined();
   });
 });

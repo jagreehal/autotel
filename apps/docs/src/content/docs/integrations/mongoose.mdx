@@ -121,13 +121,14 @@ instrumentMongoose(mongoose, {
 });
 
 instrumentMongoose(mongoose, {
-  instrumentHooks: { exclude: ['init'] }, // everything else
+  instrumentHooks: { exclude: [] }, // every hook, init included
 });
 ```
 
-Reach for that with `init`, which runs once for every document a query
-hydrates, where `save` and `validate` run once per operation. A find returning
-500 documents means 500 `post.init` spans.
+`true` leaves out `init`, which runs once for every document a query hydrates,
+where `save` and `validate` run once per operation: a find returning 500
+documents would mean 500 `post.init` spans. Name it, or pass `{ exclude: [] }`,
+to trace it.
 
 Selection works a hook at a time whichever way you register. Both
 `pre(['save', 'validate'], fn)` and `pre(/^find/, fn)` are selected and named

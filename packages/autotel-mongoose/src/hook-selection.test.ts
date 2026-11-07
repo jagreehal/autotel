@@ -71,13 +71,23 @@ function wrappedPreHooks(
 }
 
 describe('which hooks the selector traces', () => {
-  it('traces every hook the application registers when true', () => {
+  it('traces every hook but init when true', () => {
     const names = wrappedPreHooks(true, (schema) => {
+      schema.pre('init', function () {});
       schema.pre('save', function () {});
       schema.pre('validate', function () {});
     });
 
     expect(new Set(names)).toEqual(new Set(['save', 'validate']));
+  });
+
+  it('traces init too for an empty exclude list', () => {
+    const names = wrappedPreHooks({ exclude: [] }, (schema) => {
+      schema.pre('init', function () {});
+      schema.pre('save', function () {});
+    });
+
+    expect(new Set(names)).toEqual(new Set(['init', 'save']));
   });
 
   it('traces none when false', () => {

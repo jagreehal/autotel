@@ -7,6 +7,7 @@ import {
   createDatadogConfig,
   type DatadogSite,
 } from 'autotel-backends/datadog';
+import { datadogNames } from 'autotel-datadog/names';
 
 const apiKey = process.env.DATADOG_API_KEY;
 if (!apiKey) {
@@ -33,4 +34,6 @@ init({
   autoInstrumentations: ['http', 'express'],
   // The browser's `session.id` baggage lands on server spans under that name.
   baggage: '',
+  // Datadog's resource names: an outbound call is `POST api.example.com`.
+  spanEnrichers: [datadogNames()],
 });
