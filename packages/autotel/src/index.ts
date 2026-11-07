@@ -37,6 +37,7 @@ export {
   type AutotelConfig,
 } from './init';
 export type { ProcessHandlersConfig } from './process-handlers';
+export type { HttpClientUrlTemplate } from './http-client-url-template';
 
 // Baggage span processor
 export {

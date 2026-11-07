@@ -51,6 +51,23 @@ export async function withAutotel(
 
 `getRequestLogger()` requires an active span, so call it inside the `trace()` callback. It emits one correlated event when the request span ends.
 
+## Hand the route to the HTTP server span
+
+Under `@opentelemetry/instrumentation-http`, the span a backend groups by is the HTTP server span, opened before your middleware runs. Once the framework has matched a route, hand it the template:
+
+```ts
+import { setHttpServerRoute } from 'autotel';
+
+// Fills in `http.route` and renames the server span `GET /users/:id` when
+// the response ends. keepExisting leaves a fuller template another
+// instrumentation recorded, such as Express's across nested routers.
+setHttpServerRoute(req.routeTemplate, { keepExisting: true });
+```
+
+Pass the template, never the concrete path: `/users/42` puts every user in its own group. Call it from the request's own context. A context built from `ROOT_CONTEXT` drops the server span, and the route goes nowhere.
+
+Test the handoff with `captureHttpServerRoute()` from `autotel/testing`, which runs your handler as a request served under the HTTP instrumentation and returns the route it handed over.
+
 ## Forward the trace downstream
 
 When your handler calls another service, inject the active context so the trace continues across the hop.

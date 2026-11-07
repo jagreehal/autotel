@@ -11,6 +11,7 @@ import {
   trace as otelTrace,
   context,
   propagation,
+  SpanKind,
   SpanStatusCode,
   type Attributes,
 } from '@opentelemetry/api';
@@ -32,6 +33,7 @@ import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch';
 import { XMLHttpRequestInstrumentation } from '@opentelemetry/instrumentation-xml-http-request';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { rememberRequestSpan } from './join';
+import { urlTemplate } from './url-template';
 import { PrivacyManager, type PrivacyConfig } from './privacy';
 import { setupNetworkTimingObserver } from './network-timing';
 import { setupUserInteractionInstrumentation } from './user-interaction';
@@ -106,6 +108,38 @@ function sessionSpanProcessor(): SpanProcessor {
   };
 }
 
+/**
+ * The fetch and XHR instrumentations name a span after its method alone, so
+ * every `GET` is one operation. Renaming it `{method} {url.template}` at start,
+ * when an id segment was replaced, gives each endpoint its own name while
+ * keeping ids out of it.
+ */
+function urlTemplateSpanProcessor(idPatterns?: RegExp[]): SpanProcessor {
+  return {
+    onStart(span) {
+      if (span.kind !== SpanKind.CLIENT) return;
+      const url = span.attributes['url.full'];
+      const method = span.attributes['http.request.method'];
+      if (!url || !method) return;
+      let path: string;
+      try {
+        path = new URL(String(url), globalThis.location?.href).pathname;
+      } catch {
+        return;
+      }
+      const template = urlTemplate(path, idPatterns);
+      // A path with no id in it may still hold a slug, an email or a token,
+      // so only a path the patterns templated goes into the name.
+      if (template === path) return;
+      span.setAttribute('url.template', template);
+      span.updateName(`${String(method)} ${template}`);
+    },
+    onEnd() {},
+    forceFlush: () => Promise.resolve(),
+    shutdown: () => Promise.resolve(),
+  };
+}
+
 export interface AutotelWebFullConfig extends ReleaseConfig {
   /** Service name for the browser application */
   service: string;
@@ -152,6 +186,19 @@ export interface AutotelWebFullConfig extends ReleaseConfig {
    * `'/rum-proxy'` covers a vendor SDK proxied through your own origin.
    */
   ignoreUrls?: (string | RegExp)[];
+
+  /**
+   * More path segments to treat as ids. Fetch and XHR spans are named
+   * `{method} {url.template}`, with each id segment replaced by `:id`. MongoDB
+   * ObjectIds, UUIDs and numbers are recognised already; each pattern here is
+   * tested against one whole segment.
+   *
+   * @example
+   * ```ts
+   * urlIdPatterns: [/^ord_[a-z0-9]+$/]   // GET /orders/ord_9f2k -> GET /orders/:id
+   * ```
+   */
+  urlIdPatterns?: RegExp[];
 
   /**
    * Custom span processor(s). If provided, used instead of default BatchSpanProcessor + OTLP exporter.
@@ -431,6 +478,7 @@ export function initFull(config: AutotelWebFullConfig): void {
   if (config.session !== false) {
     spanProcessors.push(sessionSpanProcessor());
   }
+  spanProcessors.push(urlTemplateSpanProcessor(config.urlIdPatterns));
   // Ahead of whatever exports below: onEnd runs in array order, so an enricher
   // placed after the exporter would decorate a span that has already gone.
   if (config.spanEnrichers?.length) {

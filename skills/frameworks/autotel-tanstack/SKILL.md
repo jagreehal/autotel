@@ -111,6 +111,7 @@ tracingMiddleware({
   captureResults: false, // Capture return values
   captureParams: true, // Capture route params
   excludePaths: ['/health', /^\/api\/internal/],
+  router: getRouter(), // spans named `GET /posts/$postId`, set as http.route
   sampling: 'adaptive', // 'adaptive' | 'always' | 'never'
   customAttributes: (ctx) => ({ 'app.tenant': ctx.tenant }),
 });

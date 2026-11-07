@@ -150,6 +150,9 @@ export const REDACTOR_PATTERNS = {
   // Key patterns (match attribute names - redacts entire value)
   sensitiveKey:
     /^(password|passwd|pwd|secret|token|api[_-]?key|auth|credential|private[_-]?key|authorization)$/i,
+  /** Bank details and date of birth: `iban`, `account_number`, `accountNumber`, `dob`. */
+  personalKey:
+    /^(iban|bic(_?swift)?|swift(_?(code|bic))?|sort_?code|routing_?number|(bank_?)?acc(oun)?t_?(number|no)|date_?of_?birth|birth_?date|dob)$/i,
 } as const;
 
 const MASK_FIRST = new Set<string>(['bearer', 'iban']);
@@ -282,10 +285,14 @@ export const REDACTOR_PRESETS = {
   /**
    * Default preset - covers common PII patterns with smart masking
    * Detects: emails (a***@***.com), phone numbers, SSNs, credit cards (****1111)
-   * Redacts keys: password, secret, token, apiKey, auth, credential
+   * Redacts keys: password, secret, token, apiKey, auth, credential, plus
+   * bank details (iban, bic, account number, sort code) and date of birth
    */
   default: {
-    keyPatterns: [REDACTOR_PATTERNS.sensitiveKey],
+    keyPatterns: [
+      REDACTOR_PATTERNS.sensitiveKey,
+      REDACTOR_PATTERNS.personalKey,
+    ],
     valuePatterns: DEFAULT_VALUE_PATTERNS,
     builtins: true,
     replacement: '[REDACTED]',
@@ -298,7 +305,12 @@ export const REDACTOR_PRESETS = {
    * Includes everything in default plus: Bearer tokens, JWTs, IBAN, API keys in values
    */
   strict: {
-    keyPatterns: [REDACTOR_PATTERNS.sensitiveKey, /bearer/i, /jwt/i],
+    keyPatterns: [
+      REDACTOR_PATTERNS.sensitiveKey,
+      REDACTOR_PATTERNS.personalKey,
+      /bearer/i,
+      /jwt/i,
+    ],
     valuePatterns: [
       ...DEFAULT_VALUE_PATTERNS,
       builtinToValuePattern('jwt'),

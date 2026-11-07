@@ -9,6 +9,11 @@
  */
 
 import type { AutotelSdkOptions } from './sdk';
+import {
+  HTTP_CLIENT_PACKAGES,
+  withHttpClientUrlTemplate,
+  type HttpClientUrlTemplate,
+} from './http-client-url-template';
 import { requireModule } from './node-require';
 import { asFunction, readProperty } from './values';
 
@@ -94,6 +99,28 @@ const AUTOTEL_DEFAULTS: InstrumentationSwitches = {
     ignoreLayersType: ['middleware', 'request_handler'],
   },
 };
+
+/**
+ * Apply {@link AUTOTEL_DEFAULTS}, and the `httpClientUrlTemplate` hooks, to
+ * instrumentations built by hand, such as `new ExpressInstrumentation()`.
+ * The defaults otherwise reach only the instances autotel builds itself.
+ */
+export function applyAutotelDefaults(
+  instrumentations: AutotelSdkOptions['instrumentations'],
+  httpClientUrlTemplate?: HttpClientUrlTemplate,
+): void {
+  for (const instrumentation of (instrumentations ?? []).flat()) {
+    const name = instrumentation.instrumentationName;
+    const named = httpClientUrlTemplate && HTTP_CLIENT_PACKAGES.has(name);
+    if (!AUTOTEL_DEFAULTS[name] && !named) continue;
+    // The caller's own options win, as in withAutotelDefaults.
+    const configured = withHttpClientUrlTemplate(
+      { [name]: { ...AUTOTEL_DEFAULTS[name], ...instrumentation.getConfig() } },
+      httpClientUrlTemplate,
+    )[name];
+    if (configured) instrumentation.setConfig(configured);
+  }
+}
 
 /** Apply {@link AUTOTEL_DEFAULTS} under whatever the caller already chose. */
 function withAutotelDefaults(
@@ -301,6 +328,7 @@ export function getAutoInstrumentations(
   integrations: string[] | boolean | InstrumentationSwitches,
   manualInstrumentationNames: Set<string> = new Set(),
   ignoredServerPorts: number[] = [],
+  httpClientUrlTemplate?: HttpClientUrlTemplate,
 ): AutotelSdkOptions['instrumentations'] {
   if (integrations === false) {
     return [];
@@ -351,7 +379,10 @@ export function getAutoInstrumentations(
     };
   }
 
-  const resolved = withAutotelDefaults(config);
+  const resolved = withHttpClientUrlTemplate(
+    withAutotelDefaults(config),
+    httpClientUrlTemplate,
+  );
   if (!Array.isArray(integrations)) {
     return getNodeAutoInstrumentations(resolved);
   }

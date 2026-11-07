@@ -1,7 +1,12 @@
+import {
+  InstrumentationBase,
+  type InstrumentationConfig,
+} from '@opentelemetry/instrumentation';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   _resetAutoInstrumentationsLoader,
   _setAutoInstrumentationsLoader,
+  applyAutotelDefaults,
   getAutoInstrumentations,
   isESMMode,
   isEsmHookLoaded,
@@ -306,5 +311,75 @@ describe('isESMMode', () => {
     expect(isESMMode('/app/server.cts')).toBe(false);
     expect(isESMMode('/app/server.mjs')).toBe(true);
     expect(isESMMode('/app/server.js')).toBe(true);
+  });
+});
+
+describe('applyAutotelDefaults', () => {
+  /** An instrumentation built by hand, as `new ExpressInstrumentation(config)`. */
+  class HandBuilt extends InstrumentationBase<ExpressConfig> {
+    constructor(name: string, config: ExpressConfig = {}) {
+      super(name, '1.0.0', config);
+    }
+
+    protected init() {
+      return [];
+    }
+  }
+
+  interface ExpressConfig extends InstrumentationConfig {
+    ignoreLayers?: string[];
+    ignoreLayersType?: string[];
+  }
+
+  const EXPRESS = '@opentelemetry/instrumentation-express';
+
+  it('ignores express layers on a hand-built instance that sets none', () => {
+    const express = new HandBuilt(EXPRESS, { ignoreLayers: ['/health'] });
+
+    applyAutotelDefaults([express]);
+
+    expect(express.getConfig()).toMatchObject({
+      ignoreLayers: ['/health'],
+      ignoreLayersType: ['middleware', 'request_handler'],
+    });
+  });
+
+  it('keeps an ignoreLayersType the caller chose, empty list included', () => {
+    const express = new HandBuilt(EXPRESS, { ignoreLayersType: [] });
+
+    applyAutotelDefaults([[express]]);
+
+    expect(express.getConfig().ignoreLayersType).toEqual([]);
+  });
+
+  it('leaves other instrumentations alone', () => {
+    const http = new HandBuilt('@opentelemetry/instrumentation-http');
+
+    applyAutotelDefaults([http]);
+
+    expect(http.getConfig().ignoreLayersType).toBeUndefined();
+  });
+
+  it('adds the httpClientUrlTemplate hook to a hand-built http instance', () => {
+    const http = new HandBuilt('@opentelemetry/instrumentation-http');
+
+    applyAutotelDefaults([http], () => '/orders/{id}');
+
+    expect(http.getConfig()).toHaveProperty('requestHook');
+  });
+});
+
+describe('httpClientUrlTemplate', () => {
+  it('reaches the http and undici instrumentations autotel loads', () => {
+    const calls = captureConfig();
+
+    getAutoInstrumentations(['http', 'undici'], new Set(), [], () => '/x');
+
+    expect(calls[0]?.['@opentelemetry/instrumentation-http']).toHaveProperty(
+      'requestHook',
+    );
+    expect(calls[0]?.['@opentelemetry/instrumentation-undici']).toHaveProperty(
+      'requestHook',
+    );
   });
 });

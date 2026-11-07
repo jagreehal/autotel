@@ -1,7 +1,7 @@
 ---
 name: autotel-datadog
 description: >
-  Use this skill when a page runs Datadog RUM beside autotel-web, or when browser errors and traces should reach Datadog. joinDatadog(datadogRum) puts the autotel trace on every RUM error and the RUM session, user and replay link on spans; otlpRelay from autotel-backends/relay gets browser spans to Datadog without shipping the API key. Covers layering RUM and PostHog on Datadog tracing, and choosing one error tracker.
+  Use this skill when a page runs Datadog RUM beside autotel-web, when browser errors and traces should reach Datadog, or when Datadog APM groups spans as POST, mcp.request or Internal (datadogNames() from autotel-datadog/names sets resource.name and operation.name). joinDatadog(datadogRum) puts the autotel trace on every RUM error and the RUM session, user and replay link on spans; otlpRelay from autotel-backends/relay gets browser spans to Datadog without shipping the API key. Covers layering RUM and PostHog on Datadog tracing, and choosing one error tracker.
 ---
 
 # autotel-datadog
@@ -77,6 +77,18 @@ With RUM and PostHog both on, create the error owner's join first: it owns `sess
 ### React
 
 React 19 sends errors a boundary caught to `createRoot`'s `onCaughtError`, not `window.onerror`. Pass both callbacks to `addReactError` (RUM) or your error owner. With `reactPlugin({ router: true })` and react-router 7, import `createBrowserRouter` from `@datadog/browser-rum-react/react-router-v7`; the unversioned `/react-router` entry targets react-router 8.
+
+### Datadog resource and operation names
+
+Without `resource.name` / `operation.name`, Datadog groups every outbound call as `POST`, every MCP request as `mcp.request` and every internal span under `Internal`. Add `datadogNames()` on the server and in the page:
+
+```ts
+import { datadogNames } from 'autotel-datadog/names';
+
+init({ ...createDatadogConfig(options), spanEnrichers: [datadogNames()] });
+```
+
+Client spans get `POST api.stripe.com` (or `GET /v1/customers/:id` from `url.template`), MCP spans `tools/call get_contract`, internal spans their own name as the operation. OpenTelemetry span names stay spec-compliant. A name already set stays.
 
 ## Common Mistakes
 

@@ -30,6 +30,12 @@ export class EnrichedSpanProcessor implements SpanProcessor {
       processor.onStart(span, parentContext);
   }
 
+  // The last moment a processor can still write to the span, before any of
+  // them sees it ended.
+  onEnding(span: Span): void {
+    for (const processor of this.processors) processor.onEnding?.(span);
+  }
+
   onEnd(span: ReadableSpan): void {
     for (const processor of this.processors) processor.onEnd(span);
   }

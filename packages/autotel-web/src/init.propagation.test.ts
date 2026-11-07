@@ -75,6 +75,7 @@ interface OtlpSpan {
   traceId: string;
   spanId: string;
   attributes?: OtlpAttribute[];
+  status?: { code: number };
 }
 
 interface OtlpTracePayload {
@@ -308,5 +309,46 @@ describe('sampled flag', () => {
     init({ service: 'web', sampleRate: 0 });
     await patchedFetch()(`${PAGE_ORIGIN}/api`);
     expect(sentTraceparent()).toMatch(/-00$/);
+  });
+});
+
+describe('the browser span for a fetch', () => {
+  it('names it after the path with ids replaced', async () => {
+    init({ service: 'spa', endpoint: COLLECTOR, urlIdPatterns: [/^ord_\w+$/] });
+
+    await patchedFetch()(
+      `${PAGE_ORIGIN}/clients/507f1f77bcf86cd799439011/orders/ord_9f2k/lines/3`,
+    );
+
+    const [span] = exportedSpans();
+    expect(span!.name).toBe('browser /clients/:id/orders/:id/lines/:id');
+    expect(attributesOf(span!)['url.template']).toBe(
+      '/clients/:id/orders/:id/lines/:id',
+    );
+  });
+
+  it('marks it ERROR on a 4xx or 5xx and leaves a 2xx unset', async () => {
+    init({ service: 'spa', endpoint: COLLECTOR });
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 503 }));
+
+    await patchedFetch()(`${PAGE_ORIGIN}/down`);
+    await patchedFetch()(`${PAGE_ORIGIN}/up`);
+
+    const byName = Object.fromEntries(
+      exportedSpans().map((span) => [span.name, span.status]),
+    );
+    expect(byName['browser /down']).toEqual({ code: 2 });
+    expect(byName['browser /up']).toBeUndefined();
+  });
+
+  it('marks it ERROR with the error type when no response came back', async () => {
+    init({ service: 'spa', endpoint: COLLECTOR });
+    mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    await expect(patchedFetch()(`${PAGE_ORIGIN}/offline`)).rejects.toThrow();
+
+    const [span] = exportedSpans();
+    expect(span!.status).toEqual({ code: 2 });
+    expect(attributesOf(span!)['error.type']).toBe('TypeError');
   });
 });

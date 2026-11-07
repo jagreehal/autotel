@@ -1325,6 +1325,17 @@ function resolveCustomMethods(
  * Evaluates whether a named function in a category should be instrumented.
  * Supports boolean, include-list, and `{ include, exclude }` selectors.
  */
+/**
+ * `true` traces every hook but `init`, which fires once per hydrated document:
+ * a find returning 500 documents would emit 500 spans. `{ exclude: [] }` or a
+ * list naming `init` traces it.
+ */
+function resolveHookSelector(
+  selector: MethodSelector | undefined,
+): MethodSelector {
+  return selector === true ? { exclude: ['init'] } : (selector ?? false);
+}
+
 function selectorAllows(selector: MethodSelector, name: string): boolean {
   if (selector === false) {
     return false;
@@ -1750,7 +1761,7 @@ export function instrumentMongoose(
     peerPort: config?.peerPort || 27_017,
     tracerName: config?.tracerName || DEFAULT_TRACER_NAME,
     captureCollectionName: config?.captureCollectionName ?? true,
-    instrumentHooks: config?.instrumentHooks ?? false,
+    instrumentHooks: resolveHookSelector(config?.instrumentHooks),
     dbStatementSerializer:
       resolvedSerializer === false
         ? false

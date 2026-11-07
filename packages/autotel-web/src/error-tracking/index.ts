@@ -50,6 +50,20 @@ function isLocalOrigin(): boolean {
   return LOCAL_HOSTS.has(hostname) || hostname.endsWith('.local');
 }
 
+const CHUNK_LOAD_ERROR = 'chunk_load_error';
+
+/**
+ * A lazily loaded module the browser could not fetch, most often a tab still
+ * running the previous build after a deploy removed its chunks. Messages per
+ * engine: Chromium, Safari, Firefox, then webpack's `ChunkLoadError`.
+ */
+const CHUNK_LOAD_MESSAGE =
+  /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Loading (CSS )?chunk \S+ failed/i;
+
+function isChunkLoadError(type: string, message: string): boolean {
+  return type === 'ChunkLoadError' || CHUNK_LOAD_MESSAGE.test(message);
+}
+
 function recordException(
   error: unknown,
   mechanismType: ExceptionMechanism['type'],
@@ -93,13 +107,20 @@ function recordException(
     return;
   }
 
+  // A chunk that failed to load is one issue however many call sites and
+  // bundle hashes it shows up with, so it gets one type and one fingerprint.
+  const chunkLoad = isChunkLoadError(topException.type, topException.value);
+  const errorType = chunkLoad ? CHUNK_LOAD_ERROR : topException.type;
+
   // Computed from the frames already parsed above, so the grouping decision
   // travels with the error instead of each backend re-deriving its own.
-  const fingerprint = fingerprintFrames(
-    topException.type,
-    topException.value,
-    topException.stacktrace?.frames,
-  );
+  const fingerprint = chunkLoad
+    ? fingerprintFrames(CHUNK_LOAD_ERROR, '', undefined)
+    : fingerprintFrames(
+        topException.type,
+        topException.value,
+        topException.stacktrace?.frames,
+      );
 
   // The trail leading in. An exception says where the code gave up; the steps
   // before it say what the person was doing, which is the half that reproduces.
@@ -123,6 +144,7 @@ function recordException(
     activeSpan.setAttribute('exception.message', topException.value);
     activeSpan.setAttribute('exception.list', JSON.stringify(exceptionList));
     activeSpan.setAttribute('exception.fingerprint', fingerprint);
+    activeSpan.setAttribute('error.type', errorType);
     activeSpan.setAttribute('error.source', mechanismType);
     if (trail) activeSpan.setAttribute('exception.breadcrumbs', trail);
   } else {
@@ -133,7 +155,12 @@ function recordException(
     const parent = request
       ? trace.setSpanContext(context.active(), request)
       : context.active();
-    tracer.startActiveSpan('unhandled_error', {}, parent, (span) => {
+    // `captureException()` is a caught error; only the window handlers see
+    // errors nothing caught.
+    const name = topException.mechanism.handled
+      ? 'exception'
+      : 'unhandled_error';
+    tracer.startActiveSpan(name, {}, parent, (span) => {
       const normalizedError =
         error instanceof Error ? error : new Error(String(error));
       span.recordException(normalizedError);
@@ -145,6 +172,7 @@ function recordException(
       span.setAttribute('exception.message', topException.value);
       span.setAttribute('exception.list', JSON.stringify(exceptionList));
       span.setAttribute('exception.fingerprint', fingerprint);
+      span.setAttribute('error.type', errorType);
       span.setAttribute('error.source', mechanismType);
       if (trail) span.setAttribute('exception.breadcrumbs', trail);
       span.end();

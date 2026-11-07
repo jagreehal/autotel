@@ -17,7 +17,7 @@ export const Default: Story = { args: {} };
 
 export const Large: Story = { args: { width: 96, height: 96 } };
 
-/** Inherits a caller-supplied colour. */
+/** The colour of the plain glyph drawn where no colour emoji font is installed. */
 export const Tinted: Story = {
   args: { fill: '#38bdf8', width: 64, height: 64 },
 };

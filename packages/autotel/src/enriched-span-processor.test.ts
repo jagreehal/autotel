@@ -3,6 +3,7 @@ import {
   TracerProvider,
   BatchSpanProcessor,
   InMemorySpanExporter,
+  SimpleSpanProcessor,
   type ReadableSpan,
   type SpanProcessor,
 } from '@opentelemetry/sdk-trace';
@@ -96,4 +97,31 @@ describe('EnrichedSpanProcessor', () => {
       expect(calls).toEqual(['flush', 'shutdown']);
     },
   );
+
+  it('lets an enricher write to a span as it ends, before export', async () => {
+    const exporter = new InMemorySpanExporter();
+    const atEnd: SpanProcessor = {
+      onStart() {},
+      onEnding(span) {
+        span.setAttribute('resource.name', `${span.name} at end`);
+      },
+      onEnd() {},
+      forceFlush: async () => {},
+      shutdown: async () => {},
+    };
+    const provider = new TracerProvider({
+      spanProcessors: [
+        new EnrichedSpanProcessor(
+          [atEnd],
+          [new SimpleSpanProcessor({ exporter })],
+        ),
+      ],
+    });
+
+    provider.getTracer('t').startSpan('request').end();
+
+    expect(exporter.getFinishedSpans()[0]?.attributes['resource.name']).toBe(
+      'request at end',
+    );
+  });
 });

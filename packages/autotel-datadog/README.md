@@ -66,6 +66,29 @@ const relay = otlpRelay(
 app.post('/otel/v1/*', (c) => relay(c.req.raw)); // Hono; any Request/Response framework works
 ```
 
+## Datadog resource and operation names
+
+Datadog groups APM by `operation.name` and `resource.name`, and derives them when a span carries neither. Three common kinds then collapse into one group each: every outbound call is resource `POST`, every MCP request `mcp.request`, every internal span operation `Internal`. `datadogNames()` sets them when a span ends, on the server or in the page:
+
+```typescript
+import { datadogNames } from 'autotel-datadog/names';
+
+init({ ...createDatadogConfig(options), spanEnrichers: [datadogNames()] });
+initFull({
+  service: 'web',
+  endpoint: '/otel',
+  spanEnrichers: [datadogNames()],
+});
+```
+
+| span                    | gets                                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| outbound HTTP (client)  | `resource.name` `GET /v1/customers/:id` from `url.template`, or `POST api.stripe.com` from `server.address` |
+| MCP (`mcp.method.name`) | `resource.name` `tools/call get_contract`, or the method alone                                              |
+| internal                | `operation.name` set to the span name                                                                       |
+
+The OpenTelemetry span names stay as the conventions define them: an HTTP client span keeps `POST`, since the convention keeps the host out of the name. A name the span already carries stays. `autotel-datadog/names` needs no `autotel-web`, so a Node service can install the package for it alone. The main entry, `joinDatadog`, imports `autotel-web/join` and needs `autotel-web` installed.
+
 ## Two error trackers, one error
 
 With RUM on the page, an uncaught error is recorded twice: by RUM (a RUM error) and by autotel-web's own error capture (an exception on a span, which Datadog Error Tracking also groups as an issue). If RUM is your error tracker, turn autotel's capture off with `initFull({ captureErrors: false })`. Spans that fail still record their exceptions.

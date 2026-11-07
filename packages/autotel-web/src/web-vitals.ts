@@ -112,6 +112,49 @@ function stripUrl(raw: string): string | undefined {
   return url.origin + url.pathname;
 }
 
+const MAX_TARGET_LENGTH = 100;
+/** A class that reads as a name; utility classes such as `[&_svg]:shrink-0` do not. */
+const NAMED_CLASS = /^[a-z][\w-]*$/i;
+
+/** One selector step, and whether it already identifies the element. */
+function selectorStep(el: Element): [string, boolean] {
+  if (el.id) return [`#${el.id}`, true];
+  // A test id is the developer's. An accessible name is often the user's
+  // content ("Delete Jane Smith"), so it never goes into a target.
+  const testId = el.getAttribute('data-testid');
+  if (testId) {
+    return [
+      `${el.localName}[data-testid="${testId.replaceAll('"', '\\"')}"]`,
+      true,
+    ];
+  }
+  const classes = [...el.classList]
+    .filter((name) => NAMED_CLASS.test(name))
+    .slice(0, 2);
+  return [[el.localName, ...classes].join('.'), false];
+}
+
+/**
+ * The element a vital blames, as a short selector to group by. web-vitals'
+ * own selector lists every class, which on a utility-styled button runs to
+ * hundreds of characters. This stops at an id or a `data-testid`,
+ * keeps at most two named classes per step, and stays within 100 characters.
+ */
+export function webVitalTarget(node: Node | null): string | undefined {
+  let selector = '';
+  // SAFETY: nodeType 1 is ELEMENT_NODE, and parentElement is an Element or null.
+  let el = node?.nodeType === 1 ? (node as Element) : null;
+  for (; el; el = el.parentElement) {
+    const [step, identifies] = selectorStep(el);
+    if (selector.length + step.length + 1 > MAX_TARGET_LENGTH) {
+      return selector || step.slice(0, MAX_TARGET_LENGTH);
+    }
+    selector = selector ? `${step}>${selector}` : step;
+    if (identifies) break;
+  }
+  return selector || undefined;
+}
+
 /**
  * Emit one `browser.web_vital` event. Exported for tests and manual reporting.
  *
@@ -223,6 +266,7 @@ export function setupWebVitals(config: WebVitalsConfig): void {
   const opts = {
     reportAllChanges: config.reportAllChanges ?? false,
     reportSoftNavs: config.reportSoftNavs ?? false,
+    generateTarget: webVitalTarget,
   };
 
   // The attribution build names the element and phase behind each value.

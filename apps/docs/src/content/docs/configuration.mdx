@@ -200,6 +200,30 @@ Useful for platforms like GCP Cloud Run or AWS Lambda where stdout is managed ex
 
 With no `logger`, these warnings go to the console, and `silent: true` suppresses them. With a `logger`, they go to its `warn` method. To decide ESM, `init()` reads the entry file's extension first (`.mjs`/`.mts` or `.cjs`/`.cts`), then the `type` in your `package.json`, so a `.cjs` entry in a `"type": "module"` package counts as CommonJS.
 
+## Outbound HTTP span names
+
+The HTTP instrumentations name a client span `GET` or `POST` and nothing more:
+they cannot tell which path segments are ids. The HTTP semantic conventions
+allow `{method} {url.template}` once you know the template, and keep the host
+out of the name. `httpClientUrlTemplate` supplies the template:
+
+```typescript
+init({
+  service: 'checkout',
+  httpClientUrlTemplate: (url) => {
+    if (url.hostname !== 'api.stripe.com') return undefined;
+    return url.pathname.replace(/\/(cus|pi)_\w+/g, '/{id}');
+  },
+});
+// POST https://api.stripe.com/v1/customers/cus_123 -> span `POST /v1/customers/{id}`
+```
+
+The span also gets `url.template`. Return `undefined` and the span keeps its
+name, so map only the paths you recognise: a raw path in the name gives every
+id a group of its own. It covers `@opentelemetry/instrumentation-http` and
+`@opentelemetry/instrumentation-undici` (Node's `fetch`), loaded by autotel or
+passed in `instrumentations`, and your own `requestHook` runs after it.
+
 ## spanEnrichers
 
 Span processors that decorate spans on the way out. Unlike `spanProcessors`,

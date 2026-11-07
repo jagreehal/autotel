@@ -64,7 +64,7 @@ interface InstrumentMongooseConfig {
   peerPort?: number; // Sets server.port (default: 27017)
   tracerName?: string; // Default: 'autotel-mongoose'
   captureCollectionName?: boolean; // Include db.collection.name (default: true)
-  instrumentHooks?: boolean; // Instrument Schema pre/post hooks (default: false)
+  instrumentHooks?: MethodSelector; // Schema pre/post hooks (default: false; true skips init)
 
   // Controls db.query.text serialization
   dbStatementSerializer?:
@@ -113,7 +113,7 @@ Span names follow `<operation> <collectionName>` (e.g., `find users`) or fall ba
 `populate`, `select`, `lean`, `where`, `sort`, `limit`, `skip`
 
 **Schema hooks** (opt-in via `instrumentHooks: true`):
-User-defined `pre` and `post` hooks are wrapped. Internal Mongoose hooks are skipped automatically.
+User-defined `pre` and `post` hooks are wrapped, except `init`, which fires once per hydrated document. Name it in a selector, or pass `{ exclude: [] }`, to trace it. Internal Mongoose hooks are skipped automatically.
 
 ### Statement capture and redaction
 

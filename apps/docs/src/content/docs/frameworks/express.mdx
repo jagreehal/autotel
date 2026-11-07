@@ -83,8 +83,9 @@ middleware would land on a `middleware - anonymous` span that ends the moment
 `next()` fires - not on the request span your backend shows as the resource.
 
 autotel turns those leaf layer spans off by default
-(`ignoreLayersType: ['middleware', 'request_handler']`), so `ctx` inside a
-middleware already means the request:
+(`ignoreLayersType: ['middleware', 'request_handler']`), including on an
+`ExpressInstrumentation` you build yourself and pass in `instrumentations`, so
+`ctx` inside a middleware already means the request:
 
 ```typescript
 import { ctx } from 'autotel';
@@ -111,6 +112,7 @@ init({
     // `[]` restores upstream behaviour; `ignoreLayers` silences named paths.
     express: { ignoreLayersType: [] },
   },
+  // or, on an instance you build: new ExpressInstrumentation({ ignoreLayersType: [] })
 });
 ```
 

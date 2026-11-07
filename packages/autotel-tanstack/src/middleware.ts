@@ -4,6 +4,7 @@ import { extractContextFromRequest } from './context';
 import { isServerSide } from './env';
 import { isControlFlowSignal, isRealError } from './control-flow';
 import { isExcludedPath } from './route-filter';
+import { requestSpan } from './request-name';
 import {
   type TracingMiddlewareConfig,
   DEFAULT_CONFIG,
@@ -16,7 +17,10 @@ import {
 function buildRequestAttributes(
   request: Request,
   config: Required<
-    Omit<TracingMiddlewareConfig, 'customAttributes' | 'service' | 'type'>
+    Omit<
+      TracingMiddlewareConfig,
+      'customAttributes' | 'service' | 'type' | 'router'
+    >
   >,
 ): Attributes {
   const url = new URL(request.url);
@@ -51,7 +55,10 @@ function buildServerFnAttributes(
   method: string,
   args: unknown,
   config: Required<
-    Omit<TracingMiddlewareConfig, 'customAttributes' | 'service' | 'type'>
+    Omit<
+      TracingMiddlewareConfig,
+      'customAttributes' | 'service' | 'type' | 'router'
+    >
   >,
 ): Attributes {
   const attrs: Attributes = {
@@ -250,12 +257,19 @@ export function createTracingMiddleware<TContext = unknown>(
 
     // Run within parent context for distributed tracing
     return context.with(parentContext, async () => {
-      const spanName = `${request.method} ${pathname || url.pathname}`;
+      const { name: spanName, attributes: nameAttrs } = requestSpan(
+        request.method,
+        pathname ? Object.assign(new URL(url), { pathname }) : url,
+        mergedConfig.router,
+      );
 
       return trace.run(
         { name: spanName, isError: isRealError },
         async (ctx) => {
-          const attrs = buildRequestAttributes(request, mergedConfig);
+          const attrs = {
+            ...buildRequestAttributes(request, mergedConfig),
+            ...nameAttrs,
+          };
           ctx.setAttributes(attrs as Record<string, string | number | boolean>);
 
           // Add custom attributes if provided

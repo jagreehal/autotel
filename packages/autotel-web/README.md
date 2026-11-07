@@ -100,6 +100,8 @@ built on the browser conventions works without knowing autotel exists.
 | a click        | `app.widget.click` + `app.widget.name` / `app.widget.id` / `app.screen.*`                             |
 | a web vital    | `browser.web_vital` (one event per metric, with `target`, phase durations and INP `longest_script.*`) |
 | a long task    | `app.jank` + `app.jank.threshold`                                                                     |
+| a request      | span `{method} {url.template}` (full) or `browser {url.template}` (lean), ids as `:id`                |
+| an exception   | span `exception` (caught, `captureException`) or `unhandled_error`, with `error.type`                 |
 | a session      | `session.id` / `session.previous_id`, `session.start` / `session.end`                                 |
 | the browser    | `browser.language`, `.platform`, `.mobile`, `.brands` (resource)                                      |
 | an automation  | `user_agent.synthetic.type` = `test` (resource)                                                       |
@@ -507,6 +509,19 @@ A failed request's error leads back to its trace even after the span ended:
 from `error.request` (axios), `error.response` (ky, ofetch) or `error.cause`,
 and `captureException(error)` records it under that request's span.
 
+Fetch and XHR spans are named `{method} {url.template}`: `GET
+/clients/507f1f77bcf86cd799439011` becomes `GET /clients/:id`, with
+`url.template` set. MongoDB ObjectIds, UUIDs and numeric segments are
+recognised; add your own with `urlIdPatterns: [/^ord_\w+$/]`. Lean mode names
+its spans `browser {url.template}` the same way, and marks a 4xx, a 5xx or a
+request with no response `ERROR`.
+
+A caught error (`captureException`) with no span in flight gets a span named
+`exception`; one nothing caught gets `unhandled_error`. Both carry `error.type`.
+A lazily loaded chunk that failed to fetch, such as one a tab still on the
+previous build asks for after a deploy, gets `error.type: chunk_load_error` and one
+fingerprint, so it groups as one issue whatever the chunk.
+
 Other SDKs' own uploads (Datadog RUM, Sentry, PostHog Cloud, New Relic) are
 never traced. For one proxied through your origin, add its path:
 `initFull({ ignoreUrls: ['/rum-proxy'] })`.
@@ -751,6 +766,9 @@ interface AutotelWebConfig {
   /** Enable debug logging (default: false) */
   debug?: boolean;
 
+  /** More path segments to name `:id` in span names and `url.template` */
+  urlIdPatterns?: RegExp[];
+
   /**
    * OTLP endpoint for exporting browser spans.
    * When set, a real span is sent via sendBeacon for each fetch,
@@ -852,6 +870,7 @@ interface AutotelWebFullConfig {
   captureNavigation?: boolean; // default true
   captureFetch?: boolean; // default true
   captureXHR?: boolean; // default true
+  urlIdPatterns?: RegExp[]; // more path segments named `:id` in `{method} {url.template}`
   captureNetworkTiming?: boolean; // http.client.network_timing events (default true)
   captureErrors?: boolean; // unhandled errors → span.recordException (default true)
   captureWebVitals?: boolean; // LCP, INP, CLS, FCP, TTFB → browser.web_vital events (default true)

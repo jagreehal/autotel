@@ -7,6 +7,7 @@
  */
 import { createMiddleware, createStart } from '@tanstack/react-start'
 import { createTracingServerHandler } from 'autotel-tanstack/middleware'
+import { getRouter } from './router'
 
 // Import instrumentation to ensure tracing is initialized
 import './instrumentation'
@@ -16,6 +17,9 @@ const requestTracingMiddleware = createMiddleware().server(
   createTracingServerHandler({
     captureHeaders: ['x-request-id', 'user-agent'],
     excludePaths: ['/health', '/healthz', '/ready', '/metrics', '/_ping'],
+    // Names each request after the route it matches (`GET /posts/$postId`)
+    // and hands that route to the HTTP server span as `http.route`.
+    router: getRouter(),
   }),
 )
 

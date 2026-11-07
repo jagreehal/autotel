@@ -1,6 +1,30 @@
 import type { Attributes } from '@opentelemetry/api';
 
 /**
+ * The part of a TanStack router that matches a pathname to its route:
+ * `router.getMatchedRoutes`, whose third entry is the route found.
+ */
+export interface RouteMatcher {
+  /** Where the router is mounted, such as `/app`; `/` at the root. */
+  basepath?: string;
+  /**
+   * The router's input rewrite, which strips its `basepath` and applies any
+   * `rewrite` option. Request paths go through it before matching, as the
+   * router's own locations do.
+   */
+  rewrite?: {
+    input?: (location: { url: URL }) => undefined | string | URL;
+  };
+  getMatchedRoutes(
+    pathname: string,
+  ): readonly [
+    ReadonlyArray<object>,
+    Record<string, string>,
+    { fullPath: string } | undefined,
+  ];
+}
+
+/**
  * Configuration options for TanStack Start instrumentation
  */
 export interface TanStackInstrumentationConfig {
@@ -41,6 +65,15 @@ export interface TanStackInstrumentationConfig {
    * @default []
    */
   excludePaths?: (string | RegExp)[];
+
+  /**
+   * A router built from your route tree, such as `getRouter()` from
+   * `src/router.tsx`. Request spans are then named after the matched route
+   * (`GET /posts/$postId`), which also becomes `http.route` on the request
+   * span and the HTTP server span. Without it, request spans are named after
+   * the path.
+   */
+  router?: RouteMatcher;
 
   /**
    * Sampling strategy
@@ -143,7 +176,7 @@ export interface WrapStartHandlerConfig extends TanStackInstrumentationConfig {
  * Default configuration values
  */
 export const DEFAULT_CONFIG: Required<
-  Omit<TanStackInstrumentationConfig, 'customAttributes' | 'service'>
+  Omit<TanStackInstrumentationConfig, 'customAttributes' | 'service' | 'router'>
 > = {
   captureArgs: true,
   captureResults: false,
@@ -160,6 +193,7 @@ export const SPAN_ATTRIBUTES = {
   // HTTP semantic conventions
   HTTP_REQUEST_METHOD: 'http.request.method',
   HTTP_RESPONSE_STATUS_CODE: 'http.response.status_code',
+  HTTP_ROUTE: 'http.route',
   URL_PATH: 'url.path',
   URL_QUERY: 'url.query',
   URL_FULL: 'url.full',

@@ -5,12 +5,13 @@ import { resetForTesting } from './span-exporter';
 import { resetSessionForTesting } from './session';
 import { captureEvents, eventsNamed } from './test-events';
 
-import type { WebVitalReport } from './web-vitals';
+import { webVitalTarget, type WebVitalReport } from './web-vitals';
 
 type Report = (metric: WebVitalReport) => void;
 interface ReportOpts {
   reportAllChanges?: boolean;
   reportSoftNavs?: boolean;
+  generateTarget?: unknown;
 }
 interface Registration {
   name: string;
@@ -54,7 +55,11 @@ it('registers every vital from the attribution build with the configured options
     expect.arrayContaining(['CLS', 'FCP', 'INP', 'LCP', 'TTFB']),
   );
   for (const { opts } of registered) {
-    expect(opts).toEqual({ reportAllChanges: true, reportSoftNavs: true });
+    expect(opts).toEqual({
+      reportAllChanges: true,
+      reportSoftNavs: true,
+      generateTarget: webVitalTarget,
+    });
   }
 });
 

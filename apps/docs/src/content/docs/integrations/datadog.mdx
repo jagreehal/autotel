@@ -639,6 +639,23 @@ does not let anything change. That is why the join writes `context.*`.
 The example [`apps/example-datadog`](https://github.com/jagreehal/autotel/tree/main/apps/example-datadog)
 runs both: `pnpm web`, and `pnpm smoke:web` to check them against your org.
 
+## Resource and operation names
+
+Datadog groups APM by `operation.name` and `resource.name`, and derives them when a span carries neither: every outbound call becomes resource `POST`, every MCP request `mcp.request`, every internal span operation `Internal`. `datadogNames()` from `autotel-datadog/names` sets them as a span ends, on the server or in the page:
+
+```typescript
+import { init } from 'autotel';
+import { createDatadogConfig } from 'autotel-backends/datadog';
+import { datadogNames } from 'autotel-datadog/names';
+
+init({
+  ...createDatadogConfig({ apiKey, site: 'datadoghq.eu', service: 'api' }),
+  spanEnrichers: [datadogNames()],
+});
+```
+
+Outbound HTTP spans get `GET /v1/customers/:id` from `url.template` (see `httpClientUrlTemplate`), or `POST api.stripe.com` from `server.address`. MCP spans get `tools/call get_contract`. Internal spans take their own name as the operation. OpenTelemetry span names stay as the conventions define them, and a name the span already carries stays.
+
 ## Querying Datadog Back
 
 Everything above sends telemetry to Datadog. Reading it back, from

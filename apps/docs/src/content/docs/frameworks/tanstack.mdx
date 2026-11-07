@@ -143,6 +143,11 @@ Pass the route's `ctx` through. TanStack Router types `params`, `search` and the
 | `excludePaths`     | `string[]`                                | `[]`         | Glob paths to skip                                        |
 | `sampling`         | `'always' \| 'adaptive' \| 'never'`       | `'adaptive'` | Sampling strategy                                         |
 | `customAttributes` | `({ type, name, request }) => Attributes` | —            | Per-span custom attributes                                |
+| `router`           | your router, such as `getRouter()`        | —            | Names requests after the route they match                 |
+
+### Span names
+
+Server-function requests are named `METHOD /_serverFn`, with the function id in `tanstack.server_function.name`, so names stay the same across deploys. Pass `router` and every other request is named after the route it matches, `GET /posts/$postId`, which also becomes `http.route` on the request span and on the HTTP server span. The router's `basepath` and `rewrite` apply as they do in the app: under basepath `/app`, `/app/posts/1` records `/app/posts/$postId`. A request no route matches keeps its path.
 
 ## Span attributes
 

@@ -3,6 +3,7 @@ import { trace, init } from 'autotel';
 import { extractContextFromRequest } from './context';
 import { isControlFlowSignal, isRealError } from './control-flow';
 import { isExcludedPath } from './route-filter';
+import { requestSpan } from './request-name';
 import {
   type WrapStartHandlerConfig,
   DEFAULT_CONFIG,
@@ -94,7 +95,11 @@ export function wrapStartHandler(
 
       // Run within parent context
       return context.with(parentContext, async () => {
-        const spanName = `${request.method} ${url.pathname}`;
+        const { name: spanName, attributes: nameAttrs } = requestSpan(
+          request.method,
+          url,
+          mergedConfig.router,
+        );
 
         return trace.run(
           { name: spanName, isError: isRealError },
@@ -105,6 +110,7 @@ export function wrapStartHandler(
               [SPAN_ATTRIBUTES.URL_PATH]: url.pathname,
               [SPAN_ATTRIBUTES.URL_FULL]: request.url,
               [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'request',
+              ...nameAttrs,
             });
 
             if (url.search) {
@@ -234,7 +240,11 @@ export function createTracedHandler(
       const parentContext = extractContextFromRequest(request);
 
       return context.with(parentContext, async () => {
-        const spanName = `${request.method} ${url.pathname}`;
+        const { name: spanName, attributes: nameAttrs } = requestSpan(
+          request.method,
+          url,
+          mergedConfig.router,
+        );
 
         return trace.run(
           { name: spanName, isError: isRealError },
@@ -243,6 +253,7 @@ export function createTracedHandler(
               [SPAN_ATTRIBUTES.HTTP_REQUEST_METHOD]: request.method,
               [SPAN_ATTRIBUTES.URL_PATH]: url.pathname,
               [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'request',
+              ...nameAttrs,
             });
 
             if (url.search) {
