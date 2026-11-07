@@ -5,7 +5,7 @@ import { createPrefixAdapter } from './prefix-adapter';
  * instrument and event names under an `opencode.*` prefix and the `com.opencode`
  * scope. Same shape → same factory.
  */
-export const opencodeAdapter = createPrefixAdapter({
+export const opencodeAdapter = /* @__PURE__ */ createPrefixAdapter({
   kind: 'opencode',
   prefix: 'opencode.',
   scopeHint: 'opencode',

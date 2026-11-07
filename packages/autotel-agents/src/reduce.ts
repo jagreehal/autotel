@@ -25,6 +25,7 @@ import {
 import type { AgentMetricSignal, SessionIdentity } from './adapters/types';
 import type {
   AccountingStatus,
+  BodyFacts,
   AgentEvent,
   AgentKind,
   AgentRawEvent,
@@ -97,6 +98,14 @@ function emptyRollup(): AgentSessionRollup {
     untokenedRequests: 0,
     apiErrors: 0,
     apiRefusals: 0,
+    stopReasons: wireKeyed(),
+    thinkingTokens: 0,
+    cacheWrite1hTokens: 0,
+    cacheWrite5mTokens: 0,
+    largestRequestBytes: 0,
+    pendingRequestBodies: wireKeyed(),
+    pendingResponseBodies: wireKeyed(),
+    unkeyedRequestBodies: [],
     prompts: 0,
     toolCalls: 0,
     accepted: 0,
@@ -226,6 +235,155 @@ function tallyToolKind(rollup: AgentSessionRollup, event: AgentEvent): void {
   }
 }
 
+/** Body facts kept waiting for their partner event, per map. */
+const PENDING_BODY_LIMIT = 64;
+
+function holdBodyFacts(
+  pending: Record<string, BodyFacts>,
+  key: string,
+  facts: BodyFacts,
+): void {
+  pending[key] = { ...pending[key], ...facts };
+  const keys = Object.keys(pending);
+  // Insertion order, so the first key is the one waiting longest.
+  if (keys.length > PENDING_BODY_LIMIT) delete pending[keys[0]!];
+}
+
+function takeBodyFacts(
+  pending: Record<string, BodyFacts>,
+  key: string | undefined,
+): BodyFacts | undefined {
+  if (!key) return undefined;
+  const facts = pending[key];
+  delete pending[key];
+  return facts;
+}
+
+/**
+ * A response body: its totals count at once, and its facts, with its request
+ * body's, go onto the `api_request` event for the same call, or wait for it.
+ */
+function foldResponseBody(session: AgentSession, event: AgentEvent): void {
+  const { rollup } = session;
+  if (event.stopReason) {
+    rollup.stopReasons[event.stopReason] =
+      (rollup.stopReasons[event.stopReason] ?? 0) + 1;
+  }
+  rollup.thinkingTokens += event.thinkingTokens ?? 0;
+  rollup.cacheWrite1hTokens += event.cacheWrite1hTokens ?? 0;
+  rollup.cacheWrite5mTokens += event.cacheWrite5mTokens ?? 0;
+
+  const facts: BodyFacts = {
+    ...takeBodyFacts(rollup.pendingRequestBodies, event.requestBodyId),
+    requestBodyId: event.requestBodyId,
+    stopReason: event.stopReason,
+    thinkingTokens: event.thinkingTokens,
+    cacheWrite1hTokens: event.cacheWrite1hTokens,
+    cacheWrite5mTokens: event.cacheWrite5mTokens,
+    toolUses: event.toolUses,
+    serviceTier: event.serviceTier,
+  };
+  if (!event.requestId) return;
+  const request = session.timeline.findLast(
+    (candidate) =>
+      candidate.type === 'api_request' &&
+      candidate.requestId === event.requestId,
+  );
+  if (request) Object.assign(request, facts);
+  else holdBodyFacts(rollup.pendingResponseBodies, event.requestId, facts);
+}
+
+/**
+ * A request body: its facts go where its response body's went (onto the
+ * `api_request`, or waiting with the response facts), or wait for the response.
+ */
+function foldRequestBody(session: AgentSession, event: AgentEvent): void {
+  const { rollup } = session;
+  const { requestBodyId } = event;
+  rollup.largestRequestBytes = Math.max(
+    rollup.largestRequestBytes,
+    event.requestBytes ?? 0,
+  );
+  const facts: BodyFacts = {
+    requestBytes: event.requestBytes,
+    request: event.request,
+  };
+  if (!requestBodyId) {
+    holdUnkeyedRequestBody(session, event, facts);
+    return;
+  }
+  const target =
+    session.timeline.findLast(
+      (candidate) =>
+        candidate.type === 'api_request' &&
+        candidate.requestBodyId === requestBodyId,
+    ) ??
+    Object.values(rollup.pendingResponseBodies).find(
+      (waiting) => waiting.requestBodyId === requestBodyId,
+    );
+  if (target) Object.assign(target, facts);
+  else holdBodyFacts(rollup.pendingRequestBodies, requestBodyId, facts);
+}
+
+/**
+ * Claude Code versions before `request_body_id` link a request body to nothing.
+ * Calls run in sequence: a call's body is sent after the previous call on its
+ * model ended (`api_request` is logged at the end), so each call takes the
+ * latest body sent since the call before it. Exporters batch and deliver out of
+ * order, so every arrival on either side matches the model's calls again from
+ * scratch. Parallel calls on one model can swap sizes.
+ */
+function holdUnkeyedRequestBody(
+  session: AgentSession,
+  event: AgentEvent,
+  facts: BodyFacts,
+): void {
+  // Kept in timestamp order: the limit drops the earliest body.
+  const bodies = session.rollup.unkeyedRequestBodies;
+  const after = bodies.findIndex((body) => body.timestamp > event.timestamp);
+  bodies.splice(after === -1 ? bodies.length : after, 0, {
+    model: event.model,
+    timestamp: event.timestamp,
+    facts,
+  });
+  if (bodies.length > PENDING_BODY_LIMIT) bodies.shift();
+  matchUnkeyedRequestBodies(session, event.model);
+}
+
+function matchUnkeyedRequestBodies(
+  session: AgentSession,
+  model: string | undefined,
+): void {
+  const bodies = session.rollup.unkeyedRequestBodies.filter(
+    (body) => body.model === model,
+  );
+  if (bodies.length === 0) return;
+  const calls = session.timeline
+    .filter(
+      (event) =>
+        event.type === 'api_request' &&
+        event.model === model &&
+        !event.requestBodyId,
+    )
+    .toSorted((a, b) => a.timestamp - b.timestamp);
+  // Calls that ended before the earliest body kept were matched while their
+  // bodies were still here: they keep what they have.
+  const windowStart = bodies[0]!.timestamp;
+  let previousEnd = -Infinity;
+  for (const call of calls) {
+    if (call.timestamp < windowStart) {
+      previousEnd = call.timestamp;
+      continue;
+    }
+    const body = bodies.findLast(
+      ({ timestamp }) => timestamp > previousEnd && timestamp <= call.timestamp,
+    );
+    call.requestBytes = body?.facts.requestBytes;
+    call.request = body?.facts.request;
+    previousEnd = call.timestamp;
+  }
+}
+
 /** Fold a normalized event into a session rollup + timeline. Returns the session. */
 export function foldEvent(
   session: AgentSession,
@@ -247,7 +405,21 @@ export function foldEvent(
 
   const { rollup } = session;
   switch (event.type) {
+    // Body events carry facts about a call, not a step of their own, so they
+    // stay off the timeline.
+    case 'api_request_body': {
+      foldRequestBody(session, event);
+      return session;
+    }
+    case 'api_response_body': {
+      foldResponseBody(session, event);
+      return session;
+    }
     case 'api_request': {
+      Object.assign(
+        event,
+        takeBodyFacts(rollup.pendingResponseBodies, event.requestId),
+      );
       rollup.apiRequests += 1;
       if (event.costUsd === undefined) rollup.unpricedRequests += 1;
       if (event.inputTokens === undefined && event.outputTokens === undefined)
@@ -354,6 +526,9 @@ export function foldEvent(
   session.timeline.push(event);
   if (session.timeline.length > timelineLimit) {
     session.timeline.splice(0, session.timeline.length - timelineLimit);
+  }
+  if (event.type === 'api_request' && !event.requestBodyId) {
+    matchUnkeyedRequestBodies(session, event.model);
   }
   return session;
 }

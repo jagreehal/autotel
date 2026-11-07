@@ -177,6 +177,8 @@ npx autotel-devtools agents status
 npx autotel-devtools agents disable         # removes only values still as written
 ```
 
+`npx autotel-devtools claude --log-api-bodies` (or `agents enable --log-api-bodies`) also exports Claude Code's raw API bodies (`OTEL_LOG_RAW_API_BODIES=1`). The Agents tab then shows stop reasons, thinking tokens, cache writes by lifetime and the largest request. The bodies hold the conversation, so they are off by default.
+
 Claude Code gets the telemetry env in `~/.claude/settings.json` plus a SessionStart hook that tags each session with its repository (`--repository=path|name|off`). Codex gets a marked `[otel]` block in `~/.codex/config.toml`; a file that already configures `otel` is left untouched. Restart the agent afterwards.
 
 ## Works With

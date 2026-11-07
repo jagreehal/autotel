@@ -104,6 +104,18 @@ session.rollup.tools['Read']?.contextTokens;
 
 Parallel results split a step's growth by `tool_result_size_bytes` when reported, evenly otherwise; a `Task` is charged by the parent's growth, its sub-agent's tools by their own requests; nothing is charged across a compaction.
 
+### Read what the API bodies say
+
+With `OTEL_LOG_RAW_API_BODIES=1`, each `api_request` event gains `stopReason`, `thinkingTokens`, `cacheWrite1hTokens` / `cacheWrite5mTokens`, `toolUses`, `serviceTier` and `requestBytes`, and the rollup totals `stopReasons`, `thinkingTokens`, the cache lifetimes and `largestRequestBytes`. The body events never reach the timeline.
+
+```ts
+const stoppedShort =
+  (session.rollup.stopReasons.max_tokens ?? 0) +
+  (session.rollup.stopReasons.refusal ?? 0);
+```
+
+A request body over 60 KB arrives cut short, so `request` (system prompt characters, tool definitions, messages) is present only for requests under that. Claude Code versions without `request_body_id` still get `requestBytes`: the reducer gives each call the latest request body sent since the call before it on the same model.
+
 ### Add an agent adapter
 
 ```ts

@@ -26,8 +26,14 @@ describe('CLI', () => {
     expect(output).toContain('export OTEL_TRACES_EXPORTER=otlp');
     expect(output).toContain('export OTEL_METRICS_EXPORTER=otlp');
     expect(output).toContain('export OTEL_LOGS_EXPORTER=otlp');
-    // Prompt text stays out unless it is asked for.
+    // Prompt text and API bodies stay out unless they are asked for.
     expect(output).not.toContain('OTEL_LOG_USER_PROMPTS');
+    expect(output).not.toContain('OTEL_LOG_RAW_API_BODIES');
+  });
+
+  it('exports raw API bodies with --log-api-bodies', async () => {
+    const output = await runCli(['claude', '--print-env', '--log-api-bodies']);
+    expect(output).toContain('export OTEL_LOG_RAW_API_BODIES=1');
   });
 
   it('reads --repository as one argument, leaving the next option alone', async () => {

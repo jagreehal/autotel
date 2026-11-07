@@ -6,6 +6,7 @@
  * a new agent is `createPrefixAdapter({ kind, prefix, scopeHint })`.
  */
 
+import { readRequestBody, readResponseBody } from '../api-bodies';
 import { bool, num, str } from '../attrs';
 import { estimateCostUsd } from '../cost';
 import { mergeAttrs, readIdentity } from '../identity';
@@ -45,6 +46,8 @@ const EVENT_SUFFIXES = new Map<string, AgentEventType>([
   ['mcp_server_connection', 'mcp_connection'],
   ['plugin_loaded', 'plugin_loaded'],
   ['hook_execution_complete', 'hook_execution'],
+  ['api_request_body', 'api_request_body'],
+  ['api_response_body', 'api_response_body'],
 ]);
 
 /**
@@ -170,6 +173,7 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
               : undefined;
           event.cacheCreationTokens = num(attrs, 'cache_creation_tokens');
           event.durationMs = num(attrs, 'duration_ms');
+          event.requestId = str(attrs, 'request_id');
           const reported = num(attrs, 'cost_usd', 'cost');
           if (reported === undefined) {
             const estimated = estimateCostUsd(
@@ -189,6 +193,17 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
         }
         case 'api_refusal': {
           event.durationMs = num(attrs, 'duration_ms');
+          break;
+        }
+        case 'api_request_body': {
+          event.requestBodyId = str(attrs, 'request_body_id');
+          Object.assign(event, readRequestBody(attrs));
+          break;
+        }
+        case 'api_response_body': {
+          event.requestBodyId = str(attrs, 'request_body_id');
+          event.requestId = str(attrs, 'request_id');
+          Object.assign(event, readResponseBody(attrs));
           break;
         }
         case 'api_error': {

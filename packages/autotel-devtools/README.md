@@ -239,6 +239,10 @@ to **Agents**.
 - `--print-env`: print the env block instead of launching (for managed-settings
   / MDM / VS Code), e.g. `npx autotel-devtools claude --print-env`.
 - `--log-prompts`: capture prompt _text_ (default is private: length only).
+- `--log-api-bodies`: export the raw API request and response bodies. The
+  Agents tab reads stop reasons, thinking tokens, cache writes by lifetime and
+  request size from them. They hold the whole conversation, so they are off by
+  default. `agents enable --log-api-bodies` writes the same setting.
 
 To route **every** new session here without a wrapper, write the route into the
 agents' own config once:
@@ -526,7 +530,7 @@ Arguments:
 
 Subcommands:
 
-- `claude [claude args]` - Start the receiver and launch Claude Code wired to it (open the **Agents** tab). `--print-env` prints the env block instead; `--log-prompts` opts into prompt-text capture (default: private). `--port`/`--host` apply to the receiver; anything else is passed through to `claude`.
+- `claude [claude args]` - Start the receiver and launch Claude Code wired to it (open the **Agents** tab). `--print-env` prints the env block instead; `--log-prompts` opts into prompt-text capture (default: private); `--log-api-bodies` exports the raw API bodies for stop reasons, thinking and cache lifetimes. `--port`/`--host` apply to the receiver; anything else is passed through to `claude`.
 
 Options:
 
