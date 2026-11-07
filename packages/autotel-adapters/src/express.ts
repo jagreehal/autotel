@@ -140,6 +140,7 @@ export function withAutotel<
         {
           ...toRouteAdapterOptions(options),
           path: route,
+          route: routeTemplate(req),
           requestLoggerOptions: options?.requestLoggerOptions,
           autoEmit: options?.autoEmit,
           finalize: () =>

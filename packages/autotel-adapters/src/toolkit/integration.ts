@@ -5,7 +5,12 @@ import type {
   RequestLoggerOptions,
   TraceContext,
 } from 'autotel';
-import { createNoopRequestLogger, getRequestLogger, trace } from 'autotel';
+import {
+  createNoopRequestLogger,
+  getRequestLogger,
+  setHttpServerRoute,
+  trace,
+} from 'autotel';
 import { attachForkToLogger } from './fork';
 import { createStorageForkLifecycle } from './storage';
 import {
@@ -214,6 +219,10 @@ function buildHandle<TCtx>(
     'http.request.id': extracted.requestId,
   });
 
+  // The adapter's span sits inside the request; the server span is what a
+  // backend groups by route, so it gets the route too.
+  if (extracted.route) setHttpServerRoute(extracted.route);
+
   if (spec.storage) {
     attachForkToLogger(
       log,
@@ -236,6 +245,7 @@ function buildHandle<TCtx>(
     setRoute: (route) => {
       if (!route) return;
       log.set({ 'http.route': route });
+      setHttpServerRoute(route);
       if (defaultNamed) {
         traceCtx.updateName(defaultSpanName(extracted.method, route));
       }
