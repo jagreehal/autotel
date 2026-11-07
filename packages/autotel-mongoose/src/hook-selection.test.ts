@@ -13,16 +13,16 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import mongoose from 'mongoose';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
+  TracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+} from '@opentelemetry/sdk-trace';
 import type { Tracer } from 'autotel';
 import { instrumentMongoose, wrapHookHandler } from './instrumentation';
 import type { InstrumentMongooseConfig, ResolvedConfig } from './types';
 
 const exporter = new InMemorySpanExporter();
-const provider = new NodeTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(exporter)],
+const provider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
 });
 const tracer: Tracer = provider.getTracer('autotel-mongoose-selection-test');
 

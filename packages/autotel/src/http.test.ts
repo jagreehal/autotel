@@ -395,7 +395,7 @@ describe('injectTraceContext', () => {
 
     init({
       service: 'test',
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
       metrics: false,
     });
 

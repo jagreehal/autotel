@@ -8,7 +8,7 @@ import type {
   Span,
   SpanExporter,
   SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import type { PostProcessorFn, TailSampleFn, LocalTrace } from '../types';
 
 /**

@@ -23,7 +23,7 @@ import {
   AggregationTemporality,
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 import {
   CloudWatchLogExporter,
   CloudWatchMetricExporter,
@@ -38,11 +38,11 @@ export function initTelemetry(service: string): void {
     init({
       service,
       spanProcessors: [
-        new BatchSpanProcessor(
-          new CloudWatchTraceExporter({
+        new BatchSpanProcessor({
+          exporter: new CloudWatchTraceExporter({
             region,
           }),
-        ),
+        }),
       ],
       logRecordProcessors: [
         new BatchLogRecordProcessor({

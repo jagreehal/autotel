@@ -1,7 +1,7 @@
 import { logLevelToSeverityNumber } from '@effect/opentelemetry/OtelLogger';
 import * as OtelTracer from '@effect/opentelemetry/OtelTracer';
 import * as Resource from '@effect/opentelemetry/Resource';
-import { logs } from '@opentelemetry/api-logs';
+import { logs } from '@opentelemetry/api';
 import { flattenToAttributes } from 'autotel';
 import { createBuiltinLogger, type BuiltinLoggerOptions } from 'autotel/logger';
 import * as Cause from 'effect/Cause';

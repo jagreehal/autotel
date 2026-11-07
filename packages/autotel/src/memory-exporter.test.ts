@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
 import { createMemoryExporter } from './memory-exporter';
 import { ctx, instrument } from './functional';
 import { trace } from './trace-hybrid';
@@ -15,7 +15,7 @@ describe('createMemoryExporter()', () => {
   beforeAll(() => {
     init({
       service: 'memory-exporter-test',
-      spanProcessor: new SimpleSpanProcessor(exporter),
+      spanProcessor: new SimpleSpanProcessor({ exporter }),
     });
   });
 

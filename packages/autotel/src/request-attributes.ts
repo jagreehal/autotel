@@ -13,10 +13,7 @@ import {
   type Context,
   type Span,
 } from '@opentelemetry/api';
-import type {
-  Span as SdkSpan,
-  SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+import type { Span as SdkSpan, SpanProcessor } from '@opentelemetry/sdk-trace';
 import { isFunction, readProperty } from './values';
 
 /**

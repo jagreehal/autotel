@@ -1,13 +1,18 @@
 /**
  * Standard OpenTelemetry environment variables
  */
-import type { Sampler as OtelSampler } from '@opentelemetry/sdk-trace-base';
+import { getNumberFromEnv } from '@opentelemetry/core';
+import type {
+  BatchSpanProcessorOptions,
+  SpanLimits,
+} from '@opentelemetry/sdk-trace';
+import type { Sampler as OtelSampler } from '@opentelemetry/sdk-trace';
 import {
   AlwaysOffSampler,
   AlwaysOnSampler,
   ParentBasedSampler,
   TraceIdRatioBasedSampler,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 export interface OtelEnvVars {
   OTEL_SERVICE_NAME?: string;
@@ -318,4 +323,47 @@ export function envToConfig(env: OtelEnvVars): EnvConfig {
 export function resolveConfigFromEnv(): EnvConfig {
   const env = resolveOtelEnv();
   return envToConfig(env);
+}
+
+const definedOnly = <T extends object>(values: T): T =>
+  // SAFETY: dropping undefined entries leaves a subset of T, whose keys are all optional.
+  Object.fromEntries(
+    Object.entries(values).filter(([, value]) => value !== undefined),
+  ) as T;
+
+/**
+ * The `OTEL_SPAN_*` and `OTEL_ATTRIBUTE_*` limits. `@opentelemetry/sdk-trace`
+ * stopped reading these in 3.0, leaving the environment to `sdk-node`, which
+ * autotel replaces. A span-specific limit wins over the general one.
+ */
+export function spanLimitsFromEnv(): SpanLimits {
+  return definedOnly({
+    attributeValueLengthLimit:
+      getNumberFromEnv('OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT') ??
+      getNumberFromEnv('OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT'),
+    attributeCountLimit:
+      getNumberFromEnv('OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT') ??
+      getNumberFromEnv('OTEL_ATTRIBUTE_COUNT_LIMIT'),
+    linkCountLimit: getNumberFromEnv('OTEL_SPAN_LINK_COUNT_LIMIT'),
+    eventCountLimit: getNumberFromEnv('OTEL_SPAN_EVENT_COUNT_LIMIT'),
+    attributePerEventCountLimit: getNumberFromEnv(
+      'OTEL_SPAN_ATTRIBUTE_PER_EVENT_COUNT_LIMIT',
+    ),
+    attributePerLinkCountLimit: getNumberFromEnv(
+      'OTEL_SPAN_ATTRIBUTE_PER_LINK_COUNT_LIMIT',
+    ),
+  });
+}
+
+/** The `OTEL_BSP_*` settings, which `BatchSpanProcessor` no longer reads. */
+export function batchSpanOptionsFromEnv(): Omit<
+  BatchSpanProcessorOptions,
+  'exporter'
+> {
+  return definedOnly({
+    maxExportBatchSize: getNumberFromEnv('OTEL_BSP_MAX_EXPORT_BATCH_SIZE'),
+    maxQueueSize: getNumberFromEnv('OTEL_BSP_MAX_QUEUE_SIZE'),
+    scheduledDelayMillis: getNumberFromEnv('OTEL_BSP_SCHEDULE_DELAY'),
+    exportTimeoutMillis: getNumberFromEnv('OTEL_BSP_EXPORT_TIMEOUT'),
+  });
 }

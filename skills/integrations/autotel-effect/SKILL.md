@@ -169,7 +169,7 @@ what `layer()` routes through autotel.
 
 ### Do not reach for a barrel import
 
-The package imports `@effect/opentelemetry/OtelTracer` and `.../Resource` by subpath deliberately. The v4 barrel pulls `@opentelemetry/sdk-trace-web` in at runtime, which is not what a Node service wants in its graph.
+The package imports `@effect/opentelemetry/OtelTracer` and `.../Resource` by subpath deliberately. The v4 barrel pulls `@opentelemetry/sdk-trace` in at runtime, which is not what a Node service wants in its graph.
 
 ## Review checklist
 

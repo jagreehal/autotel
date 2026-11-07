@@ -9,7 +9,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api": "^1.10.0",
     "autotel": "workspace:*",
     "autotel-audit": "workspace:*",
     "autotel-genai": "workspace:*",

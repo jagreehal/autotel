@@ -1,8 +1,8 @@
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import {
   INVALID_SPAN_CONTEXT,
   trace as otelTrace,
@@ -98,8 +98,8 @@ describe('enterOrRun', () => {
 describe('createTraceContext attributes', () => {
   function recordAttributes(set: (ctx: TraceContext) => void) {
     const exporter = new InMemorySpanExporter();
-    const provider = new BasicTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    const provider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
     const span = provider.getTracer('test').startSpan('op');
     set(createTraceContext(span));

@@ -220,11 +220,6 @@ export function buildLogQl(query: LogSearchQuery | undefined): string {
     // Loki streams typically carry `severity_text` or `level`; match either.
     labels.push(`severity_text=~"${escapeLokiLabelValue(query.severityText)}"`);
   }
-  if (query?.attributes) {
-    for (const [key, value] of Object.entries(query.attributes)) {
-      labels.push(`${key}="${escapeLokiLabelValue(String(value))}"`);
-    }
-  }
   // Loki requires at least one label matcher. If none supplied, use a
   // wide match on the service_name label being present.
   if (labels.length === 0) {
@@ -241,6 +236,12 @@ export function buildLogQl(query: LogSearchQuery | undefined): string {
   }
   if (query?.text) {
     logQl += ` |= "${escapeLokiLabelValue(query.text)}"`;
+  }
+  // Label filters match stream labels and structured metadata alike. Loki
+  // stores `state.id` as `state_id`.
+  for (const [key, value] of Object.entries(query?.attributes ?? {})) {
+    const label = key.replaceAll(/\W/g, '_');
+    logQl += ` | ${label}="${escapeLokiLabelValue(String(value))}"`;
   }
   return logQl;
 }

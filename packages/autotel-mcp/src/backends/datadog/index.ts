@@ -437,7 +437,10 @@ export class DatadogBackend implements TelemetryBackend {
     return { items, totalCount: names.length };
   }
 
-  /** One series per service (`/api/v1/query`, averaged across other tags). */
+  /**
+   * One series per service (`/api/v1/query`, averaged across other tags). With
+   * `groupBy`, one per tag combination, summed as counts per rollup interval.
+   */
   async getMetricSeries(
     name: string,
     query?: MetricSeriesQuery,
@@ -448,7 +451,13 @@ export class DatadogBackend implements TelemetryBackend {
     const url = new URL('/api/v1/query', this.baseUrl);
     url.searchParams.set('from', String(Math.floor(fromMs / 1000)));
     url.searchParams.set('to', String(Math.floor(toMs / 1000)));
-    url.searchParams.set('query', `avg:${name}{${scope}} by {service}`);
+    const groupBy = query?.groupBy;
+    url.searchParams.set(
+      'query',
+      groupBy
+        ? `sum:${name}{${scope}} by {${groupBy.join(',')}}.as_count()`
+        : `avg:${name}{${scope}} by {service}`,
+    );
     const body = await jsonGet<DatadogMetricQueryResponse>(url.toString(), {
       headers: this.authHeaders(),
     });
@@ -464,6 +473,7 @@ export class DatadogBackend implements TelemetryBackend {
       attributes: datadogTags(
         (series.scope ?? '').split(',').filter((tag) => tag !== '*'),
       ),
+      ...(groupBy && { temporality: 'delta' as const }),
     }));
   }
 

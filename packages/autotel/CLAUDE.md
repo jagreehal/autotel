@@ -12,7 +12,7 @@ You are working on the core Node.js package that provides OpenTelemetry instrume
 - **Language**: TypeScript 5.0+ (ESM-first, CJS fallback)
 - **Build**: tsup
 - **Testing**: vitest (unit + integration)
-- **Key Dependencies**: `@opentelemetry/sdk-trace-node`, `@opentelemetry/api`
+- **Key Dependencies**: `@opentelemetry/sdk-trace`, `@opentelemetry/api`
 
 ## Key Concepts
 
@@ -30,6 +30,10 @@ You are working on the core Node.js package that provides OpenTelemetry instrume
 Package uses explicit exports (check `package.json` exports field) for tree-shaking:
 
 - `autotel` - Core trace/span/init functions
+- `autotel` also exports `transition()`: a persisted state change as the
+  `autotel.state.transitions` counter, independent of trace sampling. Call it
+  after the write succeeded and only when a document changed. The entity id is
+  never a metric attribute.
 - `autotel/logger` - Pino integration
 - `autotel/event` - Events API (`Event`, `track`)
 - `autotel/metric` - Metrics helpers
@@ -75,7 +79,7 @@ Package uses explicit exports (check `package.json` exports field) for tree-shak
   is no `Span.addEvent` fallback, because a fallback is how the Logs API
   direction quietly becomes optional; a caller holding a raw span passes its
   own `track` (in the browser, `emitEvent` from `autotel-web`), and
-  `autotelOpenFeatureHook` falls back to an actual `@opentelemetry/api-logs`
+  `autotelOpenFeatureHook` falls back to an actual `@opentelemetry/api`
   record. **Not** `emitCorrelatedEvent`: that helper prefers `Span.addEvent`
   when the target has one, so routing through it lands the evaluation exactly
   where no log or event pipeline will look — the failure the Logs API invariant

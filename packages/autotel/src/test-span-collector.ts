@@ -10,13 +10,13 @@
  * import { TestSpanCollector } from 'autotel/test-span-collector';
  * import { SimpleSpanProcessor } from 'autotel/processors';
  * import { setAutotelTracerProvider, getAutotelTracer } from 'autotel';
- * import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+ * import { TracerProvider } from '@opentelemetry/sdk-trace';
  *
  * const collector = new TestSpanCollector();
  *
  * // OTel SDK v2: pass processors at construction, then register the provider.
- * const provider = new NodeTracerProvider({
- *   spanProcessors: [new SimpleSpanProcessor(collector)],
+ * const provider = new TracerProvider({
+ *   spanProcessors: [new SimpleSpanProcessor({ exporter: collector })],
  * });
  * setAutotelTracerProvider(provider);
  *
@@ -37,7 +37,7 @@
  * exporter, use `InMemorySpanExporter` from `autotel/exporters`.
  */
 
-import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace';
 import { SpanStatusCode } from '@opentelemetry/api';
 import {
   asBooleanArray,

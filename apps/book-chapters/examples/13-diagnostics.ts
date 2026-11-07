@@ -11,7 +11,7 @@ async function main() {
 
   init({
     service: 'book-13',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // captureConsole() bridges console.* into telemetry without patching

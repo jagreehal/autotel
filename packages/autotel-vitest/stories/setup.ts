@@ -12,5 +12,5 @@ import { otelTestCollector } from 'autotel-vitest';
 // provider construction — there is no addSpanProcessor to call later.
 init({
   service: 'autotel-stories',
-  spanProcessors: [new SimpleSpanProcessor(otelTestCollector)],
+  spanProcessors: [new SimpleSpanProcessor({ exporter: otelTestCollector })],
 });

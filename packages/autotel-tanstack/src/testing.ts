@@ -1,4 +1,4 @@
-import { type ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import { type ReadableSpan } from '@opentelemetry/sdk-trace';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
 import { init } from 'autotel';
@@ -117,7 +117,7 @@ export function createTestHarness(): TestHarness {
 
   init({
     service: 'test',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   function getSpans(): ReadableSpan[] {

@@ -1,17 +1,17 @@
 import { tracingChannel } from 'node:diagnostics_channel';
 import { type Tracer } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   type ReadableSpan,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { GEN_AI } from '../semconv.js';
 import { subscribeAiTelemetry } from './ai-sdk-channel.js';
 
 let exporter: InMemorySpanExporter;
-let provider: BasicTracerProvider;
+let provider: TracerProvider;
 let tracer: Tracer;
 let unsubscribe: () => void;
 
@@ -19,8 +19,8 @@ const channel = tracingChannel<Record<string, unknown>, string>('ai:telemetry');
 
 beforeEach(() => {
   exporter = new InMemorySpanExporter();
-  provider = new BasicTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  provider = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
   tracer = provider.getTracer('ai-sdk-channel-test');
 });

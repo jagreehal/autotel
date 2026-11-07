@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 import {
   querySpansForEvalIncident,
   spansToCrossAgentEvents,

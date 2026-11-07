@@ -47,6 +47,17 @@ pnpm start:unified   # one dossier; payment.provider is obvious
 
 **See:** [example-pillars-vs-unified/README.md](./example-pillars-vs-unified/README.md).
 
+### PM2
+
+**`example-pm2`** - Autotel beside `pm2-io-otel` under a real PM2 daemon. Autotel owns tracing and exports to OTLP and PM2; `pm2-io-otel` keeps metrics and remote actions. No Docker or API keys.
+
+```bash
+cd apps/example-pm2
+pnpm verify
+```
+
+**See:** [example-pm2/README.md](./example-pm2/README.md).
+
 ### Canonical Log Lines Demo
 
 **`example-canonical-logs`** - Demonstrates canonical log lines (wide events) vs traditional logging. Shows how one comprehensive log line per request with all context enables powerful queries instead of string search.

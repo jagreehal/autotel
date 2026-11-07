@@ -23,10 +23,9 @@
  */
 
 import type { Link, Attributes, Context } from '@opentelemetry/api';
-import { TraceFlags } from '@opentelemetry/api';
+import { TraceFlags, propagation } from '@opentelemetry/api';
 import { type Logger } from './logger';
 import { asStringRecord, type UnknownRecord } from './values';
-import { propagation } from '@opentelemetry/api';
 import { getActiveContextWithBaggage } from './trace-context';
 
 /**

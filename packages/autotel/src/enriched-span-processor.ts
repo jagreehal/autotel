@@ -3,7 +3,7 @@ import type {
   ReadableSpan,
   Span,
   SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 /**
  * `spanEnrichers` in front of the processors that export, as one processor.

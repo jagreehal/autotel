@@ -11,7 +11,7 @@
  * import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
  *
  * const exporter = new OTLPTraceExporter({ url: 'http://localhost:4318/v1/traces' })
- * const baseProcessor = new BatchSpanProcessor(exporter)
+ * const baseProcessor = new BatchSpanProcessor({ exporter })
  * const streamingProcessor = new StreamingSpanProcessor(baseProcessor)
  *
  * // Subscribe to spans
@@ -27,9 +27,9 @@
 import type {
   SpanProcessor,
   ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+  Span,
+} from '@opentelemetry/sdk-trace';
 import type { Context } from '@opentelemetry/api';
-import type { Span } from '@opentelemetry/sdk-trace-base';
 
 /**
  * Span processor that wraps another processor and emits spans to subscribers

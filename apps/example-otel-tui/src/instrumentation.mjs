@@ -23,11 +23,11 @@ init({
   endpoint,
   // Send logs via OTLP so otel-tui can correlate them with traces
   logRecordProcessors: [
-    new BatchLogRecordProcessor(
-      new OTLPLogExporter({
+    new BatchLogRecordProcessor({
+      exporter: new OTLPLogExporter({
         url: `${endpoint}/v1/logs`,
       }),
-    ),
+    }),
   ],
   // Enable pino instrumentation to inject trace_id/span_id into logs
   instrumentations: getNodeAutoInstrumentations({

@@ -1,10 +1,12 @@
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import { context, trace } from '@opentelemetry/api';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import mongoose from 'mongoose';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import {
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+} from '@opentelemetry/sdk-trace';
 import { instrumentMongoose } from './instrumentation';
 import { ATTR_DB_QUERY_TEXT, ATTR_DB_OPERATION_NAME } from './constants';
 import { canListenOnLoopback, startMongo } from './test-support';
@@ -12,7 +14,7 @@ import type { TestMongo } from './test-support';
 
 let mongod: TestMongo | undefined;
 let exporter: InMemorySpanExporter;
-let provider: NodeTracerProvider;
+let provider: TracerProvider;
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -26,11 +28,14 @@ const supportsLocalServer = await canListenOnLoopback();
 
 beforeAll(async () => {
   exporter = new InMemorySpanExporter();
-  // Use the same NodeTracerProvider pattern as the main integration test
-  provider = new NodeTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  // Use the same TracerProvider pattern as the main integration test
+  provider = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
-  provider.register();
+  trace.setGlobalTracerProvider(provider);
+  context.setGlobalContextManager(
+    new AsyncLocalStorageContextManager().enable(),
+  );
 
   if (!supportsLocalServer) {
     return;

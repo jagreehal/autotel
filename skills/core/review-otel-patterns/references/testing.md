@@ -30,7 +30,7 @@ it('traces processOrder', async () => {
 
 Collector methods: `getSpans()`, `getSpansByName()`, `getSpansByAttributes()`, `expectSpan()` (exactly one match or throws), `clear()`. Assertions: `assertTraceCreated`, `assertTraceSucceeded`, `assertTraceFailed`, `assertNoErrors`, and `await waitForTrace(collector, name)` for async work.
 
-To test the real SDK pipeline (processors, redaction) instead, pass `spanProcessors: [new SimpleSpanProcessor(exporter)]` with `InMemorySpanExporter` from `autotel/exporters` and `sampling: 'development'` to `init()`, then read `exporter.getFinishedSpans()` before `shutdown()`.
+To test the real SDK pipeline (processors, redaction) instead, pass `spanProcessors: [new SimpleSpanProcessor({ exporter })]` with `InMemorySpanExporter` from `autotel/exporters` and `sampling: 'development'` to `init()`, then read `exporter.getFinishedSpans()` before `shutdown()`.
 
 `autotel-vitest` gives every test its own parent span: import `test` from `autotel-vitest` and pass `otelTestCollector` to `init()` in a `setupFiles` entry. It re-exports the `autotel/testing` helpers; there are no custom matchers.
 

@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import type {
-  ReadableSpan,
-  SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace';
 import { initFull, resetFullForTesting, span } from './full';
 
 afterEach(() => {

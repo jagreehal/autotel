@@ -199,15 +199,17 @@ const isAudit = (span: { attributes: Record<string, unknown> }) =>
   span.attributes['audit'] === true ||
   span.attributes['autotel.audit'] === true;
 
-const auditExporter = new BatchSpanProcessor(
-  new OTLPTraceExporter({
+const auditExporter = new BatchSpanProcessor({
+  exporter: new OTLPTraceExporter({
     url: `${process.env.AUDIT_OTLP!}/v1/traces`,
     headers: { authorization: `Bearer ${process.env.AUDIT_TOKEN!}` },
   }),
-);
-const opsExporter = new BatchSpanProcessor(
-  new OTLPTraceExporter({ url: `${process.env.OPS_OTLP!}/v1/traces` }),
-);
+});
+const opsExporter = new BatchSpanProcessor({
+  exporter: new OTLPTraceExporter({
+    url: `${process.env.OPS_OTLP!}/v1/traces`,
+  }),
+});
 
 // Only audit spans reach the audit pipeline. No tail sampling on this branch.
 const auditOnly = new FilteringSpanProcessor(auditExporter, {

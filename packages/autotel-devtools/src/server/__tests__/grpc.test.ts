@@ -3,10 +3,10 @@ import { Client, credentials } from '@grpc/grpc-js';
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { ProtobufTraceSerializer } from '@opentelemetry/otlp-transformer';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { DevtoolsServer } from '../server';
 import { startOtlpGrpcReceiver, type GrpcReceiver } from '../grpc';
 
@@ -30,8 +30,8 @@ describe('OTLP/gRPC receiver', () => {
     receiver = await startOtlpGrpcReceiver({ devtools, port: 0 });
 
     const exporter = new InMemorySpanExporter();
-    const provider = new BasicTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    const provider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
     const span = provider.getTracer('grpc-test').startSpan('grpc.operation', {
       kind: SpanKind.SERVER,

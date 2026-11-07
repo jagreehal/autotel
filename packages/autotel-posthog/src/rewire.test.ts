@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { context } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
-import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
 import type { BeforeSendFn } from 'posthog-js';
 import { liveSpanCountForTesting, resetJoinForTesting } from 'autotel-web/join';
 import { joinPostHog } from './join';
@@ -49,7 +49,7 @@ describe('joinPostHog called more than once', () => {
 
   it('lets go of a span once it has ended, however many joins saw it', () => {
     const posthog = fakePostHog();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [joinPostHog(posthog), joinPostHog(posthog)],
     });
 
@@ -74,7 +74,7 @@ describe('joinPostHog called more than once', () => {
 
     expect(hooks(posthog)).toHaveLength(1);
 
-    const provider = new BasicTracerProvider({ spanProcessors: [second] });
+    const provider = new TracerProvider({ spanProcessors: [second] });
     const span = provider.getTracer('test').startSpan('checkout.click');
 
     const event = hooks(posthog)[0]!({
@@ -91,7 +91,7 @@ describe('joinPostHog called more than once', () => {
     const posthog = fakePostHog();
     const first = joinPostHog(posthog);
     const second = joinPostHog(posthog);
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [first, second],
     });
     const tracer = provider.getTracer('test');

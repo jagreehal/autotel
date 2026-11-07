@@ -163,14 +163,14 @@ import {
   createTerminalSpanStream,
   renderTerminal,
 } from 'autotel-terminal';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 
 // Create exporter and base processor for your backend
 const exporter = new OTLPTraceExporter({
   url: 'http://localhost:4318/v1/traces',
 });
-const batchProcessor = new BatchSpanProcessor(exporter);
+const batchProcessor = new BatchSpanProcessor({ exporter });
 
 // Create streaming processor that wraps your batch processor
 // Spans are forwarded to both the dashboard AND the backend
@@ -330,13 +330,13 @@ A span processor that emits completed spans to subscribers. Can wrap another pro
 
 ```typescript
 import { StreamingSpanProcessor } from 'autotel-terminal';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 
 // Standalone (no forwarding)
 const streamingProcessor = new StreamingSpanProcessor(null);
 
 // Or wrap an existing processor (spans forwarded to both)
-const batchProcessor = new BatchSpanProcessor(exporter);
+const batchProcessor = new BatchSpanProcessor({ exporter });
 const streamingProcessor = new StreamingSpanProcessor(batchProcessor);
 
 // Subscribe to spans directly (alternative to using createTerminalSpanStream)

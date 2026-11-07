@@ -1,6 +1,6 @@
 services:
   otelcol:
-    image: otel/opentelemetry-collector-contrib:0.157.0
+    image: otel/opentelemetry-collector-contrib:0.164.0
     container_name: genai-metrics-otelcol
     command: ['--config=/etc/otelcol/config.yaml']
     volumes:

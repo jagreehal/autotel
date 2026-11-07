@@ -3,11 +3,11 @@ import { createServer, type Server } from 'node:http';
 import { gzipSync } from 'node:zlib';
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
   type IdGenerator,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import {
   LoggerProvider,
   InMemoryLogRecordExporter,
@@ -54,9 +54,9 @@ const END_MS = START_MS + 500;
 // Real OTel SDK span -> real OTLP/protobuf bytes.
 function traceRequestBytes(): Buffer {
   const exporter = new InMemorySpanExporter();
-  const provider = new BasicTracerProvider({
+  const provider = new TracerProvider({
     idGenerator: fixedIds,
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
   const span = provider.getTracer('test').startSpan('GET /orders', {
     kind: SpanKind.SERVER,

@@ -2,10 +2,10 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { context, trace, SpanStatusCode } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { posthogCompatibility } from './compatibility';
 import { autotelBeforeSend } from './before-send';
 
@@ -27,10 +27,10 @@ const posthog = {
 describe('a failed checkout, end to end', () => {
   it('leaves a trace that points at the replay and an event that points back', () => {
     const exporter = new InMemorySpanExporter();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [
         posthogCompatibility({ posthog }),
-        new SimpleSpanProcessor(exporter),
+        new SimpleSpanProcessor({ exporter }),
       ],
     });
     const tracer = provider.getTracer('test');

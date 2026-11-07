@@ -1,9 +1,9 @@
 import { context, trace, type Attributes } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AiSdkEvaluationAnswer } from './ai-sdk-evaluate.js';
 import { TestContextManager } from './test-context-manager.js';
@@ -49,8 +49,8 @@ function setup(
   const model = options.model ?? defaultModel();
   const signals = createSignals({ ...options, model });
   const exporter = new InMemorySpanExporter();
-  const provider = new BasicTracerProvider({
-    spanProcessors: [signals, new SimpleSpanProcessor(exporter)],
+  const provider = new TracerProvider({
+    spanProcessors: [signals, new SimpleSpanProcessor({ exporter })],
   });
   trace.setGlobalTracerProvider(provider);
   // The evaluation span has to parent under the signals span, as it does in an

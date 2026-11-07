@@ -307,6 +307,29 @@ const events = new Event('checkout', {
 
 ---
 
+## Architecture Snapshot
+
+`ArchitectureSnapshotSubscriber` from `autotel-subscribers/architecture-snapshot` turns what a test run observed into a committable JSON snapshot (spec `autotel-architecture/v0.1.0`). Alongside events and workflows it aggregates `transition()` calls:
+
+```json
+{
+  "transitions": [
+    {
+      "entity": "order",
+      "field": "status",
+      "from": "pending",
+      "to": "paid",
+      "via": "checkout",
+      "count": 12,
+      "firstSeen": "2026-05-21T18:00:00.000Z",
+      "lastSeen": "2026-05-21T18:04:00.000Z"
+    }
+  ]
+}
+```
+
+The field is optional and appears once a transition is seen, so existing readers keep working. It holds no entity ids. Transitions stay out of `events`, since nothing publishes them as messages.
+
 ## Multi-Platform Tracking
 
 Send to **multiple platforms simultaneously**:

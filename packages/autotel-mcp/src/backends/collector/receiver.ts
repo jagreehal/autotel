@@ -231,6 +231,7 @@ export function parseTraces(
 
 interface OtlpDataPoint {
   timeUnixNano?: string | number;
+  startTimeUnixNano?: string | number;
   asDouble?: number;
   asInt?: string | number;
   /** Histogram and summary points carry these instead of a value. */
@@ -243,10 +244,16 @@ interface OtlpMetric {
   name?: string;
   unit?: string;
   gauge?: { dataPoints?: OtlpDataPoint[] };
-  sum?: { dataPoints?: OtlpDataPoint[] };
-  histogram?: { dataPoints?: OtlpDataPoint[] };
-  exponentialHistogram?: { dataPoints?: OtlpDataPoint[] };
+  sum?: OtlpAggregation;
+  histogram?: OtlpAggregation;
+  exponentialHistogram?: OtlpAggregation;
   summary?: { dataPoints?: OtlpDataPoint[] };
+}
+
+interface OtlpAggregation {
+  dataPoints?: OtlpDataPoint[];
+  /** Protobuf JSON allows the enum's number or its name. */
+  aggregationTemporality?: number | string;
 }
 
 interface OtlpScopeMetrics {
@@ -278,6 +285,16 @@ function attributeKey(attributes: Record<string, TagValue>): string {
   );
 }
 
+function toTemporality(
+  value: number | string | undefined,
+): MetricSeries['temporality'] {
+  if (value === 1 || value === 'AGGREGATION_TEMPORALITY_DELTA') return 'delta';
+  if (value === 2 || value === 'AGGREGATION_TEMPORALITY_CUMULATIVE') {
+    return 'cumulative';
+  }
+  return undefined;
+}
+
 export function parseMetrics(body: OtlpMetricsPayload): MetricSeries[] {
   const series: MetricSeries[] = [];
   for (const rm of body.resourceMetrics ?? []) {
@@ -293,6 +310,11 @@ export function parseMetrics(body: OtlpMetricsPayload): MetricSeries[] {
           [];
 
         if (dataPoints.length === 0) continue;
+
+        const temporality = toTemporality(
+          (m.sum ?? m.histogram ?? m.exponentialHistogram)
+            ?.aggregationTemporality,
+        );
 
         // OTel puts a metric's dimensions on the data point, not the resource:
         // one `http.server.requests` metric arrives as a data point per route.
@@ -312,12 +334,15 @@ export function parseMetrics(body: OtlpMetricsPayload): MetricSeries[] {
               unit: m.unit,
               attributes,
               points: [],
+              temporality,
             };
             byAttributes.set(key, entry);
           }
+          const startMs = Number(dp.startTimeUnixNano ?? 0) / 1_000_000;
           entry.points.push({
             timestampUnixMs: nanoStringToMs(dp.timeUnixNano),
             value: dataPointValue(dp),
+            ...(startMs > 0 && { startTimeUnixMs: startMs }),
           });
         }
         series.push(...byAttributes.values());

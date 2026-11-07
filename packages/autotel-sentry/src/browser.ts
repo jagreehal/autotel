@@ -30,7 +30,7 @@
  * `@sentry/*` entry the app uses is the one copy on the page.
  */
 
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace';
 import { currentSpanContext, enrichSpans } from 'autotel-web/join';
 import { asString, isFunction } from './values';
 

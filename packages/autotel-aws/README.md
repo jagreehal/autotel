@@ -344,6 +344,13 @@ export const handler = wrapHandler(async (event) => {
 
 ## Lambda Durable Functions
 
+> **OpenTelemetry SDK 3:** AWS's plugin targets SDK 2 and runs beside autotel on SDK 3 with a single `@opentelemetry/api`. Install it with npm's peer check off, at the version this example uses:
+>
+> ```bash
+> npm install --legacy-peer-deps @aws/durable-execution-sdk-js-otel@1.2.0 \
+>   @opentelemetry/api@1.10.0 @opentelemetry/core@2.12.0 @opentelemetry/sdk-trace-node@2.12.0
+> ```
+
 AWS's [OpenTelemetry plugins](https://docs.aws.amazon.com/durable-execution/) (`@aws/durable-execution-sdk-js-otel`) trace durable executions: a workflow span, an invocation span per Lambda invocation, and operation and attempt spans, all in one trace. `autotel-aws/durable` adds what they need when autotel owns the tracer provider:
 
 ```typescript
@@ -482,7 +489,7 @@ As of late 2025 / early 2026, CloudWatch accepts OTLP/HTTP directly. No collecto
 pnpm add autotel-aws autotel \
   @smithy/signature-v4 @aws-crypto/sha256-js \
   @aws-sdk/credential-providers \
-  @opentelemetry/sdk-trace-base \
+  @opentelemetry/sdk-trace \
   @opentelemetry/sdk-logs \
   @opentelemetry/sdk-metrics \
   @opentelemetry/otlp-transformer
@@ -494,15 +501,15 @@ Only the peers you actually use are needed (e.g. drop `sdk-logs` / `sdk-metrics`
 
 ```typescript
 import { init } from 'autotel';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 import { CloudWatchTraceExporter } from 'autotel-aws/cloudwatch';
 
 init({
   service: 'my-service',
   spanProcessors: [
-    new BatchSpanProcessor(
-      new CloudWatchTraceExporter({ region: 'eu-west-1' }),
-    ),
+    new BatchSpanProcessor({
+      exporter: new CloudWatchTraceExporter({ region: 'eu-west-1' }),
+    }),
   ],
 });
 ```
@@ -521,7 +528,9 @@ import {
 import { CloudWatchLogExporter } from 'autotel-aws/cloudwatch';
 
 const provider = new LoggerProvider({
-  processors: [new BatchLogRecordProcessor(new CloudWatchLogExporter())],
+  processors: [
+    new BatchLogRecordProcessor({ exporter: new CloudWatchLogExporter() }),
+  ],
 });
 ```
 

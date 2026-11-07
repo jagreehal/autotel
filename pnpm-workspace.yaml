@@ -67,3 +67,17 @@ peerDependencyRules:
     '@opentelemetry/exporter-trace-otlp-proto': 0.216.0
     '@effect/platform': 0.94.4
     ink: '7'
+
+# pm2-io-otel's runtime imports, declared for strict pnpm resolution.
+packageExtensions:
+  # AWS's plugin targets SDK 2. autotel-aws pins @opentelemetry/core 2.12.0 as a
+  # dev dependency for it, and this provides sdk-trace-node at the same version.
+  '@aws/durable-execution-sdk-js-otel':
+    dependencies:
+      '@opentelemetry/sdk-trace-node': 2.12.0
+  pm2-io-otel:
+    dependencies:
+      '@opentelemetry/core': 1.30.1
+      '@opentelemetry/sdk-trace-base': 1.30.1
+      '@opentelemetry/semantic-conventions': 1.28.0
+      tslib: 2.8.1

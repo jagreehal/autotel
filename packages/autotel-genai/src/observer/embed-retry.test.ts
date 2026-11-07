@@ -8,11 +8,11 @@ import {
   type Tracer,
 } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   type ReadableSpan,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { autotelTelemetry } from './ai-sdk-telemetry.js';
 
@@ -48,8 +48,8 @@ let tracer: Tracer;
 
 beforeEach(() => {
   exporter = new InMemorySpanExporter();
-  tracer = new BasicTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  tracer = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   }).getTracer('probe');
 });
 

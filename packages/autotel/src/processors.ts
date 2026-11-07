@@ -18,7 +18,7 @@
  * const exporter = new InMemorySpanExporter()
  * init({
  *   service: 'test',
- *   spanProcessor: new SimpleSpanProcessor(exporter),
+ *   spanProcessor: new SimpleSpanProcessor({ exporter }),
  * })
  * ```
  *
@@ -31,7 +31,8 @@
  * const exporter = new OTLPTraceExporter({ url: 'http://collector:4318/v1/traces' })
  * init({
  *   service: 'my-app',
- *   spanProcessor: new BatchSpanProcessor(exporter, {
+ *   spanProcessor: new BatchSpanProcessor({
+ *     exporter,
  *     maxQueueSize: 2048,
  *     scheduledDelayMillis: 5000,
  *     exportTimeoutMillis: 30000,
@@ -69,7 +70,7 @@ export {
    * import { SimpleSpanProcessor } from 'autotel/processors'
    * import { ConsoleSpanExporter } from 'autotel/exporters'
    *
-   * const processor = new SimpleSpanProcessor(new ConsoleSpanExporter())
+   * const processor = new SimpleSpanProcessor({ exporter: new ConsoleSpanExporter() })
    * ```
    */
   SimpleSpanProcessor,
@@ -94,7 +95,8 @@ export {
    * ```typescript
    * import { BatchSpanProcessor } from 'autotel/processors'
    *
-   * const processor = new BatchSpanProcessor(exporter, {
+   * const processor = new BatchSpanProcessor({
+   *   exporter,
    *   maxQueueSize: 4096,           // Max spans in queue
    *   scheduledDelayMillis: 10000,  // Export every 10s
    *   exportTimeoutMillis: 30000,   // 30s export timeout
@@ -103,7 +105,7 @@ export {
    * ```
    */
   BatchSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 export {
   /**

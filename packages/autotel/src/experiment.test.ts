@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { experiment } from './experiment';
 import { instrument } from './functional';
 import { init } from './init';
@@ -19,7 +19,7 @@ describe('experiment()', () => {
     init({
       service: 'experiment-test',
       sampling: 'development',
-      spanProcessor: new SimpleSpanProcessor(exporter),
+      spanProcessor: new SimpleSpanProcessor({ exporter }),
     });
   });
 

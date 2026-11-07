@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { context, trace, SpanStatusCode } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
   type ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import {
   installConsoleSignals,
   logTemplate,
@@ -13,8 +13,8 @@ import {
 } from './console-signals';
 
 const exporter = new InMemorySpanExporter();
-const tracer = new BasicTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(exporter)],
+const tracer = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
 }).getTracer('test');
 
 function inSpan(fn: () => void): ReadableSpan {

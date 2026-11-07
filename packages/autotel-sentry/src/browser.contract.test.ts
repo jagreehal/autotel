@@ -8,10 +8,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as Sentry from '@sentry/browser';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   type ReadableSpan,
   type SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { rememberRequestSpan } from 'autotel-web/join';
 import { joinSentry, type SentryLike } from './browser';
 
@@ -60,7 +60,7 @@ describe('joinSentry with the real Sentry SDK', () => {
     forceFlush: () => Promise.resolve(),
     shutdown: () => Promise.resolve(),
   };
-  const tracer = new BasicTracerProvider({
+  const tracer = new TracerProvider({
     spanProcessors: [enricher, recorder],
   }).getTracer('t');
 

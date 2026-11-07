@@ -43,10 +43,7 @@
 
 import { context as otelContext, trace as otelTrace } from '@opentelemetry/api';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import {
-  BasicTracerProvider,
-  SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+import { TracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { langfuseCompatibility } from './index.js';
 import { langfuseMedia } from './media.js';
@@ -111,7 +108,7 @@ const READ_FIELDS = [
   'providedModelName',
 ] as const;
 
-let provider: BasicTracerProvider;
+let provider: TracerProvider;
 let otelTraceId: string;
 /**
  * The rows Langfuse returned for this run, read once.
@@ -286,7 +283,7 @@ describe.skipIf(!enabled)('Langfuse contract', () => {
       );
     }
 
-    provider = new BasicTracerProvider({
+    provider = new TracerProvider({
       spanProcessors: [
         langfuseCompatibility({
           traceName,
@@ -294,8 +291,8 @@ describe.skipIf(!enabled)('Langfuse contract', () => {
           release: 'contract-release',
           version: 'contract-version',
         }),
-        new SimpleSpanProcessor(
-          new OTLPTraceExporter({
+        new SimpleSpanProcessor({
+          exporter: new OTLPTraceExporter({
             url: `${BASE_URL}/api/public/otel/v1/traces`,
             // The same wire `createLangfuseConfig` produces, ingestion header
             // included, so this suite tests what the preset actually sends.
@@ -304,7 +301,7 @@ describe.skipIf(!enabled)('Langfuse contract', () => {
               'x-langfuse-ingestion-version': '4',
             },
           }),
-        ),
+        }),
       ],
     });
 

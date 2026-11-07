@@ -125,8 +125,8 @@ import {
   ATTR_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
 import { Resource } from '@opentelemetry/resources';
 import { trace, withTracing } from '@opentelemetry/api';
 
@@ -136,18 +136,16 @@ const otlpTraceExporter = new OTLPTraceExporter({
 });
 
 // Configure the trace provider
-const provider = new NodeTracerProvider({
+const provider = new TracerProvider({
   resource: new Resource({
     [ATTR_SERVICE_NAME]: 'my-app',
     [ATTR_SERVICE_VERSION]: '1.0.0',
   }),
+  spanProcessors: [new BatchSpanProcessor({ exporter: otlpTraceExporter })],
 });
 
-// Add span processor
-provider.addSpanProcessor(new BatchSpanProcessor(otlpTraceExporter));
-
 // Register the provider globally
-provider.register();
+trace.setGlobalTracerProvider(provider);
 
 // Get tracer and manually instrument Drizzle
 const tracer = trace.getTracer('drizzle-instrumentation');
@@ -267,7 +265,7 @@ You can override the default span processor for environment-specific behavior:
 import {
   SimpleSpanProcessor,
   ConsoleSpanExporter,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { init } from 'autotel';
 
 init({
@@ -276,7 +274,7 @@ init({
   spanProcessor:
     process.env.NODE_ENV === 'production'
       ? undefined // Use default BatchSpanProcessor
-      : new SimpleSpanProcessor(new ConsoleSpanExporter()),
+      : new SimpleSpanProcessor({ exporter: new ConsoleSpanExporter() }),
 });
 ```
 

@@ -23,6 +23,17 @@ describe('LokiBackend — LogQL generation', () => {
     ).toBe('{service_name="api"} |= "abc" |= "def"');
   });
 
+  it('matches attributes after the selector, under Loki label names', () => {
+    expect(
+      buildLogQl({
+        text: 'state.transition',
+        attributes: { 'state.entity': 'order', 'state.id': 'a"1' },
+      }),
+    ).toBe(
+      '{service_name=~".+"} |= "state.transition" | state_entity="order" | state_id="a\\"1"',
+    );
+  });
+
   it('escapes quotes in label values', () => {
     expect(buildLogQl({ serviceName: 'svc"weird' })).toBe(
       '{service_name="svc\\"weird"}',

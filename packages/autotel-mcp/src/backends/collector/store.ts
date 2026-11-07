@@ -46,6 +46,20 @@ function bindableTag(value: TagValue): string | number {
   return asString(value) ?? asNumber(value) ?? String(value);
 }
 
+/**
+ * A series is a name, an attribute set and whether its points are increments.
+ * NULL and `cumulative` are one identity, so a counter in a `--persist` file
+ * from before temporality was kept carries on rather than starting over.
+ */
+function seriesKey(name: string, attributes: string, row: Row): string {
+  return `${name}::${attributes}::${row.temporality === 'delta' ? 'delta' : ''}`;
+}
+
+function rowTemporality(row: Row): MetricSeries['temporality'] {
+  const value = optionalText(row, 'temporality');
+  return value === 'delta' || value === 'cumulative' ? value : undefined;
+}
+
 export class CollectorStore {
   private db: Client;
   private opts: CollectorStoreOptions;
@@ -74,6 +88,23 @@ export class CollectorStore {
         DROP TABLE spans_span_id_keyed;
         COMMIT;
       `);
+    }
+    // A `--persist` file from before these columns. Its rows stay NULL, which
+    // reads as cumulative, the OTLP default, with no known start.
+    const columns = await this.db.execute(
+      "SELECT name FROM pragma_table_info('metric_points')",
+    );
+    if (columns.rows.length > 0) {
+      for (const [name, type] of [
+        ['temporality', 'TEXT'],
+        ['start_time_unix_ms', 'INTEGER'],
+      ]) {
+        if (!columns.rows.some((column) => column.name === name)) {
+          await this.db.execute(
+            `ALTER TABLE metric_points ADD COLUMN ${name} ${type}`,
+          );
+        }
+      }
     }
     await this.db.executeMultiple(SCHEMA_SQL);
   }
@@ -287,14 +318,16 @@ export class CollectorStore {
     for (const series of metrics) {
       for (const point of series.points) {
         await this.db.execute({
-          sql: `INSERT INTO metric_points (metric_name, unit, timestamp_unix_ms, value, attributes)
-                VALUES (?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO metric_points (metric_name, unit, timestamp_unix_ms, value, attributes, temporality, start_time_unix_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
           args: [
             series.metricName,
             series.unit ?? null,
             point.timestampUnixMs,
             point.value,
             JSON.stringify(series.attributes ?? {}),
+            series.temporality ?? null,
+            point.startTimeUnixMs ?? null,
           ],
         });
       }
@@ -318,11 +351,11 @@ export class CollectorStore {
     const where =
       conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
 
-    // A series is one metric name at one attribute set, the same identity
-    // `getMetricSeries` uses. Keying by name alone merges `lane=legacy` and
+    // The identity from `seriesKey`, which `getMetricSeries` uses too. Keying
+    // by name alone merges `lane=legacy` and
     // `lane=modern` into one series labelled with whichever row came first.
     const countResult = await this.db.execute({
-      sql: `SELECT COUNT(*) as cnt FROM (SELECT DISTINCT metric_name, attributes FROM metric_points${where})`,
+      sql: `SELECT COUNT(*) as cnt FROM (SELECT DISTINCT metric_name, attributes, temporality IS 'delta' FROM metric_points${where})`,
       args,
     });
     const totalCount = Number(countResult.rows[0]?.cnt ?? 0);
@@ -330,7 +363,7 @@ export class CollectorStore {
     // Newest MAX_POINT_ROWS points, grouped in memory. Push the
     // grouping into SQL if a collector ever holds more than a dev workload.
     const result = await this.db.execute({
-      sql: `SELECT metric_name, unit, attributes, timestamp_unix_ms, value
+      sql: `SELECT metric_name, unit, attributes, timestamp_unix_ms, value, temporality
             FROM metric_points${where}
             ORDER BY timestamp_unix_ms DESC
             LIMIT ?`,
@@ -342,7 +375,7 @@ export class CollectorStore {
     const seriesMap = new Map<string, MetricSeries>();
     for (const row of rows) {
       const name = text(row, 'metric_name');
-      const key = `${name}::${text(row, 'attributes') || '{}'}`;
+      const key = seriesKey(name, text(row, 'attributes') || '{}', row);
       let series = seriesMap.get(key);
       if (!series) {
         series = {
@@ -353,6 +386,7 @@ export class CollectorStore {
         };
         seriesMap.set(key, series);
       }
+      series.temporality ??= rowTemporality(row);
       series.points.push({
         timestampUnixMs: Number(row.timestamp_unix_ms),
         value: Number(row.value),
@@ -388,7 +422,7 @@ export class CollectorStore {
     query: MetricSeriesQuery = {},
   ): Promise<MetricSeries[]> {
     let sql =
-      'SELECT timestamp_unix_ms, value, unit, attributes FROM metric_points WHERE metric_name = ?';
+      'SELECT timestamp_unix_ms, value, unit, attributes, temporality, start_time_unix_ms FROM metric_points WHERE metric_name = ?';
     const args: (string | number)[] = [name];
 
     if (query.startTimeUnixMs !== undefined) {
@@ -399,11 +433,10 @@ export class CollectorStore {
       sql += ' AND timestamp_unix_ms <= ?';
       args.push(query.endTimeUnixMs);
     }
-    sql += ' ORDER BY timestamp_unix_ms ASC';
-    if (query.limit !== undefined) {
-      sql += ' LIMIT ?';
-      args.push(query.limit);
-    }
+    // `limit` counts series, so it applies after grouping. The row cap keeps
+    // the newest points, the ones a recent window reads.
+    sql += ' ORDER BY timestamp_unix_ms DESC LIMIT ?';
+    args.push(MAX_POINT_ROWS);
 
     const result = await this.db.execute({ sql, args });
     if (result.rows.length === 0) return [];
@@ -412,7 +445,7 @@ export class CollectorStore {
     const seriesMap = new Map<string, MetricSeries>();
     for (const row of result.rows) {
       const attrs = text(row, 'attributes') || '{}';
-      const key = `${name}::${attrs}`;
+      const key = seriesKey(name, attrs, row);
       if (!seriesMap.has(key)) {
         seriesMap.set(key, {
           metricName: name,
@@ -421,24 +454,29 @@ export class CollectorStore {
           attributes: json<Record<string, string>>(row, 'attributes', {}),
         });
       }
-      seriesMap.get(key)!.points.push({
+      const series = seriesMap.get(key)!;
+      series.temporality ??= rowTemporality(row);
+      const startMs = row.start_time_unix_ms;
+      series.points.push({
         timestampUnixMs: Number(row.timestamp_unix_ms),
         value: Number(row.value),
+        ...(startMs != null && { startTimeUnixMs: Number(startMs) }),
       });
     }
 
-    let series = [...seriesMap.values()];
+    let found = [...seriesMap.values()];
+    for (const series of found) series.points.reverse();
 
     if (query.serviceName !== undefined) {
       const svc = query.serviceName;
-      series = series.filter(
+      found = found.filter(
         (s) =>
           s.attributes?.['service.name'] === svc ||
           s.attributes?.['serviceName'] === svc,
       );
     }
 
-    return series;
+    return found.slice(0, query.limit);
   }
 
   async insertLogs(logs: LogRecord[]): Promise<void> {

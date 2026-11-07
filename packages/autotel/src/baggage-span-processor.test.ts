@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BaggageSpanProcessor } from './baggage-span-processor';
 import { context, propagation, trace } from '@opentelemetry/api';
-import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
 import {
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 
 // Set up context manager globally
@@ -22,8 +22,8 @@ describe('BaggageSpanProcessor', () => {
   it('should copy baggage entries to span attributes with default prefix', async () => {
     const exporter = new InMemorySpanExporter();
     const baggageProcessor = new BaggageSpanProcessor();
-    const provider = new BasicTracerProvider({
-      spanProcessors: [baggageProcessor, new SimpleSpanProcessor(exporter)],
+    const provider = new TracerProvider({
+      spanProcessors: [baggageProcessor, new SimpleSpanProcessor({ exporter })],
     });
 
     // Set as global provider
@@ -60,8 +60,8 @@ describe('BaggageSpanProcessor', () => {
   it('should use custom prefix when provided', async () => {
     const exporter = new InMemorySpanExporter();
     const baggageProcessor = new BaggageSpanProcessor({ prefix: 'ctx.' });
-    const provider = new BasicTracerProvider({
-      spanProcessors: [baggageProcessor, new SimpleSpanProcessor(exporter)],
+    const provider = new TracerProvider({
+      spanProcessors: [baggageProcessor, new SimpleSpanProcessor({ exporter })],
     });
 
     // Set as global provider
@@ -96,8 +96,8 @@ describe('BaggageSpanProcessor', () => {
   it('should use no prefix when empty string provided', async () => {
     const exporter = new InMemorySpanExporter();
     const baggageProcessor = new BaggageSpanProcessor({ prefix: '' });
-    const provider = new BasicTracerProvider({
-      spanProcessors: [baggageProcessor, new SimpleSpanProcessor(exporter)],
+    const provider = new TracerProvider({
+      spanProcessors: [baggageProcessor, new SimpleSpanProcessor({ exporter })],
     });
 
     // Set as global provider
@@ -132,8 +132,8 @@ describe('BaggageSpanProcessor', () => {
   it('should handle spans with no baggage gracefully', async () => {
     const exporter = new InMemorySpanExporter();
     const baggageProcessor = new BaggageSpanProcessor();
-    const provider = new BasicTracerProvider({
-      spanProcessors: [baggageProcessor, new SimpleSpanProcessor(exporter)],
+    const provider = new TracerProvider({
+      spanProcessors: [baggageProcessor, new SimpleSpanProcessor({ exporter })],
     });
 
     // Set as global provider
@@ -163,8 +163,8 @@ describe('BaggageSpanProcessor', () => {
   it('should copy multiple baggage entries', async () => {
     const exporter = new InMemorySpanExporter();
     const baggageProcessor = new BaggageSpanProcessor();
-    const provider = new BasicTracerProvider({
-      spanProcessors: [baggageProcessor, new SimpleSpanProcessor(exporter)],
+    const provider = new TracerProvider({
+      spanProcessors: [baggageProcessor, new SimpleSpanProcessor({ exporter })],
     });
 
     // Set as global provider

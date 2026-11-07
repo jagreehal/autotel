@@ -11,7 +11,7 @@ This package is that wiring, maintained once:
 | You get                              | Without it                                                         |
 | ------------------------------------ | ------------------------------------------------------------------ |
 | One import: `layer({ serviceName })` | Copy `OtelTracer.layerGlobal` + `Resource.layer` into `tracing.ts` |
-| Correct v4 subpath imports           | Barrel import pulls `@opentelemetry/sdk-trace-web` at runtime      |
+| Correct v4 subpath imports           | Barrel import pulls `@opentelemetry/sdk-trace` at runtime          |
 | Documented `--import` init order     | Silent broken traces after Effect upgrades                         |
 
 Autotel still owns export. `@effect/opentelemetry` still owns the Effect tracer implementation. **autotel-effect only connects them.**

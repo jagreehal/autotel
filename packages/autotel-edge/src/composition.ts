@@ -13,7 +13,7 @@ import type { Span } from '@opentelemetry/api';
 import type {
   ReadableSpan as SdkReadableSpan,
   SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import type {
   EdgeConfig,
   EdgeEvent,

@@ -24,7 +24,7 @@ async function main() {
 
   init({
     service: 'book-07', // init args beat OTEL_SERVICE_NAME
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   const ping = trace('config.ping', () => 'pong');

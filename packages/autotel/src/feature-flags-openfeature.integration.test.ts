@@ -2,8 +2,7 @@
  * Against the real OpenFeature server SDK: `init()` registers the hook on the
  * app's own OpenFeature, and an evaluation lands on the span that read it.
  */
-import { context, metrics, propagation, trace } from '@opentelemetry/api';
-import { logs } from '@opentelemetry/api-logs';
+import { context, metrics, propagation, trace, logs } from '@opentelemetry/api';
 import {
   InMemoryLogRecordExporter,
   SimpleLogRecordProcessor,
@@ -11,7 +10,7 @@ import {
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { OpenFeature, TypedInMemoryProvider } from '@openfeature/server-sdk';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { init } from './init';
@@ -32,7 +31,7 @@ beforeAll(async () => {
     sampling: 'development',
     instrumentations: [],
     flushOnExit: false,
-    spanProcessors: [new SimpleSpanProcessor(spans)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter: spans })],
     logRecordProcessors: [new SimpleLogRecordProcessor({ exporter: records })],
   });
   await OpenFeature.setProviderAndWait(

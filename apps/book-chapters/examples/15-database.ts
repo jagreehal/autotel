@@ -10,7 +10,7 @@ async function main() {
 
   init({
     service: 'book-15',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   // traceDB uses (ctx) => fn pattern with DB semantic conventions

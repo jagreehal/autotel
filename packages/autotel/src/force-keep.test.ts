@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
 import { forceKeep } from './force-keep';
 import { instrument } from './functional';
@@ -30,7 +30,7 @@ describe('forceKeep()', () => {
     init({
       service: 'force-keep-test',
       spanProcessor: new TailSamplingSpanProcessor(
-        new SimpleSpanProcessor(exporter),
+        new SimpleSpanProcessor({ exporter }),
       ),
     });
   });

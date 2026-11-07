@@ -33,7 +33,7 @@ You are working on the Sentry integration package. You understand Sentry DSN for
 ## Entry Points
 
 - `autotel-sentry`: `sentryOtlpConfig`, `SentryOtlpConfig` (no dependencies, Node and browser)
-- `autotel-sentry/browser`: `joinSentry`, `SentryLike`, plus `sentryOtlpConfig` re-exported. Optional peers: `autotel-web`, `@opentelemetry/sdk-trace-base`
+- `autotel-sentry/browser`: `joinSentry`, `SentryLike`, plus `sentryOtlpConfig` re-exported. Optional peers: `autotel-web`, `@opentelemetry/sdk-trace`
 
 ## Commands
 

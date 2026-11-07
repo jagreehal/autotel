@@ -29,11 +29,13 @@ import { otelTestCollector } from 'autotel-vitest';
 init({
   service: 'unit-tests',
   spanProcessors: [
-    new SimpleSpanProcessor(otelTestCollector),
+    new SimpleSpanProcessor({ exporter: otelTestCollector }),
     // Optional: also ship test traces to a collector
-    new BatchSpanProcessor(
-      new OTLPTraceExporter({ url: 'http://localhost:4318/v1/traces' }),
-    ),
+    new BatchSpanProcessor({
+      exporter: new OTLPTraceExporter({
+        url: 'http://localhost:4318/v1/traces',
+      }),
+    }),
   ],
 });
 ```
@@ -255,7 +257,7 @@ export default defineConfig({
 });
 ```
 
-Explanation: test bodies and the fixture run in worker processes. A provider configured in `globalSetup` lives in the main process, so worker spans are never exported. Also pass `new SimpleSpanProcessor(otelTestCollector)` in `spanProcessors`, or `task.meta.otelSpans` stays empty on SDK 2.x.
+Explanation: test bodies and the fixture run in worker processes. A provider configured in `globalSetup` lives in the main process, so worker spans are never exported. Also pass `new SimpleSpanProcessor({ exporter: otelTestCollector })` in `spanProcessors`, or `task.meta.otelSpans` stays empty on SDK 2.x.
 
 ### MEDIUM: Adding the reporter without init() in the main process
 

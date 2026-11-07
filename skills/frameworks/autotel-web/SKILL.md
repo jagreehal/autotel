@@ -455,4 +455,4 @@ that is an ad blocker or CORS — and after three the exporter waits for an
 
 ## Version
 
-Targets autotel-web v1.11.0. Lean mode has no `@opentelemetry/*` runtime dependencies. Full mode (`autotel-web/full`) depends on `@opentelemetry/sdk-trace-web`, `@opentelemetry/exporter-trace-otlp-http`, and related packages (all bundled in the package, no separate install needed). Node.js 22+ for testing; browser targets all modern browsers.
+Targets autotel-web v1.11.0. Lean mode has no `@opentelemetry/*` runtime dependencies. Full mode (`autotel-web/full`) depends on `@opentelemetry/sdk-trace`, `@opentelemetry/exporter-trace-otlp-http`, and related packages (all bundled in the package, no separate install needed). Node.js 22+ for testing; browser targets all modern browsers.

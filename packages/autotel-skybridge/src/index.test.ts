@@ -5,8 +5,8 @@ import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { createStructuredError } from 'autotel';
 import { instrumentMcpClient } from 'autotel-mcp-instrumentation';
@@ -21,8 +21,8 @@ beforeAll(() => {
     new AsyncLocalStorageContextManager().enable(),
   );
   propagation.setGlobalPropagator(new W3CTraceContextPropagator());
-  const provider = new NodeTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  const provider = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
   trace.setGlobalTracerProvider(provider);
 });

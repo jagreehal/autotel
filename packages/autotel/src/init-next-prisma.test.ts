@@ -11,7 +11,7 @@ import {
   InstrumentationBase,
   InstrumentationNodeModuleDefinition,
 } from '@opentelemetry/instrumentation';
-import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
+import { InMemorySpanExporter } from '@opentelemetry/sdk-trace';
 
 /**
  * Next.js and Prisma behaviour, each against a real init() and an in-memory

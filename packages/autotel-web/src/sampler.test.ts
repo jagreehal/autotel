@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SamplingDecision } from '@opentelemetry/sdk-trace-base';
+import { SamplingDecision } from '@opentelemetry/sdk-trace';
 import { context, trace, TraceFlags } from '@opentelemetry/api';
 import { createSessionRatioSampler, withoutResourceFetch } from './sampler';
 import { configureSession, resetSessionForTesting } from './session';

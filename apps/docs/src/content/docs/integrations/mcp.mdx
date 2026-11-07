@@ -423,7 +423,7 @@ don't need Jaeger, Tempo, or Grafana.
 
 ### Requirements
 
-- Node.js 20+
+- Node.js 22.15+
 - An MCP-compatible client
 
 ### Protocol
@@ -468,12 +468,14 @@ investigation.
 
 These tools answer "what changed and where is the time going" in one call each:
 
-| Tool              | Returns                                                                                                                                                                                      |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `aggregate_spans` | Count, error rate and avg/p50/p95/p99/max latency, grouped by service, operation, version or any span attribute, with optional time buckets. On Datadog it runs server-side over every span. |
-| `aggregate_logs`  | Log counts by service, severity or any attribute, plus the most frequent message patterns (ids and numbers masked).                                                                          |
-| `what_changed`    | Every service whose `service.version` changed in the window, when it changed, and its error rate and p95 before and after. It reads versions from spans, so you need no deploy events.       |
-| `find_root_cause` | The error's origin span, or the span with the most self time (time not spent waiting on child spans), plus the top five spans by self time.                                                  |
+| Tool                    | Returns                                                                                                                                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aggregate_spans`       | Count, error rate and avg/p50/p95/p99/max latency, grouped by service, operation, version or any span attribute, with optional time buckets. On Datadog it runs server-side over every span. |
+| `aggregate_logs`        | Log counts by service, severity or any attribute, plus the most frequent message patterns (ids and numbers masked).                                                                          |
+| `what_changed`          | Every service whose `service.version` changed in the window, when it changed, and its error rate and p95 before and after. It reads versions from spans, so you need no deploy events.       |
+| `find_root_cause`       | The error's origin span, or the span with the most self time (time not spent waiting on child spans), plus the top five spans by self time.                                                  |
+| `get_state_transitions` | Persisted state transitions per entity, field, from, to and via, counted from the `autotel.state.transitions` metric                                                                         |
+| `get_entity_history`    | One instance's transitions, read from `state.transition` log records                                                                                                                         |
 
 Every tool rejects an argument it does not take and names it. A result that
 stops at its `limit` carries a `hint` on how to fetch the rest. Traces carry a

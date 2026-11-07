@@ -50,12 +50,13 @@
   },
   "peerDependencies": {
     "mongoose": ">=8.0.0",
-    "autotel": "*"
+    "autotel": "workspace:*"
   },
   "devDependencies": {
-    "@opentelemetry/context-async-hooks": "^2.12.0",
-    "@opentelemetry/core": "^2.12.0",
-    "@opentelemetry/sdk-trace-node": "^2.12.0",
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/context-async-hooks": "^3.1.0",
+    "@opentelemetry/core": "^3.1.0",
+    "@opentelemetry/sdk-trace": "^3.1.0",
     "@types/node": "^26.6.5",
     "autotel": "workspace:*",
     "kareem": "^3.4.1",

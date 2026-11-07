@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 import type {
   PushMetricExporter,
   ResourceMetrics,
 } from '@opentelemetry/sdk-metrics';
-import type { LogRecordProcessor, SdkLogRecord } from '@opentelemetry/sdk-logs';
+import type {
+  LogRecordProcessor,
+  ReadWriteLogRecord,
+} from '@opentelemetry/sdk-logs';
 import {
   clearPolicies,
   getPolicies,
@@ -37,7 +40,9 @@ function makeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
   });
 }
 
-function makeLog(overrides: Partial<SdkLogRecord> = {}): SdkLogRecord {
+function makeLog(
+  overrides: Partial<ReadWriteLogRecord> = {},
+): ReadWriteLogRecord {
   return logRecordDouble({
     body: 'hello',
     severityText: 'INFO',
@@ -49,7 +54,7 @@ function makeLog(overrides: Partial<SdkLogRecord> = {}): SdkLogRecord {
 }
 
 function collectingProcessor() {
-  const emitted: SdkLogRecord[] = [];
+  const emitted: ReadWriteLogRecord[] = [];
   const wrapped: LogRecordProcessor = {
     onEmit: (record) => {
       emitted.push(record);

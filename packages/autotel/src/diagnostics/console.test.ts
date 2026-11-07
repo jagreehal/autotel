@@ -8,18 +8,19 @@ import {
   type Context,
   type ContextManager,
   type Span,
+  logs,
+  SeverityNumber,
 } from '@opentelemetry/api';
-import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import {
   InMemoryLogRecordExporter,
   LoggerProvider,
   SimpleLogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { captureConsole } from './console.js';
 
@@ -60,8 +61,8 @@ const loggerProvider = new LoggerProvider({
 logs.setGlobalLoggerProvider(loggerProvider);
 
 const spanExporter = new InMemorySpanExporter();
-const tracerProvider = new BasicTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(spanExporter)],
+const tracerProvider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter: spanExporter })],
 });
 const tracer = tracerProvider.getTracer('console-test');
 

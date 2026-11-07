@@ -7,8 +7,7 @@
 
 import type { Span, Context } from '@opentelemetry/api';
 import { propagation, context as otelContext } from '@opentelemetry/api';
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor, ReadableSpan } from '@opentelemetry/sdk-trace';
 import { requireModule } from './node-require';
 
 export interface BaggageSpanProcessorOptions {

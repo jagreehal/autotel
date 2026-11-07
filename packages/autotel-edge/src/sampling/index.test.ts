@@ -9,7 +9,7 @@ import {
 } from './index';
 import type { LocalTrace } from '../types';
 import { SpanStatusCode } from '@opentelemetry/api';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 
 // Helper to create a mock span
 function createMockSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {

@@ -19,7 +19,7 @@ code → SDK init → sampler → processor → exporter → network → backend
 
 This skill walks each link in order with a quick check you can run. Don't skip steps. The cause is rarely where you'd guess.
 
-## Check these three first
+## Check these four first
 
 1. **No endpoint, no export.** Node `init()` has no default endpoint and no
    localhost fallback. Without `endpoint`, `destinations`, `spanExporters`,
@@ -44,6 +44,11 @@ This skill walks each link in order with a quick check you can run. Don't skip s
    provider nobody exports from. `init()` warns and names it. Under Next.js,
    use `withAutotelConfig` from `autotel-adapters/next-config` and add
    `@opentelemetry/api` to the app's dependencies.
+
+4. **Another tracer provider registered first.** OpenTelemetry keeps the first
+   global provider. A library that starts its own `NodeSDK` before `init()`
+   holds it, and `init()` warns `Another tracer provider is already registered`.
+   Turn off that library's tracing, or call `init()` first.
 
 ## Step 0: Reproduce locally with the pretty exporter
 
@@ -244,7 +249,7 @@ Some spans land, some don't:
 TypeError: Cannot read properties of undefined (reading 'startActiveSpan')
 ```
 
-Usually means the API version (`@opentelemetry/api`) and SDK version (`@opentelemetry/sdk-trace-base`) drifted. Run:
+Usually means the API version (`@opentelemetry/api`) and SDK version (`@opentelemetry/sdk-trace`) drifted. Run:
 
 ```bash
 pnpm why @opentelemetry/api

@@ -30,7 +30,7 @@ import type {
   ReadableSpan,
   Span,
   SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { nonEmptyString } from './values';
 
 /** Attribute the fingerprint is written to. */

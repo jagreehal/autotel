@@ -8,7 +8,7 @@
  * person it was slow for", in whatever backend the spans land in.
  */
 
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace';
 import { emitEvent } from 'autotel-web';
 import { enrichSpans } from 'autotel-web/join';
 import { recordFeatureFlag } from 'autotel/feature-flags';

@@ -44,13 +44,13 @@
 import type {
   SpanProcessor,
   ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+  Span,
+} from '@opentelemetry/sdk-trace';
 import {
   SpanStatusCode,
   type Context,
   type SpanContext,
 } from '@opentelemetry/api';
-import type { Span } from '@opentelemetry/sdk-trace-base';
 import {
   AUTOTEL_SAMPLING_TAIL_KEEP,
   AUTOTEL_SAMPLING_TAIL_EVALUATED,

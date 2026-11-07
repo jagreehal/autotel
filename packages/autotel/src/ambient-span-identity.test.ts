@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { getActiveTraceContext, instrument, withTracing } from './functional';
 import { getActiveSpan } from './trace-helpers';
 import { init } from './init';
@@ -40,7 +40,7 @@ describe('ambient span identity inside nested traced functions', () => {
     init({
       service: 'ambient-identity-test',
       sampling: 'development',
-      spanProcessor: new SimpleSpanProcessor(exporter),
+      spanProcessor: new SimpleSpanProcessor({ exporter }),
     });
   });
 

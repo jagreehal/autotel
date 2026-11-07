@@ -2,7 +2,7 @@
 name: autotel-api-surface
 description: >
   Complete autotel API reference: trace(), span(), instrument(), getRequestLogger(), createStructuredError(),
-  parseError(), track(), init(). Import paths, function signatures, factory vs direct pattern, name inference.
+  parseError(), track(), transition(), init(). Import paths, function signatures, factory vs direct pattern, name inference.
   Use as the primary reference when writing autotel code.
 ---
 
@@ -220,6 +220,22 @@ track('order.completed', {
 
 Events are batched and delivered asynchronously. Call `getEventQueue()?.flush()` before process exit in serverless/scripts.
 
+### transition({ entity, field, from, to, via?, id?, history? })
+
+Records a persisted state change. Call it after the write succeeds. It increments `autotel.state.transitions` on every call, whatever the sampling decision, and never throws. `id` stays off the metric; `history: true` emits a `state.transition` log record carrying it.
+
+```typescript
+import { transition } from 'autotel';
+
+transition({
+  entity: 'order',
+  field: 'status',
+  from: 'pending',
+  to: 'paid',
+  via: 'checkout',
+});
+```
+
 ### init(config)
 
 One-time SDK initialization. Must be called before any tracing. **Synchronous.**
@@ -289,47 +305,48 @@ autoInstrumentations:
 - `OTEL_EXPORTER_OTLP_PROTOCOL`: `http` or `grpc`
 - `OTEL_EXPORTER_OTLP_HEADERS`: comma-separated `key=value` pairs
 - `OTEL_RESOURCE_ATTRIBUTES`: comma-separated `key=value` resource attributes
+- `OTEL_SPAN_*`, `OTEL_ATTRIBUTE_*`, `OTEL_BSP_*`: SDK limits and batching, passed through by `init()`
 
 ## Valid Import Paths
 
 Only import from these public entry points:
 
-| Import Path                           | What It Contains                                                                                |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `autotel`                             | Core: trace, span, instrument, init, getRequestLogger, createStructuredError, parseError, track |
-| `autotel/event`                       | Event class for advanced event creation                                                         |
-| `autotel/testing`                     | createTraceCollector() and createMemoryExporter() for test assertions                           |
-| `autotel/exporters`                   | InMemorySpanExporter for low-level testing                                                      |
-| `autotel/logger`                      | Pino integration                                                                                |
-| `autotel/metric`                      | Metrics helpers (counters, histograms, gauges)                                                  |
-| `autotel/slo`                         | createSloTracker(), evaluateBurnRateAlert()                                                     |
-| `autotel/analysis`                    | compareCohorts(): ranks the fields separating an outlier group from a baseline                  |
-| `autotel/sampling`                    | Sampler implementations and hashUnitInterval()                                                  |
-| `autotel/validate`                    | defineValidator() for boundary validation telemetry                                             |
-| `autotel/attributes`                  | Attribute builders and safeSetAttributes()                                                      |
-| `autotel/messaging`                   | Kafka, SQS, RabbitMQ producer/consumer helpers                                                  |
-| `autotel/business-baggage`            | Safe cross-service context propagation                                                          |
-| `autotel/workflow`                    | Workflow and saga tracing                                                                       |
-| `autotel/yaml`                        | loadYamlConfigFromFile()                                                                        |
-| `autotel/correlation-id`              | Correlation ID utilities                                                                        |
-| `autotel/auto`                        | Zero-config auto-instrumentation                                                                |
-| `autotel-hono`                        | Hono middleware (otel())                                                                        |
-| `autotel-tanstack`                    | TanStack Start middleware and wrappers                                                          |
-| `autotel-tanstack/middleware`         | tracingMiddleware()                                                                             |
-| `autotel-tanstack/server-functions`   | traceServerFn()                                                                                 |
-| `autotel-tanstack/loaders`            | traceLoader()                                                                                   |
-| `autotel-tanstack/handlers`           | wrapStartHandler()                                                                              |
-| `autotel-tanstack/auto`               | Zero-config TanStack Start                                                                      |
-| `autotel-cloudflare`                  | Cloudflare Workers wrappers                                                                     |
-| `autotel-cloudflare/bindings`         | Bindings instrumentation                                                                        |
-| `autotel-mcp-instrumentation`         | MCP instrumentation                                                                             |
-| `autotel-mcp-instrumentation/server`  | instrumentMcpServer()                                                                           |
-| `autotel-mcp-instrumentation/client`  | instrumentMcpClient()                                                                           |
-| `autotel-mcp-instrumentation/context` | MCP context propagation                                                                         |
-| `autotel-edge`                        | Edge runtime core                                                                               |
-| `autotel-edge/sampling`               | Sampling strategies                                                                             |
-| `autotel-edge/events`                 | Edge events system                                                                              |
-| `autotel-edge/testing`                | Edge testing utilities                                                                          |
+| Import Path                           | What It Contains                                                                                            |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `autotel`                             | Core: trace, span, instrument, init, getRequestLogger, createStructuredError, parseError, track, transition |
+| `autotel/event`                       | Event class for advanced event creation                                                                     |
+| `autotel/testing`                     | createTraceCollector() and createMemoryExporter() for test assertions                                       |
+| `autotel/exporters`                   | InMemorySpanExporter for low-level testing                                                                  |
+| `autotel/logger`                      | Pino integration                                                                                            |
+| `autotel/metric`                      | Metrics helpers (counters, histograms, gauges)                                                              |
+| `autotel/slo`                         | createSloTracker(), evaluateBurnRateAlert()                                                                 |
+| `autotel/analysis`                    | compareCohorts(): ranks the fields separating an outlier group from a baseline                              |
+| `autotel/sampling`                    | Sampler implementations and hashUnitInterval()                                                              |
+| `autotel/validate`                    | defineValidator() for boundary validation telemetry                                                         |
+| `autotel/attributes`                  | Attribute builders and safeSetAttributes()                                                                  |
+| `autotel/messaging`                   | Kafka, SQS, RabbitMQ producer/consumer helpers                                                              |
+| `autotel/business-baggage`            | Safe cross-service context propagation                                                                      |
+| `autotel/workflow`                    | Workflow and saga tracing                                                                                   |
+| `autotel/yaml`                        | loadYamlConfigFromFile()                                                                                    |
+| `autotel/correlation-id`              | Correlation ID utilities                                                                                    |
+| `autotel/auto`                        | Zero-config auto-instrumentation                                                                            |
+| `autotel-hono`                        | Hono middleware (otel())                                                                                    |
+| `autotel-tanstack`                    | TanStack Start middleware and wrappers                                                                      |
+| `autotel-tanstack/middleware`         | tracingMiddleware()                                                                                         |
+| `autotel-tanstack/server-functions`   | traceServerFn()                                                                                             |
+| `autotel-tanstack/loaders`            | traceLoader()                                                                                               |
+| `autotel-tanstack/handlers`           | wrapStartHandler()                                                                                          |
+| `autotel-tanstack/auto`               | Zero-config TanStack Start                                                                                  |
+| `autotel-cloudflare`                  | Cloudflare Workers wrappers                                                                                 |
+| `autotel-cloudflare/bindings`         | Bindings instrumentation                                                                                    |
+| `autotel-mcp-instrumentation`         | MCP instrumentation                                                                                         |
+| `autotel-mcp-instrumentation/server`  | instrumentMcpServer()                                                                                       |
+| `autotel-mcp-instrumentation/client`  | instrumentMcpClient()                                                                                       |
+| `autotel-mcp-instrumentation/context` | MCP context propagation                                                                                     |
+| `autotel-edge`                        | Edge runtime core                                                                                           |
+| `autotel-edge/sampling`               | Sampling strategies                                                                                         |
+| `autotel-edge/events`                 | Edge events system                                                                                          |
+| `autotel-edge/testing`                | Edge testing utilities                                                                                      |
 
 The `exports` field in `packages/autotel/package.json` is the authoritative
 list; this table covers the entry points you reach for most. Check there before

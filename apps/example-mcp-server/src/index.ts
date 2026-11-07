@@ -9,7 +9,7 @@ import {
 } from 'autotel-mcp-instrumentation/security';
 import { init } from 'autotel';
 import { SimpleSpanProcessor } from 'autotel/processors';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 import { z } from 'zod';
 
 /**
@@ -44,7 +44,7 @@ const stderrSpanExporter: SpanExporter = {
 // traced is constructed. That is an OpenTelemetry rule, not an MCP one.
 init({
   service: 'mcp-weather-server',
-  spanProcessors: [new SimpleSpanProcessor(stderrSpanExporter)],
+  spanProcessors: [new SimpleSpanProcessor({ exporter: stderrSpanExporter })],
 });
 
 console.error('Starting MCP Weather Server...');

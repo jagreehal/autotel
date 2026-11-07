@@ -5,10 +5,7 @@
 import { getActiveNativeTracer } from './native-bridge';
 import { installConsoleSignals } from './console-signals';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
-import {
-  ParentBasedSampler,
-  AlwaysOnSampler,
-} from '@opentelemetry/sdk-trace-base';
+import { ParentBasedSampler, AlwaysOnSampler } from '@opentelemetry/sdk-trace';
 import {
   context as api_context,
   createContextKey,

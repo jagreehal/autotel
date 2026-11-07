@@ -25,16 +25,16 @@
  * ## Example
  *
  * ```ts
- * import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
- * import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+ * import { trace } from '@opentelemetry/api';
+ * import { BatchSpanProcessor, TracerProvider } from '@opentelemetry/sdk-trace';
  * import { CloudWatchTraceExporter } from 'autotel-aws/cloudwatch';
  *
- * const provider = new NodeTracerProvider({
+ * const provider = new TracerProvider({
  *   spanProcessors: [
- *     new BatchSpanProcessor(new CloudWatchTraceExporter({ region: 'eu-west-1' })),
+ *     new BatchSpanProcessor({ exporter: new CloudWatchTraceExporter({ region: 'eu-west-1' }) }),
  *   ],
  * });
- * provider.register();
+ * trace.setGlobalTracerProvider(provider);
  * ```
  *
  * In Lambda call `provider.forceFlush()` (or use a span processor configured

@@ -21,8 +21,13 @@
  * this module degrades to a no-op where they are unavailable.
  */
 
-import { trace, type Attributes } from '@opentelemetry/api';
-import { logs, SeverityNumber, type Logger } from '@opentelemetry/api-logs';
+import {
+  trace,
+  type Attributes,
+  logs,
+  SeverityNumber,
+  type Logger,
+} from '@opentelemetry/api';
 import { safeRequire } from '../node-require.js';
 import { subscribeChannel } from './channel.js';
 import { asString } from '../values.js';

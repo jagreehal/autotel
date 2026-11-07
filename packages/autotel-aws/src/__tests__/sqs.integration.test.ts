@@ -56,7 +56,7 @@ describe.skipIf(!isLocalStackAvailable)('SQS Integration Tests', () => {
     exporter = new InMemorySpanExporter();
     init({
       service: 'sqs-integration-test',
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
 
     // Create test queue

@@ -47,14 +47,14 @@ Before:
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({ 'service.name': 'my-app' }),
   spanProcessors: [
-    new BatchSpanProcessor(
-      new OTLPTraceExporter({ url: process.env.OTEL_ENDPOINT }),
-    ),
+    new BatchSpanProcessor({
+      exporter: new OTLPTraceExporter({ url: process.env.OTEL_ENDPOINT }),
+    }),
   ],
 });
 sdk.start();

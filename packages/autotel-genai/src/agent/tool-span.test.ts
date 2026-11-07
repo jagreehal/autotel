@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
 import { init, trace } from 'autotel';
 import { createMemoryExporter } from 'autotel/testing';
 import { defineAgentToolCall } from './index.js';
@@ -35,7 +35,7 @@ describe('agent tool calls', () => {
   beforeAll(() => {
     init({
       service: 'tool-span-test',
-      spanProcessor: new SimpleSpanProcessor(exporter),
+      spanProcessor: new SimpleSpanProcessor({ exporter }),
     });
   });
 

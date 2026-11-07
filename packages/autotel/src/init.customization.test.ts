@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MetricReader } from '@opentelemetry/sdk-metrics';
 import type { AutotelSdk, AutotelSdkOptions } from './sdk';
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { mock, mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import { NeverSampler } from './sampling';
@@ -320,6 +320,81 @@ describe('init() customization', () => {
       expect(options.instrumentations).toContain(instrumentation);
     },
   );
+
+  describe('deployment environment', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    async function environmentAttributes(
+      options: Parameters<
+        Awaited<ReturnType<typeof loadInitWithMocks>>['init']
+      >[0],
+    ) {
+      const { init, sdkInstances } = await loadInitWithMocks();
+      init(options);
+      // SAFETY: init() always passes a resource built from resourceFromAttributes.
+      const resource = sdkInstances.at(-1)?.options.resource as {
+        attributes: Record<string, ConfigValue>;
+      };
+      return {
+        name: resource.attributes['deployment.environment.name'],
+        legacy: resource.attributes['deployment.environment'],
+      };
+    }
+
+    it.each([
+      ['deployment.environment.name=staging'],
+      ['deployment.environment=staging'],
+    ])(
+      'takes it from OTEL_RESOURCE_ATTRIBUTES (%s) over NODE_ENV, under both keys',
+      async (resourceAttributes) => {
+        vi.stubEnv('NODE_ENV', 'production');
+        vi.stubEnv('OTEL_RESOURCE_ATTRIBUTES', resourceAttributes);
+
+        expect(await environmentAttributes({ service: 'env-app' })).toEqual({
+          name: 'staging',
+          legacy: 'staging',
+        });
+      },
+    );
+
+    it('takes it from resourceAttributes over NODE_ENV, under both keys', async () => {
+      vi.stubEnv('NODE_ENV', 'production');
+
+      expect(
+        await environmentAttributes({
+          service: 'env-app',
+          resourceAttributes: { 'deployment.environment.name': 'staging' },
+        }),
+      ).toEqual({ name: 'staging', legacy: 'staging' });
+    });
+
+    it('still prefers an explicit environment option', async () => {
+      vi.stubEnv(
+        'OTEL_RESOURCE_ATTRIBUTES',
+        'deployment.environment.name=staging',
+      );
+
+      expect(
+        await environmentAttributes({ service: 'env-app', environment: 'qa' }),
+      ).toEqual({ name: 'qa', legacy: 'qa' });
+    });
+
+    it('falls back to NODE_ENV, then development', async () => {
+      vi.stubEnv('NODE_ENV', 'test-env');
+      expect(await environmentAttributes({ service: 'env-app' })).toEqual({
+        name: 'test-env',
+        legacy: 'test-env',
+      });
+
+      vi.stubEnv('NODE_ENV', undefined);
+      expect(await environmentAttributes({ service: 'env-app' })).toEqual({
+        name: 'development',
+        legacy: 'development',
+      });
+    });
+  });
 
   it('merges resource attributes with defaults', async () => {
     const { init, getConfig, sdkInstances } = await loadInitWithMocks();

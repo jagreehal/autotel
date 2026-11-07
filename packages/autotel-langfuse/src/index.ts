@@ -40,13 +40,12 @@
  * ```
  */
 
-import type { AttributeValue, Attributes } from '@opentelemetry/api';
-import type { Context } from '@opentelemetry/api';
+import type { AttributeValue, Attributes, Context } from '@opentelemetry/api';
 import type {
   ReadableSpan,
   Span,
   SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 /**
  * Canonical attributes this processor reads. Spelled out rather than imported

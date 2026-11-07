@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { setEventSink } from 'autotel-web';
 import { recordFeatureFlag } from 'autotel/feature-flags';
 import { posthogCompatibility } from './compatibility';
@@ -30,8 +30,8 @@ function runEnricher(
     } as never,
     featureFlags,
   });
-  const provider = new BasicTracerProvider({
-    spanProcessors: [processor, new SimpleSpanProcessor(exporter)],
+  const provider = new TracerProvider({
+    spanProcessors: [processor, new SimpleSpanProcessor({ exporter })],
   });
   const work = provider.getTracer('t').startSpan('work');
   inSpan?.(work as never);

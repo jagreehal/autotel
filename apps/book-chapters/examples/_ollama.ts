@@ -49,7 +49,7 @@ export function skip(chapter: string): void {
  */
 export function collectGenAiSpans(service: string): InMemorySpanExporter {
   const exporter = new InMemorySpanExporter();
-  init({ service, spanProcessors: [new SimpleSpanProcessor(exporter)] });
+  init({ service, spanProcessors: [new SimpleSpanProcessor({ exporter })] });
   registerTelemetry(autotelTelemetry({ tracer: getAutotelTracer(service) }));
   return exporter;
 }

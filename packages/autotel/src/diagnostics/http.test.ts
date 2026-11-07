@@ -8,11 +8,11 @@ import {
   type TextMapPropagator,
 } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   type ReadableSpan,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { instrumentHttp } from './http.js';
 
@@ -45,8 +45,8 @@ const w3c: TextMapPropagator = {
 propagation.setGlobalPropagator(w3c);
 
 const exporter = new InMemorySpanExporter();
-const provider = new BasicTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(exporter)],
+const provider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
 });
 const tracer = provider.getTracer('http-test');
 

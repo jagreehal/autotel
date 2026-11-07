@@ -1,23 +1,23 @@
 import { context as otelContext, trace as otelTrace } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
   type ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LANGFUSE, langfuseCompatibility } from './index.js';
 
 let exporter: InMemorySpanExporter;
-let provider: BasicTracerProvider;
+let provider: TracerProvider;
 
 /** Register the compatibility processor ahead of the exporting one. */
 function setup(options: Parameters<typeof langfuseCompatibility>[0] = {}) {
   exporter = new InMemorySpanExporter();
-  provider = new BasicTracerProvider({
+  provider = new TracerProvider({
     spanProcessors: [
       langfuseCompatibility(options),
-      new SimpleSpanProcessor(exporter),
+      new SimpleSpanProcessor({ exporter }),
     ],
   });
   return provider.getTracer('langfuse-test');

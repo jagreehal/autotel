@@ -10,7 +10,7 @@
     "smoke": "node smoke.mjs"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api": "^1.10.0",
     "autotel": "workspace:*",
     "autotel-posthog": "workspace:*",
     "autotel-web": "workspace:*",

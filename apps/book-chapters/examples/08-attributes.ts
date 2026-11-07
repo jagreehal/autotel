@@ -18,7 +18,7 @@ async function main() {
 
   init({
     service: 'book-08',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   const demo = trace('attributes.demo', () => {

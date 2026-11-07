@@ -3,7 +3,7 @@ import { context, trace as otelTrace, TraceFlags } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { span } from './functional';
 import { init } from './init';
 import { flush } from './shutdown';
@@ -30,7 +30,7 @@ describe("init()'s sampler and the parent's decision", () => {
     init({
       service: 'parent-sampler-test',
       sampler: keepEverything,
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
   });
   beforeEach(() => exporter.reset());

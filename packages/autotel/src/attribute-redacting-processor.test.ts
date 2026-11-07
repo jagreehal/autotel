@@ -4,10 +4,10 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import {
   AttributeRedactingProcessor,
   REDACTOR_PATTERNS,
@@ -21,9 +21,9 @@ import {
 import type {
   SpanProcessor,
   ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+  Span,
+} from '@opentelemetry/sdk-trace';
 import type { Attributes } from '@opentelemetry/api';
-import type { Span } from '@opentelemetry/sdk-trace-base';
 import {
   emptyContext,
   readableSpanDouble,
@@ -641,9 +641,9 @@ describe('createRedactedSpan', () => {
 
   it('redacts event and link attributes on an exported span', () => {
     const exporter = new InMemorySpanExporter();
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       spanProcessors: [
-        new AttributeRedactingProcessor(new SimpleSpanProcessor(exporter), {
+        new AttributeRedactingProcessor(new SimpleSpanProcessor({ exporter }), {
           redactor: 'default',
         }),
       ],

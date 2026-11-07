@@ -1,6 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { context, trace } from '@opentelemetry/api';
-import { logs } from '@opentelemetry/api-logs';
+import { context, trace, logs } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import {
   autotelOpenFeatureHook,

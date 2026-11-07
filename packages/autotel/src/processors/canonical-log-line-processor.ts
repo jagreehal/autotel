@@ -22,12 +22,9 @@
  * ```
  */
 
-import type {
-  SpanProcessor,
-  ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor, ReadableSpan } from '@opentelemetry/sdk-trace';
 import type { Attributes, AttributeValue } from '@opentelemetry/api';
-import { logs, SeverityNumber } from '@opentelemetry/api-logs';
+import { logs, SeverityNumber } from '@opentelemetry/api';
 import type { Logger } from '../logger';
 import { formatPrettyLogLine, formatDuration } from '../pretty-log-formatter';
 import type { UnknownRecord } from '../values';

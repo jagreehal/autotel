@@ -148,6 +148,46 @@ describe('OtlpReceiver over OTLP/protobuf', () => {
     expect(series[0]?.points[0]?.value).toBe(7.5);
   });
 
+  it('keeps delta temporality from the protobuf enum', async () => {
+    const metrics: OtlpJson = {
+      resourceMetrics: [
+        {
+          resource,
+          scopeMetrics: [
+            {
+              metrics: [
+                {
+                  name: 'autotel.state.transitions',
+                  sum: {
+                    aggregationTemporality: 1,
+                    isMonotonic: true,
+                    dataPoints: [
+                      {
+                        startTimeUnixNano: '1000000000',
+                        timeUnixNano: NOW_NANOS,
+                        asInt: '2',
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    await post(
+      '/v1/metrics',
+      encodeOtlpRequest('metrics', metrics),
+      'application/x-protobuf',
+    );
+
+    const [series] = await store.getMetricSeries('autotel.state.transitions');
+    expect(series?.temporality).toBe('delta');
+    expect(series?.points[0]?.startTimeUnixMs).toBe(1000);
+  });
+
   it('reports a histogram point as its mean', async () => {
     const metrics: OtlpJson = {
       resourceMetrics: [

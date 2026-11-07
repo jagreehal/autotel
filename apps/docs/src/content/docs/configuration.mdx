@@ -21,6 +21,14 @@ Autotel supports standard OpenTelemetry environment variables for configuration.
 
 - `OTEL_RESOURCE_ATTRIBUTES`: Custom metadata tags as comma-separated `key=value` pairs
 
+**SDK Limits:**
+
+`init()` reads the OpenTelemetry limit and batching variables and passes them to the SDK:
+
+- `OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT`, `OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT`, `OTEL_SPAN_EVENT_COUNT_LIMIT`, `OTEL_SPAN_LINK_COUNT_LIMIT`, `OTEL_SPAN_ATTRIBUTE_PER_EVENT_COUNT_LIMIT`, `OTEL_SPAN_ATTRIBUTE_PER_LINK_COUNT_LIMIT`
+- `OTEL_ATTRIBUTE_COUNT_LIMIT`, `OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT` : general limits; a span-specific limit wins
+- `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BSP_EXPORT_TIMEOUT`, `OTEL_BSP_MAX_QUEUE_SIZE`, `OTEL_BSP_MAX_EXPORT_BATCH_SIZE`
+
 ## Configuration Precedence
 
 1. **Explicit `init()` parameters**: highest priority
@@ -223,12 +231,12 @@ an enricher ends at exit still reaches the exporter. If you build your own SDK,
 
 ```typescript
 import { EnrichedSpanProcessor } from 'autotel';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 import { langfuseCompatibility } from 'autotel-langfuse';
 
 const processor = new EnrichedSpanProcessor(
   [langfuseCompatibility()], // enrichers, drained first
-  [new BatchSpanProcessor(exporter)], // exporters, flushed after
+  [new BatchSpanProcessor({ exporter })], // exporters, flushed after
 );
 ```
 

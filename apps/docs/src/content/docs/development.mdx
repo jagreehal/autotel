@@ -90,7 +90,7 @@ Autotel re-exports commonly-needed OpenTelemetry utilities in semantically-organ
 - `assertTraceCreated()`, `assertTraceSucceeded()`, `assertTraceFailed()`, etc.
 - Events and metrics testing utilities
 
-**Why re-export?** Achieves "one install is all you need" DX without bundle size impact (these are from `@opentelemetry/sdk-trace-base`, already a dependency).
+**Why re-export?** Achieves "one install is all you need" DX without bundle size impact (these are from `@opentelemetry/sdk-trace`, already a dependency).
 
 ```typescript
 // Development debugging - see spans in console
@@ -110,7 +110,7 @@ import { SimpleSpanProcessor } from 'autotel/processors';
 const exporter = new InMemorySpanExporter();
 init({
   service: 'test',
-  spanProcessors: [new SimpleSpanProcessor(exporter)],
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
 });
 
 // Run code under test

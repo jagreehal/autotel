@@ -7,10 +7,7 @@
  */
 
 import type { Attributes } from '@opentelemetry/api';
-import type {
-  SpanExporter,
-  SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+import type { SpanExporter, SpanProcessor } from '@opentelemetry/sdk-trace';
 import type { MetricReader } from '@opentelemetry/sdk-metrics';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import type { AutotelSdkLike, AutotelSdkOptions } from './sdk';
@@ -290,25 +287,25 @@ export interface AutotelConfig {
    *
    * @example Multiple processors
    * ```typescript
-   * import { JaegerExporter } from '@opentelemetry/exporter-jaeger'
-   * import { BatchSpanProcessor, SimpleSpanProcessor, ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base'
+   * import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
+   * import { BatchSpanProcessor, SimpleSpanProcessor, ConsoleSpanExporter } from '@opentelemetry/sdk-trace'
    *
    * init({
    *   service: 'my-app',
    *   spanProcessors: [
-   *     new BatchSpanProcessor(new JaegerExporter()),
-   *     new SimpleSpanProcessor(new ConsoleSpanExporter())  // Debug alongside production
+   *     new BatchSpanProcessor({ exporter: new OTLPTraceExporter() }),
+   *     new SimpleSpanProcessor({ exporter: new ConsoleSpanExporter() })  // Debug alongside production
    *   ]
    * })
    * ```
    *
    * @example Single processor
    * ```typescript
-   * import { ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
+   * import { ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace'
    *
    * init({
    *   service: 'my-app',
-   *   spanProcessors: [new SimpleSpanProcessor(new ConsoleSpanExporter())]
+   *   spanProcessors: [new SimpleSpanProcessor({ exporter: new ConsoleSpanExporter() })]
    * })
    * ```
    */
@@ -349,13 +346,13 @@ export interface AutotelConfig {
    * @example Multiple exporters
    * ```typescript
    * import { ZipkinExporter } from '@opentelemetry/exporter-zipkin'
-   * import { JaegerExporter } from '@opentelemetry/exporter-jaeger'
+   * import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
    *
    * init({
    *   service: 'my-app',
    *   spanExporters: [
    *     new ZipkinExporter({ url: 'http://localhost:9411/api/v2/spans' }),
-   *     new JaegerExporter()  // Send to multiple backends simultaneously
+   *     new OTLPTraceExporter()  // Send to multiple backends simultaneously
    *   ]
    * })
    * ```
@@ -563,7 +560,7 @@ export interface AutotelConfig {
    * ```typescript
    * init({
    *   service: 'fixture-capture',
-   *   spanProcessors: [new SimpleSpanProcessor(new InMemorySpanExporter())],
+   *   spanProcessors: [new SimpleSpanProcessor({ exporter: new InMemorySpanExporter() })],
    *   sampling: 'development', // capture EVERY span
    * });
    * ```

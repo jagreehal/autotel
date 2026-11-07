@@ -23,7 +23,7 @@ import {
   sanitizeAttributes,
 } from '@opentelemetry/core';
 import type { Resource } from '@opentelemetry/resources';
-import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace';
 import {
   SEMATTRS_EXCEPTION_MESSAGE,
   SEMATTRS_EXCEPTION_STACKTRACE,

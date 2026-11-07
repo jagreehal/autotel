@@ -27,10 +27,10 @@
  */
 
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import assert from 'node:assert/strict';
 import { ToolLoopAgent, embed, registerTelemetry, stepCountIs, tool } from 'ai';
 import { generateText, ollama, streamText } from 'ai-sdk-ollama';
@@ -42,8 +42,8 @@ const MODEL = process.env.OLLAMA_MODEL ?? 'llama3.2';
 const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? 'nomic-embed-text';
 
 const exporter = new InMemorySpanExporter();
-const provider = new BasicTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(exporter)],
+const provider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
 });
 const tracer = provider.getTracer('ai-sdk-observer-example');
 

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
 import { instrument } from './functional';
 import { init } from './init';
@@ -33,7 +33,7 @@ describe('sampler configured on init()', () => {
       service: 'init-sampler-test',
       sampler: dropEverything,
       spanProcessor: new TailSamplingSpanProcessor(
-        new SimpleSpanProcessor(exporter),
+        new SimpleSpanProcessor({ exporter }),
       ),
     });
   });

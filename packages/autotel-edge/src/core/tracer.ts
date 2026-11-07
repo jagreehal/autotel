@@ -25,7 +25,7 @@ import {
   RandomIdGenerator,
   type ReadableSpan,
   SamplingDecision,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 
 // parseConfig's default, for a pipeline built without setHeadSampler.
 const defaultHeadSampler = () =>

@@ -10,7 +10,7 @@ async function main() {
 
   init({
     service: 'book-10',
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
 
   const sendOrder = traceProducer({

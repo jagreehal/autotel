@@ -9,11 +9,11 @@ import {
   type Tracer,
 } from '@opentelemetry/api';
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   type ReadableSpan,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GEN_AI } from '../semconv.js';
 import {
@@ -22,7 +22,7 @@ import {
 } from './ai-sdk-telemetry.js';
 
 // The context runners rely on the ambient OpenTelemetry ContextManager — the
-// same one a real Node app gets from NodeTracerProvider/sdk-node. BasicTracer
+// same one a real Node app gets from TracerProvider/sdk-node. BasicTracer
 // registers none, so register a minimal AsyncLocalStorage-backed manager (set
 // once globally) to exercise context propagation in tests.
 class AlsContextManager implements ContextManager {
@@ -53,13 +53,13 @@ class AlsContextManager implements ContextManager {
 otelContext.setGlobalContextManager(new AlsContextManager());
 
 let exporter: InMemorySpanExporter;
-let provider: BasicTracerProvider;
+let provider: TracerProvider;
 let tracer: Tracer;
 
 beforeEach(() => {
   exporter = new InMemorySpanExporter();
-  provider = new BasicTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  provider = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
   });
   tracer = provider.getTracer('ai-sdk-telemetry-test');
 });

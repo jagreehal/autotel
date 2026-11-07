@@ -14,7 +14,7 @@
   "dependencies": {
     "@datadog/browser-rum": "7.16.1",
     "@datadog/browser-rum-react": "7.16.1",
-    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api": "^1.10.0",
     "@tanstack/react-query": "^5.104.4",
     "autotel": "workspace:*",
     "autotel-backends": "workspace:*",

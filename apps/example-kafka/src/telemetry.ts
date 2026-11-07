@@ -20,7 +20,10 @@ export function startTelemetry() {
     // is what each CONSUMER span links to.
     events: { includeTraceContext: true },
     // The snapshot reads CONSUMER and workflow spans as they end.
-    spanProcessors: [new SimpleSpanProcessor(exporter), snapshot.spanProcessor],
+    spanProcessors: [
+      new SimpleSpanProcessor({ exporter }),
+      snapshot.spanProcessor,
+    ],
   });
   return { exporter, snapshot };
 }

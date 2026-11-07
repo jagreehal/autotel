@@ -9,7 +9,7 @@
     "start:webhook": "tsx src/webhook-server.ts"
   },
   "dependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.81.2",
+    "@opentelemetry/auto-instrumentations-node": "^0.83.0",
     "autotel": "workspace:*",
     "autotel-subscribers": "workspace:*",
     "dotenv": "^18.0.8",

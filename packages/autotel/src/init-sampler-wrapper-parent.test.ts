@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { trace } from './functional';
 import { init } from './init';
 import { flush } from './shutdown';
@@ -21,7 +21,7 @@ describe("trace()'s own head decision and the parent's", () => {
     init({
       service: 'wrapper-parent-sampler-test',
       sampler: keepParentOnly,
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
   });
 

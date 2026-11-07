@@ -43,7 +43,7 @@ import type {
   ReadableSpan,
   Span,
   SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { setBaggage } from './baggage';
 import { setJoinSessionProvider, settledSessionId } from './session';
 import { isDevelopment } from './dev-mode';

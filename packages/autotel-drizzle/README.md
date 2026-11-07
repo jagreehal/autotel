@@ -21,7 +21,7 @@ If you are pinned to an older Drizzle (for example 0.38.x):
 
 ## Why This Approach?
 
-With the `--import` pattern (Node.js 18.19+), using official OpenTelemetry packages **when they work** is simple:
+With the `--import` pattern (Node.js 22.15+), using official OpenTelemetry packages **when they work** is simple:
 
 ```javascript
 // instrumentation.mjs

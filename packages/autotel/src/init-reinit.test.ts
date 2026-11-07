@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { propagation, type TextMapPropagator } from '@opentelemetry/api';
 import type { Instrumentation } from '@opentelemetry/instrumentation';
-import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
+import { InMemorySpanExporter } from '@opentelemetry/sdk-trace';
 import { init, getTracer, flush, shutdown, trace } from './index';
 import { configure, getConfig, resetConfig } from './config';
 

@@ -9,7 +9,7 @@ import type {
   ReadableSpan,
   Span,
   SpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import type { SpanFilterPredicate } from './filtering-span-processor';
 
 /** A route to ignore: a path prefix (`/api/health`) or a pattern. */

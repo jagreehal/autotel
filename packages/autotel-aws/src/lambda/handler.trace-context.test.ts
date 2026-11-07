@@ -20,7 +20,7 @@ describe('Lambda trace context', () => {
   beforeAll(() => {
     init({
       service: 'test',
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
     propagation.disable();
     propagation.setGlobalPropagator(

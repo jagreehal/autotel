@@ -10,7 +10,7 @@ import type { ExportResult } from '@opentelemetry/core';
 import { ExportResultCode } from '@opentelemetry/core';
 import { OTLPExporterError } from '@opentelemetry/otlp-exporter-base';
 import { JsonTraceSerializer } from '@opentelemetry/otlp-transformer';
-import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { SpanExporter } from '@opentelemetry/sdk-trace';
 import type { OTLPExporterConfig } from '../types';
 
 // Version is injected at build time via tsup define

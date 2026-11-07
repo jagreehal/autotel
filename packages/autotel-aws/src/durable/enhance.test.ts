@@ -16,7 +16,7 @@ beforeAll(async () => {
   init({
     service: 'test',
     spanProcessors: [
-      new BatchSpanProcessor(exporter, { scheduledDelayMillis: 600_000 }),
+      new BatchSpanProcessor({ exporter, scheduledDelayMillis: 600_000 }),
     ],
   });
   await LocalDurableTestRunner.setupTestEnvironment({ skipTime: true });

@@ -1,11 +1,12 @@
+import { trace } from '@opentelemetry/api';
 import { createRequire } from 'node:module';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MongoDBInstrumentation } from '@opentelemetry/instrumentation-mongodb';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
+  TracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+} from '@opentelemetry/sdk-trace';
 import { planFromExplain, serializeMongoCommand } from './index';
 
 /**
@@ -21,10 +22,10 @@ describe.skipIf(!uri)('against MongoDB', () => {
   let client: import('mongodb').MongoClient;
 
   beforeAll(async () => {
-    const provider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    const provider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
-    provider.register();
+    trace.setGlobalTracerProvider(provider);
     const instrumentation = new MongoDBInstrumentation({
       dbStatementSerializer: serializeMongoCommand,
       // A test has no request span to hang the queries under.

@@ -11,8 +11,7 @@ import {
   hasTracerProvider,
 } from './tracer-provider';
 import { trace } from '@opentelemetry/api';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { TracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
 import { isFunction } from './values';
 
 describe('getForceFlushableProvider', () => {
@@ -41,10 +40,10 @@ describe('getForceFlushableProvider', () => {
         return Promise.resolve();
       },
     };
-    const provider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    const provider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
-    provider.register();
+    trace.setGlobalTracerProvider(provider);
 
     const span = trace.getTracer('t').startSpan('flushable');
     span.end();
@@ -82,11 +81,11 @@ describe('getForceFlushableProvider', () => {
 });
 
 describe('Isolated Tracer Provider', () => {
-  let customProvider: NodeTracerProvider;
+  let customProvider: TracerProvider;
 
   beforeEach(() => {
     // Create a custom provider for testing
-    customProvider = new NodeTracerProvider();
+    customProvider = new TracerProvider();
   });
 
   afterEach(() => {
@@ -112,8 +111,8 @@ describe('Isolated Tracer Provider', () => {
     });
 
     it('should allow overwriting existing isolated provider', () => {
-      const provider1 = new NodeTracerProvider();
-      const provider2 = new NodeTracerProvider();
+      const provider1 = new TracerProvider();
+      const provider2 = new TracerProvider();
 
       setAutotelTracerProvider(provider1);
       expect(getAutotelTracerProvider()).toBe(provider1);
@@ -264,12 +263,12 @@ describe('hasTracerProvider', () => {
   });
 
   it('is true once a global provider is registered', () => {
-    trace.setGlobalTracerProvider(new NodeTracerProvider());
+    trace.setGlobalTracerProvider(new TracerProvider());
     expect(hasTracerProvider()).toBe(true);
   });
 
   it('is true with an isolated provider', () => {
-    setAutotelTracerProvider(new NodeTracerProvider());
+    setAutotelTracerProvider(new TracerProvider());
     expect(hasTracerProvider()).toBe(true);
   });
 });

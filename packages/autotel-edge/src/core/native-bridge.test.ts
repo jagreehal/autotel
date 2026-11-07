@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { context as api_context, SpanStatusCode } from '@opentelemetry/api';
-import type { Attributes } from '@opentelemetry/api';
-import type { AttributeValue } from '@opentelemetry/api';
+import type { Attributes, AttributeValue } from '@opentelemetry/api';
 import {
   withNativeTracer,
   getActiveNativeTracer,

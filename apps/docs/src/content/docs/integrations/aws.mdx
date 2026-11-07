@@ -183,7 +183,7 @@ As of late 2025 / early 2026, CloudWatch accepts OTLP/HTTP directly. No collecto
 pnpm add autotel-aws autotel \
   @smithy/signature-v4 @aws-crypto/sha256-js \
   @aws-sdk/credential-providers \
-  @opentelemetry/sdk-trace-base \
+  @opentelemetry/sdk-trace \
   @opentelemetry/sdk-logs \
   @opentelemetry/sdk-metrics \
   @opentelemetry/otlp-transformer
@@ -195,15 +195,15 @@ Drop the signal-specific peers you don't use (e.g. omit `sdk-logs` if you only e
 
 ```typescript
 import { init } from 'autotel';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 import { CloudWatchTraceExporter } from 'autotel-aws/cloudwatch';
 
 init({
   service: 'my-service',
   spanProcessors: [
-    new BatchSpanProcessor(
-      new CloudWatchTraceExporter({ region: 'eu-west-1' }),
-    ),
+    new BatchSpanProcessor({
+      exporter: new CloudWatchTraceExporter({ region: 'eu-west-1' }),
+    }),
   ],
 });
 ```
@@ -222,7 +222,9 @@ import {
 import { CloudWatchLogExporter } from 'autotel-aws/cloudwatch';
 
 const provider = new LoggerProvider({
-  processors: [new BatchLogRecordProcessor(new CloudWatchLogExporter())],
+  processors: [
+    new BatchLogRecordProcessor({ exporter: new CloudWatchLogExporter() }),
+  ],
 });
 ```
 

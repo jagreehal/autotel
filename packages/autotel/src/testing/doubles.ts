@@ -7,13 +7,15 @@
  * partial double possible is stated once, next to what it knows.
  */
 import { vi } from 'vitest';
-import type { Context, Meter, Span, Tracer } from '@opentelemetry/api';
-import type { Logger as OTelLogger } from '@opentelemetry/api-logs';
 import type {
-  ReadableSpan,
-  Span as SdkSpan,
-} from '@opentelemetry/sdk-trace-base';
-import type { SdkLogRecord } from '@opentelemetry/sdk-logs';
+  Context,
+  Meter,
+  Span,
+  Tracer,
+  Logger as OTelLogger,
+} from '@opentelemetry/api';
+import type { ReadableSpan, Span as SdkSpan } from '@opentelemetry/sdk-trace';
+import type { ReadWriteLogRecord } from '@opentelemetry/sdk-logs';
 import type { Logger } from '../logger';
 import type { UnknownRecord } from '../values';
 
@@ -96,10 +98,10 @@ export function sdkSpanDouble(span: object): SdkSpan {
 }
 
 /** A log record, as a log record processor receives one. */
-export function logRecordDouble(record: object): SdkLogRecord {
+export function logRecordDouble(record: object): ReadWriteLogRecord {
   // SAFETY: a processor reads body, severity and attributes off a record. The
-  // rest of SdkLogRecord is the SDK's own emission bookkeeping.
-  return record as SdkLogRecord;
+  // rest of ReadWriteLogRecord is the SDK's own emission bookkeeping.
+  return record as ReadWriteLogRecord;
 }
 
 /** A `fetch` stand-in: the tests only ever call it the one way. */

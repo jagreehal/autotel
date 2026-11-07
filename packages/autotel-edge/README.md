@@ -236,7 +236,7 @@ log.error('Request failed', { error });
 to `parseConfig()` and read the finished spans back:
 
 ```typescript
-import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
+import { InMemorySpanExporter } from '@opentelemetry/sdk-trace';
 
 const exporter = new InMemorySpanExporter();
 const config = parseConfig({ service: { name: 'test' }, exporter });

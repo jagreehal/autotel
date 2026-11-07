@@ -251,7 +251,7 @@ All components implement graceful shutdown:
 
 ### Auto-Instrumentation Requirements
 
-**ESM Setup (Node 18.19+) - Recommended:**
+**ESM Setup:**
 
 For ESM apps using auto-instrumentation (Pino, Express, HTTP, etc.), you need to:
 
@@ -287,12 +287,6 @@ OTEL_SERVICE_NAME=my-app tsx --import autotel/auto src/index.ts
 ```
 
 Env vars: `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `AUTOTEL_AUTO_INSTRUMENTATIONS` (comma-separated or 'true'), `AUTOTEL_DEBUG`
-
-**Legacy (Node 18.0-18.18):**
-
-```bash
-NODE_OPTIONS="--experimental-loader=@opentelemetry/instrumentation/hook.mjs --import ./instrumentation.mjs" tsx src/index.ts
-```
 
 **CommonJS:**
 No loader hooks required, just use `--require ./instrumentation.js`

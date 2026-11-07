@@ -29,14 +29,14 @@
     "test:contract": "LANGFUSE_CONTRACT=1 vitest run src/contract.test.ts"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.1"
+    "@opentelemetry/api": "^1.10.0"
   },
   "peerDependencies": {
-    "@opentelemetry/sdk-trace-base": ">=2.12.0"
+    "@opentelemetry/sdk-trace": ">=3.1.0"
   },
   "devDependencies": {
-    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
-    "@opentelemetry/sdk-trace-base": "^2.12.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.301.0",
+    "@opentelemetry/sdk-trace": "^3.1.0",
     "@types/node": "^26.6.5",
     "tsdown": "^0.23.1",
     "typescript": "^7.0.2",

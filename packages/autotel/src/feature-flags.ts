@@ -28,8 +28,7 @@
  * branch on is the one that explains its behaviour.
  */
 
-import { trace, type Span } from '@opentelemetry/api';
-import { logs } from '@opentelemetry/api-logs';
+import { trace, type Span, logs } from '@opentelemetry/api';
 
 /** Canonical `feature_flag.*` attribute keys. */
 export const FEATURE_FLAG = {

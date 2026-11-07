@@ -28,7 +28,7 @@ describe('Workflow Async Safety', () => {
     exporter = new InMemorySpanExporter();
     init({
       service: 'test-workflow-async-safety',
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
     // Reset again to pick up the newly configured tracer provider
     resetConfig();

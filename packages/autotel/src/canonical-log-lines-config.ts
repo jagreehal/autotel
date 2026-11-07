@@ -1,4 +1,4 @@
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 import type { Logger } from './logger';
 import type { CanonicalLogLineOptions } from './processors/canonical-log-line-processor';
 

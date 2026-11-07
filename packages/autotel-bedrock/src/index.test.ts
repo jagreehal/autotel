@@ -1,9 +1,9 @@
 import {
-  BasicTracerProvider,
+  TracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
   type ReadableSpan,
-} from '@opentelemetry/sdk-trace-base';
+} from '@opentelemetry/sdk-trace';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   AWS_BEDROCK,
@@ -14,14 +14,14 @@ import {
 } from './index.js';
 
 let exporter: InMemorySpanExporter;
-let provider: BasicTracerProvider;
+let provider: TracerProvider;
 
 function setup(options: Parameters<typeof bedrockCompatibility>[0] = {}) {
   exporter = new InMemorySpanExporter();
-  provider = new BasicTracerProvider({
+  provider = new TracerProvider({
     spanProcessors: [
       bedrockCompatibility(options),
-      new SimpleSpanProcessor(exporter),
+      new SimpleSpanProcessor({ exporter }),
     ],
   });
   return provider.getTracer('bedrock-test');

@@ -82,7 +82,7 @@ export function instrument(options: InstrumentOptions = {}): void {
       service,
       subscribers: options.subscribers,
       spanProcessors: [
-        new SimpleSpanProcessor(exporter),
+        new SimpleSpanProcessor({ exporter }),
         ...(options.spanProcessors ?? []),
       ],
     });

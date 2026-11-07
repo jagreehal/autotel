@@ -68,7 +68,7 @@ describe('autotel/register', () => {
         import { createRequire } from 'node:module';
         const require = createRequire(${JSON.stringify(import.meta.url)});
         const { LoggerProvider, SimpleLogRecordProcessor, InMemoryLogRecordExporter } = require('@opentelemetry/sdk-logs');
-        const { logs } = require('@opentelemetry/api-logs');
+        const { logs } = require('@opentelemetry/api');
         const { PinoInstrumentation } = require(${JSON.stringify(autoRequire.resolve('@opentelemetry/instrumentation-pino'))});
         const exporter = new InMemoryLogRecordExporter();
         const provider = new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter })] });
