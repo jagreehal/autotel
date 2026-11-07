@@ -9,6 +9,7 @@ import {
   type PipelineDrainFn,
   type StructuredError,
   type StructuredErrorInput,
+  setHttpServerRoute,
   trace,
 } from 'autotel';
 import {
@@ -69,6 +70,8 @@ export interface RequestRunnerOptions extends RouteAdapterOptions {
   requestLoggerOptions?: RequestLoggerOptions;
   /** HTTP route used for include/exclude filtering. */
   path?: string;
+  /** Matched route template, such as `/users/:id`, handed to the HTTP server span. */
+  route?: string;
   /** Emit one wide event automatically when the handler settles. Default `true`. */
   autoEmit?: boolean;
   /** Fields merged into the wide event at emit time (e.g. response status). */
@@ -88,6 +91,8 @@ export function createRequestRunner(storage: AsyncLocalStorage<RequestLogger>) {
     handler: () => T | Promise<T>,
     options?: RequestRunnerOptions,
   ): Promise<T> {
+    if (options?.route) setHttpServerRoute(options.route);
+
     if (options?.path && !shouldInstrumentPath(options.path, options)) {
       return Promise.resolve(handler());
     }

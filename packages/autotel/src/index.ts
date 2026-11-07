@@ -113,6 +113,7 @@ export type { ExperimentOptions } from './experiment';
 // `trace` is the hybrid: callable like autotel's `trace(fn)` AND carries the
 // full `@opentelemetry/api` TraceAPI surface (getActiveSpan, getTracer, etc).
 export { trace } from './trace-hybrid';
+export { setHttpServerRoute } from './server-route';
 
 // Operation context (for advanced usage)
 export type { OperationContext } from './operation-context';
