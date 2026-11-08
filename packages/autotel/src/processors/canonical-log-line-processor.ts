@@ -24,7 +24,7 @@
 
 import type { SpanProcessor, ReadableSpan } from '@opentelemetry/sdk-trace';
 import type { Attributes, AttributeValue } from '@opentelemetry/api';
-import { logs, SeverityNumber } from '@opentelemetry/api';
+import { logs, ROOT_CONTEXT, SeverityNumber, trace } from '@opentelemetry/api';
 import type { Logger } from '../logger';
 import { formatPrettyLogLine, formatDuration } from '../pretty-log-formatter';
 import type { UnknownRecord } from '../values';
@@ -83,7 +83,14 @@ export interface CanonicalLogLineOptions {
   minLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Custom message format (default: uses span name) */
   messageFormat?: (span: ReadableSpan) => string;
-  /** Whether to include resource attributes (default: true) */
+  /**
+   * Whether to include resource attributes in each line.
+   *
+   * Default: true for `logger` destinations, which have no resource of their
+   * own. Default false for the OTel Logs API, whose records already carry the
+   * logger provider's resource; set true explicitly if that provider was built
+   * with a different resource than your tracer's.
+   */
   includeResourceAttributes?: boolean;
   /**
    * Attribute redactor function to apply before logging.
@@ -175,6 +182,7 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
   private minLevel: 'debug' | 'info' | 'warn' | 'error';
   private messageFormat: (span: ReadableSpan) => string;
   private includeResourceAttributes: boolean;
+  private otelResourceAttributes: boolean;
   private attributeRedactor?: AttributeRedactorFn;
   private shouldEmit?: (ctx: CanonicalLogLineEvent) => boolean;
   private drain?: (ctx: CanonicalLogLineEvent) => void | Promise<void>;
@@ -196,6 +204,7 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     this.messageFormat =
       options.messageFormat ?? ((span) => `[${span.name}] Request completed`);
     this.includeResourceAttributes = options.includeResourceAttributes ?? true;
+    this.otelResourceAttributes = options.includeResourceAttributes === true;
     this.attributeRedactor = options.attributeRedactor;
     this.shouldEmit =
       options.shouldEmit ?? this.buildKeepPredicate(options.keep);
@@ -279,7 +288,7 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     if (this.getOTelLogger) {
       try {
         const otelLogger = this.getOTelLogger();
-        this.emitViaOTel(level, message, canonicalLogLine, otelLogger);
+        this.emitViaOTel(level, message, canonicalLogLine, otelLogger, span);
       } catch (error) {
         this.reportInternalWarning(
           'canonical log line OTel emission failed',
@@ -371,9 +380,19 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     message: string,
     canonicalLogLine: UnknownRecord,
     otelLogger: ReturnType<typeof logs.getLogger>,
+    span: ReadableSpan,
   ): void {
+    // An OTLP record carries trace context and resource as fields of its own,
+    // and every OTLP backend reads them there. Repeating them as attributes
+    // stores them twice (Loki renames the clashes to *_extracted). Logger
+    // destinations keep them: stdout has no other place for them.
+    const native = new Set(['traceId', 'spanId']);
+    if (!this.otelResourceAttributes) {
+      for (const key of Object.keys(span.resource.attributes)) native.add(key);
+    }
     const otelAttributes: Record<string, string | number | boolean> = {};
     for (const [key, value] of Object.entries(canonicalLogLine)) {
+      if (native.has(key)) continue;
       const scalar = asString(value) ?? asNumber(value) ?? asBoolean(value);
       if (scalar !== undefined) {
         otelAttributes[key] = scalar;
@@ -386,6 +405,10 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
       severityText: level.toUpperCase(),
       body: message,
       attributes: otelAttributes,
+      // The span's own context, not whatever is active when it ends: a span
+      // can end after its request's context is gone, and the record must
+      // still belong to its trace.
+      context: trace.setSpanContext(ROOT_CONTEXT, span.spanContext()),
     });
   }
 

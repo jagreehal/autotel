@@ -14,6 +14,7 @@ import {
   withHttpClientUrlTemplate,
   type HttpClientUrlTemplate,
 } from './http-client-url-template';
+import { withUnroutedServerNames } from './server-url-template';
 import { requireModule } from './node-require';
 import { asFunction, readProperty } from './values';
 
@@ -86,17 +87,22 @@ export interface InstrumentationSwitches {
  * so whatever is active inside a middleware is that layer's span - one that
  * ends the moment `next()` fires. Request-wide attributes set there would land
  * on `middleware - anonymous` rather than on the request span every backend
- * shows as the resource. Ignoring the two leaf layer types puts them back on
- * the request span and drops a pile of noise spans with them; the route rename
+ * shows as the resource. Ignoring middleware layers puts them back on the
+ * request span and drops a pile of noise spans with them; the route rename
  * (`GET /users/:id`) survives, because `rpcMetadata.route` is assigned before
  * the ignore check.
+ *
+ * `request_handler` layers stay: one span per request, and the only place the
+ * instrumentation records an exception a route handler throws. An ignored
+ * layer is called with no span and no error capture, so ignoring them dropped
+ * every handler exception from the trace.
  *
  * Pass your own `ignoreLayersType` - `[]` for the upstream behaviour - to
  * override it, or `ignoreLayers` to silence only the noisy paths.
  */
 const AUTOTEL_DEFAULTS: InstrumentationSwitches = {
   '@opentelemetry/instrumentation-express': {
-    ignoreLayersType: ['middleware', 'request_handler'],
+    ignoreLayersType: ['middleware'],
   },
 };
 
@@ -111,12 +117,16 @@ export function applyAutotelDefaults(
 ): void {
   for (const instrumentation of (instrumentations ?? []).flat()) {
     const name = instrumentation.instrumentationName;
-    const named = httpClientUrlTemplate && HTTP_CLIENT_PACKAGES.has(name);
+    const named = HTTP_CLIENT_PACKAGES.has(name);
     if (!AUTOTEL_DEFAULTS[name] && !named) continue;
     // The caller's own options win, as in withAutotelDefaults.
-    const configured = withHttpClientUrlTemplate(
-      { [name]: { ...AUTOTEL_DEFAULTS[name], ...instrumentation.getConfig() } },
-      httpClientUrlTemplate,
+    const configured = withUnroutedServerNames(
+      withHttpClientUrlTemplate(
+        {
+          [name]: { ...AUTOTEL_DEFAULTS[name], ...instrumentation.getConfig() },
+        },
+        httpClientUrlTemplate,
+      ),
     )[name];
     if (configured) instrumentation.setConfig(configured);
   }
@@ -379,9 +389,11 @@ export function getAutoInstrumentations(
     };
   }
 
-  const resolved = withHttpClientUrlTemplate(
-    withAutotelDefaults(config),
-    httpClientUrlTemplate,
+  const resolved = withUnroutedServerNames(
+    withHttpClientUrlTemplate(
+      withAutotelDefaults(config),
+      httpClientUrlTemplate,
+    ),
   );
   if (!Array.isArray(integrations)) {
     return getNodeAutoInstrumentations(resolved);

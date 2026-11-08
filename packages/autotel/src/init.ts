@@ -672,13 +672,18 @@ export function init(cfg: AutotelConfig): void {
 
   // Add baggage span processor if enabled. `''` is a documented prefix ("copy
   // baggage on, unprefixed"), not an off switch — only `false`/omitted disable.
-  if (mergedConfig.baggage || mergedConfig.baggage === '') {
+  const baggage = mergedConfig.baggage;
+  if (typeof baggage === 'object') {
+    // An allowlist: bare keys unless a prefix is named.
+    spanProcessors.push(
+      new BaggageSpanProcessor({
+        keys: baggage.keys,
+        prefix: baggage.prefix ? `${baggage.prefix}.` : '',
+      }),
+    );
+  } else if (baggage || baggage === '') {
     const prefix =
-      typeof mergedConfig.baggage === 'string'
-        ? mergedConfig.baggage
-          ? `${mergedConfig.baggage}.`
-          : ''
-        : 'baggage.';
+      typeof baggage === 'string' ? (baggage ? `${baggage}.` : '') : 'baggage.';
     spanProcessors.push(new BaggageSpanProcessor({ prefix }));
   }
 

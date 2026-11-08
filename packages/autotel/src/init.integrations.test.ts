@@ -332,6 +332,7 @@ describe('init() integrations vs instrumentations', () => {
     });
     expect(config['@opentelemetry/instrumentation-http']).toEqual({
       enabled: true,
+      applyCustomAttributesOnSpan: expect.any(Function),
     });
 
     // Check that manual MongoDB instrumentation is in the final list

@@ -78,6 +78,11 @@ export const SESSION = {
   PREVIOUS_ID: 'session.previous_id',
 } as const;
 
+/** Canonical `user.*` attributes, set by `identify()`. */
+export const USER = {
+  ID: 'user.id',
+} as const;
+
 /** Canonical event names. Emitted as OTLP log records, never as spans. */
 export const WEB_EVENT = {
   WIDGET_CLICK: 'app.widget.click',

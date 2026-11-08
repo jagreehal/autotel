@@ -843,9 +843,12 @@ clearBaggage('tenant.id'); // or remove a single key
 **Backend (autotel Node), pick the attribute key you want:**
 
 ```typescript
-init({ service: 'my-api', endpoint: '...', baggage: '' }); // → bare `tenant.id` on server spans
+init({ service: 'my-api', endpoint: '...', baggage: { keys: ['tenant.id'] } }); // → bare `tenant.id`, nothing else
 init({ service: 'my-api', endpoint: '...', baggage: true }); // → `baggage.tenant.id` (prefixed)
 ```
+
+The header is written by the browser, so list the keys you expect. `baggage: ''`
+copies every key bare, and a client could then set `user.id` on your spans.
 
 **Security, fail-closed:** baggage is sent **only to same-origin** requests unless you list a destination in `baggage.allowedOrigins`. This keeps customer-identifying values (e.g. `tenant.id`) from leaking to third-party origins (analytics, CDNs). Baggage also never travels wider than `traceparent`, it inherits all `privacy` suppression (DNT/GPC/blocked origins). Local browser spans are always tagged regardless of destination (that telemetry is yours and never leaves your collector).
 
@@ -854,6 +857,39 @@ init({
   service: 'my-spa',
   baggage: { allowedOrigins: ['api.example.com'] }, // cross-origin opt-in
 });
+```
+
+### `identify(userId, attributes?)` / `clearIdentity()`
+
+Tags every span, log and event recorded afterwards with `user.id` and the
+attributes you pass, in both modes, with no enricher of your own. Records from
+before login carry the same `session.id`, so they are attributed by joining on
+it. Identity stays in the browser's telemetry; it is not sent to your API.
+
+```typescript
+import { identify, clearIdentity } from 'autotel-web'; // or 'autotel-web/full'
+
+identify(user.id, { 'client.id': client.id }); // after login
+clearIdentity(); // on logout
+```
+
+### `session.id` on API spans
+
+`session: { propagate: true }` sends the page's `session.id` in the `baggage`
+header, so the API's server span carries the same session as the browser's,
+including a request rejected by auth middleware before any route ran. It goes
+where all baggage goes: same-origin, plus `baggage.allowedOrigins`. Off by
+default, because a cross-origin API has to allow `baggage` in its CORS
+preflight. axios (XHR) gets the header in full mode too.
+
+```typescript
+initFull({
+  service: 'web',
+  propagateTo: ['api.example.com'],
+  baggage: { allowedOrigins: ['api.example.com'] },
+  session: { propagate: true },
+});
+// API: init({ service: 'api', baggage: { keys: ['session.id'] } }) → `session.id` on server spans, and no other client-sent key
 ```
 
 ### `initFull(config)` (full mode)

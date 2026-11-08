@@ -62,8 +62,8 @@ export interface JoinPostHogOptions
   /**
    * Copy PostHog's session id onto subsequent same-origin fetches as W3C
    * `baggage`, so the server span of a traced request carries `session.id`.
-   * The backend needs `init({ baggage: '' })` for the attribute to land under
-   * that name. Distinct id stays off: it can be an email.
+   * The backend needs `init({ baggage: { keys: ['session.id'] } })` for the
+   * attribute to land under that name. Distinct id stays off: it can be an email.
    *
    * @default true
    */

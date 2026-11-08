@@ -186,7 +186,7 @@ init({
 
 Defaults:
 
-- OTLP endpoint: `process.env.OTLP_ENDPOINT || http://localhost:4318`
+- OTLP endpoint: the `endpoint` option, else `process.env.OTEL_EXPORTER_OTLP_ENDPOINT`. With neither set, nothing is exported (there is no localhost default).
 - Metrics: on in every environment
 - Sampler: adaptive (10% baseline, 100% for errors/slow spans)
 - Version: auto-detected from `package.json`
@@ -376,7 +376,7 @@ import { init } from 'autotel';
 
 init({
   service: 'my-llm-app',
-  endpoint: process.env.OTLP_ENDPOINT,
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
   openllmetry: {
     enabled: true,
     options: {
@@ -413,7 +413,10 @@ import { registerTelemetry } from 'ai';
 import { init } from 'autotel';
 import { autotelTelemetry } from 'autotel-genai/observer';
 
-init({ service: 'my-llm-app', endpoint: process.env.OTLP_ENDPOINT });
+init({
+  service: 'my-llm-app',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+});
 registerTelemetry(autotelTelemetry());
 ```
 
@@ -2265,7 +2268,7 @@ OTEL_SERVICE_NAME=my-app tsx --import autotel/auto src/index.ts
 AUTOTEL_METRICS=off node server.js
 
 # Point at a different collector
-OTLP_ENDPOINT=https://otel.mycompany.com node server.js
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.mycompany.com node server.js
 ```
 
 ## Configuration Reference
@@ -2381,10 +2384,12 @@ init({
   baggage: 'ctx', // Copies with 'ctx.' prefix → ctx.tenant.id
 });
 
-// No prefix
+// Only listed keys, no prefix → tenant.id. Use this for baggage from
+// browsers: the header is client-written, and `baggage: ''` (every key, bare)
+// would let a caller set any attribute, `user.id` included.
 init({
   service: 'my-app',
-  baggage: '', // Copies directly → tenant.id
+  baggage: { keys: ['tenant.id'] },
 });
 ```
 

@@ -116,7 +116,7 @@ try {
   );
   check(/^[0-9a-f]{16}$/.test(spanId ?? ''), 'event carries $span_id', spanId);
 
-  // The server hop, via W3C baggage and `init({ baggage: '' })`.
+  // The server hop, via W3C baggage and `init({ baggage: { keys: ['session.id'] } })`.
   check(
     serverLog.includes(`baggage header: session.id=${sessionId}`),
     'server received session.id as baggage',

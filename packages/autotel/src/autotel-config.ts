@@ -191,9 +191,9 @@ export interface AutotelConfig {
    * @example Pass options to an instrumentation
    * Anything beyond `enabled` goes to that instrumentation's constructor, and
    * overrides what autotel defaults it to. Express defaults to
-   * `ignoreLayersType: ['middleware', 'request_handler']`, which keeps
-   * attributes set from a middleware on the request span; `[]` asks for the
-   * per-layer spans back.
+   * `ignoreLayersType: ['middleware']`, which keeps attributes set from a
+   * middleware on the request span while route handlers keep the span their
+   * exceptions are recorded on; `[]` asks for the per-layer spans back.
    * ```typescript
    * init({
    *   service: 'my-app',
@@ -770,8 +770,27 @@ export interface AutotelConfig {
    * });
    * // Creates attributes: tenant.id, user.id
    * ```
+   *
+   * @example Only listed keys (for baggage from browsers)
+   * Baggage in an incoming request is written by the caller. Unprefixed and
+   * unfiltered, a client can set any attribute on your server spans, such as
+   * `user.id`. List the keys you expect instead:
+   * ```typescript
+   * init({
+   *   service: 'my-api',
+   *   baggage: { keys: ['session.id'] } // bare `session.id`, nothing else
+   * });
+   * ```
    */
-  baggage?: boolean | string;
+  baggage?:
+    | boolean
+    | string
+    | {
+        /** The only baggage keys copied onto spans. */
+        keys: readonly string[];
+        /** Attribute prefix. @default '' (bare keys) */
+        prefix?: string;
+      };
 
   /**
    * Validation configuration for events events

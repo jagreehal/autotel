@@ -332,8 +332,8 @@
 <span class="text-gray-600">// Backend (Express + Autotel)</span>
 <span class="text-blue-600">import</span> { init, trace } <span class="text-blue-600">from</span> <span class="text-green-600">'autotel'</span>
 
-<span class="text-gray-600">// baggage: '' copies baggage entries onto every span with NO prefix → bare `tenant.id`</span>
-<span class="text-blue-600">init</span>({ service: <span class="text-green-600">'my-api'</span>, endpoint: <span class="text-green-600">'http://localhost:4318'</span>, baggage: <span class="text-green-600">''</span> })
+<span class="text-gray-600">// baggage: { keys } copies only the listed entries, with NO prefix → bare `tenant.id`</span>
+<span class="text-blue-600">init</span>({ service: <span class="text-green-600">'my-api'</span>, endpoint: <span class="text-green-600">'http://localhost:4318'</span>, baggage: { keys: [<span class="text-green-600">'tenant.id'</span>] } })
 
 app.<span class="text-blue-600">get</span>(<span class="text-green-600">'/api/users/:id'</span>, <span class="text-blue-600">async</span> (req, res) => {
   <span class="text-gray-600">// traceparent AND baggage headers are automatically extracted!</span>

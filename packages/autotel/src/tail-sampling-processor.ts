@@ -51,6 +51,7 @@ import {
   type Context,
   type SpanContext,
 } from '@opentelemetry/api';
+import { isDevelopment } from './values';
 import {
   AUTOTEL_SAMPLING_TAIL_KEEP,
   AUTOTEL_SAMPLING_TAIL_EVALUATED,
@@ -106,6 +107,32 @@ function traceKey(span: Span): string {
 
 function spanKey({ traceId, spanId }: SpanContext): string {
   return `${traceId}:${spanId}`;
+}
+
+let warnedIncomplete = false;
+
+/**
+ * Say once, in development, that a dropped span leaves a hole in a trace that
+ * is still exported. Its parent in this process is not buffered, so it goes
+ * out without this span and this span's children lose their parent: the trace
+ * still shows up, which is why nobody notices the missing data.
+ */
+function warnIncompleteTrace(span: ReadableSpan): void {
+  const parent = span.parentSpanContext;
+  if (warnedIncomplete || !parent || parent.isRemote || !isDevelopment()) {
+    return;
+  }
+  warnedIncomplete = true;
+  console.warn(
+    `[autotel] Sampling dropped "${span.name}" while its parent span is exported, ` +
+      'so that trace is incomplete. A trace() sampler decided this span on its own; ' +
+      'set the tail sampler in init({ sampling }) instead, so whole traces are kept or dropped.',
+  );
+}
+
+/** @internal */
+export function resetIncompleteTraceWarningForTesting(): void {
+  warnedIncomplete = false;
 }
 
 function isLocalRoot(span: ReadableSpan): boolean {
@@ -198,7 +225,8 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
       const dropped =
         span.attributes[AUTOTEL_SAMPLING_TAIL_EVALUATED] === true &&
         span.attributes[AUTOTEL_SAMPLING_TAIL_KEEP] === false;
-      if (!dropped) this.wrappedProcessor.onEnd(span);
+      if (dropped) warnIncompleteTrace(span);
+      else this.wrappedProcessor.onEnd(span);
       return;
     }
 

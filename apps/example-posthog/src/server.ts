@@ -12,7 +12,7 @@ const dir = path.dirname(fileURLToPath(import.meta.url));
 
 init({
   service: 'example-posthog',
-  baggage: '',
+  baggage: { keys: ['session.id'] },
   debug: 'pretty',
 });
 

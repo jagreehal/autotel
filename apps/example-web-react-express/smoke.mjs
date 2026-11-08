@@ -199,6 +199,95 @@ async function acceptance() {
   }
 }
 
+/**
+ * The 401 incident (findings 5.1–5.3): a request fired before login is
+ * rejected by the API's auth middleware, then the user logs in. Returns the
+ * request headers, browser spans and server spans.
+ */
+async function incident() {
+  console.log('\n# full mode: 401 before login, then login');
+  let api, web, browser;
+  try {
+    api = await start(
+      'node',
+      ['--require', './server/telemetry.cjs', 'server/index.cjs'],
+      {},
+      'API listening',
+    );
+    web = await start(
+      'node_modules/.bin/vite',
+      ['--port', '5173', '--strictPort'],
+      {},
+      'Local:',
+    );
+    browser = await chromium.launch();
+    const page = await browser.newPage();
+    const pageErrors = [];
+    const sent = [];
+    page.on('pageerror', (e) => pageErrors.push(e.message));
+    page.on('request', (r) => {
+      if (
+        r.url().startsWith('http://localhost:8081') &&
+        r.method() !== 'OPTIONS'
+      ) {
+        sent.push({ url: r.url(), baggage: r.headers().baggage });
+      }
+    });
+    const traces = [];
+    await page.route('http://localhost:4318/**', (route) => {
+      const req = route.request();
+      if (req.method() === 'POST' && req.url().endsWith('/v1/traces')) {
+        traces.push(JSON.parse(req.postData() ?? '{}'));
+      }
+      return route.fulfill({
+        status: 200,
+        headers: {
+          'access-control-allow-origin': '*',
+          'access-control-allow-headers': '*',
+        },
+        body: '{}',
+      });
+    });
+    await page.goto('http://localhost:5173/incident.html', {
+      waitUntil: 'networkidle',
+    });
+    for (const [id, prefix] of [
+      ['early', 'early '],
+      ['login', 'login '],
+    ]) {
+      await page.click(`#${id}`);
+      await page.waitForFunction(
+        (p) => document.querySelector('#out').textContent.startsWith(p),
+        prefix,
+      );
+    }
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', {
+        value: 'hidden',
+        configurable: true,
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await sleep(3000);
+    const spans = traces.flatMap((p) =>
+      (p.resourceSpans ?? []).flatMap((r) =>
+        r.scopeSpans.flatMap((s) =>
+          s.spans.map((sp) => ({ ...sp, attributes: attrs(sp.attributes) })),
+        ),
+      ),
+    );
+    const serverSpans = [...api.log.matchAll(/^server-span (.+)$/gm)]
+      .map((m) => JSON.parse(m[1]))
+      .filter((span) => span.kind === 1);
+    return { sent, spans, serverSpans, pageErrors };
+  } finally {
+    await browser?.close();
+    api?.kill();
+    web?.kill();
+    await sleep(500);
+  }
+}
+
 const apiOrigin = { VITE_PROPAGATE_TO: 'localhost:8081' };
 const ok = (r) => r.outputs.every((o) => !o.startsWith('error'));
 
@@ -356,6 +445,49 @@ try {
     trace.some((sp) => sp.exceptions.includes('card processor timeout')),
     'server trace carries the exception message',
     JSON.stringify(trace.map((sp) => [sp.name, sp.exceptions])),
+  );
+  // 8. The 401 incident: tie a request rejected in middleware to a user.
+  const i = await incident();
+  check(i.pageErrors.length === 0, 'no page errors', i.pageErrors.join('; '));
+  const early = i.serverSpans.find((sp) => sp.httpStatus === 401);
+  const browserEarly = i.spans.find(
+    (sp) => sp.attributes['http.response.status_code'] === 401,
+  );
+  const sessionId = browserEarly?.attributes['session.id'];
+  check(
+    i.sent.length === 2 &&
+      i.sent.every((s) => s.baggage === `session.id=${sessionId}`),
+    'axios (XHR) sends session.id in baggage to the listed API',
+    JSON.stringify(i.sent),
+  );
+  check(
+    Boolean(sessionId) && early?.sessionId === sessionId,
+    'API span of the 401 carries the browser session.id',
+    `${early?.sessionId} vs ${sessionId}`,
+  );
+  check(
+    early?.name === 'GET /clients/:id' &&
+      early.urlTemplate === '/clients/:id' &&
+      early.route === undefined,
+    'API 401 rejected before routing is named from its path',
+    JSON.stringify(early),
+  );
+  const loggedIn = i.serverSpans.find((sp) => sp.httpStatus === 200);
+  check(
+    loggedIn?.name === 'GET /clients/:id' && loggedIn.route === '/clients/:id',
+    'a matched route still names the span',
+    JSON.stringify(loggedIn),
+  );
+  const browserLogin = i.spans.find(
+    (sp) => sp.attributes['http.response.status_code'] === 200,
+  );
+  check(
+    browserEarly?.attributes['user.id'] === undefined &&
+      browserLogin?.attributes['user.id'] === '67100478766128ccd2b8ee31' &&
+      browserLogin?.attributes['client.id'] === '65fda45795a9ce7be665f817' &&
+      browserLogin?.attributes['session.id'] === sessionId,
+    'identify() tags spans after login, with the same session.id',
+    JSON.stringify([browserEarly?.attributes, browserLogin?.attributes]),
   );
 } finally {
   console.log(failures.length ? `\n${failures.length} failed` : '\nall passed');

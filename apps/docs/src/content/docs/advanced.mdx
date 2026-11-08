@@ -731,7 +731,9 @@ await trace.run('checkout', async () => {
 The call stamps `experiment.name`, `experiment.variant` and
 `experiment.expectation` on the active span, and writes the first two to
 baggage, so child spans and the services behind this one carry the same answer.
-Bare baggage keys need `init({ baggage: '' })`; `baggage: true` prefixes them.
+Bare baggage keys need
+`init({ baggage: { keys: ['experiment.name', 'experiment.variant'] } })`;
+`baggage: true` prefixes them.
 
 Call it at any depth inside a traced body. It reads the ambient span, and it
 does nothing when no trace is running.

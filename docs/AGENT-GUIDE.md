@@ -287,7 +287,7 @@ array of flat records when you are not in front of devtools.
 
 Both attributes propagate: `experiment()` writes name and variant to baggage, so
 the services behind this one file their spans under the same arm. Bare keys need
-`init({ baggage: '' })`.
+`init({ baggage: { keys: ['experiment.name', 'experiment.variant'] } })`.
 
 ---
 

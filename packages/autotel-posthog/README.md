@@ -183,10 +183,10 @@ PostHog still classifies that traffic as a bot server-side, so filter it out of 
 `joinPostHog` copies PostHog's session id onto subsequent same-origin fetches as W3C `baggage` (`propagateSession`, default on). The backend then stamps that id on the handler span:
 
 ```ts
-init({ service: 'api', endpoint, baggage: '' });
+init({ service: 'api', endpoint, baggage: { keys: ['session.id'] } });
 ```
 
-`baggage: ''` writes `session.id`. `baggage: true` would write `baggage.session.id`. Distinct id stays off; it can be an email. Pass `propagateSession: false` to skip the header.
+`keys` writes `session.id` and no other client-sent key. `baggage: true` would write `baggage.session.id`. Distinct id stays off; it can be an email. Pass `propagateSession: false` to skip the header.
 
 Needs `autotel` 7.0.1 or later: earlier versions read the empty string as "off" and the attribute never landed.
 

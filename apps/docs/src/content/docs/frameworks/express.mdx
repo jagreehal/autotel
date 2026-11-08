@@ -82,10 +82,12 @@ runs the layer under it, so an attribute set from a shared `router.use`
 middleware would land on a `middleware - anonymous` span that ends the moment
 `next()` fires - not on the request span your backend shows as the resource.
 
-autotel turns those leaf layer spans off by default
-(`ignoreLayersType: ['middleware', 'request_handler']`), including on an
+autotel turns middleware layer spans off by default
+(`ignoreLayersType: ['middleware']`), including on an
 `ExpressInstrumentation` you build yourself and pass in `instrumentations`, so
-`ctx` inside a middleware already means the request:
+`ctx` inside a middleware already means the request. The route handler keeps
+its one span, because that is where an exception it throws is recorded; inside
+a handler, `requestCtx` reaches the request span:
 
 ```typescript
 import { ctx } from 'autotel';

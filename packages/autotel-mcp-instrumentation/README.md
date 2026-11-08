@@ -122,6 +122,30 @@ const result = await traced.callTool({
 });
 ```
 
+### Behind an HTTP gateway or proxy
+
+`instrumentMcpClient` carries trace context in `_meta`, which only the MCP
+server reads. A gateway in between (agentgateway, an API gateway, a service
+mesh) traces off the HTTP `traceparent` header, so without it the gateway
+starts a new trace and the hop is lost. Hand the transport a `fetch` that adds
+the header:
+
+```typescript
+import { injectTraceContext } from 'autotel/http';
+
+const tracedFetch: typeof fetch = (url, init = {}) => {
+  const headers = new Headers(init.headers);
+  for (const [k, v] of Object.entries(injectTraceContext())) headers.set(k, v);
+  return fetch(url, { ...init, headers });
+};
+
+await client.connect(
+  new StreamableHTTPClientTransport(new URL(MCP_URL), { fetch: tracedFetch }),
+);
+```
+
+With both in place, one trace runs client → gateway → upstream server.
+
 ## Protocol eras
 
 MCP `2026-07-28` dropped the `initialize`/`initialized` handshake (SEP-2575) and

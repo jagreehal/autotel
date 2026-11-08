@@ -152,10 +152,10 @@ onError: (error) => posthog.captureException(error, traceProperties(error));
 `joinPostHog` copies PostHog's session id onto subsequent same-origin fetches as W3C `baggage` (`propagateSession`, default on). The backend stamps it on the handler span:
 
 ```typescript
-init({ service: 'api', endpoint, baggage: '' });
+init({ service: 'api', endpoint, baggage: { keys: ['session.id'] } });
 ```
 
-`baggage: ''` writes `session.id`; `baggage: true` would write `baggage.session.id`. Distinct id stays off, because it can be an email. Needs `autotel` 7.0.1 or later, since earlier versions read the empty string as "off".
+`keys` writes `session.id` and nothing else the client sends; `baggage: true` would write `baggage.session.id`. Distinct id stays off, because it can be an email.
 
 ### Server-side product events
 
@@ -211,7 +211,7 @@ PostHog still classifies that traffic as a bot server-side, so filter it out of 
 - `traceProperties()` used where a capture follows an `await`, rather than trusting the active context
 - `traceProperties(error)` on `captureException` for errors from failed requests
 - One copy of `posthog-js` on the page
-- `baggage: ''` on the server when the session should reach handler spans
+- `baggage: { keys: ['session.id'] }` on the server when the session should reach handler spans
 - Bot filtering turned off only on the instance under test
 
 ## Which session id wins

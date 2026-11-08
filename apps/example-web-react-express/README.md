@@ -17,15 +17,16 @@ VITE_PROPAGATE_TO=localhost:8081 pnpm --filter @jagreehal/example-web-react-expr
 `node smoke.mjs` drives headless Chromium through six setups and checks what
 reaches the server:
 
-| Setup                                             | Result                                                                 |
-| ------------------------------------------------- | ---------------------------------------------------------------------- |
-| `init()` with no `propagateTo`                    | Requests unchanged. No `traceparent` goes cross-origin                 |
-| `propagateTo` set, API CORS without `traceparent` | The browser blocks the request at preflight                            |
-| `propagateTo` set, API allows `traceparent`       | The server span is a child of the browser's, for axios (XHR) and fetch |
-| API samples 1% parent-based, browser default      | The API keeps each request the browser marks sampled                   |
-| Same, browser `sampleRate`                        | Unsampled sessions send `-00` and the API drops them                   |
-| posthog-js on the page                            | Browser spans carry PostHog's `session.id`                             |
-| `initFull()`, slow click + API that throws        | Both causes are findable from exported telemetry alone (below)         |
+| Setup                                                | Result                                                                                                                                                 |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `init()` with no `propagateTo`                       | Requests unchanged. No `traceparent` goes cross-origin                                                                                                 |
+| `propagateTo` set, API CORS without `traceparent`    | The browser blocks the request at preflight                                                                                                            |
+| `propagateTo` set, API allows `traceparent`          | The server span is a child of the browser's, for axios (XHR) and fetch                                                                                 |
+| API samples 1% parent-based, browser default         | The API keeps each request the browser marks sampled                                                                                                   |
+| Same, browser `sampleRate`                           | Unsampled sessions send `-00` and the API drops them                                                                                                   |
+| posthog-js on the page                               | Browser spans carry PostHog's `session.id`                                                                                                             |
+| `initFull()`, slow click + API that throws           | Both causes are findable from exported telemetry alone (below)                                                                                         |
+| `initFull()` + `session.propagate`, 401 before login | API span of the 401 has the browser's `session.id` and is named `GET /clients/:id`; after `identify()` browser spans carry `user.id` (`incident.html`) |
 
 ### Acceptance: find a slow interaction and a backend failure
 
