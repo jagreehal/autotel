@@ -1,5 +1,5 @@
 import { context, SpanStatusCode } from '@opentelemetry/api';
-import { withTracing, SpanKind, type TraceContext } from 'autotel';
+import { withTracing, SpanKind, type TraceContext } from '#runtime';
 import { serverParentContext } from './context';
 import {
   GET_MORE_TOOLS,

@@ -1,5 +1,5 @@
 import { SpanStatusCode } from '@opentelemetry/api';
-import { withTracing, SpanKind, type TraceContext } from 'autotel';
+import { withTracing, SpanKind, type TraceContext } from '#runtime';
 import { injectOtelContextToMeta } from './context';
 import {
   applyFailureGrouping,

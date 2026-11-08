@@ -7,9 +7,11 @@
 
 import {
   trace as otelTrace,
+  SpanKind,
   SpanStatusCode,
   type Span,
   type AttributeValue,
+  type SpanOptions as OtelSpanOptions,
 } from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
 import type { Sampler } from '@opentelemetry/sdk-trace';
@@ -30,6 +32,7 @@ import {
 
 // Re-export for convenience
 export type { TraceContext } from './core/trace-context';
+export { SpanKind };
 
 type AnyFn = (...args: any[]) => any;
 
@@ -49,6 +52,8 @@ export interface TracingOptions<TArgs extends any[] = any[], TReturn = any> {
   // `Awaited<TReturn>` matches runtime (and lets async fns annotate the result).
   attributesFromResult?: (result: Awaited<TReturn>) => Attributes;
   attributes?: Attributes;
+  /** Span kind (SERVER, CLIENT, ...). Applies on the OTel SDK path. */
+  spanKind?: SpanKind;
 }
 
 /** @deprecated Use {@link TracingOptions}. */
@@ -277,9 +282,9 @@ function wrapWithTracingSync<TArgs extends any[], TReturn>(
     }
 
     const tracer = otelTrace.getTracer('autotel-edge');
-    const spanOptions: Record<string, unknown> = options.sampler
-      ? { sampler: options.sampler }
-      : {};
+    const spanOptions: OtelSpanOptions & { sampler?: Sampler } = {};
+    if (options.sampler) spanOptions.sampler = options.sampler;
+    if (options.spanKind !== undefined) spanOptions.kind = options.spanKind;
 
     return tracer.startActiveSpan(spanName, spanOptions, (span) => {
       setSpanName(span, spanName);
