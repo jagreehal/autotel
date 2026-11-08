@@ -16,6 +16,12 @@ export interface BaggageSpanProcessorOptions {
    * @default 'baggage.'
    */
   prefix?: string;
+  /**
+   * Copy only these baggage keys. Baggage arriving in a request header is
+   * written by the client, so without a list a caller can put any attribute
+   * it likes on server spans, `user.id` included.
+   */
+  keys?: readonly string[];
 }
 
 /**
@@ -51,9 +57,11 @@ export interface BaggageSpanProcessorOptions {
  */
 export class BaggageSpanProcessor implements SpanProcessor {
   private readonly prefix: string;
+  private readonly keys?: ReadonlySet<string>;
 
   constructor(options: BaggageSpanProcessorOptions = {}) {
     this.prefix = options.prefix ?? 'baggage.';
+    if (options.keys) this.keys = new Set(options.keys);
   }
 
   onStart(span: Span, parentContext: Context): void {
@@ -80,6 +88,7 @@ export class BaggageSpanProcessor implements SpanProcessor {
 
     // Copy all baggage entries to span attributes
     for (const [key, entry] of baggage.getAllEntries()) {
+      if (this.keys && !this.keys.has(key)) continue;
       span.setAttribute(`${this.prefix}${key}`, entry.value);
     }
   }

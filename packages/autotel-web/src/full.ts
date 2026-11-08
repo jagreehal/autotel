@@ -246,7 +246,7 @@ export interface AutotelWebFullConfig extends ReleaseConfig {
          * span carries the same session as the browser's, a request rejected
          * in middleware included. Same destinations as all baggage:
          * same-origin, plus `baggage.allowedOrigins`. The API needs
-         * `init({ baggage: '' })` to copy it on as `session.id`, and a
+         * `init({ baggage: { keys: ['session.id'] } })` to copy it on as `session.id`, and a
          * cross-origin API must allow `baggage` in its CORS preflight.
          *
          * @default false

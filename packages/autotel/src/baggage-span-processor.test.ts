@@ -199,4 +199,32 @@ describe('BaggageSpanProcessor', () => {
     expect(spans[0]!.attributes['baggage.key2']).toBe('value2');
     expect(spans[0]!.attributes['baggage.key3']).toBe('value3');
   });
+
+  it('copies only the listed keys, so a client cannot set user.id', () => {
+    const exporter = new InMemorySpanExporter();
+    const provider = new TracerProvider({
+      spanProcessors: [
+        new BaggageSpanProcessor({ prefix: '', keys: ['session.id'] }),
+        new SimpleSpanProcessor({ exporter }),
+      ],
+    });
+    // As an incoming header would arrive: written by the caller.
+    const baggage = propagation
+      .createBaggage()
+      .setEntry('session.id', { value: 's1' })
+      .setEntry('user.id', { value: 'admin' })
+      .setEntry('http.route', { value: '/spoofed' });
+
+    provider
+      .getTracer('test')
+      .startSpan(
+        'server',
+        {},
+        propagation.setBaggage(context.active(), baggage),
+      )
+      .end();
+
+    const attributes = exporter.getFinishedSpans()[0]?.attributes;
+    expect(attributes).toEqual({ 'session.id': 's1' });
+  });
 });

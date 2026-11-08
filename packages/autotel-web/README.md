@@ -843,9 +843,12 @@ clearBaggage('tenant.id'); // or remove a single key
 **Backend (autotel Node), pick the attribute key you want:**
 
 ```typescript
-init({ service: 'my-api', endpoint: '...', baggage: '' }); // → bare `tenant.id` on server spans
+init({ service: 'my-api', endpoint: '...', baggage: { keys: ['tenant.id'] } }); // → bare `tenant.id`, nothing else
 init({ service: 'my-api', endpoint: '...', baggage: true }); // → `baggage.tenant.id` (prefixed)
 ```
+
+The header is written by the browser, so list the keys you expect. `baggage: ''`
+copies every key bare, and a client could then set `user.id` on your spans.
 
 **Security, fail-closed:** baggage is sent **only to same-origin** requests unless you list a destination in `baggage.allowedOrigins`. This keeps customer-identifying values (e.g. `tenant.id`) from leaking to third-party origins (analytics, CDNs). Baggage also never travels wider than `traceparent`, it inherits all `privacy` suppression (DNT/GPC/blocked origins). Local browser spans are always tagged regardless of destination (that telemetry is yours and never leaves your collector).
 
@@ -886,7 +889,7 @@ initFull({
   baggage: { allowedOrigins: ['api.example.com'] },
   session: { propagate: true },
 });
-// API: init({ service: 'api', baggage: '' }) → `session.id` on server spans
+// API: init({ service: 'api', baggage: { keys: ['session.id'] } }) → `session.id` on server spans, and no other client-sent key
 ```
 
 ### `initFull(config)` (full mode)

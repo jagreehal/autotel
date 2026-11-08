@@ -168,7 +168,7 @@ ever adds sessions; the ones you were already watching stay in the set.
 
 `session: { propagate: true }` also sends `session.id` to your API in the
 `baggage` header (same-origin, plus `baggage.allowedOrigins`), and the API's
-`init({ baggage: '' })` copies it onto server spans. A 401 from auth middleware
+`init({ baggage: { keys: ['session.id'] } })` copies it, and only it, onto server spans. A 401 from auth middleware
 is then findable by session, and `identify(userId, attributes)` ties the session
 to a user on every later browser record.
 

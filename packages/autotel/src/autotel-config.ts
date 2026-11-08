@@ -770,8 +770,27 @@ export interface AutotelConfig {
    * });
    * // Creates attributes: tenant.id, user.id
    * ```
+   *
+   * @example Only listed keys (for baggage from browsers)
+   * Baggage in an incoming request is written by the caller. Unprefixed and
+   * unfiltered, a client can set any attribute on your server spans, such as
+   * `user.id`. List the keys you expect instead:
+   * ```typescript
+   * init({
+   *   service: 'my-api',
+   *   baggage: { keys: ['session.id'] } // bare `session.id`, nothing else
+   * });
+   * ```
    */
-  baggage?: boolean | string;
+  baggage?:
+    | boolean
+    | string
+    | {
+        /** The only baggage keys copied onto spans. */
+        keys: readonly string[];
+        /** Attribute prefix. @default '' (bare keys) */
+        prefix?: string;
+      };
 
   /**
    * Validation configuration for events events

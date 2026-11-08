@@ -182,8 +182,9 @@ export interface AutotelWebConfig extends ReleaseConfig {
    * Set values at runtime with {@link setBaggage} (e.g. after login or a tenant
    * switch); they are injected on every instrumented same-origin request and
    * tagged onto every browser-recorded span. On the backend, autotel's
-   * `BaggageSpanProcessor` (`init({ baggage: '' })` for bare keys, or
-   * `baggage: true` for `baggage.`-prefixed keys) copies them onto server spans.
+   * `BaggageSpanProcessor` (`init({ baggage: { keys: ['tenant.id'] } })` for
+   * bare listed keys, or `baggage: true` for `baggage.`-prefixed keys) copies
+   * them onto server spans. List the keys: the header is client-written.
    *
    * **Fail-closed:** baggage is sent only to same-origin requests unless a
    * destination is explicitly listed in `allowedOrigins`. This keeps
@@ -262,7 +263,7 @@ export interface AutotelWebConfig extends ReleaseConfig {
          * span carries the same session as the browser's, a request rejected
          * in middleware included. Same destinations as all baggage:
          * same-origin, plus `baggage.allowedOrigins`. The API needs
-         * `init({ baggage: '' })` to copy it on as `session.id`, and a
+         * `init({ baggage: { keys: ['session.id'] } })` to copy it on as `session.id`, and a
          * cross-origin API must allow `baggage` in its CORS preflight.
          *
          * @default false

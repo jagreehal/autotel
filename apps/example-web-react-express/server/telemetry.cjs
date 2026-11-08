@@ -37,7 +37,8 @@ init({
   service: 'example-web-react-express-api',
   instrumentations: [new HttpInstrumentation(), new ExpressInstrumentation()],
   spanProcessors: [printServerSpans],
-  // Copy incoming baggage onto spans unprefixed, so the browser's
-  // `session.id` lands as `session.id` on every API span.
-  baggage: '',
+  // Copy the browser's `session.id` onto every API span, and nothing else:
+  // baggage in a request is written by the client, so an unfiltered copy
+  // would let it set any attribute, `user.id` included.
+  baggage: { keys: ['session.id'] },
 });

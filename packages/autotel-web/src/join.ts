@@ -276,7 +276,8 @@ export interface EnrichSpansOptions {
   /**
    * Copy `session` onto subsequent same-origin fetches as W3C `baggage`, so
    * the server span of a traced request carries `session.id` too. The backend
-   * needs `init({ baggage: '' })` for the attribute to land under that name.
+   * needs `init({ baggage: { keys: ['session.id'] } })` for the attribute to
+   * land under that name, and only that one.
    *
    * @default true
    */
