@@ -16,14 +16,55 @@ on:
 permissions:
   contents: read
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
-
 jobs:
-  release:
-    name: Release
+  # Opens or updates the "chore: release packages" PR. No publish, no OIDC
+  # token, so no environment: every push that adds a changeset refreshes the
+  # PR within minutes. Gating this job behind the reviewer left the PR stale
+  # for as long as a run waited for approval, and the concurrency group queued
+  # every later push behind it.
+  version:
+    name: Version
     runs-on: ubuntu-latest
     # Never run in a fork or under another owner.
     if: github.repository_owner == 'jagreehal'
+    # Its own group: a publish waiting for approval never holds this one up.
+    concurrency: release-version-${{ github.ref }}
+    permissions:
+      contents: write # changesets: push the release branch
+      pull-requests: write # changesets: open the "Version Packages" PR
+    outputs:
+      hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create or update the release pull request
+        id: changesets
+        uses: changesets/action@3841a0683d3cfa6dae0f9bb335290003010fe3f0 # v1.9.0
+        with:
+          version: pnpm version-packages
+          commit: 'chore: release packages'
+          title: 'chore: release packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Runs only once no changesets remain, i.e. the release PR was merged.
+  publish:
+    name: Publish
+    needs: version
+    if: needs.version.outputs.hasChangesets == 'false'
+    # Queued, never cancelled, so a publish is never cut off part-way.
+    concurrency: release-publish-${{ github.ref }}
+    runs-on: ubuntu-latest
     # Pairs with the npm trusted-publisher "Environment name = release" setting.
     # GitHub only grants this environment to jobs that satisfy the environment's
     # rules (deployment branch restricted to main + required reviewer), so a
@@ -32,8 +73,8 @@ jobs:
     # the protected release path.
     environment: release
     permissions:
-      contents: write # changesets: version commit, tags, GitHub release
-      pull-requests: write # changesets: open the "Version Packages" PR
+      contents: write # changesets: tags, GitHub release
+      pull-requests: write # changesets: comment on released PRs
       id-token: write # OIDC trusted publishing / provenance — scoped to THIS job only
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,14 +93,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Create Release Pull Request or Publish to npm
-        id: changesets
+      - name: Publish to npm
         uses: changesets/action@3841a0683d3cfa6dae0f9bb335290003010fe3f0 # v1.9.0
         with:
-          version: pnpm version-packages
           publish: pnpm release
-          commit: 'chore: release packages'
-          title: 'chore: release packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: true

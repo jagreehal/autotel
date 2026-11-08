@@ -10,9 +10,16 @@ import {
   SpanStatusCode,
   type Attributes,
   type AttributeValue,
+  type LogRecord,
   logs,
+  trace,
 } from '@opentelemetry/api';
 import { resourceFromAttributes } from '@opentelemetry/resources';
+import {
+  InMemoryLogRecordExporter,
+  LoggerProvider,
+  SimpleLogRecordProcessor,
+} from '@opentelemetry/sdk-logs';
 import type { Logger } from '../logger';
 import {
   loggerDouble,
@@ -497,10 +504,78 @@ describe('CanonicalLogLineProcessor', () => {
       expect(emitCall.body).toContain('test.operation');
       expect(emitCall.attributes).toMatchObject({
         operation: 'test.operation',
-        traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
       });
+      // Trace ids travel as the record's context, not as attributes.
+      expect(emitCall.attributes).not.toHaveProperty('traceId');
+      const record: LogRecord = emitSpy.mock.calls[0]![0];
+      expect(trace.getSpanContext(record.context!)?.traceId).toBe(
+        '4bf92f3577b34da6a3ce929d0e0e4736',
+      );
 
       vi.restoreAllMocks();
+    });
+  });
+
+  describe('OTLP records carry trace context and resource natively', () => {
+    // A real SDK pipeline, so the assertions are on the exported record that
+    // reaches a backend such as Loki, not on what was passed to emit().
+    async function exportOneLine() {
+      const exporter = new InMemoryLogRecordExporter();
+      const provider = new LoggerProvider({
+        resource: resourceFromAttributes({
+          'service.name': 'test-service',
+          'service.version': '1.0.0',
+        }),
+        processors: [new SimpleLogRecordProcessor({ exporter })],
+      });
+      vi.spyOn(logs, 'getLogger').mockImplementation((name) =>
+        provider.getLogger(name),
+      );
+
+      // onEnd runs with no active span, as when a span ends after its request
+      // context is gone. The record must still belong to the span's trace.
+      new CanonicalLogLineProcessor().onEnd(createMockSpan());
+
+      vi.restoreAllMocks();
+      await provider.forceFlush(); // The SDK exports asynchronously.
+      const records = exporter.getFinishedLogRecords();
+      expect(records).toHaveLength(1);
+      return records[0]!;
+    }
+
+    it("links the record to the span's trace even with no active context", async () => {
+      const record = await exportOneLine();
+
+      expect(record.spanContext?.traceId).toBe(
+        '4bf92f3577b34da6a3ce929d0e0e4736',
+      );
+      expect(record.spanContext?.spanId).toBe('00f067aa0ba902b7');
+    });
+
+    it('does not repeat trace ids or resource attributes as log attributes', async () => {
+      const record = await exportOneLine();
+
+      for (const duplicate of [
+        'traceId',
+        'spanId',
+        'service.name',
+        'service.version',
+      ]) {
+        expect(record.attributes).not.toHaveProperty(duplicate);
+      }
+      // The record's resource already carries them, once.
+      expect(record.resource.attributes).toMatchObject({
+        'service.name': 'test-service',
+        'service.version': '1.0.0',
+      });
+      // The wide event itself is untouched. correlationId stays: OTLP has no
+      // native field for it, and it can travel in headers as a join key.
+      expect(record.attributes).toMatchObject({
+        correlationId: '4bf92f3577b34da6',
+        operation: 'test.operation',
+        'user.id': 'user-123',
+        'cart.total_cents': 15_999,
+      });
     });
   });
 

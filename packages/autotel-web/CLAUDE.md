@@ -46,6 +46,13 @@ rather than a nice-to-have.
 - `src/session.ts`: `session.id` / `session.previous_id`, plus optional
   `session.start` / `session.end`. A session another SDK owns (`id` provider)
   emits no lifecycle events — claiming it began when we first asked is a guess.
+- `src/identity.ts`: `identify()` / `clearIdentity()`. `user.id` (from
+  `USER` in semconv) plus app attributes, stamped before session and
+  caller attributes on spans (both modes), logs and events. Never sent off
+  the page; `session.propagate` (wired in `configureSession`, read by
+  `baggage.ts` for the header only) is what reaches the API, and a join's own
+  `session.id` entry wins over it. Full mode's baggage gate covers fetch
+  **and** XHR.
 - `src/browser-context.ts`: `browser.*` resource attributes, plus
   `user_agent.synthetic.type: 'test'` when `navigator.webdriver` is set — the
   platform states that outright, so no inference is involved, and it keeps

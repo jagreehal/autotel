@@ -43,6 +43,29 @@ const VALID_KEY = /^[a-zA-Z0-9!#$%&'*+\-.^_`|~]+$/;
 let entries: Map<string, string> = new Map();
 
 /**
+ * Reads the page's `session.id` for the header when `session.propagate` is
+ * on. Header only: browser spans already carry the session from session.ts.
+ */
+let sessionId: (() => string | undefined) | undefined;
+
+/** @internal Set by `configureSession` from `session.propagate`. */
+export function setSessionBaggage(
+  provider: (() => string | undefined) | undefined,
+): void {
+  sessionId = provider;
+}
+
+/**
+ * What the header carries: the entries set with `setBaggage`, plus the
+ * session when propagated. A `session.id` set explicitly (a join's) wins.
+ */
+function headerEntries(): ReadonlyMap<string, string> {
+  if (!sessionId || entries.has('session.id')) return entries;
+  const id = sessionId();
+  return id ? new Map([...entries, ['session.id', id]]) : entries;
+}
+
+/**
  * Validate a single key/value pair. Returns a reason string if invalid, or
  * null if valid. Pure — no side effects, safe to unit-test.
  */
@@ -149,14 +172,14 @@ export function getBaggageEntries(): Record<string, string> {
  * when there is no baggage to send.
  */
 export function getBaggageHeader(): string | undefined {
-  return serializeBaggage(entries);
+  return serializeBaggage(headerEntries());
 }
 
 /**
  * Whether any baggage is currently set.
  */
 export function hasBaggage(): boolean {
-  return entries.size > 0;
+  return headerEntries().size > 0;
 }
 
 /**
@@ -193,4 +216,5 @@ export function isBaggageDestinationAllowed(
  */
 export function resetBaggageForTesting(): void {
   entries = new Map();
+  sessionId = undefined;
 }

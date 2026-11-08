@@ -82,6 +82,7 @@ import {
   hasBaggage,
   isBaggageDestinationAllowed,
 } from './baggage';
+import { getIdentityAttributes } from './identity';
 import {
   normaliseOtlpEndpoint,
   selfInstrumentationIgnoreUrls,
@@ -96,10 +97,13 @@ import { propagationUrlPattern } from './propagate';
  * processor — including whatever the host app passed as `spanProcessor` — sees
  * the attributes already there.
  */
-function sessionSpanProcessor(): SpanProcessor {
+function sessionSpanProcessor(withSession: boolean): SpanProcessor {
   return {
     onStart(span) {
-      const attributes = getSessionAttributes();
+      // Identity first: the session is the join key and is never overridden.
+      const identity = getIdentityAttributes();
+      if (identity) span.setAttributes(identity);
+      const attributes = withSession ? getSessionAttributes() : undefined;
       if (attributes) span.setAttributes(attributes);
     },
     onEnd() {},
@@ -237,6 +241,17 @@ export interface AutotelWebFullConfig extends ReleaseConfig {
         timeoutMs?: number;
         /** Emit `session.start` / `session.end` events. @default false */
         emitEvents?: boolean;
+        /**
+         * Send `session.id` in the W3C `baggage` header, so the API's server
+         * span carries the same session as the browser's, a request rejected
+         * in middleware included. Same destinations as all baggage:
+         * same-origin, plus `baggage.allowedOrigins`. The API needs
+         * `init({ baggage: '' })` to copy it on as `session.id`, and a
+         * cross-origin API must allow `baggage` in its CORS preflight.
+         *
+         * @default false
+         */
+        propagate?: boolean;
       };
 
   /**
@@ -475,9 +490,7 @@ export function initFull(config: AutotelWebFullConfig): void {
   configureSession(config.session ?? {});
 
   const spanProcessors: SpanProcessor[] = [];
-  if (config.session !== false) {
-    spanProcessors.push(sessionSpanProcessor());
-  }
+  spanProcessors.push(sessionSpanProcessor(config.session !== false));
   spanProcessors.push(urlTemplateSpanProcessor(config.urlIdPatterns));
   // Ahead of whatever exports below: onEnd runs in array order, so an enricher
   // placed after the exporter would decorate a span that has already gone.
@@ -640,14 +653,15 @@ export function initFull(config: AutotelWebFullConfig): void {
     instrumentations,
   });
 
-  wrapFetchForBaggage(
+  const gate = baggageGate(
     config.baggage?.allowedOrigins ?? [],
     config.privacy ? new PrivacyManager(config.privacy) : undefined,
     // The same exclusions the instrumentations get: a request that is never
     // traced is never propagated on either, baggage included.
     selfUrls,
-    config.debug,
   );
+  wrapFetchForBaggage(gate, config.debug);
+  wrapXhrForBaggage(gate, config.debug);
 
   if (config.captureNetworkTiming !== false) {
     setupNetworkTimingObserver({
@@ -808,31 +822,42 @@ function settlingSessions(inner: SpanExporter): SpanExporter {
   };
 }
 
-function wrapFetchForBaggage(
+/**
+ * The `baggage` header a request to `url` may carry, or `undefined`.
+ *
+ * Both gates, the same way lean mode decides it. The destination allowlist
+ * answers "is this our own backend"; the privacy configuration answers "may we
+ * send context about this visitor at all" — Do Not Track, Global Privacy
+ * Control, blocked origins. Baggage carries business context off the page, so
+ * a `privacy` setting that held for traceparent and not for this would be a
+ * setting that does not mean what it says.
+ */
+type BaggageGate = (url: string) => string | undefined;
+
+function baggageGate(
   allowedOrigins: readonly string[],
   privacy: PrivacyManager | undefined,
   excluded: readonly RegExp[],
-  debug?: boolean,
-): void {
-  const inner = globalThis.fetch.bind(globalThis);
-  globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = fetchUrl(input);
+): BaggageGate {
+  return (url) => {
     const origin = globalThis.location?.origin ?? '';
-    if (isExcluded(url, origin, excluded)) return inner(input, init);
-    // Both gates, the same way lean mode decides it. The destination allowlist
-    // answers "is this our own backend"; the privacy configuration answers
-    // "may we send context about this visitor at all" — Do Not Track, Global
-    // Privacy Control, blocked origins. Baggage carries business context off
-    // the page, so a `privacy` setting that held for traceparent and not for
-    // this would be a setting that does not mean what it says.
+    if (isExcluded(url, origin, excluded)) return undefined;
     if (
       !hasBaggage() ||
       (privacy && !privacy.shouldInjectTraceparent(url)) ||
       !isBaggageDestinationAllowed(url, origin, allowedOrigins)
     ) {
-      return inner(input, init);
+      return undefined;
     }
-    const header = getBaggageHeader();
+    return getBaggageHeader();
+  };
+}
+
+function wrapFetchForBaggage(gate: BaggageGate, debug?: boolean): void {
+  const inner = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = fetchUrl(input);
+    const header = gate(url);
     if (!header) return inner(input, init);
 
     const headers = effectiveHeaders(input, init);
@@ -842,6 +867,69 @@ function wrapFetchForBaggage(
       console.log('[autotel-web/full] Injected baggage on fetch:', url, header);
     }
     return inner(input, { ...init, headers });
+  };
+}
+
+let originalXhr:
+  Pick<XMLHttpRequest, 'open' | 'send' | 'setRequestHeader'> | undefined;
+
+/**
+ * The same header on XMLHttpRequest, which axios uses. The XHR
+ * instrumentation propagates `traceparent` only; `setBaggage()` entries live
+ * in this package, not in the OpenTelemetry context it injects from.
+ */
+function wrapXhrForBaggage(gate: BaggageGate, debug?: boolean): void {
+  if (globalThis.XMLHttpRequest === undefined || originalXhr) return;
+  const proto = XMLHttpRequest.prototype;
+  const original = {
+    open: proto.open,
+    send: proto.send,
+    setRequestHeader: proto.setRequestHeader,
+  };
+  originalXhr = original;
+  const urls = new WeakMap<XMLHttpRequest, string>();
+  const ownBaggage = new WeakSet<XMLHttpRequest>();
+
+  proto.open = function (
+    this: XMLHttpRequest,
+    ...args: Parameters<XMLHttpRequest['open']>
+  ) {
+    urls.set(this, String(args[1]));
+    ownBaggage.delete(this);
+    // SAFETY: forwards the caller's own arguments to the method it called.
+    return (original.open as (...a: unknown[]) => void).apply(this, args);
+  } as XMLHttpRequest['open'];
+
+  proto.setRequestHeader = function (
+    this: XMLHttpRequest,
+    name: string,
+    value: string,
+  ) {
+    if (name.toLowerCase() === 'baggage') ownBaggage.add(this);
+    return original.setRequestHeader.call(this, name, value);
+  };
+
+  proto.send = function (
+    this: XMLHttpRequest,
+    body?: Document | XMLHttpRequestBodyInit | null,
+  ) {
+    const url = urls.get(this);
+    const header = url && !ownBaggage.has(this) ? gate(url) : undefined;
+    if (url && header) {
+      try {
+        original.setRequestHeader.call(this, 'baggage', header);
+        if (debug) {
+          console.log(
+            '[autotel-web/full] Injected baggage on XHR:',
+            url,
+            header,
+          );
+        }
+      } catch {
+        // Not opened, or already sent: the request goes as the app made it.
+      }
+    }
+    return original.send.call(this, body);
   };
 }
 
@@ -972,6 +1060,7 @@ export {
 } from './functional';
 export type { TraceContext } from './functional';
 export { captureException } from './error-tracking';
+export { identify, clearIdentity, type IdentityAttributes } from './identity';
 
 /**
  * Reset full initialization state (for testing).
@@ -991,5 +1080,9 @@ export function resetFullForTesting(): void {
   if (originalFetch) {
     globalThis.fetch = originalFetch;
     originalFetch = undefined;
+  }
+  if (originalXhr) {
+    Object.assign(XMLHttpRequest.prototype, originalXhr);
+    originalXhr = undefined;
   }
 }

@@ -27,6 +27,7 @@ import {
   samplingKeyFor,
   settledSessionId,
 } from './session';
+import { getIdentityAttributes } from './identity';
 import { otlpEndpointFor, type OtlpSignal } from './otlp-endpoint';
 import { sampleByKey } from './sampling';
 import { RESOURCE, SESSION } from './semconv';
@@ -219,20 +220,13 @@ export function recordSpan(
   // Session attributes ride on the span rather than the resource: the resource
   // identifies the service, and a value that changes every 30 minutes there
   // would fragment it in every backend that keys on resource identity.
-  const entries = Object.entries({
+  const merged = {
+    ...getIdentityAttributes(),
     ...attrs,
     ...getSessionAttributes(),
-  });
+  };
   const attributes =
-    entries.length > 0
-      ? entries.map(([key, value]) => ({
-          key,
-          value:
-            typeof value === 'number'
-              ? { intValue: String(value) }
-              : { stringValue: value },
-        }))
-      : undefined;
+    Object.keys(merged).length > 0 ? otlpAttributes(merged) : undefined;
   enqueue('traces', {
     traceId,
     spanId,
@@ -515,7 +509,11 @@ export function recordLog(
     // Ambient enrichment first: it is a default, and an attribute the caller
     // stated outright must win. `session.end` names the session that ended, and
     // stamping the current one over it inverts the record's whole meaning.
-    attributes: otlpAttributes({ ...getSessionAttributes(), ...attributes }),
+    attributes: otlpAttributes({
+      ...getIdentityAttributes(),
+      ...getSessionAttributes(),
+      ...attributes,
+    }),
   });
   flushSpans();
 }
@@ -542,6 +540,7 @@ export function recordEvent(
     severityNumber: SEVERITY.info.number,
     severityText: SEVERITY.info.text,
     attributes: otlpAttributes({
+      ...getIdentityAttributes(),
       ...getSessionAttributes(),
       'event.name': name,
       ...attributes,

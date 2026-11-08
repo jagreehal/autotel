@@ -19,6 +19,7 @@
  * aside.
  */
 
+import { setSessionBaggage } from './baggage';
 import { emitEvent } from './emit-event';
 import { AUTOTEL_WEB, SESSION, WEB_EVENT } from './semconv';
 
@@ -260,18 +261,27 @@ export function setJoinSessionProvider(
 export function configureSession(
   config:
     | false
-    | { timeoutMs?: number; id?: SessionIdProvider; emitEvents?: boolean } = {},
+    | {
+        timeoutMs?: number;
+        id?: SessionIdProvider;
+        emitEvents?: boolean;
+        propagate?: boolean;
+      } = {},
 ): void {
   if (config === false) {
     enabled = false;
     idProvider = undefined;
     state = undefined;
+    setSessionBaggage(undefined);
     return;
   }
   enabled = true;
   timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   idProvider = config.id;
   emitEvents = config.emitEvents ?? false;
+  setSessionBaggage(
+    config.propagate ? () => getSessionAttributes()?.[SESSION.ID] : undefined,
+  );
 }
 
 /**

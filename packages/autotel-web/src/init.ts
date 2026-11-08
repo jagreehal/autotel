@@ -258,6 +258,17 @@ export interface AutotelWebConfig extends ReleaseConfig {
         timeoutMs?: number;
         id?: () => string | undefined;
         /**
+         * Send `session.id` in the W3C `baggage` header, so the API's server
+         * span carries the same session as the browser's, a request rejected
+         * in middleware included. Same destinations as all baggage:
+         * same-origin, plus `baggage.allowedOrigins`. The API needs
+         * `init({ baggage: '' })` to copy it on as `session.id`, and a
+         * cross-origin API must allow `baggage` in its CORS preflight.
+         *
+         * @default false
+         */
+        propagate?: boolean;
+        /**
          * Emit `session.start` / `session.end` events, so session count and session
          * duration are direct queries rather than something a backend has to infer
          * by grouping every span it has.

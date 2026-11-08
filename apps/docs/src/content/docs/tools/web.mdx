@@ -166,6 +166,12 @@ never enough to answer a support ticket. Hashing keeps all of a tenth of the
 visits, across spans, events and logs alike. Raising the rate mid-incident only
 ever adds sessions; the ones you were already watching stay in the set.
 
+`session: { propagate: true }` also sends `session.id` to your API in the
+`baggage` header (same-origin, plus `baggage.allowedOrigins`), and the API's
+`init({ baggage: '' })` copies it onto server spans. A 401 from auth middleware
+is then findable by session, and `identify(userId, attributes)` ties the session
+to a user on every later browser record.
+
 In lean mode `sampleRate` also sets the sampled flag on the `traceparent` the page sends, with or without an `endpoint`. Set it to your API's head-sampling ratio and a parent-based server sampler keeps the sessions the browser keeps.
 
 ## Remote config

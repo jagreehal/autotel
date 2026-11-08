@@ -2,8 +2,11 @@
  * Tests for tail sampling span processor
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { TailSamplingSpanProcessor } from './tail-sampling-processor';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  TailSamplingSpanProcessor,
+  resetIncompleteTraceWarningForTesting,
+} from './tail-sampling-processor';
 import { AdaptiveSampler } from './sampling';
 import {
   AUTOTEL_SAMPLING_TAIL_KEEP,
@@ -149,6 +152,43 @@ describe('TailSamplingSpanProcessor', () => {
 
       expect(mockProcessor.endedSpans).toHaveLength(1);
       expect(mockProcessor.endedSpans[0]).toBe(span);
+    });
+  });
+
+  describe('incomplete trace warning', () => {
+    const dropped = (parentSpanId?: string, remoteParent?: boolean) =>
+      createMockSpan(
+        {
+          [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+          [AUTOTEL_SAMPLING_TAIL_KEEP]: false,
+        },
+        { traceId: 't', parentSpanId, remoteParent },
+      );
+
+    it('warns once when a span is dropped under an exported local parent', () => {
+      resetIncompleteTraceWarningForTesting();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        tailSamplingProcessor.onEnd(dropped('server'));
+        tailSamplingProcessor.onEnd(dropped('server'));
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('incomplete');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('stays quiet for kept spans and dropped local roots', () => {
+      resetIncompleteTraceWarningForTesting();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        tailSamplingProcessor.onEnd(createMockSpan({}, { parentSpanId: 'p' }));
+        tailSamplingProcessor.onEnd(dropped());
+        tailSamplingProcessor.onEnd(dropped('upstream', true));
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
     });
   });
 

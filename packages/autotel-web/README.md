@@ -856,6 +856,39 @@ init({
 });
 ```
 
+### `identify(userId, attributes?)` / `clearIdentity()`
+
+Tags every span, log and event recorded afterwards with `user.id` and the
+attributes you pass, in both modes, with no enricher of your own. Records from
+before login carry the same `session.id`, so they are attributed by joining on
+it. Identity stays in the browser's telemetry; it is not sent to your API.
+
+```typescript
+import { identify, clearIdentity } from 'autotel-web'; // or 'autotel-web/full'
+
+identify(user.id, { 'client.id': client.id }); // after login
+clearIdentity(); // on logout
+```
+
+### `session.id` on API spans
+
+`session: { propagate: true }` sends the page's `session.id` in the `baggage`
+header, so the API's server span carries the same session as the browser's,
+including a request rejected by auth middleware before any route ran. It goes
+where all baggage goes: same-origin, plus `baggage.allowedOrigins`. Off by
+default, because a cross-origin API has to allow `baggage` in its CORS
+preflight. axios (XHR) gets the header in full mode too.
+
+```typescript
+initFull({
+  service: 'web',
+  propagateTo: ['api.example.com'],
+  baggage: { allowedOrigins: ['api.example.com'] },
+  session: { propagate: true },
+});
+// API: init({ service: 'api', baggage: '' }) → `session.id` on server spans
+```
+
 ### `initFull(config)` (full mode)
 
 Initialize full browser tracing. Import from `autotel-web/full`. Call once, client-side only.

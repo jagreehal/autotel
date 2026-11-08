@@ -5,6 +5,7 @@ import {
   BROWSER,
   RESOURCE,
   SESSION,
+  USER,
   USER_AGENT,
   WEB_EVENT,
 } from './semconv';
@@ -60,6 +61,10 @@ describe('canonical OpenTelemetry names', () => {
       ID: 'session.id',
       PREVIOUS_ID: 'session.previous_id',
     });
+  });
+
+  it('pins user attributes', () => {
+    expect(USER).toEqual({ ID: 'user.id' });
   });
 
   it('pins event names', () => {

@@ -191,9 +191,9 @@ export interface AutotelConfig {
    * @example Pass options to an instrumentation
    * Anything beyond `enabled` goes to that instrumentation's constructor, and
    * overrides what autotel defaults it to. Express defaults to
-   * `ignoreLayersType: ['middleware', 'request_handler']`, which keeps
-   * attributes set from a middleware on the request span; `[]` asks for the
-   * per-layer spans back.
+   * `ignoreLayersType: ['middleware']`, which keeps attributes set from a
+   * middleware on the request span while route handlers keep the span their
+   * exceptions are recorded on; `[]` asks for the per-layer spans back.
    * ```typescript
    * init({
    *   service: 'my-app',

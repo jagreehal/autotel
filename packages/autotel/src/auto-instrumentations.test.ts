@@ -116,14 +116,14 @@ describe('getAutoInstrumentations', () => {
   describe('express layer spans', () => {
     const EXPRESS = '@opentelemetry/instrumentation-express';
 
-    it('ignores middleware and request-handler layers by default', () => {
+    it('ignores middleware layers by default, keeping request handlers', () => {
       const calls = captureConfig();
 
       getAutoInstrumentations(['express']);
 
       expect(calls[0]?.[EXPRESS]).toEqual({
         enabled: true,
-        ignoreLayersType: ['middleware', 'request_handler'],
+        ignoreLayersType: ['middleware'],
       });
     });
 
@@ -133,7 +133,7 @@ describe('getAutoInstrumentations', () => {
       getAutoInstrumentations(true);
 
       expect(calls[0]?.[EXPRESS]).toEqual({
-        ignoreLayersType: ['middleware', 'request_handler'],
+        ignoreLayersType: ['middleware'],
       });
     });
 
@@ -180,6 +180,10 @@ describe('getAutoInstrumentations', () => {
 
     expect(calls[0]).toEqual({
       '@opentelemetry/instrumentation-express': { enabled: false },
+      // Names server spans that end without a route (server-url-template).
+      '@opentelemetry/instrumentation-http': {
+        applyCustomAttributesOnSpan: expect.any(Function),
+      },
     });
   });
 });
@@ -340,7 +344,7 @@ describe('applyAutotelDefaults', () => {
 
     expect(express.getConfig()).toMatchObject({
       ignoreLayers: ['/health'],
-      ignoreLayersType: ['middleware', 'request_handler'],
+      ignoreLayersType: ['middleware'],
     });
   });
 
