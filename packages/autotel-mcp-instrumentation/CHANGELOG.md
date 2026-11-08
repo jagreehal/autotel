@@ -1,5 +1,16 @@
 # autotel-mcp
 
+## 60.1.0
+
+### Minor Changes
+
+- 2f6178b: `instrumentMcpServer` and `instrumentMcpClient` run on Cloudflare Workers. A `#runtime` subpath import resolves to `autotel-edge` under the `workerd`, `worker` and `browser` conditions and to `autotel` otherwise, in ESM and CommonJS. `autotel-edge` exports `SpanKind`, honours `spanKind` in `withTracing`, and adds a `default` export condition so `require('autotel-edge')` resolves.
+
+### Patch Changes
+
+- Updated dependencies [2f6178b]
+  - autotel-edge@7.0.1
+
 ## 60.0.0
 
 ### Major Changes

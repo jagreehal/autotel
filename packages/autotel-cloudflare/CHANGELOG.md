@@ -1,5 +1,12 @@
 # autotel-cloudflare
 
+## 19.0.1
+
+### Patch Changes
+
+- Updated dependencies [2f6178b]
+  - autotel-edge@7.0.1
+
 ## 19.0.0
 
 ### Major Changes

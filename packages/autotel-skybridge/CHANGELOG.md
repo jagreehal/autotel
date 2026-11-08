@@ -1,5 +1,12 @@
 # autotel-skybridge
 
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [2f6178b]
+  - autotel-mcp-instrumentation@60.1.0
+
 ## 0.1.5
 
 ### Patch Changes
