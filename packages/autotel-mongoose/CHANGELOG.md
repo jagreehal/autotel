@@ -1,5 +1,51 @@
 # autotel-mongoose
 
+## 32.0.0
+
+### Major Changes
+
+- 039f92c: Adopt OpenTelemetry JS SDK 3 and add state transitions.
+
+  **SDK 3:** upgrade to Node.js 22.15+ and `@opentelemetry/api` 1.10.
+
+  - Import `@opentelemetry/sdk-trace` in place of `sdk-trace-base`, `sdk-trace-node` and `sdk-trace-web`, and `@opentelemetry/api` in place of `api-logs`.
+  - Use `TracerProvider` for the Basic, Node and Web providers, and `trace.setGlobalTracerProvider()` for `register()`.
+  - Pass processors an options object: `new BatchSpanProcessor({ exporter })`.
+  - Rename `SdkLogRecord` to `ReadWriteLogRecord`. `SpanAttributeValue` in `autotel-subscribers` is now `unknown`.
+  - Send to Jaeger over OTLP.
+  - `init()` reads `OTEL_BSP_*`, `OTEL_SPAN_*` and `OTEL_ATTRIBUTE_*`.
+
+  **State transitions:**
+
+  - **autotel:** `transition()` counts `autotel.state.transitions` after a persisted write, whatever the sampling decision. `init()` warns when another tracer provider holds the global, and sets `deployment.environment` and `deployment.environment.name` to one value, taken from `environment`, then either key in `OTEL_RESOURCE_ATTRIBUTES` or `resourceAttributes`, then `NODE_ENV`.
+  - **autotel-subscribers:** `ArchitectureSnapshotSubscriber` adds aggregated `transitions`.
+  - **autotel-mongoose:** prototype `watchTransitions()` records transitions from a change stream.
+  - **autotel-mcp:** `get_state_transitions` and `get_entity_history` read them. `getMetricSeries` takes `groupBy`, the collector keeps metric temporality and start times, and Loki attribute filters reach structured metadata.
+
+  `autotel-aws/durable` has an install command in its README.
+
+- 3c872f2: Span and route names that group in every backend.
+
+  - **autotel**: `setHttpServerRoute(route, { keepExisting: true })` keeps a route already recorded, and `captureHttpServerRoute()` in `autotel/testing` tests the handoff. `httpClientUrlTemplate` names outbound `http` and `fetch` spans `{method} {url.template}`. `spanEnrichers` receive `onEnding`. A hand-built `ExpressInstrumentation` gets the default `ignoreLayersType`. The `default` and `strict` redactor presets cover bank details and date of birth.
+  - **autotel-adapters**: a fuller route already on the server span, such as Express instrumentation's template across nested routers, stays.
+  - **autotel-backends**: `otlpRelay` forwards the browser's `user-agent`.
+  - **autotel-datadog**: `datadogNames()` from `autotel-datadog/names` sets Datadog's `resource.name` on outbound HTTP and MCP spans and `operation.name` on internal spans.
+  - **autotel-devtools**: the logo and favicon are 🔭.
+  - **autotel-mongoose**: `instrumentHooks: true` traces every hook except `init`, which fires once per hydrated document. Pass `{ exclude: [] }` to trace it.
+  - **autotel-tanstack**: server functions are named `METHOD /_serverFn` with the function id as an attribute. With `router: getRouter()`, requests take their matched route, `basepath` and `rewrite` included, and request spans run under the HTTP server span.
+  - **autotel-web**: full-mode fetch and XHR spans with an id in the path are named `METHOD /clients/:id` with `url.template`, lean-mode spans `browser /clients/:id`, and `urlIdPatterns` adds id formats. `captureException()` records an `exception` span, failed chunk loads group as `chunk_load_error`, lean-mode spans carry the response status, and web-vital targets stay under 100 characters.
+
+### Patch Changes
+
+- Updated dependencies [092e810]
+- Updated dependencies [6e32484]
+- Updated dependencies [039f92c]
+- Updated dependencies [092e810]
+- Updated dependencies [3c872f2]
+  - autotel@9.0.0
+  - autotel-mongodb@0.1.2
+  - autotel-db@0.1.1
+
 ## 31.0.1
 
 ### Patch Changes
