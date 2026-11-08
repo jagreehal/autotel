@@ -196,7 +196,7 @@ export const checkout = trace('checkout', async (order) => {
 
 `experiment()` is ambient: call it at any depth inside a traced body, and it
 no-ops when nothing is being traced. Bare baggage keys need
-`init({ baggage: '' })`; `baggage: true` prefixes them. Devtools Compare then
+`init({ baggage: { keys: ['experiment.name', 'experiment.variant'] } })`; `baggage: true` prefixes them. Devtools Compare then
 offers the experiment's arms instead of asking the reader to know them.
 
 ### Correlation ID

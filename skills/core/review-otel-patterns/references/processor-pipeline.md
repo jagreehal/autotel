@@ -17,6 +17,7 @@ sees original attributes, redaction runs last before export):
 | Drop health checks / noise          | `spanFilter: (span) => boolean` (return `false` to drop)          |
 | Bound URL cardinality               | `spanNameNormalizer: 'rest-api' \| 'graphql' \| 'minimal' \| fn`  |
 | Lift baggage onto every span        | `baggage: true` (→ `baggage.*`) or a prefix string                |
+| Lift only listed baggage keys, bare | `baggage: { keys: ['session.id'] }` (for client-sent baggage)     |
 | Mask PII                            | `attributeRedactor: 'default' \| 'strict' \| 'pci-dss' \| config` |
 | Hierarchical console output locally | `debug: 'pretty'`                                                 |
 

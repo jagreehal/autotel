@@ -232,7 +232,8 @@ export const checkout = trace('checkout', async () => {
 The call stamps `experiment.name`, `experiment.variant` and
 `experiment.expectation` on the active span, and writes the first two to
 baggage, so child spans started afterwards and the services this request goes on
-to reach carry the same answer. Bare keys need `init({ baggage: '' })`;
+to reach carry the same answer. Bare keys need
+`init({ baggage: { keys: ['experiment.name', 'experiment.variant'] } })`;
 `baggage: true` prefixes them.
 
 An experiment covers a request, not one function inside it. Call `experiment()`

@@ -629,7 +629,8 @@ initFull({
   in), `context.span_id` (decimal, as APM shows it) and `context.trace_url`.
   Search `@context.trace_id:<id>` in RUM, or open the link.
 - **Spans carry the RUM session**: `session.id` (also sent to your server as
-  baggage, so server spans can carry it with `init({ baggage: '' })`),
+  baggage, so server spans can carry it with
+  `init({ baggage: { keys: ['session.id'] } })`),
   `user.id` from `setUser`, and on failed spans `session.replay.url` when
   replay is recording.
 

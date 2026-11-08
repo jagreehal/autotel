@@ -32,8 +32,9 @@ init({
     service: 'example-datadog-react-express-api',
   }),
   autoInstrumentations: ['http', 'express'],
-  // The browser's `session.id` baggage lands on server spans under that name.
-  baggage: '',
+  // The browser's `session.id` baggage lands on server spans under that name,
+  // and no other client-sent key does.
+  baggage: { keys: ['session.id'] },
   // Datadog's resource names: an outbound call is `POST api.example.com`.
   spanEnrichers: [datadogNames()],
 });

@@ -2384,10 +2384,12 @@ init({
   baggage: 'ctx', // Copies with 'ctx.' prefix → ctx.tenant.id
 });
 
-// No prefix
+// Only listed keys, no prefix → tenant.id. Use this for baggage from
+// browsers: the header is client-written, and `baggage: ''` (every key, bare)
+// would let a caller set any attribute, `user.id` included.
 init({
   service: 'my-app',
-  baggage: '', // Copies directly → tenant.id
+  baggage: { keys: ['tenant.id'] },
 });
 ```
 

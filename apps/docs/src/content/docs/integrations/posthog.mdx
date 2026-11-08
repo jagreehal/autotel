@@ -169,18 +169,14 @@ import { init } from 'autotel';
 init({
   service: 'api',
   endpoint: 'https://collector.example.com',
-  baggage: '',
+  baggage: { keys: ['session.id'] },
 });
 ```
 
-`baggage: ''` copies entries onto server spans with no prefix, so the attribute
-is `session.id`. `baggage: true` would write `baggage.session.id`. Distinct id
-stays off; it can be an email.
-
-:::note
-`baggage: ''` needs `autotel` 7.0.1 or later. Earlier versions read the empty
-string as "off" and the attribute never landed.
-:::
+`keys` copies only `session.id` onto server spans, with no prefix. The header is
+written by the browser, so a list keeps a client from setting any other
+attribute. `baggage: true` would write `baggage.session.id`. Distinct id stays
+off; it can be an email.
 
 Pass `propagateSession: false` to skip the header.
 
