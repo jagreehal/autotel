@@ -578,13 +578,35 @@ const violations = validateToolBudget({
 
 ### Workers / edge
 
-The `autotel-mcp-instrumentation/security` toolkit (classifier, `spotlight`,
-`validateToolBudget`, annotation/size/budget helpers) is **runtime-agnostic**.
-It depends only on `@opentelemetry/api`, with a `Buffer`→`btoa` base64 fallback.
-So it runs unchanged in Cloudflare Workers and other edge runtimes. Use it
-directly in an edge MCP server, or alongside `autotel-cloudflare`. The same
-`mcp.security.*` signals are emitted, so `autotel security mcp` queries work
-across Node and Workers deployments.
+The package loads its tracer through a `#runtime` subpath import. Under the
+`workerd`, `worker` or `browser` condition it resolves to `autotel-edge`;
+otherwise it resolves to `autotel`. Wrangler sets `workerd`, so Workers code
+imports the usual entry points. Other bundlers may need one of those conditions
+in their resolve settings.
+
+```ts
+import { wrapModule } from 'autotel-cloudflare';
+import { instrumentMcpServer } from 'autotel-mcp-instrumentation/server';
+import { createServer, handleMcpRequest } from './mcp'; // your server factory + transport
+
+export default wrapModule(
+  { service: { name: 'mcp-worker' } },
+  {
+    async fetch(request, env, ctx) {
+      const server = instrumentMcpServer(createServer(), {
+        networkTransport: 'tcp',
+      });
+      return handleMcpRequest(server, request);
+    },
+  },
+);
+```
+
+Install `autotel-edge` (or `autotel-cloudflare`, which depends on it). Enable
+`nodejs_compat` for AsyncLocalStorage span context. `spanKind` applies on the
+OTel SDK path; Cloudflare native tracing sets its own span kinds.
+
+`/security` stays runtime-agnostic (`@opentelemetry/api` only, `Buffer`→`btoa` fallback).
 
 ### Security signals reference
 

@@ -20,7 +20,7 @@
  * would run the wrong way.
  */
 
-import type { TraceContext } from 'autotel';
+import type { TraceContext } from '#runtime';
 import {
   MCP_FAILURE_CATEGORY,
   MCP_SEMCONV,

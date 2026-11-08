@@ -70,7 +70,8 @@ middleware in place of the SDK's `register*` methods. `autotel-skybridge` uses i
 Context is carried in the JSON payload `_meta` field (traceparent, tracestate,
 baggage), not in HTTP headers, so it works with any MCP transport (stdio,
 Streamable HTTP, custom). Init autotel or autotel-edge before instrumenting the
-server or client.
+server or client. Under the `workerd`, `worker` or `browser` condition the
+package traces through `autotel-edge`; otherwise through `autotel`.
 
 When the server already runs inside a traced request in the caller's trace (a
 Lambda invocation or HTTP server span), tool, resource and prompt spans parent

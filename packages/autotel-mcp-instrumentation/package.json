@@ -43,6 +43,28 @@
       "require": "./dist/semantic-conventions.cjs"
     }
   },
+  "imports": {
+    "#runtime": {
+      "workerd": {
+        "types": "./dist/runtime.edge.d.ts",
+        "import": "./dist/runtime.edge.js",
+        "require": "./dist/runtime.edge.cjs"
+      },
+      "worker": {
+        "types": "./dist/runtime.edge.d.ts",
+        "import": "./dist/runtime.edge.js",
+        "require": "./dist/runtime.edge.cjs"
+      },
+      "browser": {
+        "types": "./dist/runtime.edge.d.ts",
+        "import": "./dist/runtime.edge.js",
+        "require": "./dist/runtime.edge.cjs"
+      },
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js",
+      "require": "./dist/runtime.cjs"
+    }
+  },
   "files": [
     "dist",
     "README.md",
@@ -78,7 +100,8 @@
     "@modelcontextprotocol/client": "^2.3.1",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@modelcontextprotocol/server": "^2.3.1",
-    "autotel": "*"
+    "autotel": "*",
+    "autotel-edge": "*"
   },
   "peerDependenciesMeta": {
     "@modelcontextprotocol/client": {
@@ -88,6 +111,12 @@
       "optional": true
     },
     "@modelcontextprotocol/server": {
+      "optional": true
+    },
+    "autotel": {
+      "optional": true
+    },
+    "autotel-edge": {
       "optional": true
     }
   },

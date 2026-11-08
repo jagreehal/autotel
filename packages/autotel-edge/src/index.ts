@@ -56,6 +56,7 @@ export {
   span,
   enterSpan,
   getActiveTraceContext,
+  SpanKind,
   type traceOptions,
   type TracingOptions,
   type TraceContext,
