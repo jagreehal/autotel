@@ -35,10 +35,14 @@ export type RepositoryMode = (typeof REPOSITORY_MODES)[number];
 // receiver for a live local view. HTTP/protobuf remains the most portable
 // Claude Code configuration; the same receiver also accepts OTLP/gRPC.
 // session.id kept on metrics so metric-only signals join their session.
+/** Environment variables, by name, that route an agent's telemetry here. */
+export type AgentEnv = Record<string, string>;
+
 export function buildAgentEnv(
   uiBase: string,
   logPrompts: boolean,
-): Record<string, string> {
+  logApiBodies = false,
+): AgentEnv {
   const env = {
     CLAUDE_CODE_ENABLE_TELEMETRY: '1',
     // Spans are beta-gated. Without this the interaction → llm_request → tool
@@ -54,8 +58,12 @@ export function buildAgentEnv(
     OTEL_LOGS_EXPORT_INTERVAL: '1000',
     OTEL_METRICS_INCLUDE_SESSION_ID: 'true',
   };
-  // Private by default: prompt *text* only flows when explicitly opted in.
-  return logPrompts ? { ...env, OTEL_LOG_USER_PROMPTS: '1' } : env;
+  // Private by default: prompt text and the raw API bodies, which hold the
+  // whole conversation, only flow when explicitly opted in.
+  const optIn: AgentEnv = {};
+  if (logPrompts) optIn.OTEL_LOG_USER_PROMPTS = '1';
+  if (logApiBodies) optIn.OTEL_LOG_RAW_API_BODIES = '1';
+  return Object.assign(env, optIn);
 }
 
 interface ClaudeState {
@@ -176,8 +184,9 @@ function claudeWanted(
   current: JsonObject,
   base: string,
   logPrompts: boolean,
+  logApiBodies: boolean,
 ): Record<string, string> {
-  const wanted = buildAgentEnv(base, logPrompts);
+  const wanted = buildAgentEnv(base, logPrompts, logApiBodies);
   // A signal-specific endpoint beats the generic one, and one can be inherited
   // from the shell, MDM or a managed settings file we never see. Pinning all
   // three here wins regardless of where the other came from.
@@ -245,14 +254,14 @@ function enableClaude(
   base: string,
   options: SetupOptions,
 ): string[] {
-  const { logPrompts } = options;
+  const { logPrompts, logApiBodies = false } = options;
   const path = claudeSettingsPath();
   const settings = readClaudeSettings(path);
   const current = claudeEnvOf(settings);
   const owned = state['claude-code']?.values ?? {};
   const values: Record<string, string> = {};
   for (const [key, want] of Object.entries(
-    claudeWanted(current, base, logPrompts),
+    claudeWanted(current, base, logPrompts, logApiBodies),
   )) {
     // A value the user already had, equal to ours, stays theirs.
     if (current[key] !== want || owned[key] === want) values[key] = want;
@@ -441,6 +450,11 @@ export function parseTargets(value: string | undefined): AgentTarget[] {
 export interface SetupOptions {
   endpoint: string;
   logPrompts: boolean;
+  /**
+   * Claude Code only: export each raw API request and response body, which the
+   * Agents tab reads for stop reasons, thinking tokens and cache lifetimes.
+   */
+  logApiBodies?: boolean;
   /** Default `path`. Claude Code only: Codex has no user-level hooks to add. */
   repository?: RepositoryMode;
   /** Command Claude Code runs at SessionStart; no hook is added without one. */

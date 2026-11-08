@@ -209,7 +209,14 @@ env block from elsewhere.
 ```bash
 npx autotel-devtools claude --print-env    # print the env block, launch nothing
 npx autotel-devtools claude --log-prompts  # capture prompt text (default: length only)
+npx autotel-devtools claude --log-api-bodies  # raw API bodies: stop reasons, thinking, cache lifetimes
 ```
+
+`--log-api-bodies` exports each API request and response body. The Agents tab
+reads why each call stopped (`max_tokens` and `refusal` stand out), the tokens
+spent thinking, cache writes split into one-hour and five-minute lifetimes, the
+tools each response asked for, and the size of the largest request. The bodies
+hold the whole conversation, so they stay off unless you ask for them.
 
 Use `--print-env` when the env belongs somewhere else, such as managed settings,
 MDM, or a VS Code profile.

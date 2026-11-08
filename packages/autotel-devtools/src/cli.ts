@@ -37,7 +37,7 @@ function printHelp(): void {
     `autotel-devtools - Standalone OTLP receiver with web devtools UI
 
 Usage: autotel-devtools [port] [options]
-       autotel-devtools claude [claude args] [--print-env] [--log-prompts]
+       autotel-devtools claude [claude args] [--print-env] [--log-prompts] [--log-api-bodies]
        autotel-devtools agents <enable|disable|status> [--target=claude-code,codex]
 
 Subcommands:
@@ -47,6 +47,8 @@ Subcommands:
                        tool / MCP / sub-agent / skill usage live.
                          --print-env    Print the telemetry env block and exit (don't launch)
                          --log-prompts  Capture prompt text (default: length only / private)
+                         --log-api-bodies  Capture raw API bodies: stop reasons, thinking
+                                        tokens, cache lifetimes (they hold the conversation)
   agents               Route coding agents here persistently, by editing their config:
                        Claude Code ~/.claude/settings.json (CLAUDE_CONFIG_DIR) and
                        Codex ~/.codex/config.toml (CODEX_HOME). disable removes only
@@ -54,6 +56,7 @@ Subcommands:
                          --target <list>  claude-code,codex (default: both)
                          --endpoint <url> Receiver base URL (default: http://127.0.0.1:4318)
                          --log-prompts    Capture prompt text
+                         --log-api-bodies Capture raw API bodies (Claude Code)
                          --repository <m> path | name | off (default: path). Claude Code
                                           gets a SessionStart hook naming the session's
                                           repository, so the Agents tab can filter by it
@@ -349,6 +352,7 @@ interface ClaudeOptions {
   host: string;
   printEnv: boolean;
   logPrompts: boolean;
+  logApiBodies: boolean;
   claudeArgs: string[];
 }
 
@@ -358,6 +362,7 @@ function parseClaudeArgs(argv: string[]): ClaudeOptions {
     host: process.env.AUTOTEL_DEVTOOLS_HOST || '127.0.0.1',
     printEnv: false,
     logPrompts: false,
+    logApiBodies: false,
     claudeArgs: [],
   };
   for (let i = 0; i < argv.length; i++) {
@@ -373,6 +378,10 @@ function parseClaudeArgs(argv: string[]): ClaudeOptions {
     }
     if (arg === '--log-prompts') {
       opts.logPrompts = true;
+      continue;
+    }
+    if (arg === '--log-api-bodies') {
+      opts.logApiBodies = true;
       continue;
     }
     if ((arg === '--port' || arg === '-p') && next) {
@@ -398,7 +407,7 @@ async function runClaudeSubcommand(argv: string[]): Promise<void> {
   // port so users can paste it into a shell / managed-settings file.
   if (opts.printEnv) {
     const uiBase = `http://${opts.host === 'localhost' ? '127.0.0.1' : opts.host}:${opts.port}`;
-    printEnvBlock(buildAgentEnv(uiBase, opts.logPrompts));
+    printEnvBlock(buildAgentEnv(uiBase, opts.logPrompts, opts.logApiBodies));
     return;
   }
 
@@ -407,7 +416,11 @@ async function runClaudeSubcommand(argv: string[]): Promise<void> {
     host: opts.host,
     grpcPort: 4317,
   });
-  const env = buildAgentEnv(receiver.uiBase, opts.logPrompts);
+  const env = buildAgentEnv(
+    receiver.uiBase,
+    opts.logPrompts,
+    opts.logApiBodies,
+  );
 
   process.stdout.write(`\n  autotel-devtools — Claude Code\n\n`);
   process.stdout.write(`  Receiver:  ${receiver.uiBase}\n`);
@@ -417,6 +430,11 @@ async function runClaudeSubcommand(argv: string[]): Promise<void> {
   if (!opts.logPrompts) {
     process.stdout.write(
       `  Prompts:   private (length only) — add --log-prompts to capture text\n`,
+    );
+  }
+  if (!opts.logApiBodies) {
+    process.stdout.write(
+      `  API bodies: off — add --log-api-bodies for stop reasons, thinking and cache lifetimes\n`,
     );
   }
   for (const w of receiver.warnings) process.stdout.write(`  ⚠ ${w}\n`);
@@ -473,6 +491,7 @@ async function runAgentsSubcommand(argv: string[]): Promise<void> {
   let endpoint = `http://${host === 'localhost' ? '127.0.0.1' : host}:${port}`;
   let target: string | undefined;
   let logPrompts = false;
+  let logApiBodies = false;
   let repository: RepositoryMode = 'path';
   for (let i = 0; i < rest.length; i++) {
     const [flag, inline] = rest[i].split(/=(.*)/s, 2);
@@ -480,6 +499,7 @@ async function runAgentsSubcommand(argv: string[]): Promise<void> {
     if (flag === '--target') target = value();
     else if (flag === '--endpoint') endpoint = value();
     else if (flag === '--log-prompts') logPrompts = true;
+    else if (flag === '--log-api-bodies') logApiBodies = true;
     else if (flag === '--repository') {
       const wanted = value();
       const mode = REPOSITORY_MODES.find((known) => known === wanted);
@@ -491,6 +511,7 @@ async function runAgentsSubcommand(argv: string[]): Promise<void> {
   const result = runAgentSetup(action, parseTargets(target), {
     endpoint,
     logPrompts,
+    logApiBodies,
     repository,
     // Absolute path to this CLI, so the hook starts fast. After moving the
     // install, re-run `agents enable`.

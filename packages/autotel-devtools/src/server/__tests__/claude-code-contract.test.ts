@@ -96,6 +96,15 @@ describe('Claude Code OTLP contract (recorded fixture)', () => {
     ).toEqual([]);
   });
 
+  it('gives each call the size of the request body sent before it', () => {
+    // This version sends no request_body_id, so bodies join by model and time.
+    const { store } = ingestFixture();
+    const session = [...store.values()][0];
+    const calls = session.timeline.filter((e) => e.type === 'api_request');
+    expect(calls.map((e) => e.requestBytes)).toEqual([81_756, 82_653]);
+    expect(session.rollup.largestRequestBytes).toBe(82_653);
+  });
+
   it('the fixture still exercises the newly-modeled signals', () => {
     // Guards against a future re-record silently dropping the very signals this
     // work added — the contract would otherwise "pass" while covering nothing.

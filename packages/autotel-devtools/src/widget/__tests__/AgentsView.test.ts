@@ -52,6 +52,17 @@ describe('AgentsView', () => {
     ).toBeGreaterThan(0);
   });
 
+  it('shows what the response bodies said about each call', async () => {
+    render(AgentsView);
+    updateWidgetData({ agents: sampleAgentSessions() });
+
+    expect(await screen.findByText('max_tokens 1')).toBeTruthy();
+    expect(screen.getByText('1,800 thinking')).toBeTruthy();
+    expect(screen.getByText(/cache written 19,663 1h \/ 0 5m/)).toBeTruthy();
+    expect(screen.getByText(/largest request 100,140 B/)).toBeTruthy();
+    expect(screen.getByText(/stop:max_tokens/)).toBeTruthy();
+  });
+
   it('keeps prompts private by default and toggles reveal', async () => {
     render(AgentsView);
     updateWidgetData({ agents: sampleAgentSessions() });

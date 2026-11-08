@@ -5,7 +5,7 @@ import { createPrefixAdapter, HANDLED_EVENT_NAMES } from './prefix-adapter';
  * `com.anthropic.claude_code` instrumentation scope.
  * Contract: https://code.claude.com/docs/en/monitoring-usage
  */
-export const claudeCodeAdapter = createPrefixAdapter({
+export const claudeCodeAdapter = /* @__PURE__ */ createPrefixAdapter({
   kind: 'claude-code',
   prefix: 'claude_code.',
   scopeHint: 'claude_code',
@@ -23,8 +23,6 @@ export const claudeCodeAdapter = createPrefixAdapter({
 export const CLAUDE_CODE_EVENT_CONTRACT = {
   handled: HANDLED_EVENT_NAMES,
   ignored: [
-    'api_request_body', // raw request JSON — captured for logs, not modeled
-    'api_response_body', // raw response JSON
     'assistant_response', // plaintext response — privacy-gated, not a rollup fact
     'hook_registered', // startup registration noise
     'hook_execution_start', // paired with hook_execution_complete (which we model)

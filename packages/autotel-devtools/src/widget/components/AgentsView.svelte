@@ -131,6 +131,12 @@
       if (e.speed) parts.push(e.speed);
       if (e.skillName) parts.push(`skill:${e.skillName}`);
       if (e.agentName) parts.push(`agent:${e.agentName}`);
+      // From the response body, when API bodies are exported.
+      if (e.stopReason) parts.push(`stop:${e.stopReason}`);
+      if (e.thinkingTokens)
+        parts.push(`${formatNumber(e.thinkingTokens)} thinking`);
+      if (e.toolUses?.length) parts.push(`→ ${e.toolUses.join(', ')}`);
+      if (e.requestBytes) parts.push(`${formatNumber(e.requestBytes)} B sent`);
     } else if (e.type === 'tool_result') {
       if (e.tool?.isMcp && e.tool.mcpServer)
         parts.push(`mcp:${e.tool.mcpServer}`);
@@ -221,6 +227,36 @@
   // timeline can mark the boundary in place. Inferred from token-count
   // discontinuities — see `autotel-agents/compaction`.
   const compactions = $derived(selected?.rollup.compactions ?? []);
+  /** A stop the agent did not choose: the output limit, or a refusal. */
+  const CUT_SHORT = new Set([
+    'max_tokens',
+    'refusal',
+    'model_context_window_exceeded',
+  ]);
+  /**
+   * What the response bodies said, as chips. Empty unless API bodies are
+   * exported. Stop reasons come first, most frequent first.
+   */
+  const bodyFacts = $derived.by((): [string, boolean][] => {
+    const r = selected?.rollup;
+    if (!r) return [];
+    const facts: [string, boolean][] = Object.entries(r.stopReasons)
+      .sort(([, x], [, y]) => y - x)
+      .map(([reason, n]) => [`${reason} ${n}`, CUT_SHORT.has(reason)]);
+    if (r.thinkingTokens)
+      facts.push([`${formatNumber(r.thinkingTokens)} thinking`, false]);
+    if (r.cacheWrite1hTokens + r.cacheWrite5mTokens)
+      facts.push([
+        `cache written ${formatNumber(r.cacheWrite1hTokens)} 1h / ${formatNumber(r.cacheWrite5mTokens)} 5m`,
+        false,
+      ]);
+    if (r.largestRequestBytes)
+      facts.push([
+        `largest request ${formatNumber(r.largestRequestBytes)} B`,
+        false,
+      ]);
+    return facts;
+  });
   const compactionAt = $derived(
     new Map(compactions.map((c) => [c.atEventId, c])),
   );
@@ -459,6 +495,18 @@
                 >
               {/if}
             </div>
+            {#if bodyFacts.length > 0}
+              <!-- Read from the response bodies (--log-api-bodies). -->
+              <div class="flex flex-wrap gap-2 mt-2 text-[11px]">
+                {#each bodyFacts as [text, warn] (text)}
+                  <span
+                    class="px-2 py-0.5 rounded {warn
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-subtle text-fg'}">{text}</span
+                  >
+                {/each}
+              </div>
+            {/if}
           </div>
 
           <!-- Per-tool breakdown -->

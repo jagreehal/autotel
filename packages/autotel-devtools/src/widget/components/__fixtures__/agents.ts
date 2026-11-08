@@ -167,6 +167,29 @@ export function sampleAgentSessions(): AgentSession[] {
       input_tokens: 28000,
       output_tokens: 5200,
       duration_ms: 4100,
+      request_id: 'req-opus-1',
+    }),
+    // With --log-api-bodies: the response body says why the model stopped.
+    event(a, 'api_request_body', tick(), {
+      body_length: 100_140,
+      body_truncated: 'true',
+      request_body_id: 'body-opus-1',
+    }),
+    event(a, 'api_response_body', tick(), {
+      request_id: 'req-opus-1',
+      request_body_id: 'body-opus-1',
+      body: JSON.stringify({
+        stop_reason: 'max_tokens',
+        content: [{ type: 'text', text: '' }],
+        usage: {
+          output_tokens_details: { thinking_tokens: 1800 },
+          service_tier: 'standard',
+          cache_creation: {
+            ephemeral_1h_input_tokens: 19_663,
+            ephemeral_5m_input_tokens: 0,
+          },
+        },
+      }),
     }),
     event(a, 'api_error', tick(), {
       model: 'claude-opus-4',

@@ -80,6 +80,8 @@ export type AgentEventType =
   | 'mcp_connection'
   | 'plugin_loaded'
   | 'hook_execution'
+  | 'api_request_body'
+  | 'api_response_body'
   | 'other';
 
 export type ToolDecision = 'accept' | 'reject';
@@ -157,6 +159,36 @@ export interface AgentEvent {
   /** Skill that drove the request (`skill.name`). */
   skillName?: string;
 
+  /** The provider's id for the call (`request_id`), shared by its body events. */
+  requestId?: string;
+
+  // api_request_body / api_response_body, opt-in (`OTEL_LOG_RAW_API_BODIES`).
+  // Read into the matching `api_request` event; the bodies stay off the timeline.
+  /** Links a request body to its response body (`request_body_id`). */
+  requestBodyId?: string;
+  /** Size of the request as sent, in bytes, even when the body was cut short. */
+  requestBytes?: number;
+  /**
+   * Read from a complete request body only: Claude Code cuts bodies at 60 KB,
+   * and the first request of a session, which carries the whole system prompt
+   * and every tool definition, is usually past that.
+   */
+  request?: RequestContents;
+  /** Why the model stopped: `end_turn`, `tool_use`, `max_tokens`, `refusal`… */
+  stopReason?: string;
+  /** Output tokens spent thinking, part of `outputTokens`. */
+  thinkingTokens?: number;
+  /**
+   * Cache writes by lifetime. A one-hour write is priced higher than a
+   * five-minute one, so the split says what the cache cost.
+   */
+  cacheWrite1hTokens?: number;
+  cacheWrite5mTokens?: number;
+  /** Tools the response asked to run, in order. */
+  toolUses?: string[];
+  /** `standard`, `priority` or `batch`. */
+  serviceTier?: string;
+
   // tool_result / tool_decision
   /** Size of the tool's result, in bytes, when the agent reports it. */
   resultBytes?: number;
@@ -191,6 +223,36 @@ export interface AgentEvent {
   hookCancelled?: number;
 
   attributes: Attributes;
+}
+
+/** What the body events add to the `api_request` they belong to. */
+export type BodyFacts = Pick<
+  AgentEvent,
+  | 'requestBodyId'
+  | 'requestBytes'
+  | 'request'
+  | 'stopReason'
+  | 'thinkingTokens'
+  | 'cacheWrite1hTokens'
+  | 'cacheWrite5mTokens'
+  | 'toolUses'
+  | 'serviceTier'
+>;
+
+/** A request body with no `request_body_id`, matched by model and time. */
+export interface UnkeyedRequestBody {
+  model?: string;
+  timestamp: number;
+  facts: BodyFacts;
+}
+
+/** What a complete request body held. */
+export interface RequestContents {
+  /** Characters of system prompt, across every system block. */
+  systemChars: number;
+  /** Tool definitions sent with the request. */
+  toolDefinitions: number;
+  messages: number;
 }
 
 /** MCP server the agent connected to (from `mcp_server_connection` events). */
@@ -295,6 +357,29 @@ export interface AgentSessionRollup {
   apiErrors: number;
   /** Requests the model declined. Billed like any other call, but no output. */
   apiRefusals: number;
+  /** `stop_reason` → responses that stopped for it (needs response bodies). */
+  stopReasons: Record<string, number>;
+  thinkingTokens: number;
+  cacheWrite1hTokens: number;
+  cacheWrite5mTokens: number;
+  /** Largest request sent, in bytes (needs request bodies). */
+  largestRequestBytes: number;
+  /**
+   * Internal reducer state (not for UI): request bodies waiting for their
+   * response body, by `request_body_id`. Bounded; the oldest goes first.
+   */
+  pendingRequestBodies: Record<string, BodyFacts>;
+  /**
+   * Internal reducer state (not for UI): body facts whose `api_request` has not
+   * arrived yet, by `request_id`. Exporters batch, so either can come first.
+   */
+  pendingResponseBodies: Record<string, BodyFacts>;
+  /**
+   * Internal reducer state (not for UI): request bodies from Claude Code
+   * versions that send no `request_body_id`, in timestamp order, matched to
+   * calls on the same model again whenever a body or call arrives. Bounded.
+   */
+  unkeyedRequestBodies: UnkeyedRequestBody[];
   prompts: number;
   toolCalls: number;
   accepted: number;

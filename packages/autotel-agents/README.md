@@ -81,6 +81,20 @@ session.rollup.tools['Read']?.contextTokens; // tokens Read's results added
 
 Tools that ran in parallel share the step's growth in proportion to `tool_result_size_bytes` when the agent reports it, evenly otherwise. A `Task` is charged by the parent's own growth once the sub-agent returns; the sub-agent's Reads are charged against its own requests. Nothing is charged across a compaction.
 
+## API bodies
+
+With `OTEL_LOG_RAW_API_BODIES=1` (`npx autotel-devtools claude --log-api-bodies`), Claude Code exports each Messages API request and response body as `api_request_body` and `api_response_body`. The adapter reads them onto the `api_request` event of the same call, joined by `request_id` and `request_body_id` in whichever order they arrive (Claude Code versions without `request_body_id` match a request body to the next call on the same model), and keeps them off the timeline:
+
+| From the response body   | Event field                                | Rollup                                                           |
+| ------------------------ | ------------------------------------------ | ---------------------------------------------------------------- |
+| `stop_reason`            | `stopReason`                               | `stopReasons` (`end_turn`, `tool_use`, `max_tokens`, `refusal`…) |
+| thinking tokens          | `thinkingTokens`                           | `thinkingTokens`                                                 |
+| cache writes by lifetime | `cacheWrite1hTokens`, `cacheWrite5mTokens` | the same                                                         |
+| `tool_use` blocks        | `toolUses`                                 |                                                                  |
+| `service_tier`           | `serviceTier`                              |                                                                  |
+
+Claude Code cuts a request body at 60 KB. The first request of a session, which carries the whole system prompt and every tool definition, is usually past that, so it yields its size (`requestBytes`, `rollup.largestRequestBytes`) and nothing more. A complete request body also yields `request`: system prompt characters, tool definitions and messages. The bodies hold the conversation, so they stay off unless you ask for them.
+
 ## Codex
 
 Codex does not mirror Claude Code's contract, so it has its own adapter (`codexAdapter`). The request is the `codex.sse_event` whose `event.kind` is `response.completed`: that is where the usage lands. `codex.api_request` is one HTTP attempt and only counts when it failed. OpenAI counts cached input inside `input_token_count`, so cached is split out into `cacheReadTokens`. Codex reports no cost and no OpenAI model is priced, so its spend is unknown (see below), never `$0`. Its token metrics carry no conversation id and are not attributed.
