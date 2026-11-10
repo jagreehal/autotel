@@ -10,10 +10,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./core": {
-      "types": "./dist/core.d.ts",
-      "import": "./dist/core.js"
     }
   },
   "files": [
@@ -30,7 +26,7 @@
     "type-check": "tsc --noEmit"
   },
   "peerDependencies": {
-    "autotel-web": "^3.0.0"
+    "@opentelemetry/api": "^1.10.0"
   },
   "keywords": [
     "chrome",
@@ -53,7 +49,9 @@
   },
   "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-builtin-ai#readme",
   "devDependencies": {
-    "autotel-web": "workspace:*",
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/sdk-metrics": "^3.1.0",
+    "@opentelemetry/sdk-trace": "^3.1.0",
     "happy-dom": "21.0.3",
     "tsdown": "^0.23.1",
     "typescript": "^7.0.2",

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { toGenAiSpan, unwrapMcpToolResult } from './normalize';
 import { isGenAiSpan, findMcpServerToolHalves } from './detect';
+import { spanLabel } from './label';
 import {
   buildToolResultIndex,
   hydrateToolResults,
@@ -1121,5 +1122,110 @@ describe('findMcpServerToolHalves + mergeServerToolSpan', () => {
     });
     mergeServerToolSpan(client, serverSpan);
     expect(client.errorMessage).toBe('collection is denied');
+  });
+});
+
+describe('Chrome built-in AI spans', () => {
+  const builtIn = (attributes: SpanData['attributes']): SpanData => ({
+    traceId: 't',
+    spanId: 's',
+    name: 'prompt LanguageModel',
+    kind: 'INTERNAL',
+    startTime: 0,
+    endTime: 0,
+    duration: 0,
+    attributes,
+    status: { code: 'OK' },
+  });
+
+  // The platform exposes no model id, so the API that answered is the label.
+  it('names the API when there is no model', () => {
+    const span = toGenAiSpan(
+      builtIn({
+        'gen_ai.provider.name': 'google.chrome',
+        'gen_ai.operation.name': 'generate_content',
+        'builtin_ai.api': 'LanguageModel',
+      }),
+    );
+    expect(span.requestModel).toBe('LanguageModel');
+  });
+
+  it('leaves a tool run to be titled by its tool', () => {
+    const span = toGenAiSpan(
+      builtIn({
+        'gen_ai.provider.name': 'google.chrome',
+        'gen_ai.operation.name': 'execute_tool',
+        'gen_ai.tool.name': 'get_weather',
+        'builtin_ai.api': 'LanguageModel',
+      }),
+    );
+    expect(span.requestModel).toBe('unknown');
+    expect(spanLabel(span)).toEqual({
+      kind: 'tool',
+      text: 'tool: get_weather',
+    });
+  });
+
+  it('prefers a reported model, as an embedder reports its space', () => {
+    const span = toGenAiSpan(
+      builtIn({
+        'gen_ai.provider.name': 'google.chrome',
+        'gen_ai.operation.name': 'embeddings',
+        'gen_ai.request.model': 'embeddinggemma-300m',
+        'builtin_ai.api': 'SemanticEmbedder',
+      }),
+    );
+    expect(span.requestModel).toBe('embeddinggemma-300m');
+  });
+});
+
+describe('reported context (Chrome built-in AI)', () => {
+  const at = (attributes: SpanData['attributes']) =>
+    toGenAiSpan({
+      traceId: 't',
+      spanId: 's',
+      name: 'prompt LanguageModel',
+      kind: 'INTERNAL',
+      startTime: 0,
+      endTime: 0,
+      duration: 0,
+      attributes: {
+        'gen_ai.provider.name': 'google.chrome',
+        'gen_ai.operation.name': 'generate_content',
+        ...attributes,
+      },
+      status: { code: 'OK' },
+    });
+
+  it('reads usage and window from a call span', () => {
+    expect(
+      at({
+        'builtin_ai.context.usage_after': 109,
+        'builtin_ai.context.remaining': 9107,
+      }).context,
+    ).toEqual({ used: 109, window: 9216, compacted: false });
+  });
+
+  it('reads the window and system-prompt cost from a create span', () => {
+    expect(
+      at({
+        'builtin_ai.context.window': 9216,
+        'builtin_ai.context.usage_at_create': 11,
+      }).context,
+    ).toEqual({ used: 11, window: 9216, compacted: false });
+  });
+
+  it('carries compaction', () => {
+    expect(
+      at({
+        'builtin_ai.context.usage_after': 6162,
+        'builtin_ai.context.remaining': 3054,
+        'builtin_ai.context.compacted': true,
+      }).context?.compacted,
+    ).toBe(true);
+  });
+
+  it('reports nothing for a span that says nothing about context', () => {
+    expect(at({}).context).toBeUndefined();
   });
 });

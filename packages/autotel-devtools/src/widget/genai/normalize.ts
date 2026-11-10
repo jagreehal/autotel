@@ -3,6 +3,7 @@ import type {
   GenAiGuard,
   GenAiMessage,
   GenAiMessagePart,
+  GenAiReportedContext,
   GenAiSession,
   GenAiSpan,
   GenAiStreaming,
@@ -644,6 +645,26 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   'openai.request.response_format',
 ]);
 
+/**
+ * The context window as Chrome's built-in AI reports it. A call span carries
+ * usage after the call and what remains; a create span carries the window and
+ * what the system prompt cost. Either gives both numbers.
+ */
+function readReportedContext(attrs: Attrs): GenAiReportedContext | undefined {
+  const after = num(attrs['builtin_ai.context.usage_after']);
+  const remaining = num(attrs['builtin_ai.context.remaining']);
+  const window = num(attrs['builtin_ai.context.window']);
+  const atCreate = num(attrs['builtin_ai.context.usage_at_create']);
+  const compacted = attrs['builtin_ai.context.compacted'] === true;
+  if (after !== undefined && remaining !== undefined) {
+    return { used: after, window: after + remaining, compacted };
+  }
+  if (window !== undefined && atCreate !== undefined) {
+    return { used: atCreate, window, compacted };
+  }
+  return undefined;
+}
+
 export function toGenAiSpan(span: SpanData): GenAiSpan {
   // SAFETY: SpanAttributes is what the wire delivered; Attrs is the same bag
   // named for what this file does with it - read one key at a time.
@@ -665,6 +686,11 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
     // that mirrors gen_ai.* loosely.
     str(attrs['model_name']) ??
     str(attrs['ai.model.id']) ??
+    // Chrome's built-in AI exposes no model id; the API that answered
+    // (`LanguageModel`, `Summarizer`) is the nearest thing a reader can act on.
+    // Not for a tool run: the model did not answer it, and a span with no
+    // model is what gets titled by its tool name.
+    (operation === 'execute_tool' ? undefined : str(attrs['builtin_ai.api'])) ??
     'unknown';
   const responseModel =
     str(attrs['gen_ai.response.model']) ??
@@ -1022,6 +1048,7 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
 
     usage,
     cost,
+    context: readReportedContext(attrs),
     streaming,
     guard,
     session,

@@ -6,10 +6,11 @@ description: OpenTelemetry instrumentation for Chrome's on-device built-in AI AP
 [Chrome's built-in AI APIs](https://developer.chrome.com/docs/ai/built-in) run a
 model on the device. `autotel-builtin-ai` patches the globals and every session
 they hand back, so each availability check, session creation and model call
-becomes a span — with no change to your calls.
+becomes a span, and your calls stay as they are. Spans go to the global
+OpenTelemetry tracer provider that `autotel-web` registers.
 
-The counterpart to [WebMCP](/autotel/integrations/webmcp/): that one traces the
-tools a page offers an agent, this one traces the model a page runs itself.
+It is the counterpart to [WebMCP](/autotel/integrations/webmcp/): that one
+traces the tools a page offers an agent, this one traces the model a page runs.
 
 ## Installation
 
@@ -25,42 +26,56 @@ initFull({ service: 'shop', endpoint: 'https://collector.example.com' });
 instrumentBuiltInAI();
 ```
 
-Call it before the page creates any session. A session created earlier keeps its
+Call it before the page creates a session. A session created earlier keeps its
 original methods and produces no spans.
 
-## Why this exists
+## What it records
 
-The Prompt API looks synchronous and cheap. Measured, it is neither, and the
-parts that bite are the parts nothing reports afterwards:
+The Prompt API looks synchronous and cheap. These are the costs and behaviours
+you can see only while a call runs:
 
-- `availability()` answers for the **options you passed it**, not for model
-  readiness — so the guard in the documentation refuses on a browser where the
-  call would have worked.
-- `create()` **blocks for the whole model download**: 190,163 ms measured,
-  against 1–3 ms warm.
-- The download monitor **fires when nothing is downloaded**, so a progress bar
-  flashes 0→100 for every returning visitor.
-- A session **cannot say how it samples**: `samplingMode` reads back `null` when
-  `topK` or `temperature` was used.
-- Time to first token exists only while the stream is running.
-
-None of it is recoverable after the call.
+- `availability()` can answer for the options you pass it as well as for model
+  readiness. On Canary 154, behind an experimental speculative-decoding flag,
+  the guard in the documentation refused on a browser where `create()` worked.
+  Canary 159 no longer offers that flag and gives one answer either way.
+- `create()` blocks for the whole model download: 190,163 ms measured, against
+  11–26 ms warm.
+- The download monitor fires when the model is already on disk, so a progress
+  bar flashes 0→100 for a returning visitor.
+- Web pages ignore `topK` and `temperature`: a session created with
+  `temperature: 0` reads back `samplingMode: 'balanced'` on Canary 159.
+- Time to first token exists only while the stream runs.
 
 ## Spans
 
-| Span                      | When                                                            |
-| ------------------------- | --------------------------------------------------------------- |
-| `builtin_ai.availability` | The page asks whether a model is usable                         |
-| `create_session {api}`    | A session is created — `create_session LanguageModel`           |
-| `{method} {api}`          | One model call — `prompt LanguageModel`, `summarize Summarizer` |
+| Span                                        | When                                                           |
+| ------------------------------------------- | -------------------------------------------------------------- |
+| `builtin_ai.availability`                   | The page asks whether a model is usable                        |
+| `create_session {api}`                      | The page creates a session: `create_session LanguageModel`     |
+| `{method} {api}`                            | One model call: `prompt LanguageModel`, `summarize Summarizer` |
+| `clone {api}`, `destroy {api}`              | The page forks or tears down a session                         |
+| `append {api}`, `measureContextUsage {api}` | The page adds context, or prices it before a prompt            |
+| `invoke_agent LanguageModel`                | A question on a session with tools: the root of its trace      |
+| `execute_tool {name}`                       | A tool the page ran, rebuilt from the call and its response    |
 
-The attributes each carries are listed in the
-[package README](https://github.com/jagreehal/autotel/tree/main/packages/autotel-builtin-ai).
-Three are worth knowing about before you build a dashboard.
+Model calls carry the GenAI attributes that apply on device:
+`gen_ai.operation.name`, `gen_ai.provider.name` (`google.chrome`, or
+`microsoft.edge` on Edge, which ships the same APIs over its own model),
+`gen_ai.conversation.id`, `gen_ai.request.stream`, `gen_ai.output.type`,
+`gen_ai.response.finish_reasons` and `gen_ai.response.time_to_first_chunk`.
+The generative APIs report no model id and no per-call token counts, so their
+spans carry context occupancy instead: `builtin_ai.context.usage_before`,
+`_after`, `_delta`, `remaining`, `utilization`, plus
+`builtin_ai.context.compacted` once the session overflows. `SemanticEmbedder`
+reports its embedding space, `embeddinggemma-300m` on Canary 159, and its spans
+carry it as `gen_ai.request.model`.
+
+The [package README](https://github.com/jagreehal/autotel/tree/main/packages/autotel-builtin-ai)
+lists every attribute. Three help before you build a dashboard.
 
 ### `builtin_ai.availability.options_supplied`
 
-The one to alert on. On Canary 154 with speculative decoding enabled and a
+The one to watch. On Canary 154 with speculative decoding enabled and a
 working model:
 
 ```javascript
@@ -69,77 +84,112 @@ await LanguageModel.availability({ samplingMode: 'most-predictable' }); // 'avai
 await LanguageModel.create({ samplingMode: 'most-predictable' }); // succeeds
 ```
 
-So `availability() !== 'available'` — the shape the docs show — turns the
-feature off for users who have it. A bare guard followed by an optioned
-`create()` is two spans sharing an installation id, and the disagreement becomes
-a query rather than a bug report. `guardWouldRefuse(bare, withOptions)` is
-exported for pages that want to check it themselves.
+There, `availability() !== 'available'`, the shape the docs show, turned the
+feature off for users who had it. On Canary 159 the flag is gone and
+availability gives the same answer with or without options. If a later Chrome
+brings the behaviour back, a bare guard followed by an optioned `create()`
+shows up as two spans sharing an installation id, and one query finds it.
+`guardWouldRefuse(bare, withOptions)` is exported for pages that want to check
+it themselves.
 
 ### `builtin_ai.download.real`
 
-`create()` fires the download monitor whether or not it downloads anything, so
-"the monitor fired" and "a download happened" are different facts. Only the
-availability answer from _before_ the call separates them, and that answer is
-read from the page's own `availability()` calls — never probed, because
-installing telemetry must not add a call the application did not make. A page
-that never calls `availability()` leaves this attribute off the span, which is
-the honest answer rather than a guess.
+`create()` fires the download monitor when the model is already on disk, so
+"the monitor fired" and "a download happened" are separate facts. A fractional
+progress event proves a real fetch. Otherwise the availability answer from
+_before_ the call separates them, and the package takes that answer from the
+page's own `availability()` calls, so installing telemetry adds no calls of its
+own. A page that never calls `availability()` gets no `download.real`.
 
 `builtin_ai.create.blocked_on_download` says whether this call paid for the
-fetch. That is the 190-second one.
+fetch: the 190-second one.
 
-### `builtin_ai.session.sampling_mode_reported`
+### Tool calls
 
-Whether the session could describe its own sampling at all. It reads back `null`
-for `topK` and `temperature`, so `builtin_ai.create.sampling_option` carries what
-was actually passed.
+On a session created with `tools`, a question is one trace:
+
+```
+invoke_agent LanguageModel        "Weather and population of Kyoto?"
+├── prompt LanguageModel          asks for two tools
+├── execute_tool get_weather
+├── execute_tool get_population
+└── prompt LanguageModel          "Light rain; 1.4 million people."
+```
+
+Turns and tool runs are siblings, since they run one after another. Each
+`execute_tool` spans from the end of the turn that asked for the call to the
+moment the page sent its response, paired by `callId`. When the page moves on
+without answering, the root closes with `builtin_ai.exchange.abandoned`.
 
 ## Streaming
 
-A streaming call is measured as it drains: `builtin_ai.stream.ttft_ms`,
-`.total_ms`, `.chunks` and `.chars`. The span is emitted alongside the stream
-rather than around it — the caller is handed the stream immediately and the span
-closes when the stream does. A stream that fails records `error.type`; one the
-caller walks away from records `builtin_ai.stream.cancelled` and closes rather
-than staying open for the life of the page.
+The package measures a streaming call as it drains:
+`gen_ai.response.time_to_first_chunk`, `builtin_ai.stream.chunks` and `.chars`,
+with tool-call chunks read out and passed on as Chrome sent them. You get the
+stream at once, and the span closes when the stream does. A stream that fails
+records `error.type` and error status; one you cancel records
+`builtin_ai.stream.cancelled`, and cancelling it stops the model. A generation
+that reaches the output limit records finish reason `length`.
 
 ## Payload capture
 
-Off by default. Prompts and outputs are people's data, and a span is not the
-place for them unless you decided it is:
+Capture is off by default. Prompts and outputs are people's data, so you decide
+when they go on a span:
 
 ```typescript
-instrumentBuiltInAI({ capturePayloads: true, maxPayloadLength: 2000 });
+instrumentBuiltInAI({ capturePayloads: true, maxPayloadLength: 8192 });
 ```
 
-Character counts, timings and refusal classifications are recorded either way —
-`builtin_ai.create.refusal` is a classification (`sampling_incompatible`,
-`service_unavailable`), not the platform's message, so it carries no caller data.
+With capture on, the spans record prompts, outputs, system instructions, tool
+definitions, and tool arguments and results in the GenAI message shapes. Image
+and audio parts appear by modality only. Each attribute stays valid JSON within
+`maxPayloadLength`: the package cuts long strings first, then trailing entries.
 
-## Two entry points
+Character counts, timings, tool names and refusal kinds arrive either way.
+`builtin_ai.create.refusal` is a classification of the platform's error and
+carries no caller data.
 
-`autotel-builtin-ai` wires in autotel-web's `span()` and needs a bundler like any
-app dependency.
+## Refusals worth knowing
 
-`autotel-builtin-ai/core` is the same instrumentation with no telemetry
-dependency: you pass `span` yourself, it imports nothing beyond itself, and it
-loads straight into a browser with no build step.
+`builtin_ai.create.refusal` classifies why `create()` threw:
+`sampling_incompatible`, `service_unavailable`, `feature_disabled`,
+`download_failed` or `user_activation_required`. Chrome downloads a model only
+inside a user gesture, so a `create()` on page load works for returning visitors
+and refuses for new ones; `builtin_ai.create.user_activation` on the span tells
+you which.
 
-```javascript
-import { instrumentBuiltInAI } from 'autotel-builtin-ai/core';
+## Metrics
 
-instrumentBuiltInAI({ span: mySpanFactory });
+`gen_ai.client.operation.duration` and
+`gen_ai.client.operation.time_to_first_chunk` follow the GenAI convention, and
+`builtin_ai.create.duration` keeps model downloads out of call latency, split by
+`builtin_ai.download.real`. Every span also carries the device's memory, CPU
+performance tier and logical cores, since on device the hardware sets the
+latency.
+
+## Inspecting locally
+
+`autotel-devtools` shows these spans in its GenAI view: conversations grouped
+by session, messages, tool calls, a context-window gauge from the reported
+occupancy, and a timeline with each tool exchange on its own row.
+
+## Your own tracer
+
+Pass `tracer` to send spans somewhere other than the global provider:
+
+```typescript
+instrumentBuiltInAI({ tracer: provider.getTracer('builtin-ai') });
 ```
 
 ## Teardown
 
-`instrumentBuiltInAI()` returns a handle whose `uninstall()` puts every patched
-global and session method back. Installations are reference-counted, so calling
+`instrumentBuiltInAI()` returns a handle whose `uninstall()` restores every
+patched global and session method. Installations count references, so calling
 it twice and uninstalling once leaves the instrumentation in place.
 
-Safe to call unconditionally: with no built-in AI globals present — an unflagged
-Chrome, another browser, or server rendering — it patches nothing and returns a
-no-op handle. Restrict what it touches with `apis`:
+You can call it unconditionally: with no built-in AI globals present (an
+unflagged Chrome, another browser, server rendering), it patches nothing and
+returns a handle that does nothing. Restrict what it touches with `apis`:
 
 ```typescript
 instrumentBuiltInAI({ apis: ['LanguageModel', 'Summarizer'] });

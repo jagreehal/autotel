@@ -3,6 +3,7 @@
   import { cn } from '../../utils/cn';
   import { formatDuration } from '../../utils';
   import type { GenAiSpan, SpanRef } from '../../genai/types';
+  import { buildLanes, spanKey } from '../../genai/timelineLanes';
 
   interface Props {
     rows: Array<{ normalized: GenAiSpan; service: string; traceId: string }>;
@@ -47,37 +48,6 @@
     return [...byId.values()].sort((a, b) => b.startMs - a.startMs);
   }
 
-  function laneFor(span: GenAiSpan): string {
-    if (span.handoff)
-      return `handoff: ${span.handoff.fromAgent ?? '?'} → ${span.handoff.toAgent ?? '?'}`;
-    if (span.agent?.name) return span.agent.name;
-    return `${span.provider}/${span.responseModel ?? span.requestModel}`;
-  }
-
-  // A span is a wrapper if another span in the same lane is fully contained
-  // within its time range (strict containment, not equal). Wrappers render as
-  // an outlined rail behind their children rather than a solid block, so the
-  // inner steps don't disappear under the parent.
-  function markWrappers(spans: GenAiSpan[]): Set<string> {
-    const wrapperIds = new Set<string>();
-    for (let i = 0; i < spans.length; i++) {
-      const a = spans[i];
-      for (let j = 0; j < spans.length; j++) {
-        if (i === j) continue;
-        const b = spans[j];
-        const contains =
-          b.startMs >= a.startMs &&
-          b.endMs <= a.endMs &&
-          b.endMs - b.startMs < a.endMs - a.startMs;
-        if (contains) {
-          wrapperIds.add(a.spanId);
-          break;
-        }
-      }
-    }
-    return wrapperIds;
-  }
-
   /** Resolves the CSS class for a timeline span bar based on its state. */
   function spanBarClass(
     isWrapper: boolean,
@@ -91,28 +61,6 @@
     if (errored)
       return 'bg-red-500/15 hover:bg-red-500/25 text-red-600 border border-red-500/30';
     return 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 border border-emerald-500/30';
-  }
-
-  // Builds the per-lane ordering, span map and wrapper sets for a group.
-  function buildLanes(group: Group) {
-    // Build stable lane ordering by first appearance.
-    const laneOrder: string[] = [];
-    const laneMap = new Map<string, GenAiSpan[]>();
-    for (const s of group.spans) {
-      const lane = laneFor(s);
-      if (!laneMap.has(lane)) {
-        laneMap.set(lane, []);
-        laneOrder.push(lane);
-      }
-      laneMap.get(lane)!.push(s);
-    }
-    // Wrapper detection runs per-lane: a span only wraps spans on its own lane.
-    const wrapperIdsByLane = new Map<string, Set<string>>();
-    for (const [lane, spans] of laneMap) {
-      wrapperIdsByLane.set(lane, markWrappers(spans));
-    }
-    const durationMs = Math.max(1, group.endMs - group.startMs);
-    return { laneOrder, laneMap, wrapperIdsByLane, durationMs };
   }
 
   function securityBadges(group: Group): string[] {
@@ -137,7 +85,7 @@
 </script>
 
 {#snippet conversationBlock(group: Group)}
-  {@const lanes = buildLanes(group)}
+  {@const lanes = buildLanes(group.spans, group.startMs, group.endMs)}
   <div class="border border-line rounded-lg overflow-hidden bg-surface">
     <header
       class="px-3 py-2 border-b border-line bg-subtle flex items-center gap-2 text-sm"
@@ -202,7 +150,7 @@
                 s.spanId === selected?.spanId &&
                 s.traceId === selected?.traceId}
               {@const isWrapper =
-                lanes.wrapperIdsByLane.get(lane)?.has(s.spanId) ?? false}
+                lanes.wrapperIdsByLane.get(lane)?.has(spanKey(s)) ?? false}
               <button
                 type="button"
                 onclick={() => onSelectSpan?.(s)}

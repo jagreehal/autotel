@@ -41,11 +41,38 @@ export function describeSamplingOption(
  * so a span carrying both this and `builtin_ai.create.sampling_option` says
  * whether an application hit that.
  */
-export type RefusalKind = 'sampling_incompatible' | 'service_unavailable';
+export type RefusalKind =
+  | 'download_failed'
+  | 'feature_disabled'
+  | 'sampling_incompatible'
+  | 'service_unavailable'
+  | 'user_activation_required';
 
-export function describeRefusal(message: string): RefusalKind | undefined {
+/**
+ * `user_activation_required` is measured: on Canary 159 a `create()` that
+ * would have to download, called with no gesture, rejects with `NotAllowedError:
+ * Requires a user gesture when availability is "downloading" or
+ * "downloadable".` A permissions-policy refusal shares the name, so it is only
+ * classified when the message names the gesture; `builtin_ai.create
+ * .user_activation` on the span answers it either way. `download_failed` is
+ * still from the explainer: a failed model download rejects with a
+ * `NetworkError`.
+ */
+export function describeRefusal(
+  message: string,
+  name = '',
+): RefusalKind | undefined {
   if (/speculative decoding/i.test(message)) return 'sampling_incompatible';
   if (/service is not running/i.test(message)) return 'service_unavailable';
+  // Measured on Canary when model execution is switched off by flags or
+  // policy: every create() refuses with this, whatever its options.
+  if (/feature flag gating model execution/i.test(message)) {
+    return 'feature_disabled';
+  }
+  if (name === 'NetworkError') return 'download_failed';
+  if (name === 'NotAllowedError' && /gesture|activation/i.test(message)) {
+    return 'user_activation_required';
+  }
   return undefined;
 }
 
@@ -57,46 +84,48 @@ export interface DownloadFacts {
   /** Events arrived at all. */
   observed: boolean;
   /**
-   * A model was actually fetched.
+   * A model was actually fetched, or `undefined` when that cannot be known.
    *
    * The monitor fires either way: on a browser that already has the model,
-   * `create()` emits two events ending at `loaded: 1` within a few
-   * milliseconds. So "the monitor fired" cannot be read as "a download ran",
-   * and the availability answer from *before* the call is the only thing that
-   * separates them.
+   * `create()` emits `loaded: 0` then `loaded: 1` within a few milliseconds.
+   * So "the monitor fired" is not "a download ran". Two things separate them:
+   * a fractional progress event, which only a real fetch produces, and the
+   * availability answer from *before* the call. With neither, it is
+   * undecidable.
    */
-  real: boolean;
+  real: boolean | undefined;
 }
 
 export function describeDownload(
   before: Availability | undefined,
   loaded: readonly number[],
 ): DownloadFacts {
-  return {
-    events: loaded.length,
-    lastLoaded: loaded.at(-1),
-    observed: loaded.length > 0,
-    real:
-      loaded.length > 0 &&
-      (before === 'downloadable' || before === 'downloading'),
-  };
+  const fractional = loaded.some((value) => value > 0 && value < 1);
+  const observed = loaded.length > 0;
+  let real: boolean | undefined;
+  if (fractional) real = true;
+  else if (before !== undefined) {
+    real = observed && (before === 'downloadable' || before === 'downloading');
+  }
+  return { events: loaded.length, lastLoaded: loaded.at(-1), observed, real };
 }
 
 /**
  * Whether a bare `availability()` disagrees with one passed the options the
  * caller went on to create with.
  *
- * This is the trap. On Canary 154 with speculative decoding enabled, and a
+ * The trap, as measured on Canary 154 with speculative decoding enabled, and a
  * model downloaded and working:
  *
  *   availability()                                  -> 'unavailable'
  *   availability({samplingMode:'most-predictable'})  -> 'available'
  *   create({samplingMode:'most-predictable'})        -> succeeds
  *
- * So the documented guard — `availability() !== 'available'` — refuses to run
- * on a browser where the call would have worked. `availability()` appears to
- * evaluate the options rather than report model readiness, and an application
- * has to pass the guard the same options as the `create()` it guards.
+ * So the documented guard — `availability() !== 'available'` — refused to run
+ * on a browser where the call would have worked. On Canary 159 that flag is no
+ * longer offered and both answers agree; this stays for the Chrome that brings
+ * it back. Passing the guard the same options as the `create()` it guards
+ * avoids it either way.
  */
 export function guardWouldRefuse(
   bare: Availability,

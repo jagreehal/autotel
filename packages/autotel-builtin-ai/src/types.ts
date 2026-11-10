@@ -3,9 +3,8 @@
  *
  * There is no published type package for these globals, and they are late
  * bound — present only on a Chrome with the right flags. Declaring the parts
- * this instrumentation touches keeps every value downstream a named domain
- * type rather than an unparsed one, and keeps the lookup on `globalThis` from
- * needing an assertion.
+ * this instrumentation touches keeps the lookup on `globalThis` from needing
+ * an assertion.
  */
 
 /** Every answer `availability()` can give. */
@@ -37,62 +36,164 @@ export interface DownloadMonitor {
   ): void;
 }
 
+/** A tool declared on a `LanguageModel` session. */
+export interface ToolDeclaration {
+  readonly description?: string;
+  /** A JSON Schema with `type: 'object'`. */
+  readonly inputSchema?: Json;
+  readonly name: string;
+}
+
+/**
+ * One `expectedInputs` / `expectedOutputs` entry. A type rather than an
+ * interface so it is a JSON value: it is recorded as one.
+ */
+export type ExpectedModality = {
+  readonly languages?: readonly string[];
+  readonly type?: string;
+};
+
 /**
  * Create options this package reads. Everything else the caller passes is
- * forwarded untouched; only the sampling knobs and the monitor are inspected.
+ * forwarded untouched.
  */
 export interface CreateOptions {
+  expectedInputs?: readonly ExpectedModality[];
+  /**
+   * For `LanguageModel`, the output language goes here as a `text` entry's
+   * `languages`. Canary 159 warns when it is missing: quality and safety
+   * attestation suffer, and only `de, en, es, fr, ja` are supported.
+   */
+  expectedOutputs?: readonly ExpectedModality[];
+  initialPrompts?: readonly PromptMessage[];
   monitor?: (monitor: DownloadMonitor) => void;
+  /**
+   * Which embedding space a `SemanticEmbedder` uses. Required on Canary 159;
+   * `SemanticEmbedder.params()` lists the supported ones.
+   */
+  embeddingSpace?: string;
   outputLanguage?: string;
   samplingMode?: string;
   temperature?: number;
+  tools?: readonly ToolDeclaration[];
   topK?: number;
 }
 
+/** A JSON value: what tool arguments and results, and schemas, are made of. */
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly Json[]
+  | { readonly [key: string]: Json };
+
 /**
- * Multimodal input. Opaque here: nothing in this package reads inside it, and
- * the part count is the only thing worth recording about it.
+ * A tool call the model asked for. Measured on Canary 159: the fields live on
+ * the prototype, so `Object.keys()` sees none and `JSON.stringify()` gives
+ * `{}`. Read them by name. `callId` is 16 hex characters.
  */
-export interface ModelInputParts {
-  readonly length: number;
+export interface ToolCallValue {
+  readonly arguments?: Json;
+  readonly callId?: string;
+  readonly name?: string;
 }
 
-/** What a session method accepts. Only the text form has a character count. */
-export type ModelInput = ModelInputParts | string;
+/** One part of a tool's result. Chrome accepts `text` and `object`. */
+export interface ToolResultPart {
+  readonly type: string;
+  readonly value?: Json;
+}
 
-export type AwaitedMethod = (input: ModelInput) => Promise<string>;
-export type StreamingMethod = (input: ModelInput) => ReadableStream<string>;
-export type SessionMethod = AwaitedMethod | StreamingMethod;
+/** The page's answer to a call: a `LanguageModelToolSuccess` or `…ToolError`. */
+export interface ToolResponseValue {
+  readonly callId?: string;
+  readonly errorMessage?: string;
+  readonly name?: string;
+  readonly result?: readonly ToolResultPart[];
+}
 
-/**
- * A session's work method. Naming them keeps the lookup in `instrument.ts` an
- * ordinary property read rather than a dictionary access over an assertion.
- */
-export type SessionMethodName =
-  | 'detect'
-  | 'embed'
-  | 'proofread'
-  | 'prompt'
-  | 'promptStreaming'
-  | 'rewrite'
-  | 'rewriteStreaming'
-  | 'summarize'
-  | 'summarizeStreaming'
-  | 'translate'
-  | 'translateStreaming'
-  | 'write'
-  | 'writeStreaming';
-
-export type StreamingMethodName = Extract<
-  SessionMethodName,
-  `${string}Streaming`
->;
+/** Image or audio. Never read: recorded by modality only. */
+export type MediaValue = ArrayBuffer | ArrayBufferView | Blob | ImageBitmap;
 
 /**
- * Which method does the work, per API. A `*Streaming` name returns a stream;
- * the other returns a promise. A table rather than a branch per API, so adding
- * one is a line.
+ * One content part, in a prompt or in what a turn resolves to. A streamed
+ * tool call arrives as one of these too, with own keys `type` and `value`.
  */
+export type ContentPart =
+  | {
+      readonly type: 'text';
+      readonly value?: string;
+      readonly content?: string;
+    }
+  | { readonly type: 'tool-call'; readonly value: ToolCallValue }
+  | { readonly type: 'tool-response'; readonly value: ToolResponseValue }
+  | { readonly type: 'image' | 'audio'; readonly value?: MediaValue };
+
+export interface PromptMessage {
+  readonly content: string | readonly ContentPart[];
+  readonly role?: string;
+}
+
+/** Text, one message, or a conversation. */
+export type ModelInput = string | PromptMessage | readonly PromptMessage[];
+
+/** One entry of what `LanguageDetector.detect()` resolves to. */
+export interface LanguageDetection {
+  readonly confidence: number;
+  readonly detectedLanguage: string;
+}
+
+/** What `Proofreader.proofread()` resolves to. */
+export interface ProofreadResult {
+  readonly correctedInput: string;
+}
+
+/**
+ * What a work method resolves to. Text from most; content parts from a
+ * `LanguageModel` session with tools, even when the answer is only text
+ * (measured on Canary 159); a language list from `detect()`; a vector from
+ * `embed()`; a correction from `proofread()`.
+ */
+export type ModelOutput =
+  | string
+  | readonly ContentPart[]
+  | readonly LanguageDetection[]
+  | readonly number[]
+  | Float32Array
+  | ProofreadResult;
+
+/** A streamed chunk: text, or one whole structured tool call. */
+export type StreamChunk = string | ContentPart;
+
+/** Per-call options. Only `responseConstraint` is read; all are forwarded. */
+export interface CallOptions {
+  /** Summarizer, Writer and Rewriter: what the input is for. */
+  context?: string;
+  omitResponseConstraintInput?: boolean;
+  responseConstraint?: Json | RegExp;
+  signal?: AbortSignal;
+}
+
+export interface CloneOptions {
+  signal?: AbortSignal;
+}
+
+export type AwaitedMethod = (
+  input: ModelInput,
+  options?: CallOptions,
+) => Promise<ModelOutput>;
+export type StreamingMethod = (
+  input: ModelInput,
+  options?: CallOptions,
+) => ReadableStream<StreamChunk>;
+/** `append()` resolves to nothing; `measure*Usage()` to a token count. */
+export type SideMethod = (
+  input: ModelInput,
+  options?: CallOptions,
+) => Promise<number | undefined>;
+
+/** A session's work methods, per API. A `*Streaming` name returns a stream. */
 export const SESSION_METHODS = {
   LanguageModel: ['prompt', 'promptStreaming'],
   Summarizer: ['summarize', 'summarizeStreaming'],
@@ -102,89 +203,50 @@ export const SESSION_METHODS = {
   Translator: ['translate', 'translateStreaming'],
   LanguageDetector: ['detect'],
   SemanticEmbedder: ['embed'],
-} as const satisfies Record<BuiltInApiName, readonly SessionMethodName[]>;
+} as const satisfies Record<BuiltInApiName, readonly string[]>;
 
-/**
- * A session from any of the built-in AI APIs.
- *
- * Every work method is optional because each API exposes only its own — the
- * union is what makes `SESSION_METHODS` a lookup the compiler can check.
- */
-export interface BuiltInSession {
+export type SessionMethodName =
+  (typeof SESSION_METHODS)[BuiltInApiName][number];
+
+/** A session from any of the built-in AI APIs. */
+export type BuiltInSession = {
+  [M in SessionMethodName]?: M extends `${string}Streaming`
+    ? StreamingMethod
+    : AwaitedMethod;
+} & {
+  addEventListener?: (type: string, listener: () => void) => void;
+  /** Adds input to the context without asking for an answer. */
+  append?: SideMethod;
+  /** Tokens an input would cost. `measureInputUsage` before the rename. */
+  measureContextUsage?: SideMethod;
+  measureInputUsage?: SideMethod;
+  removeEventListener?: (type: string, listener: () => void) => void;
   /** Forks the conversation. Returns a fresh session of the same API. */
-  clone?: () => Promise<BuiltInSession>;
-  /** Tokens spent so far. Present on `LanguageModel` sessions. */
+  clone?: (options?: CloneOptions) => Promise<BuiltInSession>;
+  /** Tokens spent so far. `inputUsage` on the writing-assistance APIs. */
   contextUsage?: number;
-  /** Total tokens available. Present on `LanguageModel` sessions. */
+  /** Total tokens available. `inputQuota` on the writing-assistance APIs. */
   contextWindow?: number;
   destroy?: () => void;
-  detect?: AwaitedMethod;
-  embed?: AwaitedMethod;
-  proofread?: AwaitedMethod;
-  prompt?: AwaitedMethod;
-  promptStreaming?: StreamingMethod;
-  rewrite?: AwaitedMethod;
-  rewriteStreaming?: StreamingMethod;
+  inputQuota?: number;
+  inputUsage?: number;
   /**
-   * Reads back the string only when the `samplingMode` option was the one
-   * used, and `null` when `topK` or `temperature` was — measured on Canary
-   * 154. It reports which option was passed, not how the session samples.
+   * What the session says it samples with. On Canary 159 a session created
+   * with `topK` or `temperature` reads back `balanced`, since web pages ignore
+   * those knobs; on 154 it read back `null`.
    */
   samplingMode?: string | null;
-  summarize?: AwaitedMethod;
-  summarizeStreaming?: StreamingMethod;
-  translate?: AwaitedMethod;
-  translateStreaming?: StreamingMethod;
-  write?: AwaitedMethod;
-  writeStreaming?: StreamingMethod;
-}
+  /** The embedding space a `SemanticEmbedder` session embeds into. */
+  embeddingSpace?: string;
+};
 
 export interface BuiltInApi {
   availability(options?: CreateOptions): Promise<Availability>;
   create(options?: CreateOptions): Promise<BuiltInSession>;
 }
 
-/**
- * `TransformStream` gained a `cancel` hook after the lib types this package
- * builds against were written. Declaring it keeps the abandoned-stream path
- * typed instead of asserted.
- */
-export interface CancellableTransformer<I, O> extends Transformer<I, O> {
-  cancel?: (reason?: unknown) => void;
-}
-
-// Type guards rather than inline checks: an unparsed value gets a contract
-// here, at the one boundary where the platform hands it over, and nowhere else
-// in the package needs to ask what something is. None of them use `typeof` —
-// an `instanceof` establishes the contract against a real constructor rather
-// than against a spelling of its representation.
-
-/** A primitive string is the text form; the multimodal form is always an object. */
-export const isTextInput = (value: ModelInput): value is string =>
-  !(value instanceof Object);
-
-export const isNonEmptyString = (
-  value: string | null | undefined,
-): value is string => value !== null && value !== undefined && value.length > 0;
-
 export const isCountable = (value: number | undefined): value is number =>
   Number.isFinite(value);
-
-export const isReadableStream = (
-  value: ReadableStream<string>,
-): value is ReadableStream<string> => value instanceof ReadableStream;
-
-/**
- * Generic so narrowing a method name to the streaming half narrows the method
- * with it, rather than widening both back to the union.
- */
-export const isSessionMethod = <T extends SessionMethod>(
-  value: T | undefined,
-): value is T => value instanceof Function;
-
-export const isCloneMethod = (
-  value: (() => Promise<BuiltInSession>) | undefined,
-): value is () => Promise<BuiltInSession> => value instanceof Function;
 
 export const isBuiltInApi = (
   value: BuiltInApi | undefined,
@@ -192,8 +254,3 @@ export const isBuiltInApi = (
   value instanceof Object &&
   value.availability instanceof Function &&
   value.create instanceof Function;
-
-/** Streaming methods are named for it, which is how the platform spells it. */
-export const isStreamingMethodName = (
-  method: SessionMethodName,
-): method is StreamingMethodName => method.endsWith('Streaming');
