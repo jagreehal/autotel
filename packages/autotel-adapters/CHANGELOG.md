@@ -1,5 +1,12 @@
 # autotel-adapters
 
+## 3.1.6
+
+### Patch Changes
+
+- Updated dependencies [2f6178b]
+  - autotel-edge@7.0.1
+
 ## 3.1.5
 
 ### Patch Changes

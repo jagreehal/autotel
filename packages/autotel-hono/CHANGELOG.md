@@ -1,5 +1,11 @@
 # autotel-hono
 
+## 0.6.11
+
+### Patch Changes
+
+- autotel-adapters@3.1.6
+
 ## 0.6.10
 
 ### Patch Changes
