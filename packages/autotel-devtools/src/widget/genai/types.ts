@@ -77,6 +77,21 @@ export interface GenAiStreaming {
   timePerOutputChunkS?: number;
 }
 
+/**
+ * Context occupancy as the runtime reported it, not as a price table guesses
+ * it. Chrome's built-in AI exposes the session's window and how much of it is
+ * spent (`builtin_ai.context.*`); there is no per-request token count to infer
+ * it from, and no model id to look the window up by.
+ */
+export interface GenAiReportedContext {
+  /** Tokens occupied after the call. */
+  used: number;
+  /** The session's whole window, in tokens. */
+  window: number;
+  /** The session has evicted earlier turns to fit. */
+  compacted: boolean;
+}
+
 // An inline guard / budget rule that fired during the run (autotel-genai
 // `gen_ai.guard.*`). `stopped` means the run was halted.
 export interface GenAiGuard {
@@ -160,6 +175,7 @@ export interface GenAiSpan {
 
   usage: GenAiUsage;
   cost?: GenAiCost;
+  context?: GenAiReportedContext;
 
   // Streaming timing, guard activity, session accumulators, and provider
   // warnings — all autotel-genai extensions. Present only when emitted.

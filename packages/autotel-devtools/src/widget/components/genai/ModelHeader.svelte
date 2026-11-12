@@ -56,14 +56,19 @@
     ),
   );
 
-  // Context-window fill: input tokens vs the model's total budget. Only shown
-  // when we know both the window size (seed table) and the prompt size.
-  const contextWindow = $derived(
-    lookupContextWindow(span.provider, span.responseModel ?? span.requestModel),
-  );
-  const showContextGauge = $derived(
-    contextWindow != null && span.usage.inputTokens != null,
-  );
+  // Context-window fill. A runtime that reports its own occupancy (Chrome's
+  // built-in AI) is believed first; otherwise input tokens against the model's
+  // budget from the seed table, shown only when both are known.
+  const gauge = $derived.by(() => {
+    if (span.context)
+      return { used: span.context.used, total: span.context.window };
+    const total = lookupContextWindow(
+      span.provider,
+      span.responseModel ?? span.requestModel,
+    );
+    const used = span.usage.inputTokens;
+    return total != null && used != null ? { used, total } : undefined;
+  });
 
   const paramText = $derived.by(() => {
     const params: Array<[string, string | number | undefined]> = [
@@ -212,11 +217,16 @@
         {outputTokensLabel}
       </span>
     {/if}
-    {#if showContextGauge}
-      <ContextWindowGauge
-        used={span.usage.inputTokens ?? 0}
-        total={contextWindow ?? 0}
-      />
+    {#if gauge}
+      <ContextWindowGauge used={gauge.used} total={gauge.total} />
+    {/if}
+    {#if span.context?.compacted}
+      <span
+        class="inline-flex items-center gap-1 rounded border border-warning-border bg-warning-bg px-1.5 text-[11px] text-warning"
+        title="The session overflowed its context window and evicted earlier turns to fit"
+      >
+        context compacted
+      </span>
     {/if}
     {#if costKnown}
       <span

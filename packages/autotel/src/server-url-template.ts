@@ -14,9 +14,8 @@
  * without a route (a server with no router) keeps it too, because there every
  * path, slugs included, would become a name of its own.
  *
- * ponytail: a scanner that gets 401s from auth middleware in front of every
- * path still mints names; filter it with `ignoreIncomingRequestHook` if that
- * shows up.
+ * Auth middleware that answers 401 on every path lets a scanner mint names
+ * too; `ignoreIncomingRequestHook` filters those requests.
  */
 
 import type { Span } from '@opentelemetry/api';

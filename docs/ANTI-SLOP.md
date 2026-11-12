@@ -135,6 +135,16 @@ to move the check to: the union _is_ what the wire format carries.
 `autotel-langfuse` keeps ten such checks across `index.ts`, `scores.ts` and the
 media type guard.
 
+### Shrinking a JSON value to fit — `no-runtime-typeof`
+
+`capStrings` and `longestString` in `autotel-builtin-ai/src/messages.ts` cut
+the long strings out of a captured payload so it fits an attribute while
+staying valid JSON. Their input is typed `Json`, and finding the strings in a
+JSON value means telling a string from a number or a boolean: the union _is_
+the value, with no earlier boundary to move the check to. Every other read of
+a Chrome value in that package goes through the declared, measured shapes in
+`types.ts` instead. Two findings, kept.
+
 ### Union discrimination the caller cannot pre-parse — `no-runtime-typeof`
 
 Three helpers branch on whether a value is a string before rendering it:

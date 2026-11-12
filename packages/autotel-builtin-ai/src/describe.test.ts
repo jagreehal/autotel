@@ -43,6 +43,39 @@ describe('describeSamplingOption', () => {
 });
 
 describe('describeRefusal', () => {
+  it('classifies model execution switched off', () => {
+    // Measured on Canary 154 in a profile without the model flags.
+    expect(
+      describeRefusal(
+        'The feature flag gating model execution was disabled.',
+        'NotSupportedError',
+      ),
+    ).toBe('feature_disabled');
+  });
+
+  it('classifies a failed model download', () => {
+    expect(describeRefusal('Download failed', 'NetworkError')).toBe(
+      'download_failed',
+    );
+  });
+
+  it('classifies a create refused for want of a user gesture', () => {
+    expect(
+      describeRefusal(
+        // Measured on Canary 159.
+        'Requires a user gesture when availability is "downloading" or "downloadable".',
+        'NotAllowedError',
+      ),
+    ).toBe('user_activation_required');
+    // Permissions policy refuses with the same name: not a gesture problem.
+    expect(
+      describeRefusal(
+        'Access denied by permissions policy.',
+        'NotAllowedError',
+      ),
+    ).toBeUndefined();
+  });
+
   it('classifies the speculative decoding refusal', () => {
     expect(
       describeRefusal(
@@ -93,7 +126,13 @@ describe('describeDownload', () => {
   });
 
   it('is undecided when nothing is known about the state before', () => {
-    expect(describeDownload(undefined, [0, 1]).real).toBe(false);
+    expect(describeDownload(undefined, [0, 1]).real).toBeUndefined();
+  });
+
+  // Only a real fetch reports partial progress, so it decides on its own.
+  it('calls fractional progress real without an availability answer', () => {
+    expect(describeDownload(undefined, [0, 0.4, 1]).real).toBe(true);
+    expect(describeDownload('available', [0.4, 1]).real).toBe(true);
   });
 });
 
