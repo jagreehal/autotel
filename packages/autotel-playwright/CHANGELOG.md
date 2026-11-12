@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.26
+
+### Patch Changes
+
+- Updated dependencies [80a7f9a]
+  - autotel@9.1.0
+
 ## 0.5.25
 
 ### Patch Changes
