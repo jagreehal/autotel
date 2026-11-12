@@ -123,6 +123,51 @@ export default defineWorkerFetch(
 );
 ```
 
+## Step 3b: Node serverless (Vercel, Lambda): flush per invocation
+
+The same failure on Node serverless, with no warning: the batch processor holds spans in memory, and the platform freezes the function once the response is sent. Some requests' spans arrive and some don't. In one Vercel deployment 15 of 20 requests reached Tempo, with nothing in the logs.
+
+**Vercel:** flush through `waitUntil` so the response isn't delayed, and again after any work that outlives the response:
+
+```typescript
+import { flush } from 'autotel';
+
+type VercelContext = { waitUntil?: (promise: Promise<unknown>) => void };
+// Vercel's per-request context: the lookup @vercel/functions' waitUntil does internally.
+const requestContext = (): VercelContext | undefined =>
+  (globalThis as Record<symbol, { get?: () => VercelContext } | undefined>)[
+    Symbol.for('@vercel/request-context')
+  ]?.get?.();
+
+export default async (request: Request) => {
+  const waitUntil = requestContext()?.waitUntil; // read here, at the entry
+  const response = await handler(request);
+  // Work that outlives the response (a webhook answered with 200, then processed):
+  // waitUntil?.(work.finally(() => flush()));
+  if (waitUntil) waitUntil(flush());
+  else await flush(); // no Vercel context (local, tests): flush before returning
+  return response;
+};
+```
+
+Read `waitUntil` at the entry point and pass it down. `@vercel/functions`' `waitUntil` looks the request up the same way, and called from a context that lost it (a fiber scheduler, a queue callback), it returns without doing anything.
+
+**AWS Lambda:** there is no `waitUntil`. Lambda freezes the execution environment as soon as the handler returns, so `await flush()` before returning. `wrapHandler` / `traceLambda` from `autotel-aws/lambda` do this for you, even when the handler throws:
+
+```typescript
+import { flush } from 'autotel';
+
+export const handler = async (event: APIGatewayProxyEvent) => {
+  try {
+    return await handle(event);
+  } finally {
+    await flush(); // before returning, or the spans freeze with the environment
+  }
+};
+```
+
+To confirm the fix, send N marked requests and count them in the backend, polling for index lag (Step 8). The fix is in when all N arrive.
+
 ## Step 4: Processor pipeline
 
 Read the `init()` call, not the provider internals. Common issues:
@@ -227,6 +272,7 @@ Don't conclude the span is missing until you've waited > 2× the expected lag.
 [ ] isInitialized() is true before the traced code runs
 [ ] Sampling preset / sampler allows the request
 [ ] Workers handler uses defineWorkerFetch / wrapModule
+[ ] Node serverless: Vercel flushes through waitUntil; Lambda awaits flush() before returning
 [ ] No spanFilter / FilteringSpanProcessor / tail sampler strips it
 [ ] Exporter logs no 4xx/5xx
 [ ] Curl to OTLP endpoint returns 200
@@ -238,6 +284,7 @@ Don't conclude the span is missing until you've waited > 2× the expected lag.
 
 Some spans land, some don't:
 
+- **Whole requests missing on serverless**: the function froze before the batch exported. See Step 3b.
 - **Sampling decided per span (Node).** Under `'production'` each wrapped span rolls its own baseline, so a kept parent can lose fast children. Use `forceKeep()` or `autotel.debug` baggage while debugging.
 - **Trace context broken between services**: outbound calls aren't propagating `traceparent`. Node has no outbound HTTP instrumentation unless you enable it: `autoInstrumentations: ['http', 'undici']` (`undici` covers global `fetch`). On Workers, global fetch is instrumented by default (`instrumentation.instrumentGlobalFetch`).
 - **Async boundary loses context**: a `setTimeout` / queue callback ran outside the AsyncLocalStorage scope. Wrap with `trace()` or use `context.with()`.
@@ -259,14 +306,16 @@ There should be exactly one resolved version. If there are two, dedup via `pnpm.
 
 ## Anti-patterns to fix as you debug
 
-| Anti-pattern                                              | Why it loses spans                                                  |
-| --------------------------------------------------------- | ------------------------------------------------------------------- |
-| No `endpoint` and no `OTEL_EXPORTER_OTLP_ENDPOINT`        | No exporter is built; spans go nowhere                              |
-| Calling traced code before `init()`                       | Spans before `init()` are no-ops                                    |
-| `addEventListener('fetch', …)` on Workers                 | Pre-module-worker style; no `ctx.waitUntil` to wire                 |
-| Single `OTLP_ENDPOINT` env var with `?` chars URL-encoded | Auth gets parsed as part of the path                                |
-| Importing both `@sentry/tracing` and `autotel`            | Double-instrumentation eats spans                                   |
-| `process.exit(0)` immediately after the work              | The exporter never flushed; `await shutdown()` from `autotel` first |
+| Anti-pattern                                              | Why it loses spans                                                     |
+| --------------------------------------------------------- | ---------------------------------------------------------------------- |
+| No `endpoint` and no `OTEL_EXPORTER_OTLP_ENDPOINT`        | No exporter is built; spans go nowhere                                 |
+| Calling traced code before `init()`                       | Spans before `init()` are no-ops                                       |
+| `addEventListener('fetch', …)` on Workers                 | Pre-module-worker style; no `ctx.waitUntil` to wire                    |
+| Single `OTLP_ENDPOINT` env var with `?` chars URL-encoded | Auth gets parsed as part of the path                                   |
+| Importing both `@sentry/tracing` and `autotel`            | Double-instrumentation eats spans                                      |
+| `process.exit(0)` immediately after the work              | The exporter never flushed; `await shutdown()` from `autotel` first    |
+| Serverless function with no per-invocation `flush()`      | The function freezes before the batch exports; some spans vanish       |
+| OTLP protocol set without its exporter package bundled    | Every export throws on first use; check a request arrives after deploy |
 
 `flushOnExit` (default `true`) flushes on `beforeExit`, which covers a script that ends on its own but not `process.exit()` or a signal. Call `await flush()` or `await shutdown()` yourself, or opt into `processHandlers: true` for SIGTERM/SIGINT and fatal errors.
 

@@ -1,7 +1,7 @@
 ---
 name: autotel-effect
 description: >
-  Use this skill when wiring Effect v4 to autotel so `Effect.withSpan` spans and `Effect.log*` calls export through the same OpenTelemetry pipeline as autotel's HTTP, fetch and MCP instrumentation. Covers the one-call `layer()` bridge and its `logs` option, init ordering with `--import`, why v4 subpath imports matter, and what to provide in tests.
+  Use this skill when wiring Effect v4 to autotel so `Effect.withSpan` spans and `Effect.log*` calls export through the same OpenTelemetry pipeline as autotel's HTTP, fetch and MCP instrumentation. Covers the one-call `layer()` bridge and its `logs` option, init ordering with `--import`, why v4 subpath imports matter, what to provide in tests, and serverless (Vercel, Lambda): flushing per invocation and passing waitUntil into Effect handlers.
 ---
 
 # autotel-effect
@@ -171,6 +171,50 @@ what `layer()` routes through autotel.
 
 The package imports `@effect/opentelemetry/OtelTracer` and `.../Resource` by subpath deliberately. The v4 barrel pulls `@opentelemetry/sdk-trace` in at runtime, which is not what a Node service wants in its graph.
 
+### Effect's HTTP server and serverless: `webHandler`, `baggageMiddleware`, `runtime`
+
+Effect's server middleware makes the request span itself, from `traceparent` or b3. These three add W3C `baggage`, so a session id the browser sends (autotel-posthog's `joinPostHog`) reaches your spans and events, and on serverless they finish batched spans and work after the response before the function freezes.
+
+**Serverless (Vercel, Lambda): wrap the web handler.**
+
+```typescript
+import { layer, webHandler } from 'autotel-effect';
+
+const { handler } = HttpRouter.toWebHandler(
+  routes.pipe(Layer.provideMerge(layer({ serviceName: 'api' }))),
+);
+
+export default webHandler(handler);
+```
+
+`webHandler` makes the request's baggage active from the server span down, finds Vercel's `waitUntil` (or takes one in `options.waitUntil`), flushes after the response through it, and when there is none (Lambda) awaits work registered on `WaitUntil` and flushes before returning. A failed flush never fails the request. Handlers that start work after the response read `WaitUntil`:
+
+```typescript
+Effect.gen(function* () {
+  const waitUntil = yield* WaitUntil; // the platform's; does nothing on a long-running server
+  waitUntil(answerInThread(message));
+});
+```
+
+Don't look `waitUntil` up from inside a fiber: `@vercel/functions` reads AsyncLocalStorage, which a fiber may not be in, and the call then quietly does nothing.
+
+**Long-running server: add the middleware.**
+
+```typescript
+HttpRouter.serve(
+  Layer.mergeAll(routes, baggageMiddleware({ spanKeys: ['session.id'] })),
+);
+```
+
+Pair either with autotel's `init({ baggage: { keys: ['session.id'] }, events: { enrichFromBaggage: { allow: ['session.id'] } } })`: the first stamps the key on spans, the second on `track()` events. Only allowed keys go anywhere; baggage is client input.
+
+**Callbacks from Promise-based libraries: `runtime`.** An Effect run from a bot handler or queue consumer sits outside the server's layers. Build one runtime for them, once, and run with `runPromiseExit` so a defect comes back as an `Exit`:
+
+```typescript
+const callbacks = runtime(AnswersLive, { serviceName: 'api' });
+const exit = await callbacks.runPromiseExit(answer(message));
+```
+
 ## Review checklist
 
 - `init()` runs before the app module is imported — `--import`, not a top-level import inside `src/index.ts`.
@@ -183,3 +227,6 @@ The package imports `@effect/opentelemetry/OtelTracer` and `.../Resource` by sub
 - effect 4.0.5 or later, so an `Effect.runPromise` inside an autotel span joins that trace.
 - Span instrumentation on an Effect comes from `Effect.fn` / `Effect.withSpan`, never from wrapping the function in `trace()`.
 - Every `Data.TaggedError` carries its detail in a `message` prop, so failed spans record a real `exception.message`.
+- On serverless, the entry is `webHandler(handler)`: baggage, flush after the response, `WaitUntil`. Work after the response reads `WaitUntil`, never looks `waitUntil` up inside a fiber.
+- `HttpRouter.serve` apps add `baggageMiddleware({ spanKeys })`, so the request span carries the session too.
+- Effects run from callbacks use `runtime(layer, options)`, so their spans and logs export.

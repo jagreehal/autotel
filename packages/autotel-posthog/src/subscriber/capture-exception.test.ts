@@ -40,12 +40,13 @@ describe('PostHogSubscriber.captureException', () => {
     );
   });
 
-  it('uses anonymous distinctId when not provided', async () => {
+  it('sends personless under a fresh id when no distinctId is given', async () => {
     await subscriber.captureException(new Error('test'));
 
     expect(mockCapture).toHaveBeenCalledWith(
       expect.objectContaining({
-        distinctId: 'anonymous',
+        distinctId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+        properties: expect.objectContaining({ $process_person_profile: false }),
       }),
     );
   });

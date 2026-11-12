@@ -286,6 +286,33 @@ export interface PersonProperties {
   [key: string]: unknown;
 }
 
+const TRACE_ID = /^[0-9a-f]{32}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const JOIN_ID_SHAPES: Record<string, RegExp> = {
+  $trace_id: TRACE_ID,
+  $span_id: /^[0-9a-f]{16}$/,
+  $linked_trace_ids: TRACE_ID,
+  $session_id: UUID,
+};
+
+/**
+ * Keys whose value is a join id in its exact shape. A value pattern (a card number) matches inside about 1 in 2,000
+ * UUIDv7 session ids, and a masked id joins nothing, so these skip value-pattern masking. Anything else in the
+ * slot (free-form baggage, a URL) is masked like any other property.
+ */
+function joinIdKeys(properties: UnknownRecord): string[] {
+  return Object.entries(JOIN_ID_SHAPES)
+    .filter(([key, shape]) => {
+      const value = properties[key];
+      const values = Array.isArray(value) ? value : [value];
+      return (
+        values.length > 0 &&
+        values.every((v) => typeof v === 'string' && shape.test(v))
+      );
+    })
+    .map(([key]) => key);
+}
+
 export class PostHogSubscriber extends EventSubscriber {
   readonly name = 'PostHogSubscriber';
   override readonly version = '2.0.0';
@@ -441,21 +468,38 @@ export class PostHogSubscriber extends EventSubscriber {
     return options as Parameters<PostHog['isFeatureEnabled']>[2];
   }
 
+  private userId(attributes?: EventAttributes): string | undefined {
+    return asString(attributes?.userId) ?? asString(attributes?.user_id);
+  }
+
+  // No user: the session id if it is a UUID (PostHog's shape; anything else
+  // could be personal data, and the distinct id is never redacted), else a
+  // fresh UUID, as PostHog advises for personless events. A shared constant
+  // would merge them into one profile.
   private extractDistinctId(attributes?: EventAttributes): string {
+    const sessionId = asString(attributes?.['session.id']);
     return (
-      asString(attributes?.userId) ??
-      asString(attributes?.user_id) ??
-      'anonymous'
+      this.userId(attributes) ??
+      (sessionId && UUID.test(sessionId) ? sessionId : crypto.randomUUID())
     );
   }
 
-  private redactProperties(properties: UnknownRecord): UnknownRecord {
+  /**
+   * Path rules apply to every key. Value patterns skip only `joinIds`: keys holding a validated join id (see
+   * `joinIdKeys`), since a masked id joins nothing.
+   */
+  private redactProperties(
+    properties: UnknownRecord,
+    joinIds: readonly string[] = [],
+  ): UnknownRecord {
     let result = properties;
     if (this.pathRedactor) {
       result = this.pathRedactor(properties);
     }
     if (this.stringRedactor) {
-      result = this.redactStringValues(result);
+      const masked = this.redactStringValues(result);
+      for (const key of joinIds) masked[key] = result[key];
+      result = masked;
     }
     return result;
   }
@@ -520,40 +564,57 @@ export class PostHogSubscriber extends EventSubscriber {
       properties.step_name = payload.stepName;
     }
 
-    // Map autotel context to PostHog-specific field names
+    // Map autotel context to PostHog-specific field names.
+    const ids: UnknownRecord = {};
     if (payload.autotel) {
       if (payload.autotel.trace_id) {
-        properties.$trace_id = payload.autotel.trace_id;
+        ids.$trace_id = payload.autotel.trace_id;
       }
       if (payload.autotel.span_id) {
-        properties.$span_id = payload.autotel.span_id;
+        ids.$span_id = payload.autotel.span_id;
       }
       if (payload.autotel.correlation_id) {
-        properties.$correlation_id = payload.autotel.correlation_id;
+        ids.$correlation_id = payload.autotel.correlation_id;
       }
       if (payload.autotel.trace_flags) {
-        properties.$trace_flags = payload.autotel.trace_flags;
+        ids.$trace_flags = payload.autotel.trace_flags;
       }
       if (payload.autotel.trace_state) {
-        properties.$trace_state = payload.autotel.trace_state;
+        ids.$trace_state = payload.autotel.trace_state;
       }
       if (payload.autotel.trace_url) {
-        properties.$trace_url = payload.autotel.trace_url;
+        ids.$trace_url = payload.autotel.trace_url;
       }
       // Batch/fan-in context
       if (payload.autotel.linked_trace_id_count !== undefined) {
-        properties.$linked_trace_id_count =
-          payload.autotel.linked_trace_id_count;
+        ids.$linked_trace_id_count = payload.autotel.linked_trace_id_count;
       }
       if (payload.autotel.linked_trace_id_hash) {
-        properties.$linked_trace_id_hash = payload.autotel.linked_trace_id_hash;
+        ids.$linked_trace_id_hash = payload.autotel.linked_trace_id_hash;
       }
       if (payload.autotel.linked_trace_ids) {
-        properties.$linked_trace_ids = payload.autotel.linked_trace_ids;
+        ids.$linked_trace_ids = payload.autotel.linked_trace_ids;
       }
     }
 
-    const redactedProperties = this.redactProperties(properties);
+    // The browser's PostHog session id, sent as baggage and copied onto the
+    // event by init({ events: { enrichFromBaggage: { allow: ['session.id'] } } }):
+    // the event then belongs to that session and its replay.
+    const sessionId = asString(filteredAttributes?.['session.id']);
+    if (sessionId) {
+      ids.$session_id = sessionId;
+    }
+    // With no user id, send it personless. The session id still joins it to
+    // the person who browsed.
+    if (!this.isBrowserClient && !this.userId(filteredAttributes)) {
+      properties.$process_person_profile = false;
+    }
+
+    Object.assign(properties, ids);
+    const redactedProperties = this.redactProperties(
+      properties,
+      joinIdKeys(properties),
+    );
 
     if (payload.attributes?.['exception.list']) {
       try {
@@ -898,10 +959,11 @@ export class PostHogSubscriber extends EventSubscriber {
       const properties = {
         ...formatted,
         ...options?.additionalProperties,
+        ...(options?.distinctId ? {} : { $process_person_profile: false }),
       };
 
       this.posthog?.capture({
-        distinctId: options?.distinctId || 'anonymous',
+        distinctId: options?.distinctId || crypto.randomUUID(),
         event: '$exception',
         properties: this.redactProperties(properties),
       });

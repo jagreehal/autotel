@@ -92,6 +92,61 @@ once at startup still joins the request it is run inside.
 HTTP spans from autotel's `node:http` instrumentation become parents of
 domain spans from `Effect.withSpan`.
 
+### Effect's own HTTP server, and serverless
+
+`HttpRouter.serve` and `HttpRouter.toWebHandler` make the request span in Effect's own server middleware, from
+`traceparent` or b3. Two pieces add W3C `baggage`, so a session id the browser sends (autotel-posthog's `joinPostHog`
+does) reaches your spans and events.
+
+On a serverless platform (Vercel, Lambda), wrap the web handler:
+
+```typescript
+import { webHandler } from 'autotel-effect';
+
+const { handler } = HttpRouter.toWebHandler(
+  AppLive.pipe(Layer.provideMerge(layer({ serviceName: 'api' }))),
+);
+
+export default webHandler(handler);
+```
+
+- The request's baggage is active from the server span down. autotel's `init({ baggage: { keys: ['session.id'] } })`
+  stamps the allowed keys on every span; `events: { enrichFromBaggage: { allow: ['session.id'] } }` copies them onto
+  `track()` events.
+- Spans are flushed after the response, through the platform's `waitUntil` (Vercel's is found for you), so a frozen
+  function loses none. Without a `waitUntil` (Lambda), work registered on `WaitUntil` is awaited and spans flushed
+  before the response is returned. A failed flush never fails the request or replaces its error.
+- `WaitUntil` gives handlers that `waitUntil`, for work after the response (a Slack bot answering after its 200).
+  Outside `webHandler` its default does nothing, which is right on a long-running server.
+
+On a long-running server, add the middleware to the router:
+
+```typescript
+HttpRouter.serve(
+  Layer.mergeAll(AppLive, baggageMiddleware({ spanKeys: ['session.id'] })),
+);
+```
+
+Effect starts the request span before middleware runs, so `spanKeys` are copied onto it there; the spans below get
+them from autotel's `baggage` option as above.
+
+Baggage is whatever the client sent: only the keys your config allows reach a span or an event, and the header is
+capped at the W3C limits.
+
+### Callbacks from Promise-based libraries
+
+A bot framework, MCP server or queue consumer calls you with a Promise-based callback, outside the server's layer.
+Build one runtime for them, and their spans and logs export like everything else:
+
+```typescript
+import { runtime } from 'autotel-effect';
+
+const callbacks = runtime(AnswersLive, { serviceName: 'api' });
+bot.onMention(async (message) => {
+  const exit = await callbacks.runPromiseExit(answer(message)); // a defect is an Exit, not a lost rejection
+});
+```
+
 ### Don't reach for `trace()` here
 
 autotel's `trace(name, fn)` wraps a function and ends its span when that
