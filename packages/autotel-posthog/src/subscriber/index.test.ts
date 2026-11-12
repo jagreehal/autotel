@@ -194,7 +194,7 @@ describe('PostHogSubscriber', () => {
       });
     });
 
-    it('should use anonymous if no userId is present', async () => {
+    it('sends a userless event personless under its own fresh id', async () => {
       const adapter = new PostHogSubscriber({
         apiKey: 'phc_test_key',
       });
@@ -202,13 +202,101 @@ describe('PostHogSubscriber', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       await adapter.trackEvent('page.viewed');
+      await adapter.trackEvent('page.viewed');
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(mockCapture).toHaveBeenCalledWith({
-        distinctId: 'anonymous',
+        distinctId: expect.stringMatching(/^[0-9a-f-]{36}$/),
         event: 'page.viewed',
-        properties: {}, // Empty object due to automatic undefined/null filtering
+        properties: { $process_person_profile: false },
+      });
+      // A shared fallback id would merge every userless event into one profile.
+      const [first, second] = mockCapture.mock.calls.map(
+        ([call]) => call.distinctId,
+      );
+      expect(first).not.toBe(second);
+    });
+
+    it('keeps the session id whole when a redactor masks attribute values', async () => {
+      const adapter = new PostHogSubscriber({ apiKey: 'phc_test_key' });
+      // A UUIDv7 whose tail the default card-number pattern matches.
+      const session = '01a093a1-bdb8-7a9b-9012-730003102786';
+      adapter.setStringRedactor((value) =>
+        value.replace(/\d{4}-?\d{12}/, '****'),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await adapter.trackEvent('transfer.failed', { 'session.id': session });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          properties: expect.objectContaining({ $session_id: session }),
+        }),
+      );
+    });
+
+    it('masks a session id that is not a UUID, and honors path rules on join fields', async () => {
+      const adapter = new PostHogSubscriber({
+        apiKey: 'phc_test_key',
+        redactPaths: ['$trace_url'],
+      });
+      adapter.setStringRedactor((value) => value.replace(/\S+@\S+/, '****'));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await adapter.trackEvent('transfer.failed', {
+        'session.id': 'jane@example.com',
+      });
+      // The join fields come from the payload's autotel block, which only the subscriber hook sees.
+      await (
+        adapter as unknown as {
+          sendToDestination(payload: unknown): Promise<void>;
+        }
+      ).sendToDestination({
+        type: 'event',
+        name: 'transfer.failed',
+        attributes: {},
+        timestamp: new Date().toISOString(),
+        autotel: {
+          trace_id: '0af7651916cd43dd8448eb211c80319c',
+          trace_url:
+            'https://traces.example.com/0af7651916cd43dd8448eb211c80319c',
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const [first, second] = mockCapture.mock.calls.map(
+        ([call]) => call.properties,
+      );
+      expect(first.$session_id).toBe('****');
+      // Never the distinct id either, which no redactor sees.
+      expect(mockCapture.mock.calls[0]![0].distinctId).toMatch(
+        /^[0-9a-f-]{36}$/,
+      );
+      expect(second.$trace_url).toBe('[REDACTED]');
+      expect(second.$trace_id).toBe('0af7651916cd43dd8448eb211c80319c');
+    });
+
+    it('joins the browser session sent as baggage, and stays personless', async () => {
+      const adapter = new PostHogSubscriber({ apiKey: 'phc_test_key' });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await adapter.trackEvent('transfer.failed', {
+        'session.id': '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b',
+        errorType: 'ValidationError',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockCapture).toHaveBeenCalledWith({
+        distinctId: '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b',
+        event: 'transfer.failed',
+        properties: {
+          'session.id': '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b',
+          errorType: 'ValidationError',
+          $session_id: '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b',
+          $process_person_profile: false,
+        },
       });
     });
 

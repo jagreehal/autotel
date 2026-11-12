@@ -5,10 +5,22 @@ import { logs } from '@opentelemetry/api';
 import { flattenToAttributes } from 'autotel';
 import { createBuiltinLogger, type BuiltinLoggerOptions } from 'autotel/logger';
 import * as Cause from 'effect/Cause';
+import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
+import * as ManagedRuntime from 'effect/ManagedRuntime';
+import * as Tracer from 'effect/Tracer';
+import { withBaggage } from './baggage.js';
 import * as Logger from 'effect/Logger';
 import type * as LogLevel from 'effect/LogLevel';
 import * as References from 'effect/References';
+
+export { baggageMiddleware, CurrentBaggage, parseBaggage } from './baggage.js';
+export {
+  vercelWaitUntil,
+  WaitUntil,
+  webHandler,
+  type WebHandlerOptions,
+} from './serverless.js';
 
 export interface AutotelEffectLoggerOptions {
   /** Keep Effect's default console logger alongside this one. Default: false. */
@@ -47,7 +59,12 @@ export interface AutotelEffectLayerOptions {
  * instrumentation module with `node --import` or `tsx --import`.
  */
 export function layer(options: AutotelEffectLayerOptions): Layer.Layer<never> {
-  const tracer = OtelTracer.layerGlobal.pipe(
+  // OtelTracer.layerGlobal, with the request's baggage active around each evaluation (see CurrentBaggage).
+  const tracer = Layer.effect(
+    Tracer.Tracer,
+    Effect.map(OtelTracer.make, withBaggage),
+  ).pipe(
+    Layer.provideMerge(OtelTracer.layerGlobalTracer),
     Layer.provide(
       Resource.layer({
         serviceName: options.serviceName,
@@ -72,6 +89,19 @@ export function layer(options: AutotelEffectLayerOptions): Layer.Layer<never> {
           ...(logs === true ? {} : logs),
         }),
   );
+}
+
+/**
+ * A runtime for effects started from Promise-based callbacks (a bot framework, an MCP server, a queue consumer),
+ * built once from `appLayer` with autotel's layer merged in, so a callback's spans and logs export like the server's.
+ *
+ * Run each callback with `runtime.runPromiseExit`, which returns a defect as an `Exit`.
+ */
+export function runtime<R, E>(
+  appLayer: Layer.Layer<R, E>,
+  options: AutotelEffectLayerOptions,
+) {
+  return ManagedRuntime.make(Layer.mergeAll(appLayer, layer(options)));
 }
 
 /**

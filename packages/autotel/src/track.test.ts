@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { trace } from '@opentelemetry/api';
+import { context, propagation, trace } from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
-import { track, getEventQueue } from './track';
+import { track, getEventQueue, resetEventQueue } from './track';
 import { init, getLogger } from './init';
 
 type TrackedEvent = {
@@ -143,6 +143,37 @@ describe('track() function', () => {
       expect(() => {
         track('user.signup', { userId: '123' });
       }).not.toThrow();
+    });
+  });
+
+  describe('Baggage enrichment', () => {
+    it('copies allowed baggage onto the event, as Event does, and nothing else', async () => {
+      // The queue outlives init() and holds the earlier tests' adapter.
+      resetEventQueue();
+      init({
+        service: 'test-app',
+        subscribers: [mockAdapter],
+        events: { enrichFromBaggage: { allow: ['session.id'] } },
+      });
+      const baggage = propagation
+        .createBaggage()
+        .setEntry('session.id', { value: 'ph-session-1' })
+        .setEntry('user.email', { value: 'sam@example.com' });
+
+      context.with(propagation.setBaggage(context.active(), baggage), () => {
+        track('transfer.failed', { errorType: 'ValidationError' });
+      });
+      await getEventQueue()?.flush();
+
+      expect(mockAdapter.events).toEqual([
+        {
+          name: 'transfer.failed',
+          attributes: {
+            errorType: 'ValidationError',
+            'session.id': 'ph-session-1',
+          },
+        },
+      ]);
     });
   });
 

@@ -188,6 +188,23 @@ init({ service: 'api', endpoint, baggage: { keys: ['session.id'] } });
 
 `keys` writes `session.id` and no other client-sent key. `baggage: true` would write `baggage.session.id`. Distinct id stays off; it can be an email. Pass `propagateSession: false` to skip the header.
 
+Server events join the same session when the events config copies the key too:
+
+```ts
+init({
+  service: 'api',
+  endpoint,
+  baggage: { keys: ['session.id'] },
+  events: {
+    includeTraceContext: true,
+    enrichFromBaggage: { allow: ['session.id'] },
+  },
+  subscribers: [new PostHogSubscriber({ apiKey })],
+});
+```
+
+`PostHogSubscriber` sends `session.id` as `$session_id`, so `track('transfer.failed')` on the server sits in the visitor's session and replay. An event with no `userId` is sent personless (`$process_person_profile: false`) under the session id, or a fresh UUID when there is none, so userless events never share a profile; the session still leads to the person who browsed.
+
 Needs `autotel` 7.0.1 or later: earlier versions read the empty string as "off" and the attribute never landed.
 
 Docs: [PostHog join](https://jagreehal.github.io/autotel/integrations/posthog/). Worked example: [`apps/example-posthog`](../../apps/example-posthog).

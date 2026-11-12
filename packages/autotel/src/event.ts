@@ -44,7 +44,7 @@
  * ```
  */
 
-import { trace, propagation, context } from '@opentelemetry/api';
+import { trace } from '@opentelemetry/api';
 import { type Logger } from './logger';
 import {
   getLogger,
@@ -65,7 +65,7 @@ import { CircuitBreaker, CircuitOpenError } from './circuit-breaker';
 import { validateEvent } from './validation';
 import { getOperationContext } from './operation-context';
 import { isFunction } from './values';
-import { type EnrichFromBaggageConfig, hashValue } from './events-config';
+import { enrichFromBaggage } from './baggage-enrichment';
 import { getOrCreateCorrelationId } from './correlation-id';
 
 // Re-export types for convenience
@@ -337,115 +337,6 @@ export class Event {
   }
 
   /**
-   * Enrich event attributes from baggage with guardrails
-   *
-   * @param attributes - Current event attributes
-   * @returns Enriched attributes with baggage values
-   */
-  private enrichFromBaggage(attributes: EventAttributes): EventAttributes {
-    const eventsConfig = getEventsConfig();
-    const enrichConfig = eventsConfig?.enrichFromBaggage;
-
-    if (!enrichConfig) {
-      return attributes;
-    }
-
-    const enriched = { ...attributes };
-    const activeContext = context.active();
-    const baggage = propagation.getBaggage(activeContext);
-
-    if (!baggage) {
-      return enriched;
-    }
-
-    let keyCount = 0;
-    let byteCount = 0;
-    const maxKeys = enrichConfig.maxKeys ?? 10;
-    const maxBytes = enrichConfig.maxBytes ?? 1024;
-    const prefix = enrichConfig.prefix ?? '';
-
-    // Get all baggage entries
-    for (const [key, entry] of baggage.getAllEntries()) {
-      // Check if key is allowed
-      if (!this.isBaggageKeyAllowed(key, enrichConfig)) {
-        continue;
-      }
-
-      // Check limits
-      if (keyCount >= maxKeys) {
-        break;
-      }
-
-      const value = entry.value;
-
-      // Apply transform first so maxBytes is checked against transformed size (e.g. hash output)
-      const transform = enrichConfig.transform?.[key];
-      let transformedValue: string;
-
-      if (transform === 'hash') {
-        transformedValue = hashValue(value);
-      } else if (transform === undefined || transform === 'plain') {
-        transformedValue = value;
-      } else {
-        transformedValue = transform(value);
-      }
-
-      const valueBytes = new TextEncoder().encode(transformedValue).length;
-
-      if (byteCount + valueBytes > maxBytes) {
-        continue; // Skip this entry if transformed value would exceed byte limit
-      }
-
-      // Add to enriched attributes with prefix
-      const enrichedKey = `${prefix}${key}`;
-      enriched[enrichedKey] = transformedValue;
-
-      keyCount++;
-      byteCount += valueBytes;
-    }
-
-    return enriched;
-  }
-
-  /**
-   * Check if a baggage key is allowed based on config
-   */
-  private isBaggageKeyAllowed(
-    key: string,
-    config: EnrichFromBaggageConfig,
-  ): boolean {
-    // Check deny list first (takes precedence)
-    if (config.deny) {
-      for (const pattern of config.deny) {
-        if (this.matchesBaggagePattern(key, pattern)) {
-          return false;
-        }
-      }
-    }
-
-    // Check allow list
-    for (const pattern of config.allow) {
-      if (this.matchesBaggagePattern(key, pattern)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Check if a key matches a baggage pattern
-   * Supports exact matches and wildcard patterns (e.g., 'tenant.*')
-   */
-  private matchesBaggagePattern(key: string, pattern: string): boolean {
-    if (pattern.endsWith('.*')) {
-      const prefix = pattern.slice(0, -2);
-      return key.startsWith(prefix + '.');
-    }
-    return key === pattern;
-  }
-
-  /**
    * Track a business event
    *
    * Use this for tracking user actions, business events, product usage:
@@ -507,7 +398,7 @@ export class Event {
       const autotelContext = this.buildAutotelContext();
 
       // Enrich from baggage if configured
-      const finalAttributes = this.enrichFromBaggage(enrichedAttributes);
+      const finalAttributes = enrichFromBaggage(enrichedAttributes);
 
       void this.notifySubscribers((subscriber) =>
         subscriber.trackEvent(validated.eventName, finalAttributes, {
@@ -607,7 +498,7 @@ export class Event {
     // Notify subscribers
     if (this.hasSubscribers) {
       const autotelContext = this.buildAutotelContext();
-      const finalAttributes = this.enrichFromBaggage(enrichedAttributes);
+      const finalAttributes = enrichFromBaggage(enrichedAttributes);
 
       void this.notifySubscribers((subscriber) =>
         subscriber.trackFunnelStep(funnelName, status, finalAttributes, {
@@ -669,7 +560,7 @@ export class Event {
     // Notify subscribers
     if (this.hasSubscribers) {
       const autotelContext = this.buildAutotelContext();
-      const finalAttributes = this.enrichFromBaggage(enrichedAttributes);
+      const finalAttributes = enrichFromBaggage(enrichedAttributes);
 
       void this.notifySubscribers((subscriber) =>
         subscriber.trackOutcome(operationName, status, finalAttributes, {
@@ -737,7 +628,7 @@ export class Event {
     // Notify subscribers
     if (this.hasSubscribers) {
       const autotelContext = this.buildAutotelContext();
-      const finalAttributes = this.enrichFromBaggage(enrichedAttributes);
+      const finalAttributes = enrichFromBaggage(enrichedAttributes);
 
       void this.notifySubscribers((subscriber) =>
         subscriber.trackValue(metricName, value, finalAttributes, {
@@ -894,7 +785,7 @@ export class Event {
     // Notify subscribers that support trackFunnelProgression
     if (this.hasSubscribers) {
       const autotelContext = this.buildAutotelContext();
-      const finalAttributes = this.enrichFromBaggage(enrichedAttributes);
+      const finalAttributes = enrichFromBaggage(enrichedAttributes);
 
       void this.notifySubscribers(async (subscriber) => {
         await (subscriber.trackFunnelProgression

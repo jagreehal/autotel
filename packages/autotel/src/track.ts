@@ -15,6 +15,7 @@ import {
   getEventsConfig,
 } from './init';
 import { validateEvent } from './validation';
+import { enrichFromBaggage } from './baggage-enrichment';
 import { getOrCreateCorrelationId } from './correlation-id';
 import type { EventTrackingOptions } from './event-subscriber';
 import type { AutotelEventContext } from './event-subscriber';
@@ -194,13 +195,15 @@ export function track<Events extends Record<string, any> = Record<string, any>>(
 
   // Auto-attach trace context if available (free win!)
   const span = trace.getActiveSpan();
-  const enrichedData = span
+  const traced = span
     ? {
         ...validated.attributes,
         traceId: span.spanContext().traceId,
         spanId: span.spanContext().spanId,
       }
     : validated.attributes;
+  // Baggage the events config allows (a session id, a tenant), as Event does.
+  const enrichedData = enrichFromBaggage(traced);
 
   // Build autotel context (same as Event class)
   const autotelContext = buildAutotelContext(span);
