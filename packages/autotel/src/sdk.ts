@@ -14,7 +14,7 @@
  *   - `OTEL_LOG_LEVEL` installs the console diag logger.
  *   - Resource: `envDetector`, `processDetector` and `hostDetector` are merged
  *     in, then `serviceName` is applied last so the resolved autotel value
- *     wins (`OTEL_NODE_RESOURCE_DETECTORS=none` turns detection off).
+ *     wins. `OTEL_NODE_RESOURCE_DETECTORS` picks detectors as sdk-node does.
  *   - Context manager: `AsyncLocalStorageContextManager`.
  *   - Propagator: W3C trace context + baggage, or `OTEL_PROPAGATORS`.
  *   - Providers are only registered when they have something to do; an empty
@@ -55,8 +55,10 @@ import {
   detectResources,
   envDetector,
   hostDetector,
+  osDetector,
   processDetector,
   resourceFromAttributes,
+  serviceInstanceIdDetector,
   type Resource,
   type ResourceDetector,
 } from '@opentelemetry/resources';
@@ -85,8 +87,9 @@ export interface AutotelSdkOptions {
   logRecordProcessors?: LogRecordProcessor[];
   /** `null` leaves whatever propagator is already registered alone. */
   textMapPropagator?: TextMapPropagator | null;
-  /** Off by default only via `OTEL_NODE_RESOURCE_DETECTORS=none`. */
+  /** `false` turns detection off, whatever `OTEL_NODE_RESOURCE_DETECTORS` says. */
   autoDetectResources?: boolean;
+  /** Overrides `OTEL_NODE_RESOURCE_DETECTORS`. */
   resourceDetectors?: ResourceDetector[];
 }
 
@@ -172,6 +175,42 @@ export function adoptInstrumentations(
     instrumentation.setMeterProvider(metrics.getMeterProvider());
     instrumentation.setLoggerProvider?.(logs.getLoggerProvider());
   }
+}
+
+const NODE_DETECTORS = {
+  env: envDetector,
+  host: hostDetector,
+  os: osDetector,
+  process: processDetector,
+  serviceinstance: serviceInstanceIdDetector,
+} satisfies Record<string, ResourceDetector>;
+
+const isDetectorName = (name: string): name is keyof typeof NODE_DETECTORS =>
+  Object.hasOwn(NODE_DETECTORS, name);
+
+/**
+ * `OTEL_NODE_RESOURCE_DETECTORS` as sdk-node reads it: a comma-separated list
+ * of the names above, `all` or `none`. Unset keeps autotel's default set.
+ */
+export function detectorsFromEnv(
+  value: string | undefined,
+): ResourceDetector[] {
+  const names = (value ?? '')
+    .split(',')
+    .map((n) => n.trim().toLowerCase())
+    .filter(Boolean);
+  if (names.length === 0) return [envDetector, processDetector, hostDetector];
+  if (names.includes('all')) return Object.values(NODE_DETECTORS);
+  if (names.includes('none')) return [];
+  const detectors: ResourceDetector[] = [];
+  for (const name of names) {
+    if (isDetectorName(name)) detectors.push(NODE_DETECTORS[name]);
+    else
+      diag.warn(
+        `[autotel] OTEL_NODE_RESOURCE_DETECTORS names unknown detector "${name}"; expected env, host, os, process, serviceinstance, all or none.`,
+      );
+  }
+  return detectors;
 }
 
 export class AutotelSdk implements AutotelSdkLike {
@@ -304,15 +343,12 @@ export class AutotelSdk implements AutotelSdkLike {
     const o = this.options;
     let resource = o.resource ?? resourceFromAttributes({});
 
-    const detectorsEnv = process.env.OTEL_NODE_RESOURCE_DETECTORS?.trim();
-    const detect =
-      o.autoDetectResources ?? detectorsEnv?.toLowerCase() !== 'none';
-    if (detect) {
-      const detectors = o.resourceDetectors ?? [
-        envDetector,
-        processDetector,
-        hostDetector,
-      ];
+    const detectors =
+      o.autoDetectResources === false
+        ? []
+        : (o.resourceDetectors ??
+          detectorsFromEnv(process.env.OTEL_NODE_RESOURCE_DETECTORS));
+    if (detectors.length > 0) {
       resource = resource.merge(detectResources({ detectors }));
     }
 

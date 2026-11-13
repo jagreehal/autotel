@@ -20,6 +20,7 @@ Autotel supports standard OpenTelemetry environment variables for configuration.
 **Resource Attributes:**
 
 - `OTEL_RESOURCE_ATTRIBUTES`: Custom metadata tags as comma-separated `key=value` pairs
+- `OTEL_NODE_RESOURCE_DETECTORS`: Comma-separated detectors to run: `env`, `host`, `os`, `process`, `serviceinstance`, `all` or `none` (default `env,process,host`). `env,host` keeps `host.name` and drops the `process.*` attributes. `init({ resourceDetectors })` sets the list in code and takes precedence.
 
 **SDK Limits:**
 

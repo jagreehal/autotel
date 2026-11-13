@@ -11,7 +11,7 @@ import type { SpanExporter, SpanProcessor } from '@opentelemetry/sdk-trace';
 import type { MetricReader } from '@opentelemetry/sdk-metrics';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import type { AutotelSdkLike, AutotelSdkOptions } from './sdk';
-import type { Resource } from '@opentelemetry/resources';
+import type { Resource, ResourceDetector } from '@opentelemetry/resources';
 import type { Sampler, SamplingPreset } from './sampling';
 import type { TailSamplingSpanProcessorOptions } from './tail-sampling-processor';
 import type { EventSubscriber } from './event-subscriber';
@@ -462,6 +462,12 @@ export interface AutotelConfig {
 
   /** Provide a fully custom Resource to merge (advanced use case). */
   resource?: Resource;
+
+  /**
+   * Resource detectors to run, overriding `OTEL_NODE_RESOURCE_DETECTORS`.
+   * `[]` turns detection off.
+   */
+  resourceDetectors?: ResourceDetector[];
 
   /**
    * Headers for OTLP exporters. Accepts either an object map or

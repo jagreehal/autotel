@@ -1110,6 +1110,7 @@ export function init(cfg: AutotelConfig): void {
     // serviceName separately reapplies the resolved Autotel value last,
     // preserving our documented explicit > YAML > environment precedence.
     serviceName: mergedConfig.service,
+    resourceDetectors: mergedConfig.resourceDetectors,
     sampler,
     instrumentations: finalInstrumentations,
     // Always set spanProcessors, even when nothing is being exported: "no

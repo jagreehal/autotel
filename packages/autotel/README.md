@@ -1070,6 +1070,80 @@ export const processUser = withTracing({})((ctx) => async (user) => {
 
 Guardrails apply per call. `init({ attributeRedactor })` redacts every span attribute, span event and link attribute, and log record before export, with the same key rules, paths, built-in patterns and custom `redactor` for both. It walks log bodies and nested attributes under dotted keys (`customer.password`), a sensitive key redacts everything beneath it (binary values included), and processors in `logRecordProcessors` receive the redacted record. `createStringRedactor()` applies the same value rules to a bare string.
 
+### Mask structured values before stdout or a custom destination
+
+`createValueRedactor()` applies the same rules as span and exported-log redaction
+to nested objects and arrays, without calling `init()`. It returns a copy with
+dotted key/path rules, partial value masks, and cycle/depth protection. Existing
+presets keep their behavior: cards in strings show `****1111`, email addresses
+are partially masked, bank-field strings are fully redacted, and numeric values
+keep their type. Represent card/account numbers and credentials as strings.
+
+```typescript
+import pino from 'pino';
+import { createValueRedactor, REDACTOR_PRESETS } from 'autotel';
+
+const redact = createValueRedactor({
+  ...REDACTOR_PRESETS.strict,
+  keyPatterns: [
+    ...REDACTOR_PRESETS.strict.keyPatterns,
+    /^(name|reference|reason|cvv|cvc|pin)$/i,
+  ],
+});
+
+const logger = pino({
+  serializers: {
+    // Serialize first to keep the Error's non-enumerable message and stack.
+    err: (error) => redact(pino.stdSerializers.err(error)),
+  },
+});
+
+logger.error(
+  {
+    err: Object.assign(new Error('Card declined'), {
+      status: 400,
+      body: { code: 'invalid_card', card: '4111111111111111' },
+    }),
+  },
+  'Payment failed',
+);
+// err retains type, message, stack, status and body.code;
+// body.card becomes "****1111". The original Error is unchanged.
+```
+
+This protects the stdout copy, which export-time log redaction cannot change.
+You can also call `redact(responseBody)` directly. Serialize an Error before
+passing it; this helper walks enumerable fields rather than choosing an error
+serializer.
+
+Use a custom `redactor` when a known field should retain a debugging suffix:
+
+```typescript
+import {
+  createAttributeRedactor,
+  createValueRedactor,
+  REDACTOR_PRESETS,
+} from 'autotel';
+
+const base = createAttributeRedactor('strict');
+const redact = createValueRedactor({
+  ...REDACTOR_PRESETS.strict,
+  redactor: (key, value, attributes) => {
+    if (key === 'beneficiary.account_number' && typeof value === 'string') {
+      const compact = value.replaceAll(/[\s-]/g, '');
+      return compact.length > 4 ? `****${compact.slice(-4)}` : '[REDACTED]';
+    }
+    return base(key, value, attributes);
+  },
+});
+```
+
+No rule set can recognise arbitrary personal information in free text. Add key
+rules for application-specific personal fields; keep credentials fully redacted.
+If a getter or redactor throws, the entire value becomes
+`[REDACTED: redaction failed]`. Cycles become `[Circular]` and values beyond the
+log pipeline's 32-level depth limit become `[REDACTED: nested too deep]`.
+
 ### Domain Helpers
 
 Domain helpers bundle multiple attribute groups for common scenarios:

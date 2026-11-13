@@ -84,8 +84,13 @@ export {
   type ValuePatternConfig,
 } from './attribute-redacting-processor';
 
-// String redaction utility
-export { createStringRedactor, type StringRedactor } from './redact-values';
+// Standalone redaction utilities
+export {
+  createStringRedactor,
+  createValueRedactor,
+  type StringRedactor,
+  type ValueRedactor,
+} from './redact-values';
 
 // Functional API (re-export for convenience)
 export type {
