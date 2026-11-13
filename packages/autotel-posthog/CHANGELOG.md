@@ -1,5 +1,13 @@
 # autotel-posthog
 
+## 14.1.1
+
+### Patch Changes
+
+- Updated dependencies [e3cf957]
+  - autotel@9.2.0
+  - autotel-subscribers@60.0.2
+
 ## 14.1.0
 
 ### Minor Changes
