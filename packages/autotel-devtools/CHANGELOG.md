@@ -1,5 +1,12 @@
 # autotel-devtools
 
+## 31.7.2
+
+### Patch Changes
+
+- Updated dependencies [e3cf957]
+  - autotel@9.2.0
+
 ## 31.7.1
 
 ### Patch Changes
