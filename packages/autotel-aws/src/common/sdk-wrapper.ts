@@ -13,6 +13,11 @@ import {
 import { extractResponseMetadata } from './response-builder';
 import { classifyAWSError, extractErrorAttributes } from './error-handlers';
 import { buildSDKAttributes } from '../attributes';
+import {
+  retryAttributes,
+  serviceRequestAttributes,
+  serviceResponseAttributes,
+} from './service-attributes';
 import { trace } from 'autotel';
 import { SpanStatusCode } from '@opentelemetry/api';
 
@@ -32,7 +37,8 @@ export function wrapSDKClient<T extends Client<any, any, any, any>>(
   ) => Promise<any>,
 ): T {
   const clientName = (client.constructor as { name: string }).name;
-  const resolvedServiceName = serviceName || extractServiceName(clientName);
+  const clientService = extractServiceName(clientName);
+  const resolvedServiceName = serviceName || clientService;
 
   // Create a proxy that intercepts send() calls
   return new Proxy(client, {
@@ -55,11 +61,29 @@ export function wrapSDKClient<T extends Client<any, any, any, any>>(
                   operation: operationName,
                 }),
               );
+              // Extractors key on the client class; `serviceName` only renames the span.
+              // SAFETY: every SDK v3 command carries its request as `input`.
+              ctx.setAttributes(
+                serviceRequestAttributes(
+                  clientService,
+                  operationName,
+                  (command as { input?: unknown }).input,
+                ),
+              );
 
               try {
                 const response = await (send
                   ? send(command, ...args)
                   : target.send(command, ...args));
+
+                ctx.setAttributes(
+                  serviceResponseAttributes(
+                    clientService,
+                    operationName,
+                    response,
+                  ),
+                );
+                ctx.setAttributes(retryAttributes(response?.$metadata));
 
                 // Extract and set response metadata
                 const responseMetadata = extractResponseMetadata(response);
@@ -104,6 +128,12 @@ export function wrapSDKClient<T extends Client<any, any, any, any>>(
                 const errorAttrs = extractErrorAttributes(error);
 
                 ctx.setAttributes(errorAttrs);
+                // SAFETY: SDK errors carry `$metadata`; retryAttributes checks its fields.
+                ctx.setAttributes(
+                  retryAttributes(
+                    (error as { $metadata?: unknown })?.$metadata,
+                  ),
+                );
 
                 if (errorInfo.isError) {
                   ctx.setStatus({

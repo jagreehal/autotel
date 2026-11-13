@@ -21,7 +21,7 @@ import {
 } from '@opentelemetry/sdk-trace';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AutotelSdk } from './sdk';
+import { AutotelSdk, detectorsFromEnv } from './sdk';
 
 let sdk: AutotelSdk | undefined;
 
@@ -113,6 +113,33 @@ describe('AutotelSdk', () => {
     trace.getTracer('t').startSpan('op').end();
     const [span] = await flushed(exporter);
     expect(span!.resource.attributes['deployment.environment']).toBeUndefined();
+  });
+
+  it('reads OTEL_NODE_RESOURCE_DETECTORS as a list', async () => {
+    process.env.OTEL_NODE_RESOURCE_DETECTORS = 'env,host';
+    const exporter = tracerSdk();
+    trace.getTracer('t').startSpan('op').end();
+    const [span] = await flushed(exporter);
+    const keys = Object.keys(span!.resource.attributes);
+    expect(keys).toContain('host.name');
+    expect(keys.filter((k) => k.startsWith('process.'))).toEqual([]);
+  });
+
+  it('turns detection off with OTEL_NODE_RESOURCE_DETECTORS=none', async () => {
+    process.env.OTEL_NODE_RESOURCE_DETECTORS = 'none';
+    process.env.OTEL_RESOURCE_ATTRIBUTES = 'deployment.environment=qa';
+    const exporter = tracerSdk();
+    trace.getTracer('t').startSpan('op').end();
+    const [span] = await flushed(exporter);
+    expect(span!.resource.attributes['deployment.environment']).toBeUndefined();
+    expect(span!.resource.attributes['host.name']).toBeUndefined();
+  });
+
+  it('parses detector names as sdk-node does', () => {
+    expect(detectorsFromEnv(undefined)).toHaveLength(3);
+    expect(detectorsFromEnv(' ALL ')).toHaveLength(5);
+    expect(detectorsFromEnv('env,none')).toEqual([]);
+    expect(detectorsFromEnv('env, bogus, constructor')).toHaveLength(1);
   });
 
   it('honours the sampler', async () => {

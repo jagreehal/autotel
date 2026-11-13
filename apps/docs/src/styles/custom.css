@@ -270,6 +270,11 @@ body {
   color: var(--sl-color-gray-2);
 }
 
+:root[data-theme='light'] .sl-markdown-content blockquote {
+  border-color: var(--sl-color-gray-5);
+  background: var(--sl-color-gray-6);
+}
+
 .sl-markdown-content blockquote p {
   margin: 0;
 }

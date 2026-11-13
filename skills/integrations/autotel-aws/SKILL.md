@@ -108,6 +108,8 @@ autoInstrumentAWS();
 const s3 = new S3Client({});
 ```
 
+Each SDK span records the resource the call touched under the OpenTelemetry AWS SDK conventions (`aws.s3.bucket`, `aws.dynamodb.table_names`, `messaging.destination.name`, `faas.invoked_name` and more), plus `aws.sdk.attempts` and `aws.sdk.total_retry_delay_ms`. Identifiers and counts only, never payloads. A custom service name renames the span and keeps these attributes.
+
 It finds the SDK's base Client beside each installed `@aws-sdk/client-*`, which covers pnpm's isolated installs, and patches each Smithy copy it finds. A bundle that inlines the SDK keeps no `node_modules` to search, so use `instrumentSDK()` there. Disable with `disableAutoInstrumentAWS()`. Check status with `isAutoInstrumentEnabled()`.
 
 ### Service-specific semantic tracing helpers
@@ -162,7 +164,7 @@ const getUser = traceDynamoDB({ operation: 'GetItem', table: 'users' })(
 );
 ```
 
-Auto-sets: `db.system.name` ('dynamodb'), `db.operation.name`, `db.namespace`, `aws.dynamodb.table_names`. Span name: `dynamodb.GetItem`.
+Auto-sets: `db.system.name` ('aws.dynamodb'), `db.operation.name`, `db.namespace`, `aws.dynamodb.table_names`. Span name: `dynamodb.GetItem`.
 
 **SQS / SNS / Kinesis / Step Functions / EventBridge**. Follow the same `traceXxx({ operation, ... })` pattern via their respective subpaths (`autotel-aws/sqs`, `autotel-aws/sns`, etc.).
 

@@ -112,6 +112,24 @@ const s3 = instrumentSDK(new S3Client({ region: 'us-east-1' }));
 const s3 = createTracedClient(S3Client, { region: 'us-east-1' });
 ```
 
+### What Each SDK Span Records
+
+Every call gets `rpc.service`, `rpc.method`, `aws.request_id`, the HTTP status, and `aws.sdk.attempts` / `aws.sdk.total_retry_delay_ms`, which are set on failures too so a timeout after three retries reads as one. On top of that, each span records the resource the call touched, using the [OpenTelemetry AWS SDK conventions](https://opentelemetry.io/docs/specs/semconv/cloud-providers/aws-sdk/):
+
+| Service                       | Attributes                                                                                                                                                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S3                            | `aws.s3.bucket`, `aws.s3.key`, `aws.s3.copy_source`, `aws.s3.upload_id`, `aws.s3.part_number`; for `DeleteObjects`, `aws.s3.delete.count` and `aws.s3.delete.error_count` (S3 reports per-key failures with a 200) |
+| DynamoDB (and DocumentClient) | `db.system.name`, `db.operation.name`, `aws.dynamodb.table_names` (every table in batch and transact calls), `index_name`, `limit`, `projection`, `consistent_read`, `consumed_capacity`, `count`, `scanned_count` |
+| SQS                           | `aws.sqs.queue.url`, `messaging.destination.name`, `messaging.message.id`, `messaging.batch.message_count`                                                                                                         |
+| SNS                           | `aws.sns.topic.arn`, `messaging.destination.name`, `messaging.message.id`                                                                                                                                          |
+| Kinesis                       | `aws.kinesis.stream_name`                                                                                                                                                                                          |
+| Lambda                        | `faas.invoked_name`                                                                                                                                                                                                |
+| Step Functions                | `aws.step_functions.state_machine.arn`, `aws.step_functions.activity.arn`                                                                                                                                          |
+| EventBridge                   | `aws.eventbridge.event_bus`, `aws.eventbridge.failed_entry_count`                                                                                                                                                  |
+| Secrets Manager               | `aws.secretsmanager.secret.arn`                                                                                                                                                                                    |
+
+Only identifiers and counts are read. Item values, message bodies and object contents never reach a span.
+
 ## SQS Producer/Consumer
 
 The producer injects trace context into each message's attributes. The

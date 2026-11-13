@@ -79,7 +79,7 @@ export interface TraceDynamoDBConfig {
  *
  * @remarks
  * Semantic attributes set automatically:
- * - `db.system.name` - 'dynamodb'
+ * - `db.system.name` - 'aws.dynamodb'
  * - `db.operation.name` - The operation name (GetItem, PutItem, etc.)
  * - `db.namespace` - Table name
  * - `aws.dynamodb.table_names` - Array containing the table name

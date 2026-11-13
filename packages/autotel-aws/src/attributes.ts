@@ -121,7 +121,7 @@ export function buildDynamoDBAttributes(operation: {
   consumedCapacity?: number;
 }): Record<string, string | number | string[]> {
   return {
-    'db.system.name': 'dynamodb',
+    'db.system.name': 'aws.dynamodb',
     'db.operation.name': operation.operation,
     'db.namespace': operation.tableName,
     [AWS_ATTRS.DDB_TABLE_NAMES]: [operation.tableName],

@@ -135,3 +135,7 @@ Each key pattern is tested against the full key and its last dot segment, so `/^
 Log records get the same rules (key rules, paths, built-ins, custom `redactor`). Object bodies and nested attributes are walked under dotted keys (`customer.password`), a sensitive key redacts its whole subtree including binary values, and `logRecordProcessors` receive the redacted record. With a custom `redactor`, declare `keyPatterns` or `paths` for keys whose whole object must be redacted.
 
 For free-text fields outside the telemetry pipeline (error messages, frontend payloads), use `createStringRedactor('default')` from `autotel`. It applies the span redactor's value rules (value patterns, built-ins, a custom `redactor`) and returns a `(s: string) => string`. Key rules do not apply to a bare string.
+
+For structured values outside the pipeline (response bodies, serialized errors written to stdout), use `createValueRedactor('default')`. It walks nested objects and arrays with the full rule set, key rules and paths included, and returns a redacted copy. Serialize an `Error` first (for example `pino.stdSerializers.err`) so its message and stack come along.
+
+`OTEL_NODE_RESOURCE_DETECTORS` takes a comma-separated list (`env`, `host`, `os`, `process`, `serviceinstance`, `all`, `none`). `init({ resourceDetectors })` overrides it in code.

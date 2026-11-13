@@ -61,6 +61,8 @@ const s3 = instrumentSDK(new S3Client({ region: 'us-east-1' }));
 const s3 = createTracedClient(S3Client, { region: 'us-east-1' });
 ```
 
+Each SDK span records the resource the call touched, using the [OpenTelemetry AWS SDK conventions](https://opentelemetry.io/docs/specs/semconv/cloud-providers/aws-sdk/): the S3 bucket and key, every DynamoDB table in a batch or transact call, the SQS queue, the SNS topic, the Kinesis stream, the Lambda function, the Step Functions state machine and the EventBridge bus. `aws.sdk.attempts` and `aws.sdk.total_retry_delay_ms` count the SDK's retries, on failed calls too. Spans carry identifiers and counts only, so item values and message bodies stay out of your traces.
+
 ## SQS Producer/Consumer
 
 ```typescript
