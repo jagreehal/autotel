@@ -406,6 +406,19 @@ export function attachDevtoolsRoutes(
       return;
     }
 
+    // GET /v1/logs: the logs the receiver holds, the readback twin of
+    // GET /v1/traces. Each record keeps its traceId/spanId, so a reader can put
+    // a log next to the span that wrote it.
+    if (req.method === 'GET' && url === '/v1/logs') {
+      if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+        sendJson(res, 403, { error: 'Forbidden' });
+        return;
+      }
+      const { logs } = devtools.getCurrentData();
+      sendJson(res, 200, { logs, count: logs.length });
+      return;
+    }
+
     // DELETE /v1/traces — clear captured telemetry (test isolation / reset).
     // Clears traces, logs, metrics and aggregated errors so each test starts clean.
     if (req.method === 'DELETE' && url === '/v1/traces') {

@@ -335,17 +335,18 @@ The same query the UI runs is available over HTTP, so a test can assert on what
 a run actually emitted instead of on a log line. Requests to the `/api/*`
 endpoints must come from loopback, or the server answers `403 Forbidden`.
 
-| Endpoint                       | Body / result                                                    |
-| ------------------------------ | ---------------------------------------------------------------- |
-| `POST /api/query/traces`       | `{ query, window?, limit?, cursor? }` → `{ traces, nextCursor }` |
-| `POST /api/query/logs`         | same shape, over logs                                            |
-| `POST /api/query/errors`       | same shape, error spans only                                     |
-| `POST /api/query/metrics`      | `{ name, window?, maxPoints? }` → `{ series }`                   |
-| `GET /api/query/traces/fields` | `{ fields }` - the bare field names a query can use              |
-| `GET /api/stats`               | `{ traceCount, spanCount, logCount, bytesUsed, maxBytes, … }`    |
-| `GET /v1/traces`               | every trace held, no query                                       |
-| `DELETE /v1/traces`            | `{ cleared: true }` - empty the store between tests              |
-| `GET /healthz`                 | `{ ok, service, version, clients }`                              |
+| Endpoint                       | Body / result                                                        |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `POST /api/query/traces`       | `{ query, window?, limit?, cursor? }` → `{ traces, nextCursor }`     |
+| `POST /api/query/logs`         | same shape, over logs                                                |
+| `POST /api/query/errors`       | same shape, error spans only                                         |
+| `POST /api/query/metrics`      | `{ name, window?, maxPoints? }` → `{ series }`                       |
+| `GET /api/query/traces/fields` | `{ fields }` - the bare field names a query can use                  |
+| `GET /api/stats`               | `{ traceCount, spanCount, logCount, bytesUsed, maxBytes, … }`        |
+| `GET /v1/traces`               | every trace held, no query                                           |
+| `DELETE /v1/traces`            | `{ cleared: true }` - empty the store between tests                  |
+| `GET /v1/logs`                 | `{ logs, count }` - every log held, each with its `traceId`/`spanId` |
+| `GET /healthz`                 | `{ ok, service, version, clients }`                                  |
 
 `query` takes the language above, so anything the Traces tab can filter on, a
 script can too. Metrics take a `name` instead. Each returned trace carries
@@ -368,6 +369,35 @@ curl -s -X POST http://127.0.0.1:4318/api/query/traces \
 
 That fails the moment someone reintroduces an N+1 on `/feed`, and it does not
 care how fast the machine running CI happens to be.
+
+### Asserting from a test, across processes
+
+`autotel/testing` sees spans from the test's own process only. When the test
+drives a service running elsewhere, `autotel-devtools/testing` polls the
+readback above, so the assertion is on what the service actually sent:
+
+```ts
+import { clearTraces, waitForSpan } from 'autotel-devtools/testing';
+
+beforeEach(() => clearTraces());
+
+it('stores the order', async () => {
+  await fetch(`${API}/orders`, { method: 'POST', headers: traceHeaders() });
+  const span = await waitForSpan({
+    traceId,
+    service: 'orders',
+    name: /INSERT/,
+  });
+  expect(span.attributes['db.statement']).toContain('INSERT INTO orders');
+});
+```
+
+Pass the test's own `traceId` so other tests' traffic never satisfies the
+query. On timeout the error lists what that trace did receive, and says so
+when spans arrived only under other trace ids: a hop that dropped
+`traceparent`. `findSpans` and `fetchSpans` return without waiting;
+`{ endpoint }` points any of them at a receiver other than
+`http://127.0.0.1:4318`.
 
 ### Live tail and the time window
 

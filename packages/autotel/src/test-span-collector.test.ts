@@ -208,6 +208,45 @@ describe('TestSpanCollector', () => {
     expect(spans[0]!.attributes).toBeUndefined();
   });
 
+  it('keeps span events with their time and serializable attributes', () => {
+    const collector = new TestSpanCollector();
+    const span = makeSpan({ traceId: 't', spanId: 's', name: 'page' });
+    span.kind = 1;
+    span.events = [
+      {
+        name: 'exception',
+        time: [1000, 750_000_000],
+        attributes: {
+          'exception.type': 'TypeError',
+          'exception.message': 'x is undefined',
+          dropped: { nested: true },
+        },
+      },
+      { name: 'console.warning', time: [1001, 0] },
+    ];
+    collector.export([span], vi.fn());
+
+    const [serialized] = collector.drainTrace('t', 's');
+    expect(serialized!.kind).toBe('server');
+    expect(serialized!.events).toEqual([
+      {
+        name: 'exception',
+        timeMs: 1_000_750,
+        attributes: {
+          'exception.type': 'TypeError',
+          'exception.message': 'x is undefined',
+        },
+      },
+      { name: 'console.warning', timeMs: 1_001_000 },
+    ]);
+  });
+
+  it('omits events when the span has none', () => {
+    const collector = new TestSpanCollector();
+    collector.export([makeSpan({ traceId: 't', spanId: 's', name: 'quiet' })], vi.fn());
+    expect(collector.drainTrace('t', 's')[0]).not.toHaveProperty('events');
+  });
+
   it('clears all data on shutdown', async () => {
     const collector = new TestSpanCollector();
 

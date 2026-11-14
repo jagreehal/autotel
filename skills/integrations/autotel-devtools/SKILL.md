@@ -68,12 +68,14 @@ export const loadUser = withTracing({ name: 'user.load' })(
 | `autotel-devtools`          | `createDevtools()`, `DevtoolsServer`, exporters, types                                                                                                         |
 | `autotel-devtools/server`   | `DevtoolsServer`, OTLP parsing (`parseOtlpTraces`, `parseOtlpLogs`), HTTP routes (`attachDevtoolsRoutes`, `createDevtoolsHttpServer`), telemetry-limit helpers |
 | `autotel-devtools/exporter` | `DevtoolsSpanExporter` (standalone)                                                                                                                            |
+| `autotel-devtools/testing`  | `waitForSpan`, `findSpans`, `fetchSpans`, `clearTraces` over the receiver's readback                                                                           |
 
 ## Server Endpoints
 
 | Route                                              | What                                                               |
 | -------------------------------------------------- | ------------------------------------------------------------------ |
 | `POST /v1/traces` · `/v1/logs` · `/v1/metrics`     | OTLP receivers: JSON or protobuf, gzipped or not                   |
+| `GET /v1/traces` · `/v1/logs`                      | Readback of held traces and logs (each log carries `traceId` / `spanId`) |
 | `GET /`                                            | Dashboard UI (see Views below)                                     |
 | `POST /api/query/{traces,logs,errors,metrics}`     | Server-side query over the durable store                           |
 | `POST /api/query/webmcp`                           | WebMCP tool surface, folded server-side over every page of results |
@@ -180,6 +182,28 @@ npx autotel-devtools agents disable         # removes only values still as writt
 `npx autotel-devtools claude --log-api-bodies` (or `agents enable --log-api-bodies`) also exports Claude Code's raw API bodies (`OTEL_LOG_RAW_API_BODIES=1`). The Agents tab then shows stop reasons, thinking tokens, cache writes by lifetime and the largest request. The bodies hold the conversation, so they are off by default.
 
 Claude Code gets the telemetry env in `~/.claude/settings.json` plus a SessionStart hook that tags each session with its repository (`--repository=path|name|off`). Codex gets a marked `[otel]` block in `~/.codex/config.toml`; a file that already configures `otel` is left untouched. Restart the agent afterwards.
+
+## Asserting on another process's spans
+
+`autotel-devtools/testing` polls `GET /v1/traces` so a test can wait for spans a service exported elsewhere:
+
+```ts
+import { clearTraces, waitForSpan } from 'autotel-devtools/testing';
+
+beforeEach(() => clearTraces());
+
+it('stores the order', async () => {
+  await fetch(`${API}/orders`, { method: 'POST', headers: traceHeaders() });
+  const span = await waitForSpan({
+    traceId,
+    service: 'orders',
+    name: /INSERT/,
+  });
+  expect(span.attributes['db.system']).toBe('postgresql');
+});
+```
+
+`waitForSpan` and `findSpans` take a caller's `signal`. On timeout, `waitForSpan` lists what the trace received. `GET /v1/logs` returns held logs with each record's `traceId` and `spanId`.
 
 ## Works With
 

@@ -91,6 +91,59 @@ describe('HTTP read-back: verify the collector received spans', () => {
     expect(readBack.traces[0].service).toBe('readback-svc');
   });
 
+  it('GET /v1/logs returns logs with the trace and span they were written under', async () => {
+    const port = await new Promise<number>((resolve) => {
+      server = createServer();
+      devtools = new DevtoolsServer({ server });
+      attachDevtoolsRoutes(server, devtools);
+      server.listen(0, '127.0.0.1', () =>
+        resolve((server!.address() as { port: number }).port),
+      );
+    });
+    const base = `http://127.0.0.1:${port}`;
+    const traceId = 'a'.repeat(32);
+    const spanId = 'b'.repeat(16);
+
+    const sent = await fetch(`${base}/v1/logs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                { key: 'service.name', value: { stringValue: 'orders' } },
+              ],
+            },
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    traceId,
+                    spanId,
+                    timeUnixNano: '1000000000',
+                    severityText: 'ERROR',
+                    body: { stringValue: 'stock reservation failed' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    expect(sent.status).toBe(200);
+
+    const readBack = await (await fetch(`${base}/v1/logs`)).json();
+    expect(readBack.count).toBe(1);
+    expect(readBack.logs[0]).toMatchObject({
+      traceId,
+      spanId,
+      severityText: 'ERROR',
+      body: 'stock reservation failed',
+    });
+  });
+
   it('DELETE /v1/traces clears captured telemetry for test isolation', async () => {
     const port = await new Promise<number>((resolve) => {
       server = createServer();

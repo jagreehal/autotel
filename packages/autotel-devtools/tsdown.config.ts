@@ -25,6 +25,8 @@ export default defineConfig({
     // The OTLP/protobuf decoder is shared: autotel-mcp's collector takes the same
     // bodies, so an exporter sees one behaviour from either receiver.
     'server/otlp-proto': 'src/server/otlp-proto.ts',
+    // Readback assertions for tests that drive a service in another process.
+    'testing/index': 'src/testing/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

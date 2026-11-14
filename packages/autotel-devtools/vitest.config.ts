@@ -32,6 +32,7 @@ export default defineConfig({
             'src/query/**/*.test.ts',
             'src/wire/**/*.test.ts',
             'src/issues/**/*.test.ts',
+            'src/testing/**/*.test.ts',
           ],
           environment: 'node',
         },

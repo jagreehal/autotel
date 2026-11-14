@@ -80,6 +80,7 @@ vi.mock('autotel', () => ({
   },
   otelTrace: {
     setSpan: () => ({}),
+    getSpan: () => undefined,
   },
   getAutotelTracerProvider: vi.fn(() => ({})),
   getTraceContext: vi.fn(() => null),
@@ -251,6 +252,10 @@ describe('autotel-playwright annotations', () => {
 
     expect(annotations.find((a) => a.type === 'otel-trace')).toEqual({
       type: 'otel-trace',
+      description: 'trace-1',
+    });    // The bare id too: the test body has no active span to read it from.
+    expect(annotations.find((a) => a.type === 'otel-trace-id')).toEqual({
+      type: 'otel-trace-id',
       description: 'trace-1',
     });
   });

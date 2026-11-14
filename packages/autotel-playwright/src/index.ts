@@ -35,7 +35,12 @@ import {
   resolveTraceUrl,
   SpanStatusCode,
 } from 'autotel';
-import { TestSpanCollector } from 'autotel/test-span-collector';
+import {
+  serializeSpan,
+  TestSpanCollector,
+} from 'autotel/test-span-collector';
+import type { Context, Span, Tracer } from 'autotel';
+import { recordBrowserActivity, type BrowserLogRecord } from './browser';
 import { SimpleSpanProcessor } from 'autotel/processors';
 
 const TRACER_NAME = 'playwright-tests';
@@ -47,10 +52,38 @@ interface TracerProviderWithProcessor {
   addSpanProcessor(processor: SimpleSpanProcessor): void;
 }
 
+/**
+ * The test running in this worker: spans this package started, and their
+ * context. Playwright calls the test body outside the fixture's
+ * `context.with()`, so `step()` parents here and the fixture serializes its
+ * own spans (the collector attaches only when the provider accepts a processor
+ * after construction).
+ */
+let currentTest: { ctx: ReturnType<typeof otelContext.active>; spans: Span[] } | null =
+  null;
+
+/** Record a span this package started, for the fixture to serialize. */
+function track<S extends Span>(span: S): S {
+  currentTest?.spans.push(span);
+  return span;
+}
+
+/**
+ * The ended spans a test started, serialized. Spans from a no-op provider
+ * (no `init()`) carry no timing and are skipped.
+ */
+function serializeOwn(spans: Span[]): ReturnType<typeof serializeSpan>[] {
+  return spans
+    .filter((span) => 'duration' in span && 'startTime' in span)
+    .map((span) => serializeSpan(span as unknown as Parameters<typeof serializeSpan>[0]));
+}
+
 function ensureCollector(): TestSpanCollector {
   if (!collector) {
     collector = new TestSpanCollector();
-    const provider = getAutotelTracerProvider();
+    // The global provider is a proxy; the SDK's provider is its delegate.
+    const global = getAutotelTracerProvider() as { getDelegate?: () => unknown };
+    const provider = (global.getDelegate?.() ?? global) as object;
     if ('addSpanProcessor' in provider) {
       // SAFETY: the guard above established the method exists. It is not on the
       // TracerProvider interface - only on the SDK's implementation of it, which
@@ -200,13 +233,26 @@ type OtelTestSpan = {
   carrier: Record<string, string>;
   apiBaseUrls: string[];
   testInfo: TestInfo;
+  /** The test's span and its context: browser spans nest under it. */
+  span: Span;
+  ctx: Context;
+  tracer: Tracer;
+  /** Browser log records emitted during the test, for its `otel-logs` annotation. */
+  logs: BrowserLogRecord[];
 };
 
 export const test = base.extend<{
   page: Page;
   requestWithTrace: APIRequestContext;
   _otelTestSpan: OtelTestSpan;
+  /**
+   * Record the page's requests as spans under the test span, console errors and
+   * warnings as events on it, and uncaught page errors as exceptions. Default
+   * true; `test.use({ otelBrowserSpans: false })` turns it off.
+   */
+  otelBrowserSpans: boolean;
 }>({
+  otelBrowserSpans: [true, { option: true }],
   _otelTestSpan: [
     // eslint-disable-next-line no-empty-pattern
     async ({}, use, testInfo) => {
@@ -223,9 +269,12 @@ export const test = base.extend<{
         },
       });
       setAttributesFromAnnotations(span, testInfo);
-      // The other half of the Playwright-trace link: reporters render
-      // annotations, so the HTML report points at the backend trace for this
-      // test. Pushed before the body runs, so a crashing test still gets it.
+      // Annotations for reporters: bare id for joins, URL for the HTML report.
+      // Pushed before the body runs so a crashing test still gets them.
+      testInfo.annotations.push({
+        type: 'otel-trace-id',
+        description: span.spanContext().traceId,
+      });
       testInfo.annotations.push({
         type: 'otel-trace',
         description:
@@ -233,13 +282,16 @@ export const test = base.extend<{
           span.spanContext().traceId,
       });
       const ctx = otelTrace.setSpan(otelContext.active(), span);
+      currentTest = { ctx, spans: [span] };
+      const own = currentTest.spans;
+      const browserLogs: BrowserLogRecord[] = [];
       const carrier: Record<string, string> = {};
       otelContext.with(ctx, () => {
         propagation.inject(otelContext.active(), carrier);
       });
       try {
         await otelContext.with(ctx, () =>
-          use({ carrier, apiBaseUrls, testInfo }),
+          use({ carrier, apiBaseUrls, testInfo, span, ctx, tracer, logs: browserLogs }),
         );
       } catch (error) {
         span.setStatus({
@@ -252,13 +304,31 @@ export const test = base.extend<{
         throw error;
       } finally {
         span.end();
+        currentTest = null;
         const traceId = span.spanContext().traceId;
         const rootSpanId = span.spanContext().spanId;
-        const spans = collector!.drainTrace(traceId, rootSpanId);
+        // The collector sees spans from the test's code too, when it could
+        // attach; the spans this package started are always serialized.
+        const drained = collector!.drainTrace(traceId, rootSpanId);
+        const seen = new Set(drained.map((s) => s.spanId));
+        const spans = [
+          ...drained,
+          ...serializeOwn(own).filter((s) => !seen.has(s.spanId)),
+        ];
         if (spans.length > 0) {
           testInfo.annotations.push({
             type: 'otel-spans',
             description: JSON.stringify(spans),
+          });
+        }
+        // The log records the browser produced, each tied to the test's span,
+        // so a reporter can show them without reading a log pipeline.
+        if (browserLogs.length > 0) {
+          testInfo.annotations.push({
+            type: 'otel-logs',
+            description: JSON.stringify(
+              browserLogs.map((record) => ({ spanId: rootSpanId, ...record })),
+            ),
           });
         }
       }
@@ -266,7 +336,7 @@ export const test = base.extend<{
     { scope: 'test' },
   ],
 
-  page: async ({ page, _otelTestSpan }, use) => {
+  page: async ({ page, _otelTestSpan, otelBrowserSpans }, use) => {
     const { carrier, apiBaseUrls, testInfo } = _otelTestSpan;
     if (apiBaseUrls.length > 0) {
       await page.route('**/*', async (route) => {
@@ -284,7 +354,23 @@ export const test = base.extend<{
         }
       });
     }
-    await use(page);
+    const { tracer } = _otelTestSpan;
+    const stop = otelBrowserSpans
+      ? recordBrowserActivity(page, {
+          ctx: _otelTestSpan.ctx,
+          onLog: (record) => _otelTestSpan.logs.push(record),
+          tracer: {
+            startSpan: (...args: Parameters<Tracer['startSpan']>) =>
+              track(tracer.startSpan(...args)),
+          },
+        })
+      : undefined;
+    try {
+      await use(page);
+    } finally {
+      // Before the test span ends and its spans are drained.
+      await stop?.();
+    }
   },
 
   requestWithTrace: async ({ request, _otelTestSpan }, use) => {
@@ -299,6 +385,9 @@ export const test = base.extend<{
 });
 
 export { expect } from '@playwright/test';
+
+export { recordBrowserActivity } from './browser';
+export type { BrowserActivityTarget, BrowserLogRecord } from './browser';
 
 // Re-export trace context helpers for DX convenience
 export {
@@ -326,14 +415,20 @@ export type { OtelTraceContext } from 'autotel';
  */
 export async function step<T>(name: string, fn: () => Promise<T>): Promise<T> {
   const tracer = getTracer(TRACER_NAME, TRACER_VERSION);
-  const span = tracer.startSpan(`step:${name}`, {
-    attributes: { 'step.name': name },
-  });
+  // Inside a test body there is no active span (see `currentTest`); parent the
+  // step on the test's span so it joins the test's trace.
+  const parent = otelTrace.getSpan(otelContext.active())
+    ? otelContext.active()
+    : (currentTest?.ctx ?? otelContext.active());
+  const span = track(
+    tracer.startSpan(
+      `step:${name}`,
+      { attributes: { 'step.name': name } },
+      parent,
+    ),
+  );
   try {
-    return await otelContext.with(
-      otelTrace.setSpan(otelContext.active(), span),
-      fn,
-    );
+    return await otelContext.with(otelTrace.setSpan(parent, span), fn);
   } catch (error) {
     span.setStatus({
       code: SpanStatusCode.ERROR,
