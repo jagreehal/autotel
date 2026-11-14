@@ -1,5 +1,13 @@
 # autotel-plugins
 
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies [ec63862]
+  - autotel@9.3.0
+  - autotel-kafka@1.0.3
+
 ## 1.0.2
 
 ### Patch Changes

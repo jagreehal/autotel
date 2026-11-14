@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 60.0.3
+
+### Patch Changes
+
+- Updated dependencies [ec63862]
+  - autotel@9.3.0
+
 ## 60.0.2
 
 ### Patch Changes

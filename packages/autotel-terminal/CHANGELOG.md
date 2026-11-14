@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 48.0.3
+
+### Patch Changes
+
+- Updated dependencies [ec63862]
+  - autotel@9.3.0
+
 ## 48.0.2
 
 ### Patch Changes
