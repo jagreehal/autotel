@@ -119,7 +119,7 @@ export const GEN_AI = {
   // --- Cost (autotel extension — not part of the published spec) -----------
   /**
    * Estimated USD cost for the call. NOT an OpenTelemetry attribute; an autotel
-   * convenience derived from token usage and {@link MODEL_PRICING}. Kept under
+   * convenience derived from token usage and the prices the caller registered. Kept under
    * the `gen_ai.usage.*` prefix so it sits beside the spec usage attributes.
    */
   USAGE_COST_USD: 'gen_ai.usage.cost.usd',
@@ -129,6 +129,12 @@ export const GEN_AI = {
    * this says which model needs a price before either can be trusted.
    */
   USAGE_COST_UNPRICED_MODEL: 'gen_ai.usage.cost.unpriced_model',
+  /**
+   * The `asOf` date of the price that produced {@link GEN_AI.USAGE_COST_USD},
+   * when the caller's price carries one. A cost from a stale price looks like
+   * any other without it.
+   */
+  USAGE_COST_PRICE_AS_OF: 'gen_ai.usage.cost.price_as_of',
   /**
    * Server-side tools the call used that no price table covers, so their charge
    * is missing from the cost. A web search or code-interpreter session is real

@@ -4,7 +4,7 @@ A Lambda-hosted **AI SDK tool-loop agent on Amazon Bedrock**, traced end to end:
 
 - [`autotel-aws/lambda`](../../packages/autotel-aws): `wrapHandler` opens the root span, records the cold start and trigger, and flushes telemetry before Lambda freezes the sandbox.
 - [`autotel-genai`](../../packages/autotel-genai): `autotelTelemetry()` turns every AI SDK call into an `invoke_agent › chat › execute_tool` span tree with token usage and cost.
-- [`autotel-bedrock`](../../packages/autotel-bedrock): `bedrockCompatibility()` puts the foundation-model id behind an inference profile or ARN on the span, `bedrockProviderAttributes` adds Bedrock's own stop reason and guardrail outcome, and `BEDROCK_PRICING` prices the models that exist only behind Bedrock.
+- [`autotel-bedrock`](../../packages/autotel-bedrock): `bedrockCompatibility()` puts the foundation-model id behind an inference profile or ARN on the span, `bedrockProviderAttributes` adds Bedrock's own stop reason and guardrail outcome. Prices are yours: autotel ships none, so the example passes its own, dated.
 
 ```ts
 init({
@@ -14,7 +14,9 @@ init({
 
 registerTelemetry(
   autotelTelemetry({
-    pricing: BEDROCK_PRICING,
+    pricing: {
+      'claude-haiku-4-5': { inputPer1M: 1, outputPer1M: 5, asOf: '2026-11-14' },
+    },
     providerAttributes: bedrockProviderAttributes,
   }),
 );
@@ -54,7 +56,7 @@ lambda.example-bedrock [internal]
 | `aws.bedrock.model.vendor`, `cloud.region`                     | `bedrockCompatibility()`                                                      |
 | `aws.bedrock.stop_reason`                                      | `bedrockProviderAttributes`                                                   |
 | `aws.bedrock.guardrail.intervened`, `aws.bedrock.guardrail.id` | `bedrockProviderAttributes` (the id needs `guardrailConfig.trace: 'enabled'`) |
-| `gen_ai.usage.cost.usd`                                        | `BEDROCK_PRICING`                                                             |
+| `gen_ai.usage.cost.usd`, `gen_ai.usage.cost.price_as_of`       | the `pricing` you pass                                                        |
 
 ## Related
 

@@ -25,7 +25,6 @@ import { autotelTelemetry } from 'autotel-genai/observer';
 import {
   bedrockCompatibility,
   bedrockProviderAttributes,
-  BEDROCK_PRICING,
 } from 'autotel-bedrock';
 
 init({
@@ -35,7 +34,14 @@ init({
 
 registerTelemetry(
   autotelTelemetry({
-    pricing: BEDROCK_PRICING,
+    pricing: {
+      'openai.gpt-oss-120b': {
+        inputPer1M: 0.18,
+        outputPer1M: 0.7,
+        asOf: '2026-11-14',
+        source: 'Bedrock eu-west-1',
+      },
+    },
     providerAttributes: bedrockProviderAttributes,
   }),
 );
@@ -82,10 +88,7 @@ the guardrail trace. `bedrockProviderAttributes` records both:
 
 ```ts
 registerTelemetry(
-  autotelTelemetry({
-    pricing: BEDROCK_PRICING,
-    providerAttributes: bedrockProviderAttributes,
-  }),
+  autotelTelemetry({ providerAttributes: bedrockProviderAttributes }),
 );
 ```
 
@@ -99,28 +102,43 @@ registerTelemetry(
 dashboard built on it keeps working. An intervention is a policy outcome: the
 span's status stays unset, and `guardrail.intervened / total` is one query.
 
-### Bedrock-only pricing
+### Prices
 
-`BEDROCK_PRICING` is a table for `autotelTelemetry({ pricing })` covering the
-models that exist only behind Bedrock: Nova, Llama, Mistral, DeepSeek, GLM.
-Bedrock bills Anthropic models at Anthropic's rates, and `autotel-genai`
-prices those by family, so they are not listed here.
+This package ships no prices. Bedrock prices differ by region and contract and
+change over time, and a stale built-in figure reads as fact on a dashboard. Pass
+your own to `autotelTelemetry({ pricing })`, or once for the process with
+`registerModelPricing` from `autotel-genai/cost`. A model with no price gets no
+cost, and `gen_ai.usage.cost.unpriced_model` names it.
 
-Keys match the way `autotel-genai/cost` resolves ids (exact, then prefix, tried
-again after each region and vendor prefix is peeled), so
-`eu.amazon.nova-pro-v1:0` resolves via `amazon.nova-pro`.
+Key each price by foundation-model family. Ids resolve the way
+`autotel-genai/cost` does (exact, then prefix, tried again after each region and
+vendor prefix is peeled), so one `openai.gpt-oss-120b` entry covers
+`eu.openai.gpt-oss-120b-1:0`.
 
-The prices are list prices at the time of writing, a convenience default rather
-than a billing source of truth. Spread and override what you use:
+Give each price the date you read it (`asOf`) and where it came from
+(`source`). The date lands on the span as `gen_ai.usage.cost.price_as_of`, so a
+cost computed from an old price is visible:
 
 ```ts
-autotelTelemetry({
-  pricing: {
-    ...BEDROCK_PRICING,
-    'zai.glm-4.7-flash': { inputPer1M: 0.5, outputPer1M: 2 },
+registerModelPricing({
+  'openai.gpt-oss-120b': {
+    inputPer1M: 0.18,
+    outputPer1M: 0.7,
+    asOf: '2026-11-14',
+    source: 'Bedrock eu-west-1',
+  },
+  'zai.glm-5': {
+    inputPer1M: 1.55,
+    outputPer1M: 4.96,
+    asOf: '2026-11-14',
+    source: 'Bedrock eu-west-2',
   },
 });
 ```
+
+AWS publishes on-demand prices at <https://aws.amazon.com/bedrock/pricing/> and
+as a machine-readable list per region at
+`https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/<region>/index.json`.
 
 Runnable example: [`apps/example-bedrock`](../../apps/example-bedrock), a Lambda handler around an AI SDK tool-loop agent, run in-process against Bedrock.
 

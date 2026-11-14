@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   GEN_AI_COST_ATTRIBUTE,
-  MODEL_PRICING,
   estimateLLMCost,
   recordLLMCost,
   registerModelPricing,
-  SERVER_TOOL_PRICING_PER_1K,
+  registeredModelPricing,
   unpricedServerTools,
 } from './cost.js';
+import { TEST_PRICING } from './test-pricing.js';
 
 describe('estimateLLMCost', () => {
   it('prices a known model from input + output tokens', () => {
@@ -98,8 +98,34 @@ describe('constants', () => {
     expect(GEN_AI_COST_ATTRIBUTE).toBe('gen_ai.usage.cost.usd');
   });
 
-  it('ships a non-empty default pricing table', () => {
-    expect(Object.keys(MODEL_PRICING).length).toBeGreaterThan(0);
+  it('ships no prices: a model is priced only once the caller registers it', async () => {
+    vi.resetModules();
+    const fresh = await import('./cost.js');
+    expect(fresh.registeredModelPricing()).toEqual({});
+    expect(
+      fresh.estimateLLMCost('gpt-4o', { inputTokens: 1000 }),
+    ).toBeUndefined();
+  });
+
+  it('records the date of the price that produced a cost', () => {
+    const attrs: Record<string, unknown> = {};
+    recordLLMCost(
+      { setAttribute: (k: string, v: unknown) => void (attrs[k] = v) } as never,
+      'dated-model',
+      { inputTokens: 1_000_000 },
+      {
+        pricing: {
+          'dated-model': {
+            inputPer1M: 1,
+            outputPer1M: 1,
+            asOf: '2026-11-14',
+            source: 'test',
+          },
+        },
+      },
+    );
+    expect(attrs['gen_ai.usage.cost.usd']).toBe(1);
+    expect(attrs['gen_ai.usage.cost.price_as_of']).toBe('2026-11-14');
   });
 });
 
@@ -256,13 +282,16 @@ describe('recordLLMCost provenance', () => {
 });
 
 describe('server-tool pricing covers only per-call billing', () => {
-  it('prices only tools that providers actually bill per call', () => {
-    // web_search and file_search are billed per call. Nothing else may be here:
-    // a per-1K table cannot express a session or duration price.
-    expect(Object.keys(SERVER_TOOL_PRICING_PER_1K).toSorted()).toEqual([
-      'file_search',
-      'web_search',
-    ]);
+  it('prices a tool only from the model entry the caller supplied', () => {
+    // No global tool table: a model without serverToolPer1K leaves its tools unpriced.
+    const pricing = { 'no-tools': { inputPer1M: 1, outputPer1M: 1 } };
+    expect(
+      unpricedServerTools(
+        'no-tools',
+        { serverToolCalls: { web_search: 3 } },
+        { pricing },
+      ),
+    ).toEqual(['web_search']);
   });
 
   it('leaves code interpreter unpriced rather than guessing per call', () => {
@@ -322,7 +351,7 @@ describe('hosted model ids', () => {
   it('does not mistake a version for a vendor prefix', () => {
     // Stripping at the first dot would turn `gpt-4.1-mini` into `1-mini` and
     // lose the entry the table already holds.
-    const mini = MODEL_PRICING['gpt-4.1-mini'];
+    const mini = TEST_PRICING['gpt-4.1-mini'];
     expect(estimateLLMCost('gpt-4.1-mini', usage)).toBe(
       mini.inputPer1M + mini.outputPer1M,
     );
@@ -361,7 +390,7 @@ describe('registerModelPricing()', () => {
     expect(estimateLLMCost('acme-ft-7b', usage)).toBeCloseTo(0.2);
   });
 
-  it('overrides a built-in price', () => {
+  it('overrides a registered price', () => {
     const before = estimateLLMCost('gpt-4o', usage);
     restore = registerModelPricing({
       'gpt-4o': { inputPer1M: 1, outputPer1M: 1 },
@@ -381,7 +410,7 @@ describe('registerModelPricing()', () => {
     restore = undefined;
 
     expect(estimateLLMCost('acme-ft-7b', usage)).toBeUndefined();
-    expect(MODEL_PRICING['acme-ft-7b']).toBeUndefined();
+    expect(registeredModelPricing()['acme-ft-7b']).toBeUndefined();
   });
 });
 

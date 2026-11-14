@@ -243,7 +243,10 @@ describe('TestSpanCollector', () => {
 
   it('omits events when the span has none', () => {
     const collector = new TestSpanCollector();
-    collector.export([makeSpan({ traceId: 't', spanId: 's', name: 'quiet' })], vi.fn());
+    collector.export(
+      [makeSpan({ traceId: 't', spanId: 's', name: 'quiet' })],
+      vi.fn(),
+    );
     expect(collector.drainTrace('t', 's')[0]).not.toHaveProperty('events');
   });
 

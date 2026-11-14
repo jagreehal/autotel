@@ -17,7 +17,7 @@
  * Where the built-in `@ai-sdk/otel` `OpenTelemetry` integration emits the same
  * `gen_ai.*` spans, this one additionally:
  *
- *   - prices every model call (`gen_ai.usage.cost.usd`) from {@link MODEL_PRICING};
+ *   - prices every model call (`gen_ai.usage.cost.usd`) from the prices you register;
  *   - records streaming throughput (`time_to_first_chunk`, `time_to_finish`,
  *     `output_tokens_per_second`) on each `chat` span;
  *   - keeps token usage on leaf `chat` spans only, so the `invoke_agent` root
@@ -332,8 +332,8 @@ export interface AutotelTelemetryOptions {
    */
   resolveParentContext?: (event: GenAiObserverEvent) => Context | undefined;
   /**
-   * Extra `gen_ai.usage.cost.usd` pricing for this integration, merged over the
-   * built-in table. For process-wide prices prefer `registerModelPricing` from
+   * `gen_ai.usage.cost.usd` pricing for this integration, merged over the
+   * registered prices. For process-wide prices prefer `registerModelPricing` from
    * `autotel-genai/cost`. See {@link GenAiObserverOptions.pricing}.
    */
   pricing?: ModelPricingTable;

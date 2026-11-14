@@ -7,7 +7,6 @@ import {
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   AWS_BEDROCK,
-  BEDROCK_PRICING,
   bedrockCompatibility,
   bedrockProviderAttributes,
   parseBedrockModelId,
@@ -149,14 +148,6 @@ describe('bedrockCompatibility', () => {
       'us.meta.llama3-3-70b-instruct-v1:0',
     );
     expect(a[AWS_BEDROCK.INFERENCE_PROFILE_REGION]).toBe('us');
-  });
-});
-
-describe('BEDROCK_PRICING', () => {
-  it('keys resolve by prefix from a versioned id', () => {
-    const id = 'amazon.nova-pro-v1:0';
-    const key = Object.keys(BEDROCK_PRICING).find((k) => id.startsWith(k));
-    expect(key).toBe('amazon.nova-pro');
   });
 });
 

@@ -102,6 +102,7 @@
   "gen_ai.session.step.count": "autotel extension (autotel-genai)",
   "gen_ai.session.tool_call.count": "autotel extension (autotel-genai)",
   "gen_ai.usage.cost": "autotel extension (autotel-genai)",
+  "gen_ai.usage.cost.price_as_of": "autotel extension (autotel-genai)",
   "gen_ai.usage.cost.unpriced_model": "autotel extension (autotel-genai)",
   "gen_ai.usage.cost.unpriced_tools": "autotel extension (autotel-genai)",
   "gen_ai.usage.cost.usd": "autotel extension (autotel-genai)",

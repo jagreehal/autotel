@@ -18,11 +18,15 @@ exactly aligned with them.
   (`GEN_AI_PROVIDER`), token/output/tool types, metric names, and
   `genAiSpanName()` (joins the operation with the already-selected canonical
   identifier).
-- `src/cost.ts`: `MODEL_PRICING`, `SERVER_TOOL_PRICING_PER_1K`,
-  `estimateLLMCost`, `recordLLMCost`, `unpricedServerTools`.
+- `src/cost.ts`: `registerModelPricing`, `registeredModelPricing`,
+  `estimateLLMCost`, `recordLLMCost`, `unpricedServerTools`. **No prices are
+  hardcoded**: every price comes from the caller (`registerModelPricing` or a
+  `pricing` option), optionally dated with `asOf` and `source`; the date is
+  recorded as `gen_ai.usage.cost.price_as_of`. Never add a built-in price table.
+  Tests get theirs from `src/test-pricing.ts` (vitest setup, not shipped).
   Server-hosted tools are billed outside the token counts — an agent that
-  searches every step can spend more there than on tokens. `SERVER_TOOL_PRICING_PER_1K`
-  covers **only tools providers bill per call** (`web_search`, `file_search`);
+  searches every step can spend more there than on tokens. A model's
+  `serverToolPer1K` prices **only tools providers bill per call**;
   the unit is the entry requirement. A tool billed per container session
   (OpenAI's code interpreter) or by execution time (Anthropic's) has no per-call
   price, and inventing one overstates a 100-call session by two orders of

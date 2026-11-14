@@ -38,11 +38,11 @@ export type {
 // --- Cost ------------------------------------------------------------------
 export {
   GEN_AI_COST_ATTRIBUTE,
-  MODEL_PRICING,
-  SERVER_TOOL_PRICING_PER_1K,
   estimateLLMCost,
+  priceAsOf,
   recordLLMCost,
   registerModelPricing,
+  registeredModelPricing,
   unpricedServerTools,
 } from './cost.js';
 export type {

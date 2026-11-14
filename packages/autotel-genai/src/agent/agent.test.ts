@@ -395,7 +395,7 @@ describe('autotel-genai', () => {
         'gen_ai.response.finish_reasons': ['stop'],
         'gen_ai.usage.input_tokens': 1000,
         'gen_ai.usage.output_tokens': 500,
-        // Real cost from MODEL_PRICING['gpt-4o']: 1000@2.5/1M + 500@10/1M.
+        // Real cost from the test price for gpt-4o: 1000@2.5/1M + 500@10/1M.
         'gen_ai.usage.cost.usd': 0.0075,
       }),
     );

@@ -130,7 +130,7 @@ describe('autotelTelemetry — single text generation', () => {
     expect(chat.attributes[GEN_AI.RESPONSE_ID]).toBe('resp_1');
     expect(chat.attributes[GEN_AI.RESPONSE_FINISH_REASONS]).toEqual(['stop']);
 
-    // Cost is priced from MODEL_PRICING — a differentiator over @ai-sdk/otel.
+    // Cost is priced from the registered prices, a differentiator over @ai-sdk/otel.
     expect(chat.attributes[GEN_AI.USAGE_COST_USD]).toBeGreaterThan(0);
 
     // Streaming timing (autotel extensions + spec time_to_first_chunk).
@@ -917,10 +917,12 @@ describe('autotelTelemetry — per-call output recording', () => {
 });
 
 describe('autotelTelemetry — cost pricing', () => {
-  it('prices a model the built-in table cannot know from a supplied table', () => {
+  it('prices an unregistered model from a supplied table', () => {
     const t = autotelTelemetry({
       tracer,
-      pricing: { 'glm-4.7-flash': { inputPer1M: 1, outputPer1M: 2 } },
+      pricing: {
+        'glm-4.7-flash': { inputPer1M: 1, outputPer1M: 2, asOf: '2026-11-14' },
+      },
     });
 
     t.onStart({
@@ -945,6 +947,7 @@ describe('autotelTelemetry — cost pricing', () => {
     // Vendor-prefixed id resolves through the supplied entry.
     const chat = one('chat zai.glm-4.7-flash');
     expect(chat.attributes[GEN_AI.USAGE_COST_USD]).toBe(3);
+    expect(chat.attributes[GEN_AI.USAGE_COST_PRICE_AS_OF]).toBe('2026-11-14');
     expect(chat.attributes[GEN_AI.USAGE_COST_UNPRICED_MODEL]).toBeUndefined();
   });
 

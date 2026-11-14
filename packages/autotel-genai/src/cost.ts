@@ -48,34 +48,20 @@ export interface ModelPricing {
    */
   cacheWritePer1M?: number;
   /**
-   * USD per 1,000 calls to a server-side tool, keyed by tool name. Overrides
-   * {@link SERVER_TOOL_PRICING_PER_1K} for this model.
+   * USD per 1,000 calls to a server-side tool, keyed by tool name. Price only
+   * tools billed per call: a tool billed by session or execution time has no
+   * per-call price, and stays in {@link unpricedServerTools}.
    */
   serverToolPer1K?: Record<string, number>;
+  /**
+   * The date these prices were read (`YYYY-MM-DD`). Recorded on the span as
+   * `gen_ai.usage.cost.price_as_of`, so a cost says which prices produced it
+   * and a stale price shows up.
+   */
+  asOf?: string;
+  /** Where the prices came from: a price page, a contract, a region. */
+  source?: string;
 }
-
-/**
- * USD per 1,000 calls for provider-hosted tools **that are billed per call**.
- * Approximate public list prices at the time of writing and, like
- * {@link MODEL_PRICING}, a convenience default rather than a billing source of
- * truth.
- *
- * An agent that searches the web on every step can spend more here than on
- * tokens, and a cost built from token counts alone will never show it.
- *
- * The unit is the entry requirement. A tool billed by container session
- * (OpenAI's code interpreter), by execution time (Anthropic's), or bundled free
- * alongside another tool has no per-call price, and inventing one is worse than
- * having none: 100 calls inside a single session priced per call overstates the
- * bill by two orders of magnitude, and a confident wrong number is harder to
- * catch than a missing one. Such tools stay out of this table and surface
- * through {@link unpricedServerTools} instead — a caller who knows their own
- * contract can still price one via `ModelPricing.serverToolPer1K`.
- */
-export const SERVER_TOOL_PRICING_PER_1K: Record<string, number> = {
-  web_search: 10,
-  file_search: 2.5,
-};
 
 /**
  * Token counts for a single GenAI call. Field names mirror the canonical
@@ -110,8 +96,8 @@ export interface TokenUsage {
   cacheTokensExclusive?: boolean;
   /**
    * Calls to provider-hosted tools, keyed by tool name — `web_search`,
-   * `code_interpreter`, `file_search`. Billed per call, priced from
-   * {@link SERVER_TOOL_PRICING_PER_1K}.
+   * `code_interpreter`, `file_search`. Billed per call, priced from the
+   * model's {@link ModelPricing.serverToolPer1K}.
    */
   serverToolCalls?: Record<string, number>;
   /**
@@ -124,7 +110,7 @@ export interface TokenUsage {
 }
 
 /**
- * Model id → price, keyed the way {@link MODEL_PRICING} is: exact match first,
+ * Model id → price: exact match first,
  * then longest matching prefix after any vendor namespace is stripped.
  *
  * Key by **family**, not by deployed id. One `claude-3-5-haiku` entry covers
@@ -135,8 +121,8 @@ export type ModelPricingTable = Record<string, ModelPricing>;
 
 export interface EstimateCostOptions {
   /**
-   * Prices for this call only, merged over {@link MODEL_PRICING} — an entry
-   * here both fills in a model the table lacks and overrides one it has.
+   * Prices for this call only, merged over the registered prices: an entry
+   * here both fills in a model they lack and overrides one they have.
    *
    * For prices that apply to the whole process, prefer
    * {@link registerModelPricing} so every entry point sees them without an
@@ -146,61 +132,16 @@ export interface EstimateCostOptions {
 }
 
 /**
- * Approximate public list prices (USD per 1M tokens) at the time of writing.
- * Prices change; treat these as convenience defaults, not a billing source of
- * truth. Add your own with {@link registerModelPricing}, or per call via
- * `options.pricing`.
- * Matching is exact first, then by longest key prefix, so versioned model ids
- * (`claude-sonnet-4-6-20251101`) resolve to a base entry (`claude-sonnet-4-6`).
+ * The prices registered with {@link registerModelPricing}. autotel ships no
+ * prices: they change, differ by region and contract, and a stale built-in
+ * figure reads as fact. A model nobody priced is reported as unpriced.
  */
-export const MODEL_PRICING: Record<string, ModelPricing> = {
-  // OpenAI
-  'gpt-4o': { inputPer1M: 2.5, outputPer1M: 10, cachedInputPer1M: 1.25 },
-  'gpt-4o-mini': {
-    inputPer1M: 0.15,
-    outputPer1M: 0.6,
-    cachedInputPer1M: 0.075,
-  },
-  'gpt-4.1': { inputPer1M: 2, outputPer1M: 8, cachedInputPer1M: 0.5 },
-  'gpt-4.1-mini': { inputPer1M: 0.4, outputPer1M: 1.6, cachedInputPer1M: 0.1 },
-  'gpt-4.1-nano': {
-    inputPer1M: 0.1,
-    outputPer1M: 0.4,
-    cachedInputPer1M: 0.025,
-  },
-  'o3-mini': { inputPer1M: 1.1, outputPer1M: 4.4, cachedInputPer1M: 0.55 },
-  // Anthropic Claude (cache read ~0.1×, cache write ~1.25×)
-  'claude-opus-4': {
-    inputPer1M: 15,
-    outputPer1M: 75,
-    cachedInputPer1M: 1.5,
-    cacheWritePer1M: 18.75,
-  },
-  'claude-sonnet-4': {
-    inputPer1M: 3,
-    outputPer1M: 15,
-    cachedInputPer1M: 0.3,
-    cacheWritePer1M: 3.75,
-  },
-  'claude-3-5-sonnet': {
-    inputPer1M: 3,
-    outputPer1M: 15,
-    cachedInputPer1M: 0.3,
-    cacheWritePer1M: 3.75,
-  },
-  'claude-3-5-haiku': {
-    inputPer1M: 0.8,
-    outputPer1M: 4,
-    cachedInputPer1M: 0.08,
-    cacheWritePer1M: 1,
-  },
-  'claude-3-opus': { inputPer1M: 15, outputPer1M: 75 },
-  'claude-3-haiku': { inputPer1M: 0.25, outputPer1M: 1.25 },
-  // Google Gemini
-  'gemini-1.5-pro': { inputPer1M: 1.25, outputPer1M: 5 },
-  'gemini-1.5-flash': { inputPer1M: 0.075, outputPer1M: 0.3 },
-  'gemini-2.0-flash': { inputPer1M: 0.1, outputPer1M: 0.4 },
-};
+const registeredPricing: ModelPricingTable = {};
+
+/** The prices in effect for the process, for inspection. */
+export function registeredModelPricing(): Readonly<ModelPricingTable> {
+  return { ...registeredPricing };
+}
 
 /**
  * Strip one leading vendor segment from a hosted model id, or return
@@ -250,7 +191,7 @@ function matchPricing(
 }
 
 /**
- * Add prices to {@link MODEL_PRICING} for the whole process, so every cost
+ * Register prices for the whole process, so every cost
  * site sees them — {@link estimateLLMCost}, {@link recordLLMCost},
  * `recordGenAiUsage`, `autotelTelemetry()`, and the agent runtime — with no
  * option threaded through each call.
@@ -259,16 +200,16 @@ function matchPricing(
  * property of the deployment, not of the call. Later registrations win, so a
  * base table can be layered over.
  *
- * Returns a function that restores the previous prices — useful in tests, and
- * the reason to prefer this over mutating {@link MODEL_PRICING} directly.
+ * Returns a function that restores the previous prices, useful in tests.
  *
  * @example
  * ```ts
  * import { registerModelPricing } from 'autotel-genai/cost';
  *
- * // Once at startup. Key by family, not by deployed model id.
+ * // Once at startup, from your own price list. Key by family, not by
+ * // deployed model id.
  * registerModelPricing({
- *   'glm-4.7-flash': { inputPer1M: 0.6, outputPer1M: 2.2 },
+ *   'gpt-oss-120b': { inputPer1M: 0.18, outputPer1M: 0.7, asOf: '2026-11-14', source: 'Bedrock eu-west-1' },
  *   'acme-ft-7b': { inputPer1M: 0.1, outputPer1M: 0.1 },
  * });
  * ```
@@ -291,8 +232,8 @@ function applyPricingLayers(models: readonly string[]): void {
       if (layer.live && layer.table[model]) price = layer.table[model];
     }
     price ??= unlayeredPricing.get(model);
-    if (price === undefined) delete MODEL_PRICING[model];
-    else MODEL_PRICING[model] = price;
+    if (price === undefined) delete registeredPricing[model];
+    else registeredPricing[model] = price;
   }
 }
 
@@ -300,7 +241,7 @@ export function registerModelPricing(pricing: ModelPricingTable): () => void {
   const models = Object.keys(pricing);
   for (const model of models) {
     if (!unlayeredPricing.has(model)) {
-      unlayeredPricing.set(model, MODEL_PRICING[model]);
+      unlayeredPricing.set(model, registeredPricing[model]);
     }
   }
 
@@ -330,9 +271,9 @@ function resolvePricing(
   return undefined;
 }
 
-/** The table this model's tool prices resolve through, model entry first. */
+/** The model's per-call price for a server-side tool, if it has one. */
 function serverToolRate(price: ModelPricing, tool: string): number | undefined {
-  return price.serverToolPer1K?.[tool] ?? SERVER_TOOL_PRICING_PER_1K[tool];
+  return price.serverToolPer1K?.[tool];
 }
 
 /**
@@ -349,13 +290,26 @@ export function unpricedServerTools(
   const calls = usage.serverToolCalls;
   if (!calls) return [];
   const table = options?.pricing
-    ? { ...MODEL_PRICING, ...options.pricing }
-    : MODEL_PRICING;
+    ? { ...registeredPricing, ...options.pricing }
+    : registeredPricing;
   const price = resolvePricing(table, model);
   if (!price) return [];
   return Object.keys(calls).filter(
     (tool) => serverToolRate(price, tool) === undefined,
   );
+}
+
+/**
+ * The `asOf` date of the price a model resolves to, for
+ * `gen_ai.usage.cost.price_as_of` beside its cost. Undefined when the price
+ * carries no date or the model has no price.
+ */
+export function priceAsOf(
+  model: string,
+  options?: EstimateCostOptions,
+): string | undefined {
+  return resolvePricing({ ...registeredPricing, ...options?.pricing }, model)
+    ?.asOf;
 }
 
 function round(value: number): number {
@@ -372,8 +326,8 @@ export function estimateLLMCost(
   options?: EstimateCostOptions,
 ): number | undefined {
   const table = options?.pricing
-    ? { ...MODEL_PRICING, ...options.pricing }
-    : MODEL_PRICING;
+    ? { ...registeredPricing, ...options.pricing }
+    : registeredPricing;
   const price = resolvePricing(table, model);
   if (!price) return undefined;
 
@@ -436,6 +390,8 @@ export function recordLLMCost(
     ctx.setAttribute(GEN_AI.USAGE_COST_UNPRICED_TOOLS, unpriced);
   }
   ctx.setAttribute(GEN_AI_COST_ATTRIBUTE, cost);
+  const asOf = priceAsOf(model, options);
+  if (asOf) ctx.setAttribute(GEN_AI.USAGE_COST_PRICE_AS_OF, asOf);
   recordEvidence(ctx, 'cost', 'estimated');
   return cost;
 }

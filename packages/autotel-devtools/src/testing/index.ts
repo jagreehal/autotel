@@ -145,11 +145,15 @@ export async function waitForSpan(
   for (;;) {
     caller?.throwIfAborted();
     // The deadline bounds each request and the read of its body; the caller's signal still cancels.
-    const deadlineSignal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
+    const deadlineSignal = AbortSignal.timeout(
+      Math.max(1, deadline - Date.now()),
+    );
     try {
       spans = await fetchSpans({
         ...options,
-        signal: caller ? AbortSignal.any([caller, deadlineSignal]) : deadlineSignal,
+        signal: caller
+          ? AbortSignal.any([caller, deadlineSignal])
+          : deadlineSignal,
       });
     } catch (error) {
       if (caller?.aborted) throw caller.reason;
