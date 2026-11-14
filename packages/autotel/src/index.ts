@@ -415,7 +415,7 @@ export type {
   TextMapSetter,
   TextMapGetter,
 } from '@opentelemetry/api';
-export { SpanKind, ROOT_CONTEXT } from '@opentelemetry/api';
+export { SpanKind, ROOT_CONTEXT, logs } from '@opentelemetry/api';
 // Note: trace, context, propagation, SpanStatusCode already exported above
 // (`trace` is the hybrid; `otelTrace` is the pure TraceAPI singleton).
 

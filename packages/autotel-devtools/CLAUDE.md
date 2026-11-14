@@ -29,6 +29,7 @@ pnpm test:dist          # Built ESM smoke test + widget raw/gzip budgets
 - `.`: `createDevtools()` factory, `DevtoolsServer`, `DevtoolsSpanExporter`, `DevtoolsLogExporter`, `DevtoolsRemoteExporter`, `ErrorAggregator`, types
 - `./server`: `DevtoolsServer`, exporters, OTLP parsing (`parseOtlpTraces`, `parseOtlpLogs`), HTTP routes (`attachDevtoolsRoutes`, `createDevtoolsHttpServer`), telemetry limits (`resolveTelemetryLimits`, `appendWithLimit`), `DevtoolsStore`
 - `./exporter`: `DevtoolsSpanExporter` (standalone)
+- `./testing`: `waitForSpan`, `findSpans`, `fetchSpans`, `clearTraces`: plain-`fetch` client over `GET`/`DELETE /v1/traces` for tests asserting on spans from another process
 
 ## Issues
 

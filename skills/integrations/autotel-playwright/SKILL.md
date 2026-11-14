@@ -1,16 +1,16 @@
 ---
 name: autotel-playwright
 description: >
-  Use this skill when linking Playwright e2e tests to server-side traces — the fixture and reporter that create one OTel span per test and inject W3C trace context into API requests.
+  Use this skill when linking Playwright e2e tests to server-side traces — the fixture and reporter that create one OTel span per test, record browser requests as CLIENT spans, emit console and page-error logs, and inject W3C trace context into API requests.
 ---
 
 # autotel-playwright
 
-Playwright fixture that creates one OTel span per e2e test and propagates W3C trace context (`traceparent`) into API requests. Use it when you want test runs and server-side spans to appear as a single connected trace in your observability backend.
+Playwright fixture that creates one OTel span per e2e test, records what the browser did under that span, and propagates W3C trace context (`traceparent`) into API requests. Test runs and server-side spans appear as one connected trace.
 
 Two independent features ship in this package:
 
-- **Test fixture** (`autotel-playwright`): worker-side; spans follow each test, headers are injected per request.
+- **Test fixture** (`autotel-playwright`): worker-side; spans follow each test, browser requests become CLIENT spans, console errors and page exceptions become log records, headers are injected per request.
 - **OTel Reporter** (`autotel-playwright/reporter`): runner-side; creates spans for tests and steps from the Playwright runner process.
 
 ## Setup
@@ -79,6 +79,16 @@ test('api health', async ({ requestWithTrace }) => {
 | `page`             | `Page`              | Standard Playwright `Page`; auto-injects trace headers for routes matching `API_BASE_URL` |
 | `requestWithTrace` | `APIRequestContext` | Wraps `request`; injects `traceparent` + `x-test-name` on all matching URLs               |
 | `_otelTestSpan`    | internal            | Creates and manages the root test span; do not use directly                               |
+
+### Browser activity
+
+On by default. Each `http(s)` request the page makes becomes a CLIENT child span under the test (Playwright request timing, method, URL, status, `playwright.resource_type`). Failed and 4xx/5xx requests mark the span as error. Console errors and warnings, and uncaught page errors, become Logs API records correlated to the test span; the test gets an `otel-logs` annotation with them.
+
+```ts
+test.use({ otelBrowserSpans: false }); // opt out for a file or project
+```
+
+Annotations on every test: `otel-trace` (URL or id), `otel-trace-id` (bare id), `otel-spans` (test, steps, browser), `otel-logs` when browser logging ran.
 
 ### Named steps as child spans
 

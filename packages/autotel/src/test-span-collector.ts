@@ -69,6 +69,14 @@ export type SerializedSpan = {
   status: 'ok' | 'error' | 'unset';
   statusMessage?: string;
   attributes?: Record<string, SerializableValue>;
+  /** Server or client side of a call: readers counting what a server handled need it. */
+  kind?: 'internal' | 'server' | 'client' | 'producer' | 'consumer';
+  /** Span events (exceptions, console messages), when the span has any. */
+  events?: Array<{
+    name: string;
+    timeMs: number;
+    attributes?: Record<string, SerializableValue>;
+  }>;
 };
 
 export class TestSpanCollector implements SpanExporter {
@@ -143,6 +151,9 @@ export class TestSpanCollector implements SpanExporter {
   }
 }
 
+/** The OTel API numbers SpanKind from 0: INTERNAL, SERVER, CLIENT, PRODUCER, CONSUMER. */
+const SPAN_KINDS = ['internal', 'server', 'client', 'producer', 'consumer'] as const;
+
 function hrTimeToMs(hr: [number, number]): number {
   return hr[0] * 1000 + hr[1] / 1_000_000;
 }
@@ -159,12 +170,27 @@ function asSerializable(value: unknown): SerializableValue | undefined {
   return asStringArray(value) ?? asNumberArray(value) ?? asBooleanArray(value);
 }
 
-export function serializeSpan(span: ReadableSpan): SerializedSpan {
+function serializeAttributes(
+  attributes: Record<string, unknown> | undefined,
+): Record<string, SerializableValue> | undefined {
   const attrs: Record<string, SerializableValue> = {};
-  for (const [k, v] of Object.entries(span.attributes)) {
+  for (const [k, v] of Object.entries(attributes ?? {})) {
     const serializable = asSerializable(v);
     if (serializable !== undefined) attrs[k] = serializable;
   }
+  return Object.keys(attrs).length > 0 ? attrs : undefined;
+}
+
+export function serializeSpan(span: ReadableSpan): SerializedSpan {
+  const attributes = serializeAttributes(span.attributes);
+  const events = (span.events ?? []).map((event) => {
+    const eventAttributes = serializeAttributes(event.attributes);
+    return {
+      name: event.name,
+      timeMs: hrTimeToMs(event.time),
+      ...(eventAttributes ? { attributes: eventAttributes } : {}),
+    };
+  });
   return {
     spanId: span.spanContext().spanId,
     parentSpanId: span.parentSpanContext?.spanId || undefined,
@@ -178,6 +204,8 @@ export function serializeSpan(span: ReadableSpan): SerializedSpan {
           ? 'ok'
           : 'unset',
     statusMessage: span.status.message || undefined,
-    attributes: Object.keys(attrs).length > 0 ? attrs : undefined,
+    ...(SPAN_KINDS[span.kind] ? { kind: SPAN_KINDS[span.kind] } : {}),
+    attributes,
+    ...(events.length > 0 ? { events } : {}),
   };
 }
