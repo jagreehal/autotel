@@ -1,5 +1,12 @@
 # autotel-audit
 
+## 1.2.20
+
+### Patch Changes
+
+- Updated dependencies [ec63862]
+  - autotel@9.3.0
+
 ## 1.2.19
 
 ### Patch Changes
