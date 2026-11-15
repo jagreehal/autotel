@@ -72,19 +72,19 @@ export const loadUser = withTracing({ name: 'user.load' })(
 
 ## Server Endpoints
 
-| Route                                              | What                                                               |
-| -------------------------------------------------- | ------------------------------------------------------------------ |
-| `POST /v1/traces` · `/v1/logs` · `/v1/metrics`     | OTLP receivers: JSON or protobuf, gzipped or not                   |
+| Route                                              | What                                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------------ |
+| `POST /v1/traces` · `/v1/logs` · `/v1/metrics`     | OTLP receivers: JSON or protobuf, gzipped or not                         |
 | `GET /v1/traces` · `/v1/logs`                      | Readback of held traces and logs (each log carries `traceId` / `spanId`) |
-| `GET /`                                            | Dashboard UI (see Views below)                                     |
-| `POST /api/query/{traces,logs,errors,metrics}`     | Server-side query over the durable store                           |
-| `POST /api/query/webmcp`                           | WebMCP tool surface, folded server-side over every page of results |
-| `GET /api/agents/usage`                            | Coding-agent spend by session, prompt, repository or agent         |
-| `GET /api/coverage`                                | Entry points with no telemetry, plus `freshness` of the map        |
-| `GET /api/validation` · `POST /api/validation/run` | Received telemetry checked against semconv (needs `weaver`)        |
-| `GET /widget.js`                                   | Embeddable widget bundle (IIFE)                                    |
-| `GET /healthz`                                     | Health check                                                       |
-| `WS /ws`                                           | WebSocket stream (history replay on connect)                       |
+| `GET /`                                            | Dashboard UI (see Views below)                                           |
+| `POST /api/query/{traces,logs,errors,metrics}`     | Server-side query over the durable store                                 |
+| `POST /api/query/webmcp`                           | WebMCP tool surface, folded server-side over every page of results       |
+| `GET /api/agents/usage`                            | Coding-agent spend by session, prompt, repository or agent               |
+| `GET /api/coverage`                                | Entry points with no telemetry, plus `freshness` of the map              |
+| `GET /api/validation` · `POST /api/validation/run` | Received telemetry checked against semconv (needs `weaver`)              |
+| `GET /widget.js`                                   | Embeddable widget bundle (IIFE)                                          |
+| `GET /healthz`                                     | Health check                                                             |
+| `WS /ws`                                           | WebSocket stream (history replay on connect)                             |
 
 ## Views in the UI
 

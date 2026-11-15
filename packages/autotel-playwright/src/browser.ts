@@ -100,7 +100,10 @@ export function recordBrowserActivity(
           message: request.failure()?.errorText ?? 'request failed',
         });
       } else if (status !== undefined && status >= 400) {
-        span.setStatus({ code: SpanStatusCode.ERROR, message: `HTTP ${status}` });
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: `HTTP ${status}`,
+        });
       }
       span.end(Math.max(start, end));
     })();
@@ -116,10 +119,15 @@ export function recordBrowserActivity(
     // warnings are what a reader of a failing test wants next to the steps.
     if (type !== 'error' && type !== 'warning') return;
     const { url, lineNumber } = message.location();
-    emit('browser.console', type === 'error' ? 'ERROR' : 'WARN', message.text(), {
-      'browser.console.level': type,
-      ...(url ? { 'code.filepath': url, 'code.lineno': lineNumber } : {}),
-    });
+    emit(
+      'browser.console',
+      type === 'error' ? 'ERROR' : 'WARN',
+      message.text(),
+      {
+        'browser.console.level': type,
+        ...(url ? { 'code.filepath': url, 'code.lineno': lineNumber } : {}),
+      },
+    );
   };
   const onPageError = (error: Error) =>
     emit('exception', 'ERROR', `${error.name}: ${error.message}`, {

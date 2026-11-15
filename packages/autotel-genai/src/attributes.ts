@@ -154,6 +154,8 @@ export interface GenAiUsageInput {
   costUsd?: number;
   /** Model id that has no pricing, set in place of a cost (autotel extension). */
   unpricedModel?: string;
+  /** The `asOf` date of the price behind `costUsd` (autotel extension). */
+  priceAsOf?: string;
   /**
    * Server-side tools whose per-call charge is missing from `costUsd` because
    * no price table covers them (autotel extension).
@@ -181,6 +183,7 @@ export function genAiUsageAttributes(
   );
   set(attrs, GEN_AI.USAGE_COST_USD, input.costUsd);
   set(attrs, GEN_AI.USAGE_COST_UNPRICED_MODEL, input.unpricedModel);
+  set(attrs, GEN_AI.USAGE_COST_PRICE_AS_OF, input.priceAsOf);
   set(attrs, GEN_AI.USAGE_COST_UNPRICED_TOOLS, input.unpricedServerTools);
   set(attrs, evidenceAttribute('tokens'), input.tokenSource);
   // Same value, second name: backends split on which one they read, and a cost

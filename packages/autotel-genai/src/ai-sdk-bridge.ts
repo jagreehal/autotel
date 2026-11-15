@@ -22,6 +22,7 @@ import type { TraceContext } from 'autotel';
 import { genAiUsageAttributes, type GenAiAttributeMap } from './attributes.js';
 import {
   estimateLLMCost,
+  priceAsOf,
   type EstimateCostOptions,
   type TokenUsage,
 } from './cost.js';
@@ -197,7 +198,11 @@ export function recordAiSdkCost(
   options?: EstimateCostOptions,
 ): number | undefined {
   const cost = estimateAiSdkCost(attributes, options);
-  if (cost !== undefined) ctx.setAttribute(GEN_AI.USAGE_COST_USD, cost);
+  if (cost === undefined) return cost;
+  ctx.setAttribute(GEN_AI.USAGE_COST_USD, cost);
+  const model = extractAiSdkModel(attributes);
+  const asOf = model ? priceAsOf(model, options) : undefined;
+  if (asOf) ctx.setAttribute(GEN_AI.USAGE_COST_PRICE_AS_OF, asOf);
   return cost;
 }
 

@@ -65,7 +65,7 @@ export const chat = traceGenAI({
 | Area                | Import                    | Highlights                                                                                                                                                                                            |
 | ------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Semconv**         | `autotel-genai/semconv`   | `GEN_AI.*` keys, `GEN_AI_OPERATION`, `GEN_AI_PROVIDER`, `genAiSpanName()`                                                                                                                             |
-| **Cost**            | `autotel-genai/cost`      | `estimateLLMCost`, `recordLLMCost`, `MODEL_PRICING` (cache-read/write aware)                                                                                                                          |
+| **Cost**            | `autotel-genai/cost`      | `estimateLLMCost`, `recordLLMCost`, `registerModelPricing` (your dated prices; cache-read/write aware)                                                                                                |
 | **Metrics**         | `autotel-genai/metrics`   | `genAiMetricViews()` re-buckets the canonical histograms                                                                                                                                              |
 | **Attributes**      | `autotel-genai`           | typed builders → canonical attribute maps                                                                                                                                                             |
 | **Events**          | `autotel-genai/events`    | opt-in content (binary redacted, size-capped) + `inference.operation.details` / `evaluation.result`                                                                                                   |
@@ -78,8 +78,32 @@ export const chat = traceGenAI({
 
 ### Cost
 
+autotel ships no prices: they change, differ by region and contract, and a
+stale built-in figure reads as fact. Register yours once, dated:
+
 ```ts
-import { estimateLLMCost, recordLLMCost } from 'autotel-genai/cost';
+import {
+  estimateLLMCost,
+  recordLLMCost,
+  registerModelPricing,
+} from 'autotel-genai/cost';
+
+registerModelPricing({
+  'gpt-4o': {
+    inputPer1M: 2.5,
+    outputPer1M: 10,
+    cachedInputPer1M: 1.25,
+    asOf: '2026-11-14',
+    source: 'openai.com/api/pricing',
+  },
+  'claude-sonnet-4': {
+    inputPer1M: 3,
+    outputPer1M: 15,
+    cachedInputPer1M: 0.3,
+    cacheWritePer1M: 3.75,
+    asOf: '2026-11-14',
+  },
+});
 
 estimateLLMCost('gpt-4o', { inputTokens: 1000, outputTokens: 500 }); // 0.0075
 recordLLMCost(ctx, 'claude-sonnet-4', {
@@ -88,13 +112,17 @@ recordLLMCost(ctx, 'claude-sonnet-4', {
 });
 
 // Hosted ids price as the model they name
-estimateLLMCost('eu.anthropic.claude-3-5-haiku-20241022-v1:0', usage);
+estimateLLMCost('eu.anthropic.claude-sonnet-4-20250514-v1:0', usage);
 
-// Your own rates, merged over the built-in table
+// Prices for one call, merged over the registered ones
 estimateLLMCost('my-finetune', usage, {
   pricing: { 'my-finetune': { inputPer1M: 0.5, outputPer1M: 1.5 } },
 });
 ```
+
+A model with no price gets no cost, never a guessed zero:
+`gen_ai.usage.cost.unpriced_model` names it. A price's `asOf` lands on the span
+as `gen_ai.usage.cost.price_as_of`, so a cost from an old price is visible.
 
 `createGenAiObserver({ pricing })` and `autotelTelemetry({ pricing })` take the
 same map once, so every span an observer prices uses it.
@@ -105,11 +133,21 @@ every step can spend more there than on tokens, and a cost built from tokens
 alone will never show it:
 
 ```ts
+registerModelPricing({
+  'claude-sonnet-4': {
+    inputPer1M: 3,
+    outputPer1M: 15,
+    serverToolPer1K: { web_search: 10 },
+  },
+});
 recordLLMCost(ctx, 'claude-sonnet-4', {
   inputTokens: 4000,
-  serverToolCalls: { web_search: 12 }, // SERVER_TOOL_PRICING_PER_1K
+  serverToolCalls: { web_search: 12 }, // priced from serverToolPer1K
 });
 ```
+
+Price only tools billed per call. A tool billed per session or by execution
+time has no honest per-call price.
 
 A tool with no price is left out of the figure rather than guessed at zero, and
 named on the span as `gen_ai.usage.cost.unpriced_tools` so the gap is visible.
@@ -352,7 +390,7 @@ It implements the AI SDK's stable `Telemetry` lifecycle interface (ai v7+), so
 it slots in exactly where `@ai-sdk/otel`'s `OpenTelemetry` does. But it also,
 on every `chat` span:
 
-- **prices the call** (`gen_ai.usage.cost.usd`) from `MODEL_PRICING`;
+- **prices the call** (`gen_ai.usage.cost.usd`) from the prices you register;
 - records **streaming throughput** (`time_to_first_chunk`, `time_to_finish`,
   `output_tokens_per_second`);
 - keeps token usage on leaf `chat` spans only, so the `invoke_agent` root never

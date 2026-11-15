@@ -35,10 +35,7 @@ import {
   resolveTraceUrl,
   SpanStatusCode,
 } from 'autotel';
-import {
-  serializeSpan,
-  TestSpanCollector,
-} from 'autotel/test-span-collector';
+import { serializeSpan, TestSpanCollector } from 'autotel/test-span-collector';
 import type { Context, Span, Tracer } from 'autotel';
 import { recordBrowserActivity, type BrowserLogRecord } from './browser';
 import { SimpleSpanProcessor } from 'autotel/processors';
@@ -59,8 +56,10 @@ interface TracerProviderWithProcessor {
  * own spans (the collector attaches only when the provider accepts a processor
  * after construction).
  */
-let currentTest: { ctx: ReturnType<typeof otelContext.active>; spans: Span[] } | null =
-  null;
+let currentTest: {
+  ctx: ReturnType<typeof otelContext.active>;
+  spans: Span[];
+} | null = null;
 
 /** Record a span this package started, for the fixture to serialize. */
 function track<S extends Span>(span: S): S {
@@ -75,14 +74,18 @@ function track<S extends Span>(span: S): S {
 function serializeOwn(spans: Span[]): ReturnType<typeof serializeSpan>[] {
   return spans
     .filter((span) => 'duration' in span && 'startTime' in span)
-    .map((span) => serializeSpan(span as unknown as Parameters<typeof serializeSpan>[0]));
+    .map((span) =>
+      serializeSpan(span as unknown as Parameters<typeof serializeSpan>[0]),
+    );
 }
 
 function ensureCollector(): TestSpanCollector {
   if (!collector) {
     collector = new TestSpanCollector();
     // The global provider is a proxy; the SDK's provider is its delegate.
-    const global = getAutotelTracerProvider() as { getDelegate?: () => unknown };
+    const global = getAutotelTracerProvider() as {
+      getDelegate?: () => unknown;
+    };
     const provider = (global.getDelegate?.() ?? global) as object;
     if ('addSpanProcessor' in provider) {
       // SAFETY: the guard above established the method exists. It is not on the
@@ -291,7 +294,15 @@ export const test = base.extend<{
       });
       try {
         await otelContext.with(ctx, () =>
-          use({ carrier, apiBaseUrls, testInfo, span, ctx, tracer, logs: browserLogs }),
+          use({
+            carrier,
+            apiBaseUrls,
+            testInfo,
+            span,
+            ctx,
+            tracer,
+            logs: browserLogs,
+          }),
         );
       } catch (error) {
         span.setStatus({

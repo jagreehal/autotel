@@ -152,7 +152,13 @@ export class TestSpanCollector implements SpanExporter {
 }
 
 /** The OTel API numbers SpanKind from 0: INTERNAL, SERVER, CLIENT, PRODUCER, CONSUMER. */
-const SPAN_KINDS = ['internal', 'server', 'client', 'producer', 'consumer'] as const;
+const SPAN_KINDS = [
+  'internal',
+  'server',
+  'client',
+  'producer',
+  'consumer',
+] as const;
 
 function hrTimeToMs(hr: [number, number]): number {
   return hr[0] * 1000 + hr[1] / 1_000_000;

@@ -5,7 +5,7 @@ import {
   type RequestLogger,
 } from 'autotel';
 import { forceKeepAuditEvent, withAudit } from 'autotel-audit';
-import { estimateLLMCost, type TokenUsage } from '../cost.js';
+import { estimateLLMCost, priceAsOf, type TokenUsage } from '../cost.js';
 import {
   genAiRequestAttributes,
   genAiResponseAttributes,
@@ -67,11 +67,8 @@ function recordAiTelemetry(
     }),
   };
   if (usage) {
-    const cost = estimateLLMCost(
-      ai.model,
-      usage,
-      ai.pricing ? { pricing: ai.pricing } : undefined,
-    );
+    const pricing = ai.pricing ? { pricing: ai.pricing } : undefined;
+    const cost = estimateLLMCost(ai.model, usage, pricing);
     Object.assign(
       attrs,
       genAiUsageAttributes({
@@ -80,6 +77,8 @@ function recordAiTelemetry(
         // No price found: say which model, rather than leave a gap that reads
         // as free.
         unpricedModel: cost === undefined ? ai.model : undefined,
+        priceAsOf:
+          cost === undefined ? undefined : priceAsOf(ai.model, pricing),
       }),
     );
   }

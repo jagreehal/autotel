@@ -57,9 +57,8 @@ invoke_agent LangGraph [internal]
 execute_tool multiply [internal]  —  args {"a":23,"b":19} · result 437
 ```
 
-> Cost (`gen_ai.usage.cost.usd`) is omitted here because local Ollama models
-> have no entry in `MODEL_PRICING`: they're free. Hosted models get priced
-> automatically.
+> Cost (`gen_ai.usage.cost.usd`) is omitted here: local Ollama models are free,
+> and autotel prices only the models you register with `registerModelPricing`.
 
 ## How content capture works
 

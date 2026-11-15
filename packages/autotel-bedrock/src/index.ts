@@ -18,23 +18,29 @@
  *     id and keeps the profile region and ARN as their own attributes.
  *   - **Where it ran.** `cloud.provider` / `cloud.region`, from the option
  *     or `AWS_REGION`, so a multi-region deployment can be split by region.
- *   - **Bedrock-only pricing.** {@link BEDROCK_PRICING} covers the models
- *     that exist only behind Bedrock — Nova, Llama, Mistral, DeepSeek, GLM —
- *     for `autotelTelemetry({ pricing })`. Anthropic models are priced by
- *     `autotel-genai` already, at the same rates Bedrock charges.
+ *   - **Prices are yours.** This package ships none: Bedrock prices differ by
+ *     region and change. Pass your own to `autotelTelemetry({ pricing })` or
+ *     `registerModelPricing` from `autotel-genai/cost`, keyed by foundation
+ *     model family (`openai.gpt-oss-120b` covers `eu.openai.gpt-oss-120b-1:0`).
  *
  * @example
  * ```ts
  * import { init } from 'autotel';
  * import { registerTelemetry } from 'ai';
  * import { autotelTelemetry } from 'autotel-genai/observer';
- * import { bedrockCompatibility, BEDROCK_PRICING } from 'autotel-bedrock';
+ * import { bedrockCompatibility } from 'autotel-bedrock';
  *
  * init({
  *   service: 'payments-bot',
  *   spanEnrichers: [bedrockCompatibility({ region: 'eu-west-1' })],
  * });
- * registerTelemetry(autotelTelemetry({ pricing: BEDROCK_PRICING }));
+ * registerTelemetry(
+ *   autotelTelemetry({
+ *     pricing: {
+ *       'openai.gpt-oss-120b': { inputPer1M: 0.18, outputPer1M: 0.7, asOf: '2026-11-14', source: 'Bedrock eu-west-1' },
+ *     },
+ *   }),
+ * );
  * ```
  */
 
@@ -173,7 +179,7 @@ type BedrockMetadataView = {
  * @example
  * ```ts
  * registerTelemetry(
- *   autotelTelemetry({ pricing: BEDROCK_PRICING, providerAttributes: bedrockProviderAttributes }),
+ *   autotelTelemetry({ providerAttributes: bedrockProviderAttributes }),
  * );
  * ```
  */
@@ -201,4 +207,3 @@ export function bedrockProviderAttributes(
 }
 
 export { parseBedrockModelId, type ParsedBedrockModelId } from './model-id.js';
-export { BEDROCK_PRICING, type BedrockModelPricing } from './pricing.js';

@@ -98,13 +98,12 @@ recordLLMCost(ctx, 'claude-sonnet-4', {
 **Server-side tools are money too.** Web search and file search are billed per
 call, outside the token counts — an agent that searches on every step can spend
 more there than on tokens, and a cost built from tokens alone never shows it.
-`SERVER_TOOL_PRICING_PER_1K` covers **only per-call-billed tools**; a tool billed
+A model's `serverToolPer1K` prices **only per-call-billed tools**; a tool billed
 per container session (OpenAI's code interpreter) or by execution time
-(Anthropic's) has no per-call price and is deliberately absent. Never add one:
+(Anthropic's) has no per-call price. Never give it one:
 100 calls inside a single session priced per call overstates the bill by two
 orders of magnitude, and a confident wrong number is harder to catch than a
-missing one. Unpriced tools surface as `gen_ai.usage.cost.unpriced_tools`; a
-caller who knows their own contract sets `ModelPricing.serverToolPer1K`.
+missing one. Unpriced tools surface as `gen_ai.usage.cost.unpriced_tools`.
 
 **Cache accounting.** Cache reads default to a _subset_ of `inputTokens` (what
 OpenAI and Anthropic report directly) and cache writes to additive. Where a
@@ -119,11 +118,13 @@ the agent runtime set `gen_ai.usage.cost.unpriced_model` to the model id. Treat
 a non-empty value as "this model needs a price before any cost number is
 trustworthy".
 
-Override/extend pricing per call with `{ pricing: { 'my-model': { inputPer1M, outputPer1M } } }`,
-or once for a whole observer — `createGenAiObserver({ pricing })` and
-`autotelTelemetry({ pricing })` take the same map, merged over the built-in
-table. Reach for it for anything the built-in table cannot know: a new release,
-a self-hosted or fine-tuned model, or a negotiated rate.
+**autotel ships no prices.** Every price comes from the application:
+`registerModelPricing({...})` once for the process, `createGenAiObserver({ pricing })`
+or `autotelTelemetry({ pricing })` for one observer, or `{ pricing }` per call.
+Give each price `asOf` (the date it was read) and `source`; the date is
+recorded as `gen_ai.usage.cost.price_as_of`, so a stale price is visible.
+An app with no prices registered records no costs, only
+`gen_ai.usage.cost.unpriced_model`.
 
 Hosted ids resolve to the model they name. Bedrock, Vertex and the cross-region
 inference profiles namespace rather than rename —

@@ -56,6 +56,7 @@ import {
 } from './attributes.js';
 import {
   estimateLLMCost,
+  priceAsOf,
   unpricedServerTools,
   type EstimateCostOptions,
   type TokenUsage,
@@ -318,6 +319,7 @@ export function recordGenAiUsage(
     ...usage,
     costUsd: cost,
     unpricedModel: !declined && cost === undefined ? model : undefined,
+    priceAsOf: cost === undefined ? undefined : priceAsOf(model, options),
     unpricedServerTools: unpriced.length > 0 ? unpriced : undefined,
   });
   if (Object.keys(attrs).length > 0) ctx.setAttributes(attrs);

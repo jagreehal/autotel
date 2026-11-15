@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { DevtoolsServer } from '../server/server';
 import { attachDevtoolsRoutes } from '../server/http';
-import { clearTraces, findSpans, matchesSpan, waitForSpan, type SpanData } from './index';
+import {
+  clearTraces,
+  findSpans,
+  matchesSpan,
+  waitForSpan,
+  type SpanData,
+} from './index';
 
 const TRACE = 'a'.repeat(32);
 
@@ -99,7 +105,8 @@ describe('autotel-devtools/testing', () => {
     await expect(
       waitForSpan(
         { traceId: TRACE, name: 'INSERT orders' },
-        { endpoint, timeoutMs: 20, intervalMs: 10 },
+        // Long enough for one read to finish on a loaded machine.
+        { endpoint, timeoutMs: 300, intervalMs: 50 },
       ),
     ).rejects.toThrow(/did a hop drop traceparent\?/);
   });
@@ -163,7 +170,9 @@ describe('cancellation', () => {
     const endpoint = await start();
     const reason = new Error('test cancelled');
     const signal = AbortSignal.abort(reason);
-    await expect(waitForSpan({ name: 'x' }, { endpoint, signal })).rejects.toBe(reason);
+    await expect(waitForSpan({ name: 'x' }, { endpoint, signal })).rejects.toBe(
+      reason,
+    );
     await expect(clearTraces({ endpoint, signal })).rejects.toBe(reason);
   });
 
@@ -176,7 +185,12 @@ describe('cancellation', () => {
     await expect(
       waitForSpan(
         { name: 'never' },
-        { endpoint, signal: controller.signal, timeoutMs: 5000, intervalMs: 1000 },
+        {
+          endpoint,
+          signal: controller.signal,
+          timeoutMs: 5000,
+          intervalMs: 1000,
+        },
       ),
     ).rejects.toBe(reason);
     expect(Date.now() - started).toBeLessThan(1000);
@@ -206,11 +220,19 @@ describe('matchesSpan', () => {
 
   it('matches with a global regex every time, not every other time', () => {
     const name = /INSERT/g;
-    expect([1, 2, 3].map(() => matchesSpan(span, { name }))).toEqual([true, true, true]);
+    expect([1, 2, 3].map(() => matchesSpan(span, { name }))).toEqual([
+      true,
+      true,
+      true,
+    ]);
   });
 
   it('matches array attributes by their entries', () => {
-    expect(matchesSpan(span, { attributes: { 'db.tables': ['orders', 'lines'] } })).toBe(true);
-    expect(matchesSpan(span, { attributes: { 'db.tables': ['orders'] } })).toBe(false);
+    expect(
+      matchesSpan(span, { attributes: { 'db.tables': ['orders', 'lines'] } }),
+    ).toBe(true);
+    expect(matchesSpan(span, { attributes: { 'db.tables': ['orders'] } })).toBe(
+      false,
+    );
   });
 });

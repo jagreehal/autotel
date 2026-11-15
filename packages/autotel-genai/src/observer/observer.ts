@@ -43,7 +43,7 @@ import {
   genAiWorkflowAttributes,
   type GenAiAttributeMap,
 } from '../attributes.js';
-import { estimateLLMCost } from '../cost.js';
+import { estimateLLMCost, priceAsOf } from '../cost.js';
 import { setGenAiContent, type GenAiContentSink } from '../events.js';
 import { GEN_AI, GEN_AI_OPERATION, genAiSpanName } from '../semconv.js';
 import {
@@ -208,6 +208,10 @@ export function createGenAiObserver(
           unpricedModel:
             costModel !== undefined && costUsd === undefined
               ? costModel
+              : undefined,
+          priceAsOf:
+            costModel !== undefined && costUsd !== undefined
+              ? priceAsOf(costModel, { pricing: options.pricing })
               : undefined,
         }),
       );

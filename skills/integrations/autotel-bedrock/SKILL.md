@@ -1,7 +1,7 @@
 ---
 name: autotel-bedrock
 description: >
-  Use this skill when an application calls Amazon Bedrock through the AI SDK and its `gen_ai.*` spans need the Bedrock facts no OpenTelemetry convention carries: the foundation-model id behind an inference profile or ARN (`bedrockCompatibility()`), Bedrock's own stop reason and guardrail outcome (`bedrockProviderAttributes`), and prices for Bedrock-only models (`BEDROCK_PRICING`). Also covers what `autotel-genai` already records, so nothing gets mapped twice.
+  Use this skill when an application calls Amazon Bedrock through the AI SDK and its `gen_ai.*` spans need the Bedrock facts no OpenTelemetry convention carries: the foundation-model id behind an inference profile or ARN (`bedrockCompatibility()`), Bedrock's own stop reason and guardrail outcome (`bedrockProviderAttributes`), and dated prices the application supplies (autotel ships none). Also covers what `autotel-genai` already records, so nothing gets mapped twice.
 ---
 
 # autotel-bedrock
@@ -21,7 +21,6 @@ import { autotelTelemetry } from 'autotel-genai/observer';
 import {
   bedrockCompatibility,
   bedrockProviderAttributes,
-  BEDROCK_PRICING,
 } from 'autotel-bedrock';
 
 init({
@@ -31,7 +30,14 @@ init({
 
 registerTelemetry(
   autotelTelemetry({
-    pricing: BEDROCK_PRICING,
+    pricing: {
+      'openai.gpt-oss-120b': {
+        inputPer1M: 0.18,
+        outputPer1M: 0.7,
+        asOf: '2026-11-14',
+        source: 'Bedrock eu-west-1',
+      },
+    },
     providerAttributes: bedrockProviderAttributes,
   }),
 );
@@ -81,18 +87,9 @@ The AI SDK folds Bedrock's stop reasons into its own (`guardrail_intervened` and
 
 `gen_ai.response.finish_reasons` keeps the unified value. An intervention is a policy outcome: the span's status stays unset, and `guardrail.intervened / total` is one query.
 
-### Bedrock-only pricing
+### Prices
 
-`BEDROCK_PRICING` covers Nova, Llama, Mistral, DeepSeek and GLM. Bedrock bills Anthropic models at Anthropic's rates and `autotel-genai` prices those by family. Keys resolve the way `autotel-genai/cost` does (exact, then prefix, after each region and vendor prefix is peeled), so `eu.amazon.nova-pro-v1:0` resolves via `amazon.nova-pro`. Spread and override what you use:
-
-```typescript
-autotelTelemetry({
-  pricing: {
-    ...BEDROCK_PRICING,
-    'zai.glm-4.7-flash': { inputPer1M: 0.5, outputPer1M: 2 },
-  },
-});
-```
+autotel ships no prices. Pass the account's own rates to `autotelTelemetry({ pricing })` or `registerModelPricing` from `autotel-genai/cost`, keyed by foundation-model family: ids resolve exact, then by prefix, after each region and vendor prefix is peeled, so `openai.gpt-oss-120b` covers `eu.openai.gpt-oss-120b-1:0`. Give each price `asOf` and `source`; the date lands on the span as `gen_ai.usage.cost.price_as_of`. Rates by region: https://aws.amazon.com/bedrock/pricing/.
 
 Runnable example: `apps/example-bedrock` in the autotel repository.
 
@@ -101,4 +98,4 @@ Runnable example: `apps/example-bedrock` in the autotel repository.
 - `bedrockCompatibility()` sits in `spanEnrichers`, never `spanProcessors`.
 - `providerAttributes: bedrockProviderAttributes` is passed to `autotelTelemetry`, or Bedrock's stop reason stays folded into the AI SDK's.
 - Guardrail ids need `guardrailConfig.trace: 'enabled'` on the request; without the trace only `stop_reason` and `intervened` are recorded.
-- Prices are a default; override with the rates on the account's pricing page.
+- Every model the app calls has a price it supplied, with `asOf` and `source`; autotel ships none, and a model without one shows `gen_ai.usage.cost.unpriced_model`.

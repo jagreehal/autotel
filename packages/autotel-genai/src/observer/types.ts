@@ -248,12 +248,9 @@ export interface GenAiObserverOptions {
    */
   onSpanStart?: (id: string, span: Span) => void;
   /**
-   * Extra `gen_ai.usage.cost.usd` pricing for this observer, merged over the
-   * built-in table.
-   *
-   * Needed for any model the built-in table cannot know: a new release, a
-   * self-hosted or fine-tuned model, or a negotiated rate that differs from
-   * list price. Without a matching entry the cost attribute is absent and
+   * `gen_ai.usage.cost.usd` pricing for this observer, merged over the
+   * registered prices. autotel ships no prices, so every model you want a
+   * cost for needs one here or in `registerModelPricing`. Without a matching entry the cost attribute is absent and
    * `gen_ai.usage.cost.unpriced_model` names the model instead.
    *
    * For prices that apply process-wide, prefer `registerModelPricing` from
