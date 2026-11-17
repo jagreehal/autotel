@@ -99,3 +99,45 @@ describe('WaterfallRow — database badges', () => {
     expect(screen.queryByText(/^×/)).toBeNull();
   });
 });
+
+describe('WaterfallRow: app attribute preview', () => {
+  afterEach(cleanup);
+
+  it('shows the first three app attributes by short key, never auto ones', () => {
+    renderRow(
+      makeSpan({
+        events: [],
+        attributes: {
+          'service.name': 'worker',
+          'code.function': 'sendUser',
+          'user.id': 'u4',
+          'statements.outcome': 'send_failed',
+          'statements.retries': 2,
+          'statements.channel': 'email',
+        },
+      }),
+    );
+    expect(screen.getByText('id=')).toBeTruthy();
+    expect(screen.getByText('u4')).toBeTruthy();
+    expect(screen.getByText('send_failed')).toBeTruthy();
+    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.queryByText('email')).toBeNull();
+    expect(screen.queryByText('worker')).toBeNull();
+    expect(screen.queryByText('sendUser')).toBeNull();
+  });
+
+  it('masks credential-shaped values', () => {
+    renderRow(
+      makeSpan({ events: [], attributes: { 'auth.token': 'secret-value' } }),
+    );
+    expect(screen.queryByText('secret-value')).toBeNull();
+    expect(screen.getByText('[redacted]')).toBeTruthy();
+  });
+
+  it('renders no preview when the app set nothing', () => {
+    const { container } = renderRow(
+      makeSpan({ events: [], attributes: { 'http.route': '/r' } }),
+    );
+    expect(container.textContent).not.toContain('=');
+  });
+});

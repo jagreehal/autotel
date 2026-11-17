@@ -4,27 +4,11 @@
   import { formatClock } from '../timeFormat';
   import { timeZoneSignal } from '../store.svelte';
 
-  const SENSITIVE_RE = /(password|secret|token|authorization|api[-_.]?key)/i;
-
-  /**
-   * A number or boolean cannot hold a credential: `gen_ai.usage.input_tokens`
-   * matches the key pattern but carries a count, which is the number someone
-   * opened the panel to read. Strings, arrays and objects stay masked.
-   */
-  function isSensitiveAttribute(key: string, value: unknown): boolean {
-    return (
-      typeof value !== 'number' &&
-      typeof value !== 'boolean' &&
-      SENSITIVE_RE.test(key)
-    );
-  }
-  const RESOURCE_PREFIXES = [
-    'service.',
-    'deployment.',
-    'host.',
-    'container.',
-    'process.',
-  ];
+  import {
+    isAppAttribute,
+    isResourceAttribute,
+    isSensitiveAttribute,
+  } from '../utils/keyAttributes';
 
   /** Type label + badge color class for an attribute value. */
   function valueTypeInfo(v: unknown): { label: string; cls: string } {
@@ -82,13 +66,14 @@
   import { formatDuration } from '../utils';
   import Copyable from './Copyable.svelte';
   import SearchInput from './SearchInput.svelte';
+  import ExpandableSection from './ExpandableSection.svelte';
   import { matchesNeedle } from '../utils/textMatch';
   import JsonTree from './JsonTree.svelte';
   import IdRow from './IdRow.svelte';
   import CopyButton from './CopyButton.svelte';
   import { curlFromSpan } from '../utils/curl';
   import { schemaViolations } from '../utils/schemaViolations';
-  import type { SpanData, TraceData } from '../types';
+  import type { AttributeValue, SpanData, TraceData } from '../types';
   import { inferResourceName, inferResourceType } from '../utils/resources';
   import { computeSelfTime } from '../utils/spanAnalysis';
   import {
@@ -151,14 +136,7 @@
     inferResourceType(span.attributes, resourceName),
   );
   const resourceAttributes = $derived(
-    Object.entries(span.attributes || {}).filter(
-      ([key]) =>
-        key.startsWith('service.') ||
-        key.startsWith('deployment.') ||
-        key.startsWith('host.') ||
-        key.startsWith('container.') ||
-        key.startsWith('process.'),
-    ),
+    Object.keys(span.attributes || {}).filter(isResourceAttribute),
   );
   const sortedAttributes = $derived(
     Object.entries(span.attributes || {}).sort(([a], [b]) =>
@@ -176,6 +154,15 @@
     );
   });
   const isAttrFiltered = $derived(attrQuery.trim().length > 0);
+  // App attributes first; resource and auto ones sit behind a toggle that a
+  // matching filter opens.
+  const appAttributeRows = $derived(
+    filteredAttributes.filter(([key]) => isAppAttribute(key)),
+  );
+  const autoAttributeRows = $derived(
+    filteredAttributes.filter(([key]) => !isAppAttribute(key)),
+  );
+  let showAutoAttributeRows = $state(false);
 
   // Code location → clickable editor deep-link (feature: code location linking)
   const codeLocation = $derived(
@@ -233,12 +220,12 @@
 
 {#snippet attributeRow(
   attrKey: string,
-  value: unknown,
+  value: AttributeValue,
   onFullscreen: (v: { key: string; value: string }) => void,
 )}
   {@const isSensitive =
     isSensitiveAttribute(attrKey, value) && !revealed.has(attrKey)}
-  {@const isResource = RESOURCE_PREFIXES.some((p) => attrKey.startsWith(p))}
+  {@const isResource = isResourceAttribute(attrKey)}
   {@const json = isSensitive ? null : tryParseJsonContainer(value)}
   {#if json !== null}
     <div class="py-1 border-b border-line-subtle last:border-b-0">
@@ -689,20 +676,53 @@
           placeholder="Filter attributes by key or value…"
           ariaLabel="Filter attributes by key or value"
         />
-        <Copyable content={JSON.stringify(span.attributes, null, 2)}>
-          <div
-            class="bg-subtle rounded p-3 border border-line font-mono text-xs h-[300px] min-h-[120px] overflow-auto resize-y"
-            title="Drag bottom edge to resize"
-          >
-            {#if filteredAttributes.length === 0}
-              <div class="text-fg-subtle py-2 text-center">No matches</div>
-            {:else}
-              {#each filteredAttributes as [key, value] (key)}
-                {@render attributeRow(key, value, (v) => (fullscreenValue = v))}
-              {/each}
-            {/if}
-          </div>
-        </Copyable>
+        {#if filteredAttributes.length === 0}
+          <div class="text-fg-subtle text-xs py-2 text-center">No matches</div>
+        {:else}
+          <Copyable content={JSON.stringify(span.attributes, null, 2)}>
+            <div class="flex flex-col gap-3">
+              {#if appAttributeRows.length > 0}
+                <div
+                  class="bg-subtle rounded p-3 border border-line font-mono text-xs min-h-[60px] overflow-auto resize-y"
+                  title="Drag bottom edge to resize"
+                >
+                  {#each appAttributeRows as [key, value] (key)}
+                    {@render attributeRow(
+                      key,
+                      value,
+                      (v) => (fullscreenValue = v),
+                    )}
+                  {/each}
+                </div>
+              {:else if !isAttrFiltered}
+                <p class="text-xs text-fg-subtle">
+                  Your code set no attributes on this span.
+                </p>
+              {/if}
+              {#if autoAttributeRows.length > 0}
+                <ExpandableSection
+                  label={`Resource & auto (${autoAttributeRows.length})`}
+                  expanded={showAutoAttributeRows || isAttrFiltered}
+                  onToggle={() =>
+                    (showAutoAttributeRows = !showAutoAttributeRows)}
+                >
+                  <div
+                    class="bg-subtle rounded p-3 border border-line font-mono text-xs h-[300px] min-h-[120px] overflow-auto resize-y"
+                    title="Drag bottom edge to resize"
+                  >
+                    {#each autoAttributeRows as [key, value] (key)}
+                      {@render attributeRow(
+                        key,
+                        value,
+                        (v) => (fullscreenValue = v),
+                      )}
+                    {/each}
+                  </div>
+                </ExpandableSection>
+              {/if}
+            </div>
+          </Copyable>
+        {/if}
       {/snippet}
       {@render collapsibleSection(
         isAttrFiltered

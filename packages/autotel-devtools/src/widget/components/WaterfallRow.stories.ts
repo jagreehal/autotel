@@ -4,6 +4,7 @@ import {
   makeTrace,
   makeFailedTrace,
   makeSpanNode,
+  makeBatchSendTrace,
 } from './__fixtures__/telemetry';
 
 // Catalogue only — no assertions. Behavioural claims belong in the paired
@@ -90,5 +91,17 @@ export const DatabaseFullScanRepeated: Story = {
     hasChildren: false,
     isCritical: false,
     repeatCount: 5,
+  },
+};
+
+/** The app's own attributes follow the name; resource and auto ones do not. */
+export const WithAppAttributes: Story = {
+  args: {
+    node: makeSpanNode(makeBatchSendTrace().spans[4]),
+    trace: makeBatchSendTrace(),
+    isSelected: false,
+    isCollapsed: false,
+    hasChildren: false,
+    isCritical: false,
   },
 };

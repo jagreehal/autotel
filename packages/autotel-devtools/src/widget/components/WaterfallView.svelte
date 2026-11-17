@@ -169,7 +169,7 @@
     },
   });
   const nameCol = useResizable({
-    initial: 200,
+    initial: 420,
     min: 120,
     minOther: MIN_TIMELINE,
     containerRef: columnContainer(() => durationCol.size),

@@ -69,3 +69,39 @@ describe('TracesView — selection and fragments', () => {
     expect(screen.getByText('partial')).toBeTruthy();
   });
 });
+
+describe('TracesView: root span app attributes', () => {
+  beforeEach(() => {
+    clearAllData();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('nope', { status: 503 })),
+    );
+  });
+  afterEach(() => {
+    cleanup();
+    clearAllData();
+    vi.unstubAllGlobals();
+  });
+
+  it('tags the operation with app attributes only, credentials masked', async () => {
+    const trace = makeTrace('a');
+    trace.rootSpan.attributes = {
+      'service.name': 'worker',
+      'code.function': 'send',
+      'statements.batch_id': 'b-17',
+      'auth.token': 'secret-value',
+      'statements.count': 5,
+      'statements.channel': 'email',
+    };
+    render(TracesView);
+    updateWidgetData({ traces: [trace] });
+    expect(await screen.findByText('b-17')).toBeTruthy();
+    expect(screen.queryByText('worker')).toBeNull();
+    expect(screen.queryByText('send')).toBeNull();
+    expect(screen.queryByText('secret-value')).toBeNull();
+    expect(screen.getByText('[redacted]')).toBeTruthy();
+    // Every app attribute is offered; the clipped wrap decides what fits.
+    expect(screen.getByText('email')).toBeTruthy();
+  });
+});

@@ -89,6 +89,9 @@ describe('SpanDetailPanel — sensitive attributes', () => {
     });
     expect(screen.getByText('907')).toBeTruthy();
     expect(screen.getByText('114')).toBeTruthy();
+    // Header attributes are auto-instrumentation: collapsed until opened.
+    expect(screen.queryAllByText('[redacted]')).toHaveLength(0);
+    await fireEvent.click(screen.getByText('Resource & auto (2)'));
     expect(screen.queryByText('Bearer abc')).toBeNull();
     expect(screen.queryByText(/key-one/)).toBeNull();
     expect(screen.getAllByText('[redacted]')).toHaveLength(2);
@@ -214,5 +217,41 @@ describe('SpanDetailPanel — query plan', () => {
     expect(
       screen.getByText(/Repeated ×5 in this trace: possible N\+1/),
     ).toBeTruthy();
+  });
+});
+
+describe('SpanDetailPanel: own and auto attributes', () => {
+  afterEach(cleanup);
+
+  it('lists app attributes first, auto ones collapsed until opened or matched', async () => {
+    const span = makeSpan({
+      attributes: {
+        'user.id': 'u4',
+        'statements.outcome': 'send_failed',
+        'deployment.environment': 'dev',
+        'code.function': 'sendUser',
+      },
+    });
+    render(SpanDetailPanel, {
+      props: { span, trace: makeTrace(span), onClose: () => {} },
+    });
+    expect(screen.getByText('send_failed')).toBeTruthy();
+    expect(screen.queryByText('deployment.environment')).toBeNull();
+    await fireEvent.click(screen.getByText('Resource & auto (2)'));
+    expect(screen.getByText('deployment.environment')).toBeTruthy();
+  });
+
+  it('opens the auto section when the filter matches inside it', async () => {
+    const span = makeSpan({
+      attributes: { 'user.id': 'u4', 'code.function': 'sendUser' },
+    });
+    render(SpanDetailPanel, {
+      props: { span, trace: makeTrace(span), onClose: () => {} },
+    });
+    await fireEvent.input(
+      screen.getByLabelText('Filter attributes by key or value'),
+      { target: { value: 'sendUser' } },
+    );
+    expect(screen.getByText('code.function')).toBeTruthy();
   });
 });

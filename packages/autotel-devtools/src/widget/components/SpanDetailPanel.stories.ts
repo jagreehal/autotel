@@ -3,6 +3,7 @@ import { expect, userEvent } from 'storybook/test';
 import SpanDetailPanel from './SpanDetailPanel.svelte';
 import type { SpanData, TraceData } from '../types';
 import { sampleQueryTraces } from './__fixtures__/queries';
+import { makeBatchSendTrace } from './__fixtures__/telemetry';
 
 // A span carrying the kind of resource + framework attributes a real OTLP
 // export produces — long dotted keys (`deployment.environment`,
@@ -71,6 +72,11 @@ type Story = StoryObj<typeof meta>;
  */
 export const Attributes: Story = {
   play: async ({ canvas }) => {
+    // Every key here is resource or auto-instrumentation: collapsed by default.
+    await expect(
+      await canvas.findByText('Your code set no attributes on this span.'),
+    ).toBeInTheDocument();
+    await userEvent.click(canvas.getByText(/Resource & auto \(/));
     await expect(
       await canvas.findByText('deployment.environment'),
     ).toBeInTheDocument();
@@ -83,6 +89,7 @@ export const Attributes: Story = {
 export const Dark: Story = {
   globals: { theme: 'dark' },
   play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByText(/Resource & auto \(/));
     await expect(
       await canvas.findByText('datadog.host.name'),
     ).toBeInTheDocument();
@@ -140,6 +147,7 @@ export const SensitiveAttributes: Story = {
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText('907')).toBeInTheDocument();
+    await userEvent.click(canvas.getByText('Resource & auto (1)'));
     await expect(canvas.getByText('[redacted]')).toBeInTheDocument();
     await userEvent.click(canvas.getByText('[redacted]'));
     await expect(await canvas.findByText('Bearer abc')).toBeInTheDocument();
@@ -154,4 +162,14 @@ export const DatabasePlan: Story = {
     span: dbTrace.spans.find((s) => s.spanId === 'find')!,
     trace: dbTrace,
   },
+};
+
+/**
+ * What the app set reads first; the resource and auto-instrumentation
+ * attributes wait behind "Resource & auto". A filter that matches them opens
+ * that section on its own.
+ */
+const batchTrace = makeBatchSendTrace();
+export const OwnAndAutoAttributes: Story = {
+  args: { span: batchTrace.spans[4]!, trace: batchTrace },
 };
