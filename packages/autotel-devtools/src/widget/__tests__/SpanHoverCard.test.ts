@@ -14,7 +14,12 @@ const span: SpanData = {
   startTime: 1250,
   endTime: 1500,
   duration: 250,
-  attributes: { model: 'claude-opus-5', 'http.route': '/v1/messages', junk: 1 },
+  attributes: {
+    model: 'claude-opus-5',
+    'http.route': '/v1/messages',
+    'user.id': 'u4',
+    'telemetry.sdk.name': 'opentelemetry',
+  },
   status: { code: 'ERROR', message: 'rate limited' },
   events: [{ name: 'retry', timestamp: 1300 }],
 };
@@ -39,7 +44,7 @@ const trace: TraceData = {
 describe('SpanHoverCard', () => {
   afterEach(cleanup);
 
-  it('shows the full name, timing, status and only the key attributes', () => {
+  it('shows the full name, timing, status, app and key attributes, no resource noise', () => {
     render(SpanHoverCard, { props: { node, trace } });
     expect(screen.getByText('claude_code.llm_request')).toBeTruthy();
     expect(screen.getByText('25% of trace')).toBeTruthy();
@@ -47,6 +52,26 @@ describe('SpanHoverCard', () => {
     expect(screen.getByText('rate limited')).toBeTruthy();
     expect(screen.getByText('1 child · 1 event')).toBeTruthy();
     expect(screen.getByText('claude-opus-5')).toBeTruthy();
-    expect(screen.queryByText('junk')).toBeNull();
+    expect(screen.getByText('u4')).toBeTruthy();
+    expect(screen.getByText('/v1/messages')).toBeTruthy();
+    expect(screen.queryByText('telemetry.sdk.name')).toBeNull();
+  });
+});
+
+describe('SpanHoverCard: app attributes', () => {
+  afterEach(cleanup);
+
+  it('shows full-length values and masks credentials', () => {
+    const long = `order-${'x'.repeat(80)}-tail`;
+    const s = {
+      ...span,
+      attributes: { 'order.id': long, 'auth.token': 'secret-value' },
+    };
+    render(SpanHoverCard, {
+      props: { node: { span: s, children: [], depth: 0 }, trace },
+    });
+    expect(screen.getByText(long)).toBeTruthy();
+    expect(screen.queryByText('secret-value')).toBeNull();
+    expect(screen.getByText('[redacted]')).toBeTruthy();
   });
 });

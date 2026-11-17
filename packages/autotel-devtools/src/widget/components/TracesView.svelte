@@ -54,6 +54,7 @@
   import CopyButton from './CopyButton.svelte';
   import FacetFilter from './FacetFilter.svelte';
   import QueryBar from './QueryBar.svelte';
+  import { appAttributes, shortKey } from '../utils/keyAttributes';
   import TimeWindowPicker from './TimeWindowPicker.svelte';
   import TailPill from './TailPill.svelte';
   import { createTraceQuery } from '../signalQuery.svelte';
@@ -361,6 +362,11 @@
   {@const isError = trace.status === 'ERROR'}
   {@const sc = serviceColor(trace.service || 'unknown')}
   {@const isCursor = nav.cursor === index}
+  {@const rootAttrs = appAttributes(
+    trace.rootSpan.attributes ?? {},
+    Number.POSITIVE_INFINITY,
+    24,
+  )}
   <div
     class={cn(
       'group trace-grid px-4 py-2 border-b border-line-subtle cursor-pointer transition-colors',
@@ -423,6 +429,26 @@
       <span class="truncate text-sm text-fg" title={trace.rootSpan.name}>
         {trace.rootSpan.name || 'unknown'}
       </span>
+      <!-- Root span's own attributes. Zero flex-basis: the operation name takes
+           its full width first and tags get what is left. Tags wrap inside a
+           one-line clip, and the zero-width spacer keeps the visible line
+           non-empty, so a tag wider than the space left wraps out of view
+           instead of sitting there truncated: each tag shows whole or not at
+           all. -->
+      {#if rootAttrs.length > 0}
+        <span
+          class="flex flex-wrap flex-[1_1_0%] min-w-0 h-5 overflow-hidden"
+          title={rootAttrs.map(([k, v]) => `${k}=${v}`).join('\n')}
+        >
+          <span class="w-0 h-5" aria-hidden="true"></span>
+          {#each rootAttrs as [key, value] (key)}
+            <span
+              class="mr-1 whitespace-nowrap px-1.5 rounded bg-subtle border border-line-subtle font-mono text-[10px] leading-[18px] text-fg-muted"
+              ><span class="text-fg-subtle">{shortKey(key)}=</span>{value}</span
+            >
+          {/each}
+        </span>
+      {/if}
       {#if trace.partial}
         <span
           class="flex-shrink-0 px-1.5 py-0.5 rounded bg-warning-bg text-warning text-[10px] font-medium uppercase tracking-wide"

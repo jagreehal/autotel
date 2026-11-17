@@ -88,7 +88,7 @@ export const loadUser = withTracing({ name: 'user.load' })(
 
 ## Views in the UI
 
-- **Traces**: waterfall + flame graph with the trace's logs listed under it (click a line to select its span), search with 300 ms debounce; `q=` in a shared URL fills the search
+- **Traces**: waterfall + flame graph with the trace's logs listed under it (click a line to select its span), search with 300 ms debounce; `q=` in a shared URL fills the search. Rows, hover cards and list tags show the attributes your code set; the span panel collapses resource and auto-instrumentation attributes under **Resource & auto**. Set business attributes (`user.id`, `order.outcome`) on spans and they appear on the rows
 - **Agents**: coding-agent sessions (Claude Code, opencode, Codex) folded by `autotel-agents`, with cost split by model, effort, skill, sub-agent and prompt. `npx autotel-devtools claude` starts the receiver and launches Claude Code wired to it, spans included — its `claude_code.interaction` → `llm_request` / `tool` hierarchy lands in **Traces**
 - **GenAI**: LLM calls with tokens, cost and streaming timing. The Trace view is a live waterfall of the run (bars on a time axis with duration and cost, folded rows, slowest and failed calls marked, running parents drawn as running); arrow keys move through the tree, Enter opens a span
 - **Flow**: request flow across services

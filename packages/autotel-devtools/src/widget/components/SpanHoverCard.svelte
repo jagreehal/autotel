@@ -5,7 +5,7 @@
    */
   import { AlertCircle } from '@lucide/svelte';
   import { formatDuration } from '../utils';
-  import { keyAttributes } from '../utils/keyAttributes';
+  import { appAttributes, keyAttributes } from '../utils/keyAttributes';
   import type { SpanNode, TraceData } from '../types';
   import { countDescendants } from './WaterfallRow.svelte';
 
@@ -20,8 +20,36 @@
     trace.duration > 0 ? (span.duration / trace.duration) * 100 : 0,
   );
   const descendants = $derived(countDescendants(node));
-  const attrs = $derived(keyAttributes(span.attributes ?? {}));
+  // App attributes in full, then the key protocol ones.
+  const appAttrs = $derived(
+    appAttributes(
+      span.attributes ?? {},
+      Number.POSITIVE_INFINITY,
+      Number.POSITIVE_INFINITY,
+    ),
+  );
+  const keyAttrs = $derived.by(() => {
+    const shown = new Set(appAttrs.map(([k]) => k));
+    return keyAttributes(span.attributes ?? {}).filter(([k]) => !shown.has(k));
+  });
 </script>
+
+{#snippet attributeGrid(
+  rows: Array<[string, string]>,
+  keyClass: string,
+  valueClass: string,
+)}
+  {#if rows.length > 0}
+    <div
+      class="mt-1.5 pt-1.5 border-t border-line-subtle font-mono text-[11px] grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5"
+    >
+      {#each rows as [key, value] (key)}
+        <span class={keyClass}>{key}</span>
+        <span class="text-fg break-all {valueClass}">{value}</span>
+      {/each}
+    </div>
+  {/if}
+{/snippet}
 
 <div
   role="tooltip"
@@ -58,14 +86,6 @@
       <span class="break-all">{span.status.message || 'Error'}</span>
     </div>
   {/if}
-  {#if attrs.length > 0}
-    <div
-      class="mt-1.5 pt-1.5 border-t border-line-subtle font-mono text-[11px] grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5"
-    >
-      {#each attrs as [key, value] (key)}
-        <span class="text-fg-subtle">{key}</span>
-        <span class="text-fg break-all">{value}</span>
-      {/each}
-    </div>
-  {/if}
+  {@render attributeGrid(appAttrs, 'text-fg-muted', 'font-medium')}
+  {@render attributeGrid(keyAttrs, 'text-fg-subtle', '')}
 </div>

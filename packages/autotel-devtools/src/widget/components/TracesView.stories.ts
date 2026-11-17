@@ -397,3 +397,40 @@ export const FragmentTrace: Story = {
     await expect(await canvas.findByText('partial')).toBeInTheDocument();
   },
 };
+
+/**
+ * The root span's own attributes appear as tags beside the operation, so
+ * traces that share a name tell themselves apart in the list.
+ */
+export const RootAppAttributes: Story = {
+  play: async () => {
+    updateWidgetData({
+      traces: ['b-17', 'b-18'].map((batch, i) =>
+        makeTrace({
+          traceId: `batch-${batch}`,
+          status: i === 0 ? 'ERROR' : 'OK',
+          rootSpan: makeSpan({
+            traceId: `batch-${batch}`,
+            name: 'statements.send',
+            status: { code: i === 0 ? 'ERROR' : 'OK' },
+            attributes: {
+              'service.name': 'statements-worker',
+              'code.function': 'send',
+              'statements.batch_id': batch,
+              'statements.count': 5 - i,
+            },
+          }),
+        }),
+      ),
+    });
+  },
+};
+
+/**
+ * Narrow viewer: the operation name keeps its width and each tag shows whole
+ * or drops out.
+ */
+export const RootAppAttributesNarrow: Story = {
+  ...RootAppAttributes,
+  globals: { viewport: { value: 'mobile2', isRotated: false } },
+};

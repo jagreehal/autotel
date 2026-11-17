@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { keyAttributes } from './keyAttributes';
+import {
+  keyAttributes,
+  appAttributes,
+  isResourceAttribute,
+  isAppAttribute,
+  shortKey,
+} from './keyAttributes';
 
 describe('keyAttributes', () => {
   it('keeps display order, skips noise, truncates long values', () => {
@@ -34,5 +40,75 @@ describe('keyAttributes', () => {
     expect(
       keyAttributes({ model: 'm', tool_name: 't', cost_usd: 1 }, 2),
     ).toHaveLength(2);
+  });
+});
+
+describe('appAttributes', () => {
+  it('keeps what the app set, drops resource and auto namespaces', () => {
+    expect(
+      appAttributes({
+        'service.name': 'api',
+        'deployment.environment': 'dev',
+        'code.function': 'send',
+        'http.route': '/r',
+        'error.type': 'X',
+        'user.id': 'u4',
+        'statements.outcome': 'send_failed',
+        retries: 2,
+      }),
+    ).toEqual([
+      ['user.id', 'u4'],
+      ['statements.outcome', 'send_failed'],
+      ['retries', '2'],
+    ]);
+  });
+});
+
+describe('preview masking and length', () => {
+  it('masks credential-shaped string values, keeps counts', () => {
+    expect(
+      appAttributes({
+        'auth.token': 'eyJhbGciOi',
+        password: 'hunter2',
+        'billing.api_key': ['k1'],
+        'quota.tokens_used': 42,
+        'user.id': 'u4',
+      }),
+    ).toEqual([
+      ['auth.token', '[redacted]'],
+      ['password', '[redacted]'],
+      ['billing.api_key', '[redacted]'],
+      ['quota.tokens_used', '42'],
+      ['user.id', 'u4'],
+    ]);
+  });
+
+  it('caps values at 60 by default, uncapped on request', () => {
+    const long = 'a'.repeat(100);
+    expect(appAttributes({ id: long })[0]![1]).toBe(`${'a'.repeat(60)}…`);
+    expect(
+      appAttributes(
+        { id: long },
+        Number.POSITIVE_INFINITY,
+        Number.POSITIVE_INFINITY,
+      )[0]![1],
+    ).toBe(long);
+  });
+});
+
+describe('attribute classification', () => {
+  it('resource attributes are a subset of auto ones', () => {
+    for (const key of ['service.name', 'k8s.pod.name', 'telemetry.sdk.name']) {
+      expect(isResourceAttribute(key)).toBe(true);
+      expect(isAppAttribute(key)).toBe(false);
+    }
+    // Auto-instrumentation, but not resource.
+    expect(isResourceAttribute('http.route')).toBe(false);
+    expect(isAppAttribute('http.route')).toBe(false);
+  });
+
+  it('shortKey keeps the last segment', () => {
+    expect(shortKey('statements.outcome')).toBe('outcome');
+    expect(shortKey('retries')).toBe('retries');
   });
 });

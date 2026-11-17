@@ -1,6 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/svelte-vite';
 import WaterfallView from './WaterfallView.svelte';
-import { makeTrace, makeFailedTrace } from './__fixtures__/telemetry';
+import {
+  makeTrace,
+  makeFailedTrace,
+  makeBatchSendTrace,
+} from './__fixtures__/telemetry';
 
 // Catalogue only — no assertions. Behavioural claims belong in the paired
 // `*.test.ts`; this file exists so every state is browsable in Storybook.
@@ -43,4 +47,27 @@ export const WideNameColumn: Story = {
     return () =>
       window.localStorage.removeItem('autotel-devtools:waterfall-name-width');
   },
+};
+
+/**
+ * Rows show the first attributes the app set, so five `statements.send_user`
+ * siblings read as u1…u5 and the failed one is visible without a click.
+ * Resource and auto-instrumentation attributes stay off the rows.
+ */
+export const AppAttributesOnRows: Story = {
+  args: { trace: makeBatchSendTrace() },
+};
+
+/** The hover card lists the app's attributes in full, above the protocol ones. */
+export const AppAttributesHoverCard: Story = {
+  args: { trace: makeBatchSendTrace() },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.hover(canvas.getAllByText('statements.send_user')[3]!);
+  },
+};
+
+/** A narrow viewer: the span name keeps its room, the attributes truncate. */
+export const AppAttributesNarrow: Story = {
+  args: { trace: makeBatchSendTrace() },
+  globals: { viewport: { value: 'tablet', isRotated: false } },
 };
