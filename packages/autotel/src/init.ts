@@ -102,6 +102,7 @@ import {
 } from './attribute-redacting-processor';
 import { createStringRedactor, type StringRedactor } from './redact-values';
 import { PrettyConsoleExporter } from './pretty-console-exporter';
+import { debugLogProcessor } from './debug-log-processor';
 import { resolveConfigFromEnv } from './env-config';
 import { loadYamlConfig } from './yaml-config';
 import { safeRequire } from './node-require';
@@ -973,6 +974,14 @@ export function init(cfg: AutotelConfig): void {
     ) {
       logger.info({}, '[autotel] OTLP log exporter configured');
     }
+  }
+
+  // `debug` shows what is exported, so with logs on it shows the log records too.
+  if (logsEnabled && debugMode) {
+    logRecordProcessors = [
+      ...(logRecordProcessors ?? []),
+      debugLogProcessor(debugMode, logRedactor, logKeyIsSensitive),
+    ];
   }
 
   // PostHog OTLP logs integration

@@ -399,38 +399,28 @@ export const FragmentTrace: Story = {
 };
 
 /**
- * The root span's own attributes appear as tags beside the operation, so
- * traces that share a name tell themselves apart in the list.
+ * Hovering an operation opens the root span's card, the one the waterfall
+ * shows, with the attributes the app set listed first.
  */
-export const RootAppAttributes: Story = {
-  play: async () => {
+export const RootSpanHoverCard: Story = {
+  play: async ({ canvas, userEvent }) => {
     updateWidgetData({
-      traces: ['b-17', 'b-18'].map((batch, i) =>
+      traces: [
         makeTrace({
-          traceId: `batch-${batch}`,
-          status: i === 0 ? 'ERROR' : 'OK',
+          traceId: 'batch-b-17',
           rootSpan: makeSpan({
-            traceId: `batch-${batch}`,
+            traceId: 'batch-b-17',
             name: 'statements.send',
-            status: { code: i === 0 ? 'ERROR' : 'OK' },
             attributes: {
               'service.name': 'statements-worker',
               'code.function': 'send',
-              'statements.batch_id': batch,
-              'statements.count': 5 - i,
+              'statements.batch_id': 'b-17',
+              'statements.count': 5,
             },
           }),
         }),
-      ),
+      ],
     });
+    await userEvent.hover(await canvas.findByText('statements.send'));
   },
-};
-
-/**
- * Narrow viewer: the operation name keeps its width and each tag shows whole
- * or drops out.
- */
-export const RootAppAttributesNarrow: Story = {
-  ...RootAppAttributes,
-  globals: { viewport: { value: 'mobile2', isRotated: false } },
 };

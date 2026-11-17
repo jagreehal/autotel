@@ -8,6 +8,7 @@
  */
 const TRACES_PATH = '/v1/traces';
 const LOGS_PATH = '/v1/logs';
+const METRICS_PATH = '/v1/metrics';
 
 /**
  * The endpoint's path and its query string, apart. A query is how a backend
@@ -31,18 +32,30 @@ export function normaliseOtlpEndpoint(endpoint: string): string {
   return `${traces}${query}`;
 }
 
-/** OTLP signals this package exports. */
+/** OTLP signals the hand-rolled exporter queues. */
 export type OtlpSignal = 'traces' | 'logs';
+
+/** Every OTLP path this package sends to; metrics go through `autotel-web/metrics`. */
+export type OtlpPathSignal = OtlpSignal | 'metrics';
+
+const SIGNAL_PATHS = {
+  traces: TRACES_PATH,
+  logs: LOGS_PATH,
+  metrics: METRICS_PATH,
+} as const satisfies Record<OtlpPathSignal, string>;
 
 /**
  * The endpoint for one signal. Callers configure a single `endpoint`, which may
  * already carry the traces path; the signal path is swapped rather than
  * appended, so `https://host/v1/traces` still yields `https://host/v1/logs`.
  */
-export function otlpEndpointFor(endpoint: string, signal: OtlpSignal): string {
+export function otlpEndpointFor(
+  endpoint: string,
+  signal: OtlpPathSignal,
+): string {
   const [path, query] = splitQuery(endpoint);
   const base = normaliseOtlpEndpoint(path).slice(0, -TRACES_PATH.length);
-  return `${base}${signal === 'logs' ? LOGS_PATH : TRACES_PATH}${query}`;
+  return `${base}${SIGNAL_PATHS[signal]}${query}`;
 }
 
 /**
@@ -152,7 +165,7 @@ export function selfInstrumentationIgnoreUrls(
   // Anchored on the resolved URL so a same-origin `/v1/traces` cannot match
   // some other host's, and closed at a query or fragment rather than at the
   // end of the string, since the exporter may append neither or both.
-  const otlpPaths = (['traces', 'logs'] as const).map((signal) => {
+  const otlpPaths = (['traces', 'logs', 'metrics'] as const).map((signal) => {
     // The path alone: the regex already allows any query after it.
     const path = otlpEndpointFor(splitQuery(endpoint)[0], signal);
     try {

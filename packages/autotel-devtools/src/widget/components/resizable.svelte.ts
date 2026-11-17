@@ -13,6 +13,7 @@
 // behavior is byte-for-byte identical to the original hook.
 
 import { startPointerDrag } from '../utils/pointerDrag';
+import { readStored, writeStored } from '../utils/persisted';
 
 export interface UseResizableOptions {
   /** Default size in px, used until the user drags (or restored from storage). */
@@ -31,27 +32,14 @@ export interface UseResizableOptions {
   step?: number;
 }
 
-function readStored(key: string | undefined, fallback: number): number {
-  if (!key) return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (raw != null) {
-      const n = Number(raw);
-      if (Number.isFinite(n)) return n;
-    }
-  } catch {
-    /* localStorage unavailable (private mode / SSR) — fall back */
-  }
-  return fallback;
+function readSize(key: string | undefined, fallback: number): number {
+  const raw = key ? readStored(key) : undefined;
+  const n = raw === undefined ? Number.NaN : Number(raw);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 function persist(key: string | undefined, value: number): void {
-  if (!key) return;
-  try {
-    window.localStorage.setItem(key, String(Math.round(value)));
-  } catch {
-    /* ignore */
-  }
+  if (key) writeStored(key, String(Math.round(value)));
 }
 
 export interface SeparatorProps {
@@ -89,7 +77,7 @@ export function useResizable(options: UseResizableOptions): ResizableState {
     step = 24,
   } = options;
 
-  const initialSize = Math.max(min, readStored(storageKey, initial));
+  const initialSize = Math.max(min, readSize(storageKey, initial));
   let size = $state(initialSize);
   let dragging = $state(false);
   // Mutable, non-reactive mirror of the current size (the old `sizeRef`).

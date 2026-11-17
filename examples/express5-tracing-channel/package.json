@@ -1,0 +1,20 @@
+{
+  "name": "example-express5-tracing-channel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.10.0",
+    "autotel": "workspace:*",
+    "express": "^5.3.0",
+    "router": "^2.3.0"
+  },
+  "devDependencies": {
+    "@opentelemetry/sdk-trace": "^3.1.0",
+    "@types/express": "^5.0.0",
+    "vitest": "^5.0.5"
+  }
+}

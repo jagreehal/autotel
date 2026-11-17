@@ -3087,6 +3087,7 @@ init({
   - No endpoint = console-only (perfect for local development)
   - With endpoint = console + backend (verify before choosing provider)
 - **No debug flag**: Export to backend only (default production behavior)
+- **With `logs: true`**: log records are printed too, one line each in `'pretty'` mode (severity, body, attributes, trace id), raw with `true`. No endpoint needed: `init({ service: 'my-app', logs: true, debug: 'pretty' })`
 
 **Environment Variable:**
 

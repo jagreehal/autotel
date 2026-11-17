@@ -144,3 +144,130 @@ describe('lifecycle attribution', () => {
     expect(ended?.attributes['session.id']).not.toBe(second['session.id']);
   });
 });
+
+describe('maxDurationMs', () => {
+  it('ends a session at its age limit however active it is', () => {
+    vi.useFakeTimers();
+    captureEvents();
+    configureSession({ maxDurationMs: 10_000, emitEvents: true });
+
+    const first = getSessionAttributes()!;
+    // Busy the whole time: never idle long enough to time out.
+    for (let elapsed = 0; elapsed < 12_000; elapsed += 1000) {
+      vi.advanceTimersByTime(1000);
+      getSessionAttributes();
+    }
+    const current = getSessionAttributes()!;
+
+    expect(current['session.id']).not.toBe(first['session.id']);
+    const [ended] = eventsNamed('session.end');
+    expect(ended.attributes['session.id']).toBe(first['session.id']);
+    expect(ended.attributes['session.end.reason']).toBe('max_duration');
+    // Ended when it reached the limit, not when the next read noticed.
+    expect(ended.attributes['session.duration']).toBe(10);
+  });
+
+  it('links the new session to the one that aged out', () => {
+    vi.useFakeTimers();
+    configureSession({ maxDurationMs: 1000 });
+
+    const first = getSessionAttributes()!;
+    vi.advanceTimersByTime(1000);
+    const second = getSessionAttributes()!;
+
+    expect(second['session.previous_id']).toBe(first['session.id']);
+  });
+
+  it('reports a session that went idle as timed out, whatever its age', () => {
+    vi.useFakeTimers();
+    captureEvents();
+    configureSession({
+      timeoutMs: 1000,
+      maxDurationMs: 1500,
+      emitEvents: true,
+    });
+
+    getSessionAttributes();
+    vi.advanceTimersByTime(5000);
+    getSessionAttributes();
+
+    expect(
+      eventsNamed('session.end')[0]?.attributes['session.end.reason'],
+    ).toBe('timeout');
+  });
+
+  it('applies to a session restored after a reload', () => {
+    vi.useFakeTimers();
+    configureSession({ maxDurationMs: 1000 });
+    const first = getSessionAttributes()!;
+
+    // A reload drops module state; the stored start time is what counts.
+    const stored = globalThis.sessionStorage.getItem('autotel.session')!;
+    resetSessionForTesting();
+    globalThis.sessionStorage.setItem('autotel.session', stored);
+    configureSession({ maxDurationMs: 1000 });
+    vi.advanceTimersByTime(1000);
+
+    expect(getSessionAttributes()!['session.id']).not.toBe(first['session.id']);
+  });
+});
+
+describe('onStart / onEnd', () => {
+  it('report a rollover with the ids and the reason, events or not', () => {
+    vi.useFakeTimers();
+    const started: unknown[] = [];
+    const ended: unknown[] = [];
+    configureSession({
+      timeoutMs: 1000,
+      onStart: (session) => started.push(session),
+      onEnd: (session) => ended.push(session),
+    });
+
+    const first = getSessionAttributes()!['session.id'];
+    vi.advanceTimersByTime(400);
+    getSessionAttributes();
+    vi.advanceTimersByTime(1001);
+    const second = getSessionAttributes()!['session.id'];
+
+    expect(started).toEqual([{ id: first }, { id: second, previousId: first }]);
+    expect(ended).toEqual([{ id: first, reason: 'timeout', durationMs: 400 }]);
+  });
+
+  it('see the settled session when they read it back', () => {
+    // Same hazard as the event sink: a callback that asks for the session
+    // must get the new one, not trigger a second rollover.
+    vi.useFakeTimers();
+    let seenInEnd: string | undefined;
+    configureSession({
+      timeoutMs: 1000,
+      onEnd: () => {
+        seenInEnd = getSessionAttributes()?.['session.id'];
+      },
+    });
+
+    getSessionAttributes();
+    vi.advanceTimersByTime(1001);
+    const second = getSessionAttributes()!['session.id'];
+
+    expect(seenInEnd).toBe(second);
+  });
+
+  it('cannot break session tracking by throwing', () => {
+    configureSession({
+      onStart: () => {
+        throw new Error('onStart failed');
+      },
+    });
+
+    expect(getSessionAttributes()?.['session.id']).toBeDefined();
+  });
+
+  it('are not called for a session another SDK owns', () => {
+    const onStart = vi.fn();
+    configureSession({ id: () => 'external-id', onStart });
+
+    getSessionAttributes();
+
+    expect(onStart).not.toHaveBeenCalled();
+  });
+});

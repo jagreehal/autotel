@@ -202,6 +202,6 @@ export const AUTOTEL_WEB = {
   CLICK_FRUSTRATION: 'app.widget.click.frustration',
   /** Seconds the session had been running when it ended. */
   SESSION_DURATION: 'session.duration',
-  /** Why a session ended: `timeout` or `unload`. */
+  /** Why a session ended: `timeout`, `max_duration` or `unload`. */
   SESSION_END_REASON: 'session.end.reason',
 } as const;

@@ -43,10 +43,11 @@ surfaces spans carrying the `security.*` schema (see
 300ms. **Clear** empties the server's store along with the browser's, and
 clicking the **Traces** tab returns to the trace list.
 
-The Traces view puts the attributes your code set first. Timeline rows show
-the first three after the span name, so five `send_user` rows read as
-`id=u1` to `id=u5`. The hover card lists them all, and the trace list tags
-each operation with its root span's attributes. In the span panel, resource
+The Traces view puts the attributes your code set first. Hover a timeline
+row and its card lists them in full. In the trace list, hover a row or press
+Space on the cursor row for a card that names the services the trace crossed,
+where a failure started, which spans spent the most time themselves, and the
+root span's attributes. In the span panel, resource
 and auto-instrumentation attributes (`service.*`, `deployment.*`, `code.*`,
 `http.*`, `db.*`) sit in a collapsed **Resource & auto** section. Previews
 mask values whose keys look like credentials (`password`, `token`,

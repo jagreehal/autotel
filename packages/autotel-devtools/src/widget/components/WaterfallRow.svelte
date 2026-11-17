@@ -93,7 +93,6 @@
   import type { SpanNode, TraceData } from '../types';
   import { packEventLanes, classifyEvent } from '../utils/spanEvents';
   import TreeGutter from './TreeGutter.svelte';
-  import { appAttributes, shortKey } from '../utils/keyAttributes';
   import type { TreeConnectors } from '../utils/treeConnectors';
 
   interface Props {
@@ -145,9 +144,6 @@
   // The plan read a whole table or collection (Postgres Seq Scan, MongoDB
   // COLLSCAN): the database span most worth opening.
   const isFullScan = $derived(span.attributes?.['db.plan.full_scan'] === true);
-  // The first few attributes the app set, so sibling spans with one name
-  // (five statements.send_user rows) tell themselves apart without a click.
-  const rowAttributes = $derived(appAttributes(span.attributes ?? {}, 3));
 
   // Pack event markers into sub-lanes to avoid overlap (see utils/spanEvents)
   const eventLanes = $derived(
@@ -243,25 +239,9 @@
     {/if}
 
     <!-- Span name -->
-    <span
-      class={cn(
-        'text-xs truncate',
-        rowAttributes.length > 0 && 'shrink-0 max-w-[70%]',
-        isError ? 'text-danger' : 'text-fg',
-      )}
-    >
+    <span class={cn('text-xs truncate', isError ? 'text-danger' : 'text-fg')}>
       {span.name || 'unknown'}
     </span>
-    {#if rowAttributes.length > 0}
-      <!-- No title: the row's hover card lists these in full. -->
-      <span class="text-[11px] font-mono truncate min-w-0 ml-1">
-        {#each rowAttributes as [key, value], i (key)}
-          {#if i > 0}<span class="text-fg-subtle"> · </span>{/if}<span
-            class="text-fg-subtle">{shortKey(key)}=</span
-          ><span class="text-fg-muted">{value}</span>
-        {/each}
-      </span>
-    {/if}
 
     {#if isFullScan}
       <span

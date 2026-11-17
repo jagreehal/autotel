@@ -12,9 +12,12 @@ describe('emitEvent', () => {
     const sink = vi.fn();
     setEventSink(sink);
     emitEvent('browser.web_vital', { 'browser.web_vital.name': 'lcp' });
-    expect(sink).toHaveBeenCalledWith('browser.web_vital', {
-      'browser.web_vital.name': 'lcp',
-    });
+    // No span given, so no trace to correlate with.
+    expect(sink).toHaveBeenCalledWith(
+      'browser.web_vital',
+      { 'browser.web_vital.name': 'lcp' },
+      undefined,
+    );
   });
 
   it('is a no-op with no sink, rather than throwing', () => {

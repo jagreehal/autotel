@@ -160,21 +160,39 @@ const parsed = parseTraceparent(header);
 ### Full mode extras
 
 ```typescript
-import { initFull, span, setAttribute, addEvent } from 'autotel-web/full';
+import { initFull, span, setAttribute } from 'autotel-web/full';
 
 initFull({ service: 'my-app', endpoint: '...' });
 
-// Create a manual span
-const result = span('my-operation', (s) => {
-  s.setAttribute('key', 'value');
-  return doWork();
-  // s.end() is called automatically
+// The handle stays bound to its span after an await, without Zone.js
+await span('load-user', async (s) => {
+  const res = await fetch('/api/user');
+  s.setAttribute('http.response.status_code', res.status);
+  s.event('user.loaded', { status: res.status }); // log record with the span's trace and span id
 });
 
-// Add attribute or event to the currently active span
+// Attribute on the currently active span
 setAttribute('user.id', '123');
-addEvent('button.clicked', { 'button.name': 'submit' });
 ```
+
+`s.event()` emits a log-based event correlated to the span. Suggest it over
+`Span.addEvent`.
+
+### Metrics (`autotel-web/metrics`)
+
+```typescript
+import { initMetrics, createCounter } from 'autotel-web/metrics';
+
+initMetrics(); // after init / initFull: same service, endpoint and release
+const checkouts = createCounter('app.checkout.completed');
+checkouts.add(1, { plan: 'pro' });
+```
+
+A separate entry, so lean and full mode do not bundle the metrics SDK.
+Delta temporality (tabs share a resource; a Prometheus backend needs the
+collector's `deltatocumulative`), no session sampling and no `session.id`.
+Instruments declared at module scope record once `initMetrics()` runs. Exports
+every `exportIntervalMs` (15s) to `/v1/metrics` and when the page is hidden.
 
 ### Canonical names (do not invent your own)
 
@@ -334,8 +352,19 @@ initFull({
   captureConsoleLogs: true, // console.* as OTLP log records
   sampleRate: 0.1, // hashed on session id, not per span
   remoteConfigUrl: '/autotel.json',
+  spanExporters: [new ZipkinExporter()], // more destinations beside endpoint, each batched
+  propagator: new B3Propagator(), // header format; default W3C traceparent
+  session: {
+    maxDurationMs: 4 * 60 * 60_000, // cap however active; ends with reason max_duration
+    onStart: ({ id, previousId }) => {},
+    onEnd: ({ id, reason, durationMs }) => {},
+  },
 });
 ```
+
+`spanProcessor` replaces the export pipeline, `endpoint` and `spanExporters`
+included. Requests an extra exporter starts inside `export()` are not traced;
+one that sends later needs its URL in `ignoreUrls`.
 
 ### Backend (autotel): automatic trace continuation
 

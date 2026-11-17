@@ -13,19 +13,14 @@ import {
   propagation,
   SpanKind,
   SpanStatusCode,
-  type Attributes,
+  type TextMapPropagator,
 } from '@opentelemetry/api';
 import type {
   Sampler,
   SpanExporter,
   SpanProcessor,
 } from '@opentelemetry/sdk-trace';
-import {
-  BatchSpanProcessor,
-  StackContextManager,
-  TracerProvider,
-} from '@opentelemetry/sdk-trace';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { StackContextManager, TracerProvider } from '@opentelemetry/sdk-trace';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
 import { DocumentLoadInstrumentation } from '@opentelemetry/instrumentation-document-load';
@@ -44,6 +39,8 @@ import { setupLongTaskObserver } from './long-tasks';
 import {
   browserResourceAttributes,
   releaseResourceAttributes,
+  resetPageIdentityForTesting,
+  setPageIdentity,
   type ReleaseConfig,
 } from './browser-context';
 import {
@@ -54,7 +51,7 @@ import {
 import { setupEngagement } from './engagement';
 import { setupFrustrationSignals, type FrustrationConfig } from './frustration';
 import { captureConsoleAsLogs, type ConsoleLogsConfig } from './browser-logs';
-import { setEventSink } from './emit-event';
+import { emitEvent, setEventSink } from './emit-event';
 import {
   configureExporter,
   flushSpans,
@@ -69,13 +66,13 @@ import {
   resolveCaptureToggles,
 } from './remote-config';
 import { isDevelopment } from './dev-mode';
-import { asString } from './values';
 import { createSessionRatioSampler, withoutResourceFetch } from './sampler';
+import { exportProcessors, withoutExportRequests } from './full-export';
 import {
   configureSession,
   endSessionOnUnload,
   getSessionAttributes,
-  settledSessionId,
+  type SessionConfig,
 } from './session';
 import {
   getBaggageHeader,
@@ -84,7 +81,6 @@ import {
 } from './baggage';
 import { getIdentityAttributes } from './identity';
 import {
-  normaliseOtlpEndpoint,
   selfInstrumentationIgnoreUrls,
   VENDOR_TELEMETRY_URLS,
   ignoreUrlPatterns,
@@ -205,10 +201,46 @@ export interface AutotelWebFullConfig extends ReleaseConfig {
   urlIdPatterns?: RegExp[];
 
   /**
-   * Custom span processor(s). If provided, used instead of default BatchSpanProcessor + OTLP exporter.
-   * When endpoint is set, this is ignored.
+   * Replaces the export pipeline: when set, `endpoint` exports no spans and
+   * `spanExporters` are ignored. For a processor that should run *beside* the
+   * OTLP export, use `spanExporters` (exporters) or `spanEnrichers`
+   * (decorators) instead.
    */
   spanProcessor?: SpanProcessor;
+
+  /**
+   * More destinations for spans, alongside `endpoint`. Each is batched like the
+   * OTLP export, so a Zipkin exporter, an OTLP/protobuf exporter or a
+   * `ConsoleSpanExporter` while developing is one line:
+   *
+   * ```ts
+   * import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace';
+   * initFull({ service: 'web', endpoint, spanExporters: [new ConsoleSpanExporter()] });
+   * ```
+   *
+   * A request an exporter starts while exporting is not traced, so an export
+   * never becomes a span of its own. One that defers its send past `export()`
+   * is not caught: add its URL to `ignoreUrls`.
+   *
+   * Ignored, with a warning, when `spanProcessor` is set.
+   */
+  spanExporters?: SpanExporter[];
+
+  /**
+   * How trace context is written to outgoing requests.
+   *
+   * W3C `traceparent` by default. Pass another propagator when the backend
+   * expects a different format, e.g. B3:
+   *
+   * ```ts
+   * import { B3Propagator } from '@opentelemetry/propagator-b3';
+   * initFull({ service: 'web', endpoint, propagator: new B3Propagator() });
+   * ```
+   *
+   * Which requests carry it is still decided by `propagateTo` and `privacy`;
+   * `baggage` is written separately and is unaffected.
+   */
+  propagator?: TextMapPropagator;
 
   /**
    * Processors that decorate spans on the way out rather than export them.
@@ -233,26 +265,12 @@ export interface AutotelWebFullConfig extends ReleaseConfig {
    *
    * Pass `false` to emit no session attributes.
    *
+   * Options are shared with lean `init()`; full mode takes its session from a
+   * join (`autotel-web/join`) rather than an `id` callback.
+   *
    * @default { timeoutMs: 1_800_000 }
    */
-  session?:
-    | false
-    | {
-        timeoutMs?: number;
-        /** Emit `session.start` / `session.end` events. @default false */
-        emitEvents?: boolean;
-        /**
-         * Send `session.id` in the W3C `baggage` header, so the API's server
-         * span carries the same session as the browser's, a request rejected
-         * in middleware included. Same destinations as all baggage:
-         * same-origin, plus `baggage.allowedOrigins`. The API needs
-         * `init({ baggage: { keys: ['session.id'] } })` to copy it on as `session.id`, and a
-         * cross-origin API must allow `baggage` in its CORS preflight.
-         *
-         * @default false
-         */
-        propagate?: boolean;
-      };
+  session?: false | Omit<SessionConfig, 'id'>;
 
   /**
    * Sample rate 0–1. Default 1.0. Use e.g. 0.1 in production.
@@ -498,27 +516,21 @@ export function initFull(config: AutotelWebFullConfig): void {
     spanProcessors.push(...config.spanEnrichers);
   }
   if (config.spanProcessor) {
+    // It replaces the export pipeline, so exporters given beside it would be
+    // dropped without a word.
+    if (config.spanExporters?.length) {
+      console.warn(
+        '[autotel-web/full] spanExporters are ignored when spanProcessor is set; pass one or the other.',
+      );
+    }
     spanProcessors.push(config.spanProcessor);
-  } else if (config.endpoint) {
-    const exporter = settlingSessions(
-      new OTLPTraceExporter({
-        // Accept a bare origin as init() does; without this a bare origin POSTs
-        // to the collector root and 404s.
-        url: normaliseOtlpEndpoint(config.endpoint),
-      }),
-    );
-    spanProcessors.push(
-      new BatchSpanProcessor({
-        exporter,
-        scheduledDelayMillis: 1000,
-        maxExportBatchSize: 64,
-      }),
-    );
   } else {
-    // No export; still create spans (e.g. for propagation only)
-    if (config.debug) {
+    const exportTo = exportProcessors(config.endpoint, config.spanExporters);
+    spanProcessors.push(...exportTo);
+    if (exportTo.length === 0 && config.debug) {
+      // No export; spans are still created, e.g. for propagation only.
       console.log(
-        '[autotel-web/full] No endpoint or spanProcessor; spans will not be exported.',
+        '[autotel-web/full] No endpoint, spanExporters or spanProcessor; spans will not be exported.',
       );
     }
   }
@@ -532,9 +544,13 @@ export function initFull(config: AutotelWebFullConfig): void {
     (sampleRate != null ? createSessionRatioSampler(sampleRate) : undefined);
   const captureResourceTiming =
     config.captureResourceTiming ?? !isDevelopment();
-  const sampler = captureResourceTiming
+  const withoutResources = captureResourceTiming
     ? configured
     : withoutResourceFetch(configured);
+  const sampler =
+    !config.spanProcessor && config.spanExporters?.length
+      ? withoutExportRequests(withoutResources)
+      : withoutResources;
 
   provider = new TracerProvider({
     resource,
@@ -542,7 +558,9 @@ export function initFull(config: AutotelWebFullConfig): void {
     ...(sampler && { sampler }),
   });
   otelTrace.setGlobalTracerProvider(provider);
-  propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+  propagation.setGlobalPropagator(
+    config.propagator ?? new W3CTraceContextPropagator(),
+  );
   // No Zone.js, so async context is best-effort.
   context.setGlobalContextManager(new StackContextManager().enable());
 
@@ -762,6 +780,11 @@ export function initFull(config: AutotelWebFullConfig): void {
   }
 
   isFullInitialized = true;
+  setPageIdentity({
+    service,
+    ...(config.endpoint !== undefined && { endpoint: config.endpoint }),
+    resource: release,
+  });
   if (config.debug) {
     console.log('[autotel-web/full] Initialized', {
       service,
@@ -797,29 +820,6 @@ function effectiveHeaders(
   if (init?.headers !== undefined) return new Headers(init.headers);
   if (input instanceof Request) return new Headers(input.headers);
   return new Headers();
-}
-
-/**
- * A span exporter that files spans under the visit's settled session: a span
- * that ended while the owning join's SDK was still starting carries a
- * stand-in id, and by export time (the batch waits ~1s) the vendor's session
- * usually exists. See `settledSessionId`.
- */
-function settlingSessions(inner: SpanExporter): SpanExporter {
-  return {
-    export(spans, done) {
-      for (const span of spans) {
-        // SAFETY: attributes are plain and mutable until serialized; this
-        // runs just before that.
-        const attributes = span.attributes as Attributes;
-        const id = asString(attributes['session.id']);
-        if (id) attributes['session.id'] = settledSessionId(id);
-      }
-      inner.export(spans, done);
-    },
-    shutdown: () => inner.shutdown(),
-    forceFlush: () => inner.forceFlush?.() ?? Promise.resolve(),
-  };
 }
 
 /**
@@ -974,15 +974,39 @@ function toException(cause: unknown): Error | string {
 }
 
 /**
- * Create a span with the current context (full mode).
+ * The span `span()` hands its callback. Held by the callback rather than looked
+ * up as the active span, so it still names the right span after an `await`:
+ * without Zone.js the active context does not survive one.
  */
-export function span<T>(
-  name: string,
-  fn: (s: {
-    setAttribute: (k: string, v: string | number | boolean) => void;
-    end: () => void;
-  }) => T,
-): T {
+export interface SpanHandle {
+  setAttribute: (key: string, value: string | number | boolean) => void;
+  /**
+   * Record an event that happened during this span, as a log record carrying
+   * the span's trace and span id (the Logs API model, not `Span.addEvent`).
+   * Needs an `endpoint`, like every browser event.
+   */
+  event: (
+    name: string,
+    attributes?: Record<string, string | number | boolean>,
+  ) => void;
+  /** Only for a synchronous callback that ends early; a returned promise ends the span itself. */
+  end: () => void;
+}
+
+/**
+ * Create a span with the current context (full mode).
+ *
+ * The span ends when `fn` returns, or when the promise it returns settles; a
+ * throw or rejection marks it as an error.
+ *
+ * @example
+ * ```ts
+ * await span('load-user', (s) =>
+ *   fetch('/api/user').then((res) => s.event('user.loaded', { status: res.status })),
+ * );
+ * ```
+ */
+export function span<T>(name: string, fn: (s: SpanHandle) => T): T {
   const tracer = otelTrace.getTracer('autotel-web', '1.0.0');
   // SAFETY: startActiveSpan is typed to return whatever its callback returns,
   // but only through an overload set that loses T here; the callback below
@@ -990,7 +1014,11 @@ export function span<T>(
   return tracer.startActiveSpan(name, (s) => {
     try {
       const result = fn({
-        setAttribute: (k, v) => s.setAttribute(k, v),
+        setAttribute: (key, value) => s.setAttribute(key, value),
+        event: (eventName, attributes) => {
+          const { traceId, spanId } = s.spanContext();
+          emitEvent(eventName, attributes ?? {}, { traceId, spanId });
+        },
         end: () => s.end(),
       });
       if (isThenable(result)) {
@@ -1061,6 +1089,12 @@ export {
 export type { TraceContext } from './functional';
 export { captureException } from './error-tracking';
 export { identify, clearIdentity, type IdentityAttributes } from './identity';
+export type {
+  SessionConfig,
+  SessionEnd,
+  SessionEndReason,
+  SessionStart,
+} from './session';
 
 /**
  * Reset full initialization state (for testing).
@@ -1068,6 +1102,7 @@ export { identify, clearIdentity, type IdentityAttributes } from './identity';
  */
 export function resetFullForTesting(): void {
   isFullInitialized = false;
+  resetPageIdentityForTesting();
   if (provider) {
     provider.shutdown();
     provider = undefined;
@@ -1077,6 +1112,9 @@ export function resetFullForTesting(): void {
   // provider's processors — so a suite silently tests the previous test's
   // configuration.
   otelTrace.disable();
+  // Same refusal for the propagator: a test of `propagator` would otherwise
+  // inherit whichever one the first initFull() registered.
+  propagation.disable();
   if (originalFetch) {
     globalThis.fetch = originalFetch;
     originalFetch = undefined;

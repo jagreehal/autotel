@@ -30,38 +30,13 @@
 import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace';
 import { SpanStatusCode } from '@opentelemetry/api';
 
-/**
- * Export result code constants (avoid importing @opentelemetry/core)
- */
-const ExportResultCode = {
-  SUCCESS: 0,
-  FAILED: 1,
-} as const;
-
-/**
- * Export result type for SpanExporter callback
- */
-interface ExportResult {
-  code: number;
-  error?: Error;
-}
-
-/**
- * ANSI escape codes for terminal colors (zero dependencies)
- */
-const ANSI = {
-  reset: '\u001B[0m',
-  bold: '\u001B[1m',
-  dim: '\u001B[2m',
-  green: '\u001B[32m',
-  red: '\u001B[31m',
-  yellow: '\u001B[33m',
-  blue: '\u001B[34m',
-  cyan: '\u001B[36m',
-  gray: '\u001B[90m',
-} as const;
-
-type AnsiColor = keyof typeof ANSI;
+import {
+  ExportResultCode,
+  paint,
+  useColors,
+  type AnsiColor,
+  type ExportResult,
+} from './console-format';
 
 /**
  * Configuration options for PrettyConsoleExporter
@@ -147,7 +122,7 @@ export class PrettyConsoleExporter implements SpanExporter {
 
   constructor(options: PrettyConsoleExporterOptions = {}) {
     this.options = {
-      colors: options.colors ?? process.stdout?.isTTY ?? false,
+      colors: useColors(options.colors),
       showAttributes: options.showAttributes ?? true,
       maxValueLength: options.maxValueLength ?? 50,
       showScope: options.showScope ?? true,
@@ -429,8 +404,7 @@ export class PrettyConsoleExporter implements SpanExporter {
    * Apply ANSI color if colors are enabled
    */
   private color(text: string, color: AnsiColor): string {
-    if (!this.options.colors) return text;
-    return `${ANSI[color]}${text}${ANSI.reset}`;
+    return paint(this.options.colors, color, text);
   }
 
   /** Print whatever is still held: nothing more is coming. */

@@ -888,6 +888,15 @@ export interface AutotelConfig {
    *
    * When enabled: Outputs spans to console AND sends to backend (if endpoint/exporter configured)
    *
+   * With `logs: true`, log records are printed too: one line each in
+   * `'pretty'` mode (severity, body, attributes, trace id), the raw
+   * `ConsoleLogRecordExporter` output with `true`. No endpoint is needed:
+   *
+   * ```typescript
+   * init({ service: 'my-app', logs: true, debug: 'pretty' });
+   * logs.getLogger('app').emit({ body: 'hello' }); // printed, not exported
+   * ```
+   *
    * Perfect for progressive development:
    * - Start with debug: 'pretty' (no endpoint) → see traces immediately with nice formatting
    * - Add endpoint later → console + backend, verify before choosing provider

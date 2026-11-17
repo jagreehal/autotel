@@ -15,7 +15,10 @@ const budgets = [
   // sharing widget code): 505,072 / 147,818 measured.
   // +6 KB raw / +1 KB gzip for #380 (trace logs under the waterfall,
   // histogram merge, service map edges): 509,944 / 149,173 measured.
-  { file: 'widget.global.js', raw: 512_000, gzip: 150_000 },
+  // +1 KB raw for the trace list's hover card (services, where the failure
+  // started, spans by self time, root attributes) and Space to peek:
+  // 512,140 / 149,900 measured.
+  { file: 'widget.global.js', raw: 513_000, gzip: 150_000 },
   // +15 KB raw for the Issues automations UI (destinations, triggers, runs),
   // which only the full viewer carries: 698,127 → 708,754 bytes measured.
   // +20 KB raw / +5 KB gzip for the Queries tab (statements grouped by hash,
@@ -33,7 +36,8 @@ const budgets = [
   // clock for parents still running, the tree keyboard pattern). GenAI is
   // full-page only; the embedded widget pays only the keyframes. Main
   // 752,920 / 223,511; with it 763,969 / 227,069 measured.
-  { file: 'fullpage.global.js', raw: 766_000, gzip: 228_000 },
+  // +1 KB raw / +0.5 KB gzip for the same hover card: 766,373 / 228,090.
+  { file: 'fullpage.global.js', raw: 767_000, gzip: 228_500 },
 ];
 
 let failed = false;
