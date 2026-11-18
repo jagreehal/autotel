@@ -1,6 +1,6 @@
 {
   "name": "autotel-sentry",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Sentry for autotel: OTLP endpoint and auth from a DSN, and a browser join of autotel traces to the Sentry SDK",
   "type": "module",
   "main": "./dist/index.js",

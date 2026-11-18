@@ -1,5 +1,14 @@
 # autotel-posthog
 
+## 14.1.3
+
+### Patch Changes
+
+- Updated dependencies [25a7255]
+  - autotel-web@3.1.0
+  - autotel@9.4.0
+  - autotel-subscribers@60.0.4
+
 ## 14.1.2
 
 ### Patch Changes

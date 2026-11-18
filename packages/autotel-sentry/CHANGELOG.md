@@ -1,5 +1,12 @@
 # autotel-sentry
 
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [25a7255]
+  - autotel-web@3.1.0
+
 ## 1.0.0
 
 ### Major Changes
