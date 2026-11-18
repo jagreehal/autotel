@@ -1404,6 +1404,7 @@ describe('Functional API', () => {
       expect(() => ctx.updateName('renamed')).not.toThrow();
       expect(() => ctx.recordError(new Error('boom'))).not.toThrow();
       expect(() => ctx.track('checkout.completed')).not.toThrow();
+      expect(() => ctx.event('checkout.completed', { items: 2 })).not.toThrow();
       expect(() => ctx.addLinks([])).not.toThrow();
       expect(ctx.isRecording()).toBe(false);
       expect(ctx.getBaggage('tenant')).toBeUndefined();

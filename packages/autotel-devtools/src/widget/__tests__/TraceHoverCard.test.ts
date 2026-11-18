@@ -64,9 +64,9 @@ describe('TraceHoverCard', () => {
     expect(card.textContent).toContain('2 failed');
     expect(card.textContent).toContain('SMTP 550 mailbox unavailable');
     expect(card.textContent).toContain('Where the time went');
-    // smtp.send spent 80ms itself; the root only the 20ms around it.
+    // The root spent 20ms itself around smtp.send's 80ms; listed in start order.
     expect(card.textContent).toMatch(
-      /smtp\.send.*80ms.*statements\.send.*20ms/s,
+      /statements\.send.*20ms.*smtp\.send.*80ms/s,
     );
   });
 

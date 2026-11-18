@@ -28,7 +28,8 @@
  * branch on is the one that explains its behaviour.
  */
 
-import { trace, type Span, logs } from '@opentelemetry/api';
+import { trace, type Span } from '@opentelemetry/api';
+import { emitOtelEvent } from './otel-event';
 
 /** Canonical `feature_flag.*` attribute keys. */
 export const FEATURE_FLAG = {
@@ -368,17 +369,11 @@ export interface OpenFeatureHookOptions extends FeatureFlagRecordOptions {
  * invariant exists to prevent. `correlated-events` is not a way around it
  * either: that helper prefers `addEvent` when the target has one, so routing
  * through it lands in the same place with more indirection.
- *
- * `logs.getLogger` returns a no-op logger when no `LoggerProvider` is
- * registered, so this costs nothing in an application that exports no logs.
  */
 function emitEvaluationRecord(
   attributes: Record<string, FeatureFlagAttributeValue>,
 ): void {
-  logs.getLogger('autotel').emit({
-    eventName: FEATURE_FLAG_EVALUATION_EVENT,
-    attributes,
-  });
+  emitOtelEvent(FEATURE_FLAG_EVALUATION_EVENT, attributes);
 }
 
 function metadataText(

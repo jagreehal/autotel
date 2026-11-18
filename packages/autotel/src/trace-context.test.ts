@@ -4,7 +4,13 @@ import {
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace';
 import {
+  InMemoryLogRecordExporter,
+  LoggerProvider,
+  SimpleLogRecordProcessor,
+} from '@opentelemetry/sdk-logs';
+import {
   INVALID_SPAN_CONTEXT,
+  logs,
   trace as otelTrace,
   type Attributes,
 } from '@opentelemetry/api';
@@ -232,5 +238,75 @@ describe('createTraceContext attributes', () => {
       regions: ['eu-west-1', 'us-east-1'],
       'http.route': '/users/:id',
     });
+  });
+});
+
+describe('ctx.event', () => {
+  function withLogExporter(
+    run: () => void,
+    processor?: (
+      exporter: InMemoryLogRecordExporter,
+    ) => SimpleLogRecordProcessor,
+  ) {
+    const exporter = new InMemoryLogRecordExporter();
+    logs.disable();
+    logs.setGlobalLoggerProvider(
+      new LoggerProvider({
+        processors: [
+          processor?.(exporter) ?? new SimpleLogRecordProcessor({ exporter }),
+        ],
+      }),
+    );
+    try {
+      run();
+    } finally {
+      logs.disable();
+    }
+    return exporter.getFinishedLogRecords();
+  }
+
+  it('emits a log record named by eventName, correlated to the span', () => {
+    const span = new TracerProvider().getTracer('test').startSpan('op');
+    const [record] = withLogExporter(() =>
+      createTraceContext(span).event('checkout.started', {
+        cart: { items: 2 },
+      }),
+    );
+
+    expect(record?.eventName).toBe('checkout.started');
+    expect(record?.body).toBe('checkout.started');
+    expect(record?.severityText).toBe('INFO');
+    expect(record?.attributes).toEqual({
+      'cart.items': 2,
+      'event.name': 'checkout.started',
+    });
+    expect(record?.spanContext?.spanId).toBe(span.spanContext().spanId);
+    expect(record?.spanContext?.traceId).toBe(span.spanContext().traceId);
+  });
+
+  it('does nothing without a LoggerProvider', () => {
+    logs.disable();
+    const span = new TracerProvider().getTracer('test').startSpan('op');
+    expect(() =>
+      createTraceContext(span).event('checkout.started'),
+    ).not.toThrow();
+  });
+
+  it('never throws, even when the log pipeline does', () => {
+    const span = new TracerProvider().getTracer('test').startSpan('op');
+    const records = withLogExporter(
+      () =>
+        expect(() =>
+          createTraceContext(span).event('checkout.started'),
+        ).not.toThrow(),
+      (exporter) => {
+        const processor = new SimpleLogRecordProcessor({ exporter });
+        processor.onEmit = () => {
+          throw new Error('pipeline down');
+        };
+        return processor;
+      },
+    );
+    expect(records).toEqual([]);
   });
 });

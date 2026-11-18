@@ -713,7 +713,7 @@ const specialistAgent = withTracing({ name: 'agent.specialist' })(
       'agent.model': 'gpt-4o',
     });
 
-    ctx.addEvent('specialist_engaged', { plan_length: plan.length });
+    ctx.event('specialist_engaged', { plan_length: plan.length });
 
     const result = await generateText({
       model: openai('gpt-4o'),
@@ -773,7 +773,7 @@ export const runMultiAgentWorkflow = withTracing({
 
   // Step 1: Triage
   const triage = await triageAgent(userRequest);
-  ctx.addEvent('triage_complete', {
+  ctx.event('triage_complete', {
     requires_specialist: triage.requiresSpecialist,
   });
 
@@ -781,14 +781,14 @@ export const runMultiAgentWorkflow = withTracing({
   let response;
   if (triage.requiresSpecialist) {
     response = await specialistAgent(triage.plan);
-    ctx.addEvent('specialist_complete', { requires_qa: response.requiresQA });
+    ctx.event('specialist_complete', { requires_qa: response.requiresQA });
   }
 
   // Step 3: QA (if needed)
   let qa;
   if (response?.requiresQA) {
     qa = await qaAgent(response.response);
-    ctx.addEvent('qa_complete', { approved: qa.approved });
+    ctx.event('qa_complete', { approved: qa.approved });
   }
 
   // Track workflow completion
@@ -900,16 +900,16 @@ export const ragPipeline = withTracing({ name: 'rag.pipeline' })(
 
     // Step 1: Embeddings
     const embedding = await generateEmbeddings(query);
-    ctx.addEvent('embeddings_generated');
+    ctx.event('embeddings_generated');
 
     // Step 2: Search
     const searchResults = await vectorSearch(embedding);
-    ctx.addEvent('search_completed', { results_count: searchResults.length });
+    ctx.event('search_completed', { results_count: searchResults.length });
 
     // Step 3: Generate
     const context = searchResults.map((r) => r.content);
     const response = await generateWithContext(query, context);
-    ctx.addEvent('generation_completed', { response_length: response.length });
+    ctx.event('generation_completed', { response_length: response.length });
 
     // Track pipeline completion
     track('rag.pipeline_completed', {
@@ -972,7 +972,7 @@ export const generateStreamingResponse = withTracing({ name: 'ai.stream' })(
 
       // Add event for significant milestones
       if (chunkCount % 10 === 0) {
-        ctx.addEvent('streaming_progress', {
+        ctx.event('streaming_progress', {
           chunks_received: chunkCount,
           total_length: totalLength,
         });
@@ -1060,7 +1060,7 @@ export const generateWithQualityCheck = withTracing({
       // Evaluation loop
       do {
         attempt++;
-        ctx.addEvent('generation_attempt', { attempt });
+        ctx.event('generation_attempt', { attempt });
 
         // Generate content
         content = await generateContent(prompt, 'gpt-4o');
@@ -1069,13 +1069,13 @@ export const generateWithQualityCheck = withTracing({
         evaluation = await evaluateQuality(content);
 
         if (evaluation.passesThreshold) {
-          ctx.addEvent('quality_passed', {
+          ctx.event('quality_passed', {
             attempt,
             score: evaluation.score,
           });
           break;
         } else if (attempt < maxAttempts) {
-          ctx.addEvent('quality_failed_retrying', {
+          ctx.event('quality_failed_retrying', {
             attempt,
             score: evaluation.score,
             feedback: evaluation.feedback,
@@ -1162,20 +1162,20 @@ ctx.setAttributes({
 
 ```typescript
 // Agent events
-ctx.addEvent('agent.handoff_initiated');
-ctx.addEvent('agent.handoff_completed');
-ctx.addEvent('agent.escalation_required');
+ctx.event('agent.handoff_initiated');
+ctx.event('agent.handoff_completed');
+ctx.event('agent.escalation_required');
 
 // RAG events
-ctx.addEvent('rag.embeddings_generated');
-ctx.addEvent('rag.search_completed');
-ctx.addEvent('rag.context_assembled');
+ctx.event('rag.embeddings_generated');
+ctx.event('rag.search_completed');
+ctx.event('rag.context_assembled');
 
 // Quality events
-ctx.addEvent('quality.check_initiated');
-ctx.addEvent('quality.check_passed');
-ctx.addEvent('quality.check_failed');
-ctx.addEvent('quality.retry_initiated');
+ctx.event('quality.check_initiated');
+ctx.event('quality.check_passed');
+ctx.event('quality.check_failed');
+ctx.event('quality.retry_initiated');
 ```
 
 ## Complete Examples
@@ -1267,7 +1267,7 @@ export const handleSupportRequest = withTracing({ name: 'support.workflow' })(
 
       // Step 1: Route request
       const routing = await routeRequest(message, userId);
-      ctx.addEvent('routing_completed', {
+      ctx.event('routing_completed', {
         category: routing.category,
         priority: routing.priority,
       });
@@ -1277,7 +1277,7 @@ export const handleSupportRequest = withTracing({ name: 'support.workflow' })(
       if (routing.requiresHuman) {
         response =
           'This request requires human assistance. A support agent will contact you shortly.';
-        ctx.addEvent('escalated_to_human');
+        ctx.event('escalated_to_human');
 
         track('support.escalated_to_human', {
           user_id: userId,
@@ -1290,7 +1290,7 @@ export const handleSupportRequest = withTracing({ name: 'support.workflow' })(
           routing.category,
           sessionContext,
         );
-        ctx.addEvent('specialist_handled');
+        ctx.event('specialist_handled');
       }
 
       // Track completion

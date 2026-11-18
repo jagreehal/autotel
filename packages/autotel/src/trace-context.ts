@@ -9,8 +9,14 @@ import type {
   Context,
   Link,
 } from '@opentelemetry/api';
-import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
+import {
+  context,
+  propagation,
+  SpanStatusCode,
+  trace as otelTrace,
+} from '@opentelemetry/api';
 // namespace import for browser-bundler compat; `import type` is erased — see node-require.ts
+import { emitOtelEvent } from './otel-event';
 import type { AsyncLocalStorage } from 'node:async_hooks';
 import * as nodeAsyncHooks from 'node:async_hooks';
 import { flattenToAttributes, toAttributeValue } from './flatten-attributes';
@@ -201,10 +207,19 @@ export interface SpanMethods {
    */
   recordError(cause: unknown): void;
   /**
-   * Emit a tracked event correlated to this span. Equivalent to the standalone
-   * `track(event, data)` but reads naturally on `ctx`. Replaces the deprecated
-   * `ctx.addEvent` (OTEP 4430) — events become correlated logs rather than
-   * span events.
+   * Record an event that happened during this span, as an OpenTelemetry log
+   * record at INFO severity: `name` is the record's `eventName`, body and
+   * `event.name` attribute, and the record carries this span's trace and span
+   * id. The Logs API model that replaces `Span.addEvent` (OTEP 4430), and
+   * the same call as autotel-web's `s.event`. Rich values are flattened as {@link setAttribute}
+   * does. Exported by default once there is an endpoint;
+   * `init({ logs: false })` drops it, with a one-time warning. Never throws.
+   */
+  event(name: string, attributes?: UnknownRecord): void;
+  /**
+   * Send a product event to the configured subscribers (PostHog, Mixpanel, …)
+   * with the active span's trace id attached. Equivalent to the standalone
+   * `track(event, data)`. Not an OpenTelemetry event: use {@link event} for one.
    */
   track<Events extends UnknownRecord = UnknownRecord>(
     event: keyof Events & string,
@@ -522,6 +537,18 @@ export function createTraceContext<
     recordError: (cause: unknown) => {
       const err = cause instanceof Error ? cause : new Error(String(cause));
       recordStructuredError(traceCtx, err);
+    },
+    event: (name: string, attributes?: UnknownRecord) => {
+      try {
+        emitOtelEvent(
+          name,
+          flattenToAttributes(attributes ?? {}),
+          // This span, not whichever is active: ctx can outlive an `await`.
+          otelTrace.setSpan(context.active(), span),
+        );
+      } catch {
+        // An event must not become the reason the traced code fails.
+      }
     },
     track: (event: string, data?: UnknownRecord) => {
       track(event, data);

@@ -1748,7 +1748,7 @@ Call it **after the write succeeded, and only when a document actually changed**
 
 The counter's attributes are `state.entity`, `state.field`, `state.from`, `state.to` and `state.via` (default `unknown`). Each one multiplies the metric's series, so keep them to a small fixed vocabulary. The id is never a metric attribute.
 
-`history: true` keeps one instance's history in your log backend, under that backend's existing access control. It is off by default, adds no new store, and needs log export configured in `init()`.
+`history: true` keeps one instance's history in your log backend, under that backend's existing access control. It is off by default, adds no new store, and exports as an event, so it needs only an endpoint.
 
 `transition()` never throws, so telemetry cannot break the write path. Counts are best-effort evidence, not an authoritative number: a process that dies before its next export loses what it had not sent.
 
@@ -1782,7 +1782,7 @@ import { init } from 'autotel';
 init({
   service: 'user-service',
   autoInstrumentations: ['http', 'pino'], // only these load
-  logs: true, // export log records via OTLP (off by default)
+  logs: true, // export every log record via OTLP (events only by default)
 });
 
 // logger.ts
@@ -3087,7 +3087,7 @@ init({
   - No endpoint = console-only (perfect for local development)
   - With endpoint = console + backend (verify before choosing provider)
 - **No debug flag**: Export to backend only (default production behavior)
-- **With `logs: true`**: log records are printed too, one line each in `'pretty'` mode (severity, body, attributes, trace id), raw with `true`. No endpoint needed: `init({ service: 'my-app', logs: true, debug: 'pretty' })`
+- **Events and logs**: events print by default, and with `logs: true` every log record, one line each in `'pretty'` mode (severity, body, attributes, trace id), raw with `true`. No endpoint needed: `init({ service: 'my-app', logs: true, debug: 'pretty' })`
 
 **Environment Variable:**
 

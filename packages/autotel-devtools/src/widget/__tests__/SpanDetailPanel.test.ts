@@ -241,6 +241,22 @@ describe('SpanDetailPanel: own and auto attributes', () => {
     expect(screen.getByText('deployment.environment')).toBeTruthy();
   });
 
+  it('opens the auto section when the app set no attributes', () => {
+    const span = makeSpan({
+      attributes: {
+        'deployment.environment': 'dev',
+        'code.function': 'sendUser',
+      },
+    });
+    render(SpanDetailPanel, {
+      props: { span, trace: makeTrace(span), onClose: () => {} },
+    });
+    expect(
+      screen.getByText('Your code set no attributes on this span.'),
+    ).toBeTruthy();
+    expect(screen.getByText('deployment.environment')).toBeTruthy();
+  });
+
   it('opens the auto section when the filter matches inside it', async () => {
     const span = makeSpan({
       attributes: { 'user.id': 'u4', 'code.function': 'sendUser' },

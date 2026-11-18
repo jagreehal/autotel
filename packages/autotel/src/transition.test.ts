@@ -189,6 +189,7 @@ describe('transition', () => {
     expect(record?.attributes).toEqual({
       ...ATTRIBUTES,
       'state.id': 'order-1',
+      'event.name': STATE_TRANSITION_EVENT,
     });
   });
 

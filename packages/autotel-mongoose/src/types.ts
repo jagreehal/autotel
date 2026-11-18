@@ -35,13 +35,13 @@ export interface SerializerPayload {
  * Configuration for Mongoose instrumentation.
  */
 export interface InstrumentMongooseConfig {
-  /** Database name for spans (sets db.namespace). */
+  /** Database name for spans (sets db.namespace). Defaults to the model's connection. */
   dbName?: string;
 
-  /** MongoDB server hostname (sets server.address). */
+  /** MongoDB server hostname (sets server.address). Defaults to the model's connection. */
   peerName?: string;
 
-  /** MongoDB server port (sets server.port, default: 27017). */
+  /** MongoDB server port (sets server.port). Defaults to the model's connection. */
   peerPort?: number;
 
   /** Custom tracer name (default: "autotel-mongoose"). */
@@ -213,9 +213,10 @@ export interface ResolvedCustomMethods {
  * @internal
  */
 export interface ResolvedConfig {
-  dbName: string;
-  peerName: string;
-  peerPort: number;
+  /** Unset: each span takes the value from its model's connection. */
+  dbName?: string;
+  peerName?: string;
+  peerPort?: number;
   tracerName: string;
   captureCollectionName: boolean;
   instrumentHooks: MethodSelector;

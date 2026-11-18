@@ -44,6 +44,8 @@ minimumReleaseAge: 4320
 # catches an upstream change here, and it can only see the version we install.
 # `effect` / `@effect/*`: autotel-effect bridges Effect's tracer and logger, so
 # it has to build and test against an Effect release the day it ships.
+# `awaitly` / `awaitly-visualizer` are tracked the day they ship by
+# apps/example-awaitly, which exercises their autotel adapter.
 # `router` 2.3 is the first release that publishes the `express.router.request`
 # tracing channel examples/express5-tracing-channel subscribes to.
 minimumReleaseAgeExclude:
@@ -57,6 +59,8 @@ minimumReleaseAgeExclude:
   - '@ai-sdk/*'
   - '@langfuse/*'
   - router
+  - awaitly
+  - awaitly-visualizer
 
 # No `overrides:` here on purpose. package.json's root `overrides` key
 # (`vite: >=7.1.11 <8`) is npm's and pnpm ignores it; moving it here would

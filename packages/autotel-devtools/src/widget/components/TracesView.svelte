@@ -56,6 +56,7 @@
   import FacetFilter from './FacetFilter.svelte';
   import QueryBar from './QueryBar.svelte';
   import TraceHoverCard from './TraceHoverCard.svelte';
+  import { hasTraceCardDetails } from '../utils/traceSummary';
   import TimeWindowPicker from './TimeWindowPicker.svelte';
   import TailPill from './TailPill.svelte';
   import { createTraceQuery } from '../signalQuery.svelte';
@@ -807,7 +808,7 @@
         </div>
       {/if}
     </div>
-    {#if hoverCard.card}
+    {#if hoverCard.card && hasTraceCardDetails(hoverCard.card.item)}
       {@const trace = hoverCard.card.item}
       <div class="absolute z-40 pointer-events-none" style={hoverCard.style}>
         <TraceHoverCard {trace} />

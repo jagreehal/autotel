@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { summarizeTrace } from './traceSummary';
+import { hasTraceCardDetails, summarizeTrace } from './traceSummary';
 import type { SpanData, TraceData } from '../types';
 
 const span = (s: Partial<SpanData> & { spanId: string }): SpanData => ({
@@ -56,13 +56,30 @@ describe('summarizeTrace', () => {
     }),
   ];
 
-  it('ranks spans by self time, not duration', () => {
+  it('picks the top spans by self time, listed in the order they started', () => {
     const { slowest } = summarizeTrace(trace(spans));
     expect(slowest.map((s) => [s.span.spanId, s.selfTime])).toEqual([
+      ['root', 15],
       ['db', 50],
       ['smtp', 25],
-      ['root', 15],
     ]);
+  });
+
+  it('leaves out spans under 1% of the trace', () => {
+    // root spends 0.5 of 100 itself around its child: noise, not a step.
+    const busy = [
+      span({ spanId: 'root', endTime: 100, duration: 100 }),
+      span({
+        spanId: 'email',
+        parentSpanId: 'root',
+        startTime: 0.5,
+        endTime: 100,
+        duration: 99.5,
+      }),
+    ];
+    expect(
+      summarizeTrace(trace(busy)).slowest.map((s) => s.span.spanId),
+    ).toEqual(['email']);
   });
 
   it('lists services by first appearance with span counts, defaulting to the trace service', () => {
@@ -80,5 +97,13 @@ describe('summarizeTrace', () => {
     const summary = summarizeTrace(trace(failed));
     expect(summary.errors.map((s) => s.spanId)).toEqual(['root', 'smtp']);
     expect(summary.errorOrigin?.spanId).toBe('smtp');
+  });
+
+  it('has no card details for a healthy one-span trace with no notable attributes', () => {
+    const solo = trace([
+      span({ spanId: 'user.find', endTime: 100, duration: 100 }),
+    ]);
+    expect(hasTraceCardDetails(solo)).toBe(false);
+    expect(hasTraceCardDetails(trace(spans))).toBe(true);
   });
 });

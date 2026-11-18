@@ -18,7 +18,10 @@ const budgets = [
   // +1 KB raw for the trace list's hover card (services, where the failure
   // started, spans by self time, root attributes) and Space to peek:
   // 512,140 / 149,900 measured.
-  { file: 'widget.global.js', raw: 513_000, gzip: 150_000 },
+  // +0.5 KB gzip for the card's section rules shared with the trace list,
+  // "where the time went" in start order, and Resource & auto opening on a
+  // span the app set nothing on: 512,603 / 150,075 measured.
+  { file: 'widget.global.js', raw: 513_000, gzip: 150_500 },
   // +15 KB raw for the Issues automations UI (destinations, triggers, runs),
   // which only the full viewer carries: 698,127 → 708,754 bytes measured.
   // +20 KB raw / +5 KB gzip for the Queries tab (statements grouped by hash,

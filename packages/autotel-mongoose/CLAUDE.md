@@ -18,6 +18,8 @@ You are working on the Mongoose micro-package. It instruments Mongoose 8+ with O
 - **Only application hooks are traced**: `isMongooseInternalHook` matches the handlers Mongoose registers in its own `lib/` by name (`shardingPlugin*`, `saveSubdocs*`, `trackTransaction*`, `timestampsPre*`, `_setTimestampsOnUpdate`, `virtualPreInit`). Keep that list matched to the dependency rather than widening it to generic words or naming conventions, which also catch application hooks.
 - **Delegating methods trace once**: `findById` calls `findOne`, and both are patched, so a `buildingQuery` flag covers the synchronous window in which a traced method assembles its Query and suppresses the delegate's span. Keep the window synchronous: a query a hook starts later runs outside it and must keep its span.
 - **Patching is idempotent per target, not per instance**: `Model`, `Query.prototype` and `Model.prototype` come from the mongoose module and are shared by every `new mongoose.Mongoose()`, so the already-instrumented flag on the instance cannot see them. Each installed wrapper carries `PATCHED_PROTOTYPE_FLAG` and the wrappers skip a method that already has one; without that, a second `instrumentMongoose()` call adds a layer and every operation opens an extra span.
+- **Cursors end the query's span**: `settleSpan` wraps `cursor()` beside `exec()`, and `src/cursor.ts` ends the span when `next()` returns `null` or `{ done: true }` or rejects, when `eachAsync()` settles, or on `close()`. Mongoose's `eachAsync` reads through an internal helper, not `next()`, so it is wrapped on its own. A stream reader pulls none of these: for it the driver cursor's `close` ends the span a tick later, and an `error` the cursor emits first marks it failed. That error is read off the cursor's `emit`, because Mongoose emits it directly (the stream's `errored` stays unset) and adding a listener would turn an unhandled stream error into a handled one.
+- **Server and database come from the connection**: `createSpan` reads `name`, `host` and `port` off `Model.db` unless `dbName` / `peerName` / `peerPort` are set. These are the fields Mongoose 9.7+ puts on its own tracing channel payloads.
 - **Span names come from the operation, not the registration**: `pre(['save','validate'])` is split per name at registration; `pre(/^find/)` resolves its name from the Query's `op` at call time. Hooks registered either way answer to the selector one operation at a time.
 
 ## Commands
@@ -42,7 +44,13 @@ proves the same rules against a server.
 - `src/types.ts`: Config interfaces, SerializerPayload
 - `src/constants.ts`: Stable OTel semantic convention constants
 - `src/statement.ts`: Serializer + redactor composition (default serializer delegates to `autotel-mongodb`)
-- `src/instrumentation.ts`: Core `instrumentMongoose()` patching
+- `src/instrumentation.ts`: `instrumentMongoose()` and the Model / Query / Document operation wrappers
+- `src/span-lifecycle.ts`: One operation span from start to end: target, statement and hash, plan, and `settleSpan`
+- `src/cursor.ts`: When a cursor's span ends
+- `src/hooks.ts`: Schema `pre` / `post` hook spans
+- `src/custom-methods.ts`: User-defined statics, methods and query helpers
+- `src/selector.ts`: `selectorAllows()`, shared by hooks and custom methods
+- `src/markers.ts`: The flags that keep a second install from wrapping twice
 - `src/index.ts`: Public API exports
 
 ## Boundaries

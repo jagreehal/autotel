@@ -26,6 +26,7 @@ const mockCtx = {
   updateName: vi.fn(),
   isRecording: vi.fn(() => true),
   recordError: vi.fn(),
+  event: vi.fn(),
   track: vi.fn(),
   getBaggage: vi.fn(),
   setBaggage: vi.fn(),

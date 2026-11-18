@@ -139,9 +139,9 @@ Excluding a hook only stops the span; your handler still runs.
 
 | Option                  | Default     | Description                              |
 | ----------------------- | ----------- | ---------------------------------------- |
-| `dbName`                | —           | Database name                            |
-| `peerName`              | —           | MongoDB host                             |
-| `peerPort`              | —           | MongoDB port                             |
+| `dbName`                | connection  | Database name                            |
+| `peerName`              | connection  | MongoDB host                             |
+| `peerPort`              | connection  | MongoDB port                             |
 | `captureCollectionName` | `true`      | Include collection in span               |
 | `instrumentHooks`       | `false`     | Trace schema hooks; accepts a selector   |
 | `dbStatementSerializer` | value-free  | Custom query serializer                  |

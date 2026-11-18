@@ -1090,13 +1090,30 @@ describe('init() customization', () => {
     expect(options.logRecordProcessors).toEqual([customLogProcessor]);
   });
 
-  it('does not auto-configure logs when logRecordProcessors are omitted', async () => {
+  it('exports only events when logs are unset', async () => {
     const { init, sdkInstances, logExporterOptions } =
       await loadInitWithMocks();
 
     init({
       service: 'default-logs',
       endpoint: 'http://localhost:4318',
+    });
+
+    expect(logExporterOptions).toHaveLength(1);
+    const options = sdkInstances.at(-1)!.options;
+    expect(options.logRecordProcessors?.map((p) => p.constructor.name)).toEqual(
+      ['EventsOnlyLogRecordProcessor'],
+    );
+  });
+
+  it('configures no log export with logs: false', async () => {
+    const { init, sdkInstances, logExporterOptions } =
+      await loadInitWithMocks();
+
+    init({
+      service: 'default-logs',
+      endpoint: 'http://localhost:4318',
+      logs: false,
     });
 
     expect(logExporterOptions).toHaveLength(0);

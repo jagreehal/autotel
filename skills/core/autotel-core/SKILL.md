@@ -10,7 +10,7 @@ description: >
 
 # Autotel: Core
 
-OpenTelemetry instrumentation for Node.js and edge. Instrument once; stream to any OTLP backend. Use `trace()`/`span()` for spans, `getRequestLogger()` for one snapshot per request, `createStructuredError`/`parseError` for errors, `track()` for product events.
+OpenTelemetry instrumentation for Node.js and edge. Instrument once; stream to any OTLP backend. Use `trace()`/`span()` for spans, `getRequestLogger()` for one snapshot per request, `createStructuredError`/`parseError` for errors, `ctx.event()` for OpenTelemetry events in a span, `track()` for product events.
 
 Event guidance: for new instrumentation, emit events as correlated logs (via request logger or logging pipeline bridged to OTel Logs API). Do not introduce new direct span-event dependencies for business/exception events.
 
@@ -22,6 +22,7 @@ Event guidance: for new instrumentation, emit events as correlated logs (via req
 | Request-scoped attributes + emit once | `getRequestLogger(ctx?)` → `.set()`, `.emitNow()`                                                             | `autotel`                              |
 | Throw with why/fix/link               | `createStructuredError({ message, why?, fix?, link?, status? })`                                              | `autotel`                              |
 | Parse API errors (client)             | `parseError(err)` → `message`, `why`, `fix`, `link`                                                           | `autotel`                              |
+| OpenTelemetry event during a span     | `ctx.event(name, attrs)`: a log record named by `eventName`, correlated to the span (exported by default)     | `autotel`                              |
 | Product/analytics events              | `track(name, attrs)` or `Event` from `autotel/event`                                                          | `autotel`, `autotel/event`             |
 | Init (once at startup)                | `init({ service, ... })`                                                                                      | `autotel`                              |
 | Same error thrown from many places    | `defineErrorCatalog(ns, entries)` → typed builders + `.match()`                                               | `autotel`                              |
@@ -60,7 +61,7 @@ init({
 - **`headers`**: an object or a `'key=value,key2=value2'` string. Falls back to `OTEL_EXPORTER_OTLP_HEADERS`.
 - **`protocol`**: `'http'` (OTLP/HTTP with a JSON body, the default), `'http/protobuf'` or `'grpc'`. The last two need the matching `@opentelemetry/exporter-*-otlp-proto` / `-grpc` packages in your app. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL`.
 - **`sampling`**: set it. Without `sampling` or `sampler`, wrapped functions keep every span. See `tune-sampling`.
-- **`logs`**: off by default. `logs: true` (or `AUTOTEL_LOGS=on`) exports OTel log records to the same endpoint; the HTTP/JSON log exporter ships with autotel. With `debug: 'pretty'` (or `true`) the log records print to the console beside the span trees, no endpoint needed.
+- **`logs`**: events only by default (records with an `eventName`: `ctx.event`, `transition()` history, flag evaluations). `logs: true` (or `AUTOTEL_LOGS=on`) exports every OTel log record to the same endpoint, `logs: false` none; the HTTP/JSON log exporter ships with autotel. With `debug: 'pretty'` (or `true`) the log records print to the console beside the span trees, no endpoint needed.
 - **`httpClientUrlTemplate`**: `(url, method) => template | undefined`. Outbound http and `fetch` client spans become `{method} {url.template}` and carry `url.template`, as the HTTP conventions allow; `undefined` keeps the name `{method}`. Map only known paths: never return the raw path, and never put the host in the name.
 - **Shutdown**: `await flush()` exports what is buffered (2s timeout by default); `await shutdown()` flushes and stops the SDK, waiting up to 10s (the top-level `init({ shutdownTimeoutMs })` or `shutdown({ timeout })` changes it). Both come from `autotel`.
 - **`init()` throws** on an unknown `sampling` preset, an invalid `attributeRedactor` config, `devtools: { embedded: true, port: 0 }`, and an `sdkFactory` that returns nothing. Calling `init()` again warns, shuts the previous pipeline down and starts the new config; `trace()` wrappers, tracers from `getTracer()` and the earlier call's instrumentations follow it. `init()` after `shutdown()` starts a fresh pipeline without a warning. `lockLogger()` makes later calls no-ops.

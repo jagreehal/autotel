@@ -17,7 +17,7 @@ import { init } from 'autotel';
 import pino from 'pino';
 
 const logger = pino({
-  name: 'awaitly-example',
+  name: 'example-awaitly',
   level: 'info',
   transport: {
     target: 'pino-pretty',
@@ -25,8 +25,10 @@ const logger = pino({
   },
 });
 
+// Registers the tracer, meter and context manager awaitly reads. With no
+// endpoint, `debug: 'pretty'` prints each trace as a tree.
 init({
-  service: 'awaitly-example',
-  debug: true,
+  service: 'example-awaitly',
+  debug: 'pretty',
   logger,
 });
