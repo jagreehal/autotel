@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import type { Span, SpanContext } from '@opentelemetry/api';
 import {
@@ -39,6 +40,23 @@ function createFakeSpan(): {
 }
 
 describe('structured-error helpers', () => {
+  it('keeps a name of Error that was assigned explicitly', () => {
+    class LookupError extends Error {}
+    const named = Object.assign(new LookupError('x'), { name: 'Error' });
+
+    expect(getStructuredErrorAttributes(named)['error.type']).toBe('Error');
+    expect(
+      getStructuredErrorAttributes(new LookupError('x'))['error.type'],
+    ).toBe('LookupError');
+  });
+
+  it('keeps the name of an error from another realm', () => {
+    // SAFETY: the evaluated source is a TypeError constructor call.
+    const error = runInNewContext("new TypeError('bad input')") as Error;
+    expect(error instanceof Error).toBe(false);
+    expect(getStructuredErrorAttributes(error)['error.type']).toBe('TypeError');
+  });
+
   it('creates an error with structured diagnostic fields', () => {
     const err = createStructuredError({
       message: 'Payment failed',
@@ -125,7 +143,12 @@ describe('structured-error helpers', () => {
 
     recordStructuredError(ctx, err);
 
-    expect(recordException).toHaveBeenCalledWith(err);
+    expect(recordException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'StructuredError',
+        message: err.message,
+      }),
+    );
     expect(setStatus).toHaveBeenCalledWith({
       code: 2,
       message: 'Checkout failed',
@@ -153,7 +176,12 @@ describe('ctx.recordError', () => {
 
     ctx.recordError(err);
 
-    expect(recordException).toHaveBeenCalledWith(err);
+    expect(recordException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'StructuredError',
+        message: err.message,
+      }),
+    );
     expect(setStatus).toHaveBeenCalledWith({
       code: 2,
       message: 'Order failed',
@@ -175,9 +203,9 @@ describe('ctx.recordError', () => {
     ctx.recordError('boom');
 
     expect(recordException).toHaveBeenCalledTimes(1);
-    const recorded = recordException.mock.calls[0]![0];
-    expect(recorded).toBeInstanceOf(Error);
-    expect(recorded.message).toBe('boom');
+    expect(recordException).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Error', message: 'boom' }),
+    );
     expect(setStatus).toHaveBeenCalledWith({ code: 2, message: 'boom' });
     expect(setAttributes).toHaveBeenCalled();
   });

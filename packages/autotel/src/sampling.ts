@@ -25,7 +25,7 @@
 import type { Link, Attributes, Context } from '@opentelemetry/api';
 import { TraceFlags, propagation } from '@opentelemetry/api';
 import { type Logger } from './logger';
-import { asStringRecord, type UnknownRecord } from './values';
+import { asStringRecord, readString, type UnknownRecord } from './values';
 import { getActiveContextWithBaggage } from './trace-context';
 
 /**
@@ -360,7 +360,7 @@ export class AdaptiveSampler implements Sampler {
         this.logger?.debug(
           {
             operation: context.operationName,
-            error: result.error?.message,
+            error: readString(() => result.error?.message),
           },
           'Adaptive sampling: Keeping error trace',
         );

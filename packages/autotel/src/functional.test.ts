@@ -364,6 +364,30 @@ describe('Functional API', () => {
       expect(span!.attributes.error).not.toBe(true);
     });
 
+    it('counts a failure when isError itself throws', async () => {
+      const collector = createTraceCollector();
+      const original = new Error('original');
+      const traced = traceOptionsFactory(
+        {
+          name: 'factory.async.throwing-classifier',
+          isError: () => {
+            throw new Error('classifier blew up');
+          },
+        },
+        (_ctx: TraceContext) => async () => {
+          throw original;
+        },
+      );
+
+      await expect(traced()).rejects.toBe(original);
+
+      const [span] = collector.getSpansByName(
+        'factory.async.throwing-classifier',
+      );
+      expect(span!.status.code).toBe(SpanStatusCode.ERROR);
+      expect(span!.attributes['error.type']).toBe('Error');
+    });
+
     it('honors isError for sync factory functions', () => {
       const collector = createTraceCollector();
       const signal = { type: 'control-flow' };
@@ -1296,6 +1320,20 @@ describe('Functional API', () => {
 
       const spans = collector.getSpans();
       expect(spans[0]!.attributes['exception.type']).toBe('CustomError');
+      expect(spans[0]!.attributes['error.type']).toBe('CustomError');
+    });
+
+    it('keeps an error.type the function set before throwing', async () => {
+      const collector = createTraceCollector();
+
+      const fn = traceFactory((ctx: TraceContext) => async () => {
+        ctx.setAttribute('error.type', 'timeout');
+        throw new Error('timed out');
+      });
+
+      await expect(fn()).rejects.toThrow();
+
+      expect(collector.getSpans()[0]!.attributes['error.type']).toBe('timeout');
     });
 
     it('should include stack trace', async () => {

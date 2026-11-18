@@ -20,7 +20,7 @@ import { emitOtelEvent } from './otel-event';
 import type { AsyncLocalStorage } from 'node:async_hooks';
 import * as nodeAsyncHooks from 'node:async_hooks';
 import { flattenToAttributes, toAttributeValue } from './flatten-attributes';
-import { recordStructuredError } from './structured-error';
+import { recordStructuredError, toError } from './structured-error';
 import { track } from './track';
 import type { UnknownRecord } from './values';
 import { isFunction } from './values';
@@ -535,8 +535,11 @@ export function createTraceContext<
     updateName: span.updateName.bind(span),
     isRecording: span.isRecording.bind(span),
     recordError: (cause: unknown) => {
-      const err = cause instanceof Error ? cause : new Error(String(cause));
-      recordStructuredError(traceCtx, err);
+      try {
+        recordStructuredError(traceCtx, toError(cause));
+      } catch {
+        // Recording an error never fails the traced code.
+      }
     },
     event: (name: string, attributes?: UnknownRecord) => {
       try {
