@@ -3,106 +3,49 @@
 // Mongoose is a devDependency so we type-check against the real API; consumers use the peer.
 
 import type { Mongoose } from 'mongoose';
-import { otelTrace as trace, context, SpanKind, SpanStatusCode } from 'autotel';
-import type { Attributes as SpanAttributes, Span, Tracer } from 'autotel';
-import {
-  runWithSpan,
-  finalizeSpan,
-  getActiveSpan,
-} from 'autotel/trace-helpers';
-
-import {
-  ATTR_DB_SYSTEM_NAME,
-  ATTR_DB_OPERATION_NAME,
-  ATTR_DB_COLLECTION_NAME,
-  ATTR_DB_NAMESPACE,
-  ATTR_DB_QUERY_TEXT,
-  ATTR_SERVER_ADDRESS,
-  ATTR_SERVER_PORT,
-  ATTR_CODE_FUNCTION_NAME,
-  ATTR_MONGOOSE_METHOD_NAME,
-  ATTR_MONGOOSE_METHOD_TYPE,
-  ATTR_MONGOOSE_METHOD_MODEL,
-  ATTR_MONGOOSE_METHOD_PARAMETERS,
-  ATTR_MONGOOSE_METHOD_PARAMETER_COUNT,
-  DB_SYSTEM_NAME_VALUE_MONGODB,
-} from './constants';
+import { otelTrace as trace } from 'autotel';
+import type { Tracer } from 'autotel';
+import { runWithSpan, getActiveSpan } from 'autotel/trace-helpers';
 import type {
-  CustomMethodType,
-  CustomMethodsConfig,
   InstrumentMongooseConfig,
-  MethodSelector,
-  MongoDocument,
   ResolvedConfig,
-  ResolvedCustomMethods,
   SerializerPayload,
 } from './types.js';
 import { DEFAULT_TRACER_NAME } from './types';
-import {
-  ATTR_DB_STATEMENT_HASH,
-  hashStatement,
-  planAttributes,
-  planUnavailableAttributes,
-  type ExplainMode,
-} from 'autotel-db';
-import { planFromExplain, serializeMongoStatement } from 'autotel-mongodb';
 import { explainCommand } from './explain';
 import {
   createStatementCapture,
-  createParameterCapture,
   defaultSerializer,
   type StatementCaptureFn,
 } from './statement';
+import { asFunction, asRecord, isFunction, readProperty } from './values.js';
 import {
-  asFunction,
-  asRecord,
-  asString,
-  callFunction,
-  isFunction,
-  readProperty,
-  toError,
-} from './values.js';
-
-const INSTRUMENTED_FLAG = '__autotelMongooseInstrumented' as const;
-/**
- * Autotel marks what it has already wrapped so a second install is a no-op.
- * The marker lives on functions and prototypes this package does not own, so
- * these two helpers hold the only assertions needed to read and write it.
- */
-type MarkerKey = string | symbol;
-
-/** What a marker holds: that the value was wrapped, or the span stored on it. */
-type MarkerValue = boolean | Span | undefined;
-
-type Marked = Record<MarkerKey, MarkerValue>;
-
-function hasMarker(target: object, key: MarkerKey): boolean {
-  // SAFETY: reading an own property that may not exist; absent reads undefined.
-  return Boolean((target as Marked)[key]);
-}
-
-function setMarker(
-  target: object,
-  key: MarkerKey,
-  value: MarkerValue = true,
-): void {
-  // SAFETY: the marker is autotel's own key on a value autotel just wrapped.
-  (target as Marked)[key] = value;
-}
-
-const WRAPPED_HOOK_FLAG = '__autotelWrappedHook' as const;
-const WRAPPED_METHOD_FLAG = '__autotelWrappedMethod' as const;
-const MODEL_PATCHED_FLAG = '__autotelModelPatched' as const;
-/**
- * Set on the replacement autotel installs over a Mongoose prototype method.
- *
- * `Model`, `Query.prototype` and `Model.prototype` come from the mongoose
- * module, so every `new mongoose.Mongoose()` shares them. The
- * already-instrumented guard sits on the Mongoose instance, which cannot see
- * that: instrumenting a second instance wrapped the same methods again, and one
- * `find()` then opened a span per layer.
- */
-const PATCHED_PROTOTYPE_FLAG = '__autotelPatchedPrototype' as const;
+  INSTRUMENTED_FLAG,
+  hasMarker,
+  setMarker,
+  PATCHED_PROTOTYPE_FLAG,
+  _STORED_PARENT_SPAN,
+} from './markers';
+import {
+  DescribeTarget,
+  describeModel,
+  describeDocument,
+  describeConnection,
+  createSpan,
+  mongoDocument,
+  createSpanFinalizer,
+  recordStatement,
+  succeedWith,
+  readQueryPayload,
+  explainThroughDriver,
+  settleSpan,
+} from './span-lifecycle';
+import { patchSchemaHooks, resolveHookSelector } from './hooks';
+import {
+  INSTANCE_REGISTRY,
+  resolveCustomMethods,
+  patchModelFactory,
+} from './custom-methods';
 
 /**
  * True while a traced Model method is building its query.
@@ -118,415 +61,6 @@ const PATCHED_PROTOTYPE_FLAG = '__autotelPatchedPrototype' as const;
  * which is the distinction a "suppress any nested query" rule would lose.
  */
 let buildingQuery = false;
-const PROXIED_COLLECTION_FLAG = '__autotelProxiedCollection' as const;
-
-/**
- * Per-Mongoose-instance registry of the resolved tracer + config.
- *
- * Custom-function wrappers are installed once on the (potentially shared)
- * schema object, so they must NOT close over a single instance's
- * tracer/config — a schema reused across instances/connections would otherwise
- * be permanently bound to whichever instrumented it first. Instead each wrapper
- * resolves the owning Mongoose instance from its runtime `this` and looks up
- * the config here at call time. An instance that was never instrumented (or has
- * custom methods disabled) is absent, so its calls pass straight through.
- */
-const INSTANCE_REGISTRY = new WeakMap<
-  object,
-  { tracer: Tracer; config: ResolvedConfig }
->();
-
-/** Resolves the owning Mongoose instance from a custom function's `this`. */
-function resolveMongooseInstance(
-  self: any,
-  methodType: CustomMethodType,
-): object | undefined {
-  try {
-    switch (methodType) {
-      case 'static': {
-        // `this` is the Model.
-        return self?.base ?? self?.db?.base;
-      }
-      case 'instance': {
-        // `this` is the Document; its constructor is the Model.
-        return self?.constructor?.base ?? self?.db?.base;
-      }
-      case 'query': {
-        // `this` is the Query.
-        return self?.model?.base;
-      }
-    }
-  } catch {
-    // Ignore — treated as "not instrumented".
-  }
-  return undefined;
-}
-
-/** Picks the selector for a given method category from a resolved config. */
-function selectorFor(
-  cm: ResolvedCustomMethods,
-  methodType: CustomMethodType,
-): MethodSelector {
-  switch (methodType) {
-    case 'static': {
-      return cm.statics;
-    }
-    case 'instance': {
-      return cm.methods;
-    }
-    case 'query': {
-      return cm.query;
-    }
-  }
-}
-
-/**
- * Symbol used to store the parent span on Query/Aggregate objects.
- * This preserves context across chainable query methods.
- */
-export const _STORED_PARENT_SPAN: unique symbol = Symbol('stored-parent-span');
-
-// ---------------------------------------------------------------------------
-// Span creation
-// ---------------------------------------------------------------------------
-
-/**
- * Creates a span for a Mongoose operation.
- * Note: db.query.text is NOT set here — callers set it after payload extraction.
- */
-function createSpan(
-  tracer: Tracer,
-  operation: string,
-  modelName: string | undefined,
-  collectionName: string | undefined,
-  config: ResolvedConfig,
-): Span {
-  const spanName = collectionName
-    ? `${operation} ${collectionName}`
-    : modelName
-      ? `${operation} ${modelName}`
-      : `mongoose.${operation}`;
-
-  const attributes: SpanAttributes = {
-    [ATTR_DB_SYSTEM_NAME]: DB_SYSTEM_NAME_VALUE_MONGODB,
-    [ATTR_DB_OPERATION_NAME]: operation,
-  };
-
-  if (collectionName && config.captureCollectionName) {
-    attributes[ATTR_DB_COLLECTION_NAME] = collectionName;
-  }
-  if (config.dbName) {
-    attributes[ATTR_DB_NAMESPACE] = config.dbName;
-  }
-  if (config.peerName) {
-    attributes[ATTR_SERVER_ADDRESS] = config.peerName;
-  }
-  if (config.peerPort) {
-    attributes[ATTR_SERVER_PORT] = config.peerPort;
-  }
-
-  return tracer.startSpan(spanName, { kind: SpanKind.CLIENT, attributes });
-}
-
-// ---------------------------------------------------------------------------
-// Wrapper helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Returns an idempotent finalizer for a span. Every wrapper invocation may try
- * to close its span from more than one place — a callback, an `exec()`
- * continuation, a promise settlement, a synchronous return, or a thrown error —
- * and the span must be ended exactly once. The first call wins; later calls are
- * no-ops. A non-Error rejection is normalized to an `Error`.
- */
-/**
- * A value Mongoose handed back, read as the document shape the serializer
- * expects.
- *
- * SAFETY: a query's filter, update, options and projection are plain objects
- * of BSON-serialisable values, which is what MongoDocument says. The
- * serializer walks them field by field and stringifies anything it does not
- * recognise.
- */
-function mongoDocument(value: unknown): MongoDocument | undefined {
-  return asRecord(value) as MongoDocument | undefined;
-}
-
-/** Ends a span once; `endTime` backdates the end to when the work finished. */
-type Finalize = (error?: unknown, endTime?: number) => void;
-
-function createSpanFinalizer(span: Span): Finalize {
-  let done = false;
-  return (error?: unknown, endTime?: number): void => {
-    if (done) {
-      return;
-    }
-    done = true;
-    if (error === undefined || error === null) {
-      span.setStatus({ code: SpanStatusCode.OK });
-    } else {
-      span.recordException(toError(error));
-      span.setStatus({ code: SpanStatusCode.ERROR });
-    }
-    span.end(endTime);
-  };
-}
-
-/**
- * Sets `db.query.text` (through the user's serializer and redactor) and
- * `db.statement.hash`. The hash is always taken from the value-free shape,
- * whatever the serializer emits, and from the operation and collection, which
- * the payload does not name, so it groups the same query and nothing else
- * even when text capture is off.
- */
-function recordStatement(
-  span: Span,
-  operation: string,
-  collectionName: string | undefined,
-  payload: SerializerPayload,
-  captureStatement: StatementCaptureFn,
-): void {
-  try {
-    const statementText = captureStatement(operation, payload);
-    if (statementText) {
-      span.setAttribute(ATTR_DB_QUERY_TEXT, statementText);
-    }
-    span.setAttribute(
-      ATTR_DB_STATEMENT_HASH,
-      hashStatement(
-        `${operation} ${collectionName ?? ''} ${serializeMongoStatement(payload)}`,
-      ),
-    );
-  } catch {
-    // Ignore serialization errors
-  }
-}
-
-/**
- * How a wrapper ends its span on success: plainly, or after collecting the
- * plan when `explain` is on and the operation has one.
- */
-function succeedWith(
-  span: Span,
-  finalize: Finalize,
-  mode: ExplainMode | false,
-  explain: ((verbosity: string) => Promise<unknown>) | undefined,
-): () => void {
-  if (!mode) return () => finalize();
-  // Explain is on and this operation has nothing to explain (a save, an
-  // insert): the span says so.
-  if (!explain) {
-    return () => {
-      span.setAttributes(planUnavailableAttributes('unsupported', { mode }));
-      finalize();
-    };
-  }
-  return () =>
-    finalizeWithPlan(span, finalize, mode, () =>
-      explain(EXPLAIN_VERBOSITY[mode]),
-    );
-}
-
-/** What `explainThroughDriver` returns for an operation with no command. */
-const NO_EXPLAIN = Symbol('no explain');
-
-/** A Query's filter, update, options and projection as they stand now. */
-function readQueryPayload(query: Record<string, any>): SerializerPayload {
-  const payload: SerializerPayload = {};
-  try {
-    const getFilter = asFunction(query.getFilter);
-    if (getFilter) payload.condition = mongoDocument(getFilter.call(query));
-    payload.updates = mongoDocument(query._update);
-    const getOptions = asFunction(query.getOptions);
-    if (getOptions) payload.options = mongoDocument(getOptions.call(query));
-    payload.fields = mongoDocument(query._fields);
-  } catch {
-    // Ignore errors in payload extraction
-  }
-  return payload;
-}
-
-/**
- * Sends `{ explain: command, verbosity }` on the connection's native `Db`.
- * `connection` is the Mongoose Connection a Model hangs off (`Model.db`, read
- * off the Model the wrapper was called on); its `.db` is the driver's.
- */
-function explainThroughDriver(
-  connection: unknown,
-  command: Record<string, unknown> | undefined,
-  verbosity: string,
-): Promise<unknown> {
-  const db = readProperty(connection, 'db');
-  const run = asFunction(readProperty(db, 'command'));
-  if (!command) return Promise.resolve(NO_EXPLAIN);
-  if (!run) return Promise.reject(new Error('no driver Db on this connection'));
-  return Promise.resolve(
-    callFunction(run, db, [{ explain: command, verbosity }]),
-  );
-}
-
-/** The `explain()` verbosity each mode asks MongoDB for. */
-const EXPLAIN_VERBOSITY = {
-  plan: 'queryPlanner',
-  analyze: 'executionStats',
-} as const satisfies Record<ExplainMode, string>;
-
-/**
- * Runs `explain` once the query has settled and ends the span with the plan
- * on it. The span ends at the time the query settled, not when the explain
- * came back, so the duration is the query's own, and the caller gets its
- * result without waiting. A process that exits straight after its last query
- * should shut down its tracer provider after a short pause, so that span is
- * exported.
- */
-function finalizeWithPlan(
-  span: Span,
-  finalize: Finalize,
-  mode: ExplainMode,
-  explain: () => Promise<unknown>,
-): void {
-  const settledAt = performance.timeOrigin + performance.now();
-  void Promise.resolve()
-    .then(explain)
-    .then((result) => {
-      if (result === NO_EXPLAIN) {
-        span.setAttributes(planUnavailableAttributes('unsupported', { mode }));
-        return;
-      }
-      const plan = planFromExplain(Array.isArray(result) ? result[0] : result);
-      span.setAttributes(
-        plan
-          ? planAttributes({ ...plan, mode })
-          : planUnavailableAttributes('failed', {
-              mode,
-              error: 'explain output was not a plan autotel-mongodb reads',
-            }),
-      );
-    })
-    .catch((error: unknown) => {
-      // A plan is commentary on a query: failing to get one never fails it,
-      // and the span records why, so a reader can tell it from explain off.
-      span.setAttributes(
-        planUnavailableAttributes('failed', {
-          mode,
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    })
-    .finally(() => finalize(undefined, settledAt));
-}
-
-/**
- * Closes `finalize` over whatever async shape an operation returns:
- *
- * - a Mongoose Query/Aggregate (`exec()`) → wrap `exec()` so the span spans the
- *   real DB round-trip, and return the Query unchanged for further chaining;
- * - a Promise → finalize when it settles, and return the chained promise;
- * - a synchronous value → finalize now, and return it.
- *
- * This is the single settlement ladder shared by every wrapper, so the rule
- * "the span ends when the work ends" lives in exactly one place. `succeed`
- * replaces the plain `finalize()` on success, which is where explain hooks in;
- * `beforeExec` runs as exec() starts, once the caller has finished chaining.
- */
-function settleSpan(
-  result: any,
-  finalize: Finalize,
-  succeed: () => void = () => finalize(),
-  beforeExec?: () => void,
-): any {
-  const exec = asFunction(readProperty(result, 'exec'));
-  if (exec) {
-    const originalExec = exec.bind(result);
-    result.exec = function wrappedExec(): Promise<any> {
-      try {
-        beforeExec?.();
-        return Promise.resolve(originalExec()).then(
-          (value: any) => {
-            succeed();
-            return value;
-          },
-          (error: unknown) => {
-            finalize(error);
-            throw error;
-          },
-        );
-      } catch (error) {
-        finalize(error);
-        throw error;
-      }
-    };
-    return result;
-  }
-
-  if (isFunction(readProperty(result, 'then'))) {
-    // SAFETY: the probe above established the result is a thenable.
-    return Promise.resolve(result as Promise<any>).then(
-      (value) => {
-        succeed();
-        return value;
-      },
-      (error: unknown) => {
-        finalize(error);
-        throw error;
-      },
-    );
-  }
-
-  succeed();
-  return result;
-}
-
-/**
- * Node-convention callback support for custom methods: if the last argument is
- * a function, replace it with one that (a) runs the original callback inside the
- * span's context — so any DB calls the callback makes nest under this span — and
- * (b) finalizes the span when the callback fires, treating a truthy first
- * argument as the error. Older Mongoose code returns synchronously and does its
- * real work in such a callback (e.g. `doc.checkValidationErrors(cb)`), so the
- * span must outlive the synchronous return.
- *
- * Returns the args to call with and whether finalization was handed to a
- * callback. If there is no trailing callback, the args pass through unchanged.
- *
- * NOTE: This is the Node trailing-callback convention. Mongoose *hooks* use a
- * different convention — kareem's positional `next` — handled separately in
- * wrapHookHandler. The two are intentionally not merged: a single "find the
- * callback" rule across both would hide two genuinely different calling shapes.
- */
-/** Whether the call's completion was handed to a callback, and the args to use. */
-interface DeferredCall {
-  callArgs: any[];
-  deferred: boolean;
-}
-
-function deferFinalizeToCallback(
-  args: any[],
-  span: Span,
-  finalize: (cause?: unknown) => void,
-): DeferredCall {
-  const lastIndex = args.length - 1;
-  const maybeCallback = lastIndex >= 0 ? args[lastIndex] : undefined;
-  if (!isFunction(maybeCallback)) {
-    return { callArgs: args, deferred: false };
-  }
-
-  const callArgs = [...args];
-  callArgs[lastIndex] = function tracedCallback(
-    this: any,
-    ...callbackArgs: any[]
-  ): any {
-    try {
-      return runWithSpan(span, () =>
-        callFunction(maybeCallback, this, callbackArgs),
-      );
-    } finally {
-      finalize(callbackArgs[0]);
-    }
-  };
-  return { callArgs, deferred: true };
-}
-
 /**
  * Wraps Model methods that return Query objects (find, findOne, findById,
  * findOneAndUpdate, findOneAndDelete, findOneAndReplace, deleteOne, deleteMany,
@@ -539,8 +73,7 @@ function wrapQueryReturningMethod(
   target: any,
   methodName: string,
   operation: string,
-  getCollectionName: (obj: any) => string | undefined,
-  getModelName: (obj: any) => string | undefined,
+  describe: DescribeTarget,
   tracer: Tracer,
   config: ResolvedConfig,
   captureStatement: StatementCaptureFn,
@@ -555,14 +88,14 @@ function wrapQueryReturningMethod(
       return original.apply(this, args);
     }
 
-    const collectionName = getCollectionName(this);
-    const modelName = getModelName(this);
+    const { collectionName, modelName, connection } = describe(this);
     const span = createSpan(
       tracer,
       operation,
       modelName,
       collectionName,
       config,
+      connection,
     );
 
     const finalize = createSpanFinalizer(span);
@@ -595,7 +128,7 @@ function wrapQueryReturningMethod(
           isQuery && collectionName
             ? (verbosity: string) =>
                 explainThroughDriver(
-                  this.db,
+                  connection,
                   explainCommand(
                     operation,
                     collectionName,
@@ -632,18 +165,16 @@ function wrapStaticMethod(
   target: any,
   methodName: string,
   operation: string,
-  getCollectionName: (obj: any) => string | undefined,
-  getModelName: (obj: any) => string | undefined,
+  describe: DescribeTarget,
   tracer: Tracer,
   config: ResolvedConfig,
   captureStatement: StatementCaptureFn,
 ): void {
   const original = asFunction(target[methodName]);
-  if (!original) return;
+  if (!original || hasMarker(original, PATCHED_PROTOTYPE_FLAG)) return;
 
   target[methodName] = function instrumented(this: any, ...args: any[]): any {
-    const collectionName = getCollectionName(this);
-    const modelName = getModelName(this);
+    const { collectionName, modelName, connection } = describe(this);
 
     // Build payload from args before calling original
     const payload: SerializerPayload = {};
@@ -681,6 +212,7 @@ function wrapStaticMethod(
       modelName,
       collectionName,
       config,
+      connection,
     );
 
     const finalize = createSpanFinalizer(span);
@@ -726,7 +258,7 @@ function wrapStaticMethod(
           isAggregate && collectionName
             ? (verbosity: string) =>
                 explainThroughDriver(
-                  this.db,
+                  connection,
                   explainCommand(operation, collectionName, readAggregate()),
                   verbosity,
                 )
@@ -743,6 +275,7 @@ function wrapStaticMethod(
       }
     });
   };
+  setMarker(target[methodName], PATCHED_PROTOTYPE_FLAG);
 }
 
 /**
@@ -756,8 +289,7 @@ function wrapInstanceMethod(
   target: any,
   methodName: string,
   operation: string,
-  getCollectionName: (obj: any) => string | undefined,
-  getModelName: (obj: any) => string | undefined,
+  describe: DescribeTarget,
   tracer: Tracer,
   config: ResolvedConfig,
   captureStatement: StatementCaptureFn,
@@ -766,8 +298,7 @@ function wrapInstanceMethod(
   if (!original || hasMarker(original, PATCHED_PROTOTYPE_FLAG)) return;
 
   target[methodName] = function instrumented(this: any, ...args: any[]): any {
-    const collectionName = getCollectionName(this);
-    const modelName = getModelName(this);
+    const { collectionName, modelName, connection } = describe(this);
 
     // Extract document before calling original
     const payload: SerializerPayload = {};
@@ -785,6 +316,7 @@ function wrapInstanceMethod(
       modelName,
       collectionName,
       config,
+      connection,
     );
 
     recordStatement(span, operation, collectionName, payload, captureStatement);
@@ -808,10 +340,6 @@ function wrapInstanceMethod(
   setMarker(target[methodName], PATCHED_PROTOTYPE_FLAG);
 }
 
-// ---------------------------------------------------------------------------
-// Chainable method wrapping (copied from original)
-// ---------------------------------------------------------------------------
-
 /**
  * Wraps chainable Query methods (populate, select, lean, etc.) to capture span context.
  */
@@ -833,881 +361,6 @@ function wrapChainableMethod(target: any, methodName: string): void {
   };
   setMarker(target[methodName], PATCHED_PROTOTYPE_FLAG);
 }
-
-// ---------------------------------------------------------------------------
-// Schema hook instrumentation (copied from original, updated semconv)
-// ---------------------------------------------------------------------------
-
-/**
- * Patches Mongoose Schema hooks (pre/post) to automatically trace them.
- * Only wraps user-defined hooks, skipping Mongoose's internal hooks.
- */
-function patchSchemaHooks(
-  Schema: any,
-  tracer: Tracer,
-  config: ResolvedConfig,
-): void {
-  if (!Schema?.prototype) {
-    return;
-  }
-
-  const HOOK_FLAG = '__autotelHookInstrumented' as const;
-  if (hasMarker(Schema.prototype, HOOK_FLAG)) {
-    return;
-  }
-
-  const originalPre = asFunction(Schema.prototype.pre);
-  if (originalPre) {
-    Schema.prototype.pre = function (
-      hookName: string | RegExp | string[],
-      ...args: any[]
-    ): any {
-      // `pre(['save', 'validate'], fn)` registers one handler for several
-      // hooks. Left whole, the array reached the span name verbatim
-      // (`pre.save,validate`) and the selector could not match any single
-      // entry. Splitting it here registers each hook the way Mongoose would,
-      // so both name and selector see one operation at a time.
-      if (Array.isArray(hookName)) {
-        let result: any;
-        for (const singleName of hookName) {
-          result = callFunction(
-            Schema.prototype.pre as (...a: never[]) => unknown,
-            this,
-            [singleName, ...args],
-          );
-        }
-        return result;
-      }
-
-      const handler = asFunction(args[0]) ?? asFunction(args[1]) ?? null;
-
-      // A RegExp covers whichever operations match, so it cannot be selected
-      // until one runs; `wrapHookHandler` applies the selector per call.
-      const selectable = typeof hookName !== 'string';
-
-      // Only wrap user-defined hooks the selector allows, skip Mongoose internals
-      if (
-        handler &&
-        (selectable || selectorAllows(config.instrumentHooks, hookName)) &&
-        !isMongooseInternalHook(handler)
-      ) {
-        const wrapped = wrapHookHandler(
-          handler,
-          hookName,
-          'pre',
-          tracer,
-          config,
-        );
-        if (typeof args[0] === 'function') {
-          args[0] = wrapped;
-        } else if (typeof args[1] === 'function') {
-          args[1] = wrapped;
-        }
-      }
-
-      return callFunction(originalPre, this, [hookName, ...args]);
-    };
-  }
-
-  const originalPost = asFunction(Schema.prototype.post);
-  if (originalPost) {
-    Schema.prototype.post = function (
-      hookName: string | RegExp | string[],
-      ...args: any[]
-    ): any {
-      // `post(['save', 'validate'], fn)` registers one handler for several
-      // hooks. Left whole, the array reached the span name verbatim
-      // (`post.save,validate`) and the selector could not match any single
-      // entry. Splitting it here registers each hook the way Mongoose would,
-      // so both name and selector see one operation at a time.
-      if (Array.isArray(hookName)) {
-        let result: any;
-        for (const singleName of hookName) {
-          result = callFunction(
-            Schema.prototype.post as (...a: never[]) => unknown,
-            this,
-            [singleName, ...args],
-          );
-        }
-        return result;
-      }
-
-      const handler = asFunction(args[0]) ?? asFunction(args[1]) ?? null;
-
-      // A RegExp covers whichever operations match, so it cannot be selected
-      // until one runs; `wrapHookHandler` applies the selector per call.
-      const selectable = typeof hookName !== 'string';
-
-      // Only wrap user-defined hooks the selector allows, skip Mongoose internals
-      if (
-        handler &&
-        (selectable || selectorAllows(config.instrumentHooks, hookName)) &&
-        !isMongooseInternalHook(handler)
-      ) {
-        const wrapped = wrapHookHandler(
-          handler,
-          hookName,
-          'post',
-          tracer,
-          config,
-        );
-        if (typeof args[0] === 'function') {
-          args[0] = wrapped;
-        } else if (typeof args[1] === 'function') {
-          args[1] = wrapped;
-        }
-      }
-
-      return callFunction(originalPost, this, [hookName, ...args]);
-    };
-  }
-
-  setMarker(Schema.prototype, HOOK_FLAG);
-}
-
-/**
- * Detects if a hook handler is from Mongoose's internal code.
- * Skips private methods, known internal patterns, and functions with
- * Mongoose-internal source code signatures.
- *
- * Note: We intentionally allow anonymous functions because user-defined
- * hooks are often anonymous (e.g., `schema.pre('save', async function() {...})`).
- */
-function isMongooseInternalHook(handler: unknown): boolean {
-  if (!isFunction(handler)) return false;
-
-  // Read `name` off the function directly. `readProperty` goes through
-  // `asRecord`, which requires `typeof value === 'object'` and so answers
-  // `undefined` for every function, leaving `funcName` empty and every rule
-  // below unreachable. Mongoose's own plugin hooks then reached
-  // `wrapHookHandler`, and a `post('init')` on a schema produced two spans per
-  // hydrated document: the application's and Mongoose's.
-  const funcName = asString((handler as { name?: unknown }).name) ?? '';
-
-  // Mongoose's own hook handlers, taken from its `.pre(...)` / `.post(...)`
-  // registrations in `lib/`, so this list is checkable against the dependency
-  // rather than guessed at. Anything Mongoose registers anonymously is left to
-  // the source-pattern check below.
-  //
-  // Matched as prefixes and deliberately specific. A substring match on a
-  // generic word, or a rule treating any `_`-prefixed name as internal, also
-  // swallows application hooks: losing an application span is a worse failure
-  // than tracing one hook of Mongoose's. autotel's own wrapper is recognised
-  // by its marker in `wrapHookHandler`, so it needs no name rule here.
-  const mongooseInternalNamePrefixes = [
-    'shardingPlugin', // lib/plugins/sharding.js
-    'saveSubdocs', // lib/plugins/saveSubdocs.js
-    'trackTransaction', // lib/plugins/trackTransaction.js
-    'timestampsPre', // lib/helpers/timestamps, on save
-    '_setTimestampsOnUpdate', // the same, on every update-shaped hook
-    'virtualPreInit', // lib/schema.js, on init
-    'handleTimestampOption',
-    'mongooseInternalHook',
-  ];
-
-  if (
-    mongooseInternalNamePrefixes.some((prefix) => funcName.startsWith(prefix))
-  ) {
-    return true;
-  }
-
-  // Check function source for Mongoose-internal patterns
-  // These patterns appear in Mongoose's auto-generated validation/transform hooks
-  try {
-    const source = handler.toString();
-    const mongooseInternalSourcePatterns = [
-      'this.$__', // Mongoose internal document methods
-      'this.$isValid', // Mongoose validation
-      'this.$locals', // Mongoose local properties
-      '_this.$__', // Mongoose internal with closure
-      'schema.s.hooks', // Mongoose hooks system
-      'kareem', // Mongoose's hooks library
-    ];
-
-    if (
-      mongooseInternalSourcePatterns.some((pattern) => source.includes(pattern))
-    ) {
-      return true;
-    }
-  } catch {
-    // If we can't get source, allow the hook through
-  }
-
-  return false;
-}
-
-/**
- * The hook name to put in a span.
- *
- * `Schema.prototype.pre`/`post` accept a string, an array of strings, or a
- * RegExp. Arrays are split at registration (see `patchSchemaHooks`), so only a
- * RegExp reaches here — and one registration then covers several operations:
- * `pre(/^find/)` runs for `find`, `findOne`, `findOneAndUpdate` and more. The
- * registration argument cannot name the operation that actually ran, but a
- * Query knows its own `op`, so ask it first and fall back to the pattern's
- * source. Naming every one of them `pre./^find/` told you a hook ran and
- * nothing else.
- */
-function resolveHookName(hookName: string | RegExp, self: unknown): string {
-  if (typeof hookName === 'string') {
-    return hookName;
-  }
-  const op = asString(readProperty(self, 'op'));
-  return op ?? hookName.source;
-}
-
-/**
- * Wraps a hook handler to trace its execution.
- * Handles both callback-style (with next) and promise-style hooks.
- *
- * Exported for unit testing against Kareem directly; not part of the public
- * package API (`index.ts` does not re-export it).
- */
-export function wrapHookHandler(
-  handler: any,
-  hookName: string | RegExp,
-  hookType: 'pre' | 'post',
-  tracer: Tracer,
-  config: ResolvedConfig,
-): any {
-  if (!isFunction(handler)) {
-    return handler;
-  }
-
-  // Skip if already wrapped to prevent duplicate spans
-  if (hasMarker(handler, WRAPPED_HOOK_FLAG)) {
-    return handler;
-  }
-
-  const startHookSpan = (self: any, resolvedName: string) => {
-    let modelName: string | undefined;
-    let collectionName: string | undefined;
-
-    try {
-      if (self.constructor?.modelName) {
-        modelName = self.constructor.modelName;
-        collectionName =
-          self.constructor.collection?.collectionName || modelName;
-      } else if (self.model?.modelName) {
-        modelName = self.model.modelName;
-        collectionName = self.model.collection?.collectionName || modelName;
-      }
-    } catch {
-      // Ignore errors in extracting context
-    }
-
-    const spanName = collectionName
-      ? `mongoose.${collectionName}.${hookType}.${resolvedName}`
-      : `mongoose.hook.${hookType}.${resolvedName}`;
-
-    const span = tracer.startSpan(spanName, { kind: SpanKind.INTERNAL });
-    span.setAttribute('hook.type', hookType);
-    span.setAttribute('hook.operation', resolvedName);
-    if (modelName) {
-      span.setAttribute('hook.model', modelName);
-    }
-    if (collectionName && config.captureCollectionName) {
-      span.setAttribute(ATTR_DB_COLLECTION_NAME, collectionName);
-    }
-    span.setAttribute(ATTR_DB_SYSTEM_NAME, DB_SYSTEM_NAME_VALUE_MONGODB);
-    if (config.dbName) {
-      span.setAttribute(ATTR_DB_NAMESPACE, config.dbName);
-    }
-
-    return span;
-  };
-
-  const invokeHook = (
-    self: any,
-    span: Span,
-    args: any[],
-    callbackStyle: boolean,
-  ) =>
-    runWithSpan(span, () => {
-      try {
-        const result = callFunction(handler, self, args);
-
-        if (isFunction(readProperty(result, 'then'))) {
-          // SAFETY: as above - the probe established the result is a thenable.
-          return Promise.resolve(result as Promise<any>)
-            .then((value) => {
-              finalizeSpan(span);
-              return value;
-            })
-            .catch((error: unknown) => {
-              finalizeSpan(span, toError(error));
-              throw error;
-            });
-        }
-
-        // Only finalize synchronously for non-callback hooks.
-        // Callback-style hooks finalize in the wrappedNext above.
-        if (!callbackStyle) {
-          finalizeSpan(span);
-        }
-        return result;
-      } catch (error) {
-        finalizeSpan(
-          span,
-          error instanceof Error ? error : new Error(String(error)),
-        );
-        throw error;
-      }
-    });
-
-  const wrappedHook = function wrappedHook(
-    this: any,
-    ...runtimeArgs: any[]
-  ): any {
-    // Captured before the span becomes active, so it points at the true
-    // parent (the operation span / prior sibling's parent) — not at this
-    // hook's own span. Used to fence off the span's context when we hand
-    // control back to Kareem via `next()` below.
-    const parentContext = context.active();
-
-    // A string registration was selected at registration time. A RegExp one
-    // could not be: it covers whichever operations match, so the selector is
-    // applied here, where the operation is known. Skipping means calling the
-    // handler untouched, with no span and no change in behaviour.
-    const resolvedName = resolveHookName(hookName, this);
-    if (
-      typeof hookName !== 'string' &&
-      !selectorAllows(config.instrumentHooks, resolvedName)
-    ) {
-      return callFunction(handler, this, runtimeArgs);
-    }
-
-    const span = startHookSpan(this, resolvedName);
-
-    // Whether this invocation is callback-style is decided at *call* time, and
-    // `next` — by Mongoose convention — is always the handler's *last* declared
-    // parameter, i.e. `handler.length - 1`. But `pre` and `post` reach Kareem
-    // through different calling conventions, so detection differs:
-    //
-    //   - `post` hooks: Kareem *always* appends a real `next`
-    //     (`kareem/index.js` `newArgs.push(nextCallback)`). The hook is
-    //     callback-style only if the handler's declared slot is the one Kareem
-    //     filled with a function. Checking that exact slot (rather than
-    //     scanning) matters both ways: scanning from the front would grab a
-    //     leading Model/Document (Mongoose Models are functions); accepting a
-    //     function *anywhere* would grab the appended `next` even for a data
-    //     hook like `post('save', (doc) => {})` that never reads it — deferring
-    //     finalization to a callback the handler never calls, leaking the span.
-    //     Pinning to the declared slot also subsumes the old `init` carve-out:
-    //     `post('init', (doc))` is handed `[doc]` with no callback, so it is
-    //     simply promise/sync-style.
-    //
-    //   - `pre` hooks: under kareem v3 (Mongoose 8+), `execPre` calls the
-    //     handler with the operation args and *never* passes a callback — a
-    //     declared parameter means we must synthesize `next` ourselves, with
-    //     nothing downstream to forward to. Under kareem v2 (Mongoose < 8),
-    //     `execPre` *does* pass a real `next` at the declared slot, so
-    //     `realCallback` is found and `wrappedNext` forwards to it. Both
-    //     protocols land on the same `handler.length > 0` test.
-    //
-    // Restoring the original arity on this wrapper (see `defineProperty` below)
-    // is what lets Kareem's own exact-arity checks line up in the `post` case.
-    const expectedIndex = handler.length - 1;
-    // SAFETY: the condition establishes the argument at that index is callable
-    // before it is treated as mongoose's node-style hook callback.
-    const realCallback =
-      expectedIndex >= 0 && typeof runtimeArgs[expectedIndex] === 'function'
-        ? (runtimeArgs[expectedIndex] as (...args: any[]) => void)
-        : undefined;
-    const isCallbackStyle =
-      hookType === 'pre' ? handler.length > 0 : realCallback !== undefined;
-
-    if (!isCallbackStyle) {
-      // Promise- or sync-style: pass Kareem's args through untouched and let
-      // `invokeHook` finalize on the returned promise, or synchronously.
-      return invokeHook(this, span, runtimeArgs, false);
-    }
-
-    const wrappedNext = function wrappedNext(this: any, ...nextArgs: any[]) {
-      const err = nextArgs[0];
-      if (err) {
-        finalizeSpan(span, err instanceof Error ? err : new Error(String(err)));
-      } else {
-        finalizeSpan(span);
-      }
-      // Forward to Kareem's real callback (`post` on v2/v3, `pre` on kareem
-      // v2 only); a synthesized v3 `pre` callback has nothing downstream to
-      // call.
-      //
-      // Restore the parent context first. Under Kareem's callback protocol
-      // (Mongoose < 8 / kareem v2), `next()` is often invoked from inside a
-      // hook's own async continuation (e.g. `Model.findById(...).then(next)`),
-      // which still runs with this hook's span active. Kareem advances the
-      // chain synchronously from within that callback, so the *next* sibling
-      // hook — and the query spans it opens — would otherwise be parented to
-      // this already-ended span. Fencing the handoff keeps siblings siblings.
-      if (typeof realCallback === 'function') {
-        const cb = realCallback;
-        return context.with(parentContext, () => cb.apply(this, nextArgs));
-      }
-      return;
-    };
-
-    // Put `next` at the handler's declared position. For `post` this replaces
-    // Kareem's real callback in place, keeping surrounding args (e.g. `doc` in
-    // `post('findOneAndUpdate', (doc, next))`) in the order the handler
-    // declared. For `pre` it fills the slot Mongoose left empty.
-    const callArgs = [...runtimeArgs];
-    callArgs[expectedIndex] = wrappedNext;
-    return invokeHook(this, span, callArgs, true);
-  };
-
-  // Kareem inspects `fn.length` with *exact* comparisons — e.g.
-  // `post.fn.length === numArgs + 2` to detect error-handling middleware, and
-  // `post.length === numArgs + 1` to decide whether to await the callback.
-  // Our `...runtimeArgs` wrapper reports length 0, which would collapse every
-  // handler's arity and silently break both checks, so restore the original.
-  // Same idiom as `packages/autotel-edge/src/core/context.ts`.
-  Object.defineProperty(wrappedHook, 'length', {
-    enumerable: false,
-    configurable: true,
-    writable: false,
-    value: handler.length,
-  });
-
-  // Mark as wrapped to prevent double-wrapping
-  setMarker(wrappedHook, WRAPPED_HOOK_FLAG);
-  return wrappedHook;
-}
-
-// ---------------------------------------------------------------------------
-// Custom user-defined functions (statics / methods / query helpers)
-// ---------------------------------------------------------------------------
-
-/**
- * Resolves the `customMethods` config into a concrete, defaults-applied shape.
- * Omitted/true → wrap everything and capture (redacted) parameters.
- */
-function resolveCustomMethods(
-  config: InstrumentMongooseConfig | undefined,
-): ResolvedCustomMethods {
-  const setting = config?.customMethods;
-
-  if (setting === false) {
-    return {
-      enabled: false,
-      statics: false,
-      methods: false,
-      query: false,
-      captureParameters: false,
-    };
-  }
-
-  // Default and explicit-true both mean "maximum observability".
-  const obj: CustomMethodsConfig =
-    setting === undefined || setting === true ? {} : setting;
-
-  const cp = obj.captureParameters;
-  let captureParameters: ResolvedCustomMethods['captureParameters'] = false;
-  if (cp !== false) {
-    captureParameters = createParameterCapture({
-      parameterConfig: cp === undefined || cp === true ? undefined : cp,
-      // Parameters inherit the same PII redaction as db.query.text by default.
-      statementRedactor: config?.statementRedactor ?? 'default',
-    });
-  }
-
-  return {
-    enabled: true,
-    statics: obj.statics ?? true,
-    methods: obj.methods ?? true,
-    query: obj.query ?? true,
-    captureParameters,
-  };
-}
-
-/**
- * Evaluates whether a named function in a category should be instrumented.
- * Supports boolean, include-list, and `{ include, exclude }` selectors.
- */
-/**
- * `true` traces every hook but `init`, which fires once per hydrated document:
- * a find returning 500 documents would emit 500 spans. `{ exclude: [] }` or a
- * list naming `init` traces it.
- */
-function resolveHookSelector(
-  selector: MethodSelector | undefined,
-): MethodSelector {
-  return selector === true ? { exclude: ['init'] } : (selector ?? false);
-}
-
-function selectorAllows(selector: MethodSelector, name: string): boolean {
-  if (selector === false) {
-    return false;
-  }
-  if (selector === true) {
-    return true;
-  }
-  if (Array.isArray(selector)) {
-    return selector.includes(name);
-  }
-  if (selector.include && !selector.include.includes(name)) {
-    return false;
-  }
-  if (selector.exclude && selector.exclude.includes(name)) {
-    return false;
-  }
-  return true;
-}
-
-/**
- * Derives model + collection names from the runtime `this` of a custom
- * function, which differs by category (Model / Document / Query).
- */
-/** Where a traced custom method's model and collection names came from. */
-interface ModelContext {
-  modelName?: string;
-  collectionName?: string;
-}
-
-function resolveModelContext(
-  self: any,
-  methodType: CustomMethodType,
-): ModelContext {
-  try {
-    switch (methodType) {
-      case 'static': {
-        return {
-          modelName: self?.modelName,
-          collectionName: self?.collection?.collectionName || self?.modelName,
-        };
-      }
-      case 'instance': {
-        const ctor = self?.constructor;
-        return {
-          modelName: ctor?.modelName,
-          collectionName: ctor?.collection?.collectionName || ctor?.modelName,
-        };
-      }
-      case 'query': {
-        const model = self?.model;
-        return {
-          modelName: model?.modelName,
-          collectionName: model?.collection?.collectionName || model?.modelName,
-        };
-      }
-    }
-  } catch {
-    // Ignore — fall through to empty context.
-  }
-  return {};
-}
-
-/**
- * Wraps a single user-defined function so its invocation is traced. Purely
- * observational: preserves `this`, the return value, and error propagation.
- *
- * The tracer, config, and selection are resolved per Mongoose instance at call
- * time (see {@link INSTANCE_REGISTRY}), so a schema shared across instances or
- * connections is never bound to whichever config instrumented it first. Calls
- * from a non-instrumented, disabled, or de-selected instance pass straight
- * through with no span.
- */
-function wrapCustomFunction(
-  original: (...args: any[]) => any,
-  methodName: string,
-  methodType: CustomMethodType,
-): (...args: any[]) => any {
-  if (hasMarker(original, WRAPPED_METHOD_FLAG)) {
-    return original;
-  }
-
-  const wrapped = function instrumentedCustomFn(
-    this: any,
-    ...args: any[]
-  ): any {
-    // Resolve the owning instance's tracer/config at call time.
-    const instance = resolveMongooseInstance(this, methodType);
-    const entry = instance ? INSTANCE_REGISTRY.get(instance) : undefined;
-    if (
-      !entry ||
-      !entry.config.customMethods.enabled ||
-      !selectorAllows(
-        selectorFor(entry.config.customMethods, methodType),
-        methodName,
-      )
-    ) {
-      // Not instrumented / disabled / de-selected for this instance.
-      return original.apply(this, args);
-    }
-
-    const { tracer, config } = entry;
-    const captureParameters = config.customMethods.captureParameters;
-
-    const { modelName, collectionName } = resolveModelContext(this, methodType);
-
-    const spanName = modelName
-      ? `mongoose.${modelName}.${methodName}`
-      : `mongoose.${methodType}.${methodName}`;
-
-    const span = tracer.startSpan(spanName, { kind: SpanKind.INTERNAL });
-    span.setAttribute(ATTR_DB_SYSTEM_NAME, DB_SYSTEM_NAME_VALUE_MONGODB);
-    span.setAttribute(ATTR_CODE_FUNCTION_NAME, methodName);
-    span.setAttribute(ATTR_MONGOOSE_METHOD_NAME, methodName);
-    span.setAttribute(ATTR_MONGOOSE_METHOD_TYPE, methodType);
-    if (modelName) {
-      span.setAttribute(ATTR_MONGOOSE_METHOD_MODEL, modelName);
-    }
-    if (collectionName && config.captureCollectionName) {
-      span.setAttribute(ATTR_DB_COLLECTION_NAME, collectionName);
-    }
-    if (config.dbName) {
-      span.setAttribute(ATTR_DB_NAMESPACE, config.dbName);
-    }
-
-    if (captureParameters) {
-      span.setAttribute(ATTR_MONGOOSE_METHOD_PARAMETER_COUNT, args.length);
-      try {
-        const params = captureParameters(args, { methodName, methodType });
-        if (params !== undefined) {
-          span.setAttribute(ATTR_MONGOOSE_METHOD_PARAMETERS, params);
-        }
-      } catch {
-        // Never let parameter capture break the call.
-      }
-    }
-
-    const finalize = createSpanFinalizer(span);
-    return runWithSpan(span, () => {
-      // Query helpers return a chainable Query; the DB call is traced on exec().
-      // Finalize immediately so we don't hold the span open across the chain.
-      if (methodType === 'query') {
-        try {
-          const result = original.apply(this, args);
-          finalize();
-          return result;
-        } catch (error) {
-          finalize(error);
-          throw error;
-        }
-      }
-
-      // Statics/instance methods may be callback-style (older Mongoose code).
-      const { callArgs, deferred } = deferFinalizeToCallback(
-        args,
-        span,
-        finalize,
-      );
-      try {
-        const result = original.apply(this, callArgs);
-
-        // A Query/Aggregate or Promise settles the span on its own completion,
-        // even when a callback was also supplied (idempotent finalize dedupes).
-        if (
-          result &&
-          (typeof result.exec === 'function' ||
-            typeof result.then === 'function')
-        ) {
-          return settleSpan(result, finalize);
-        }
-
-        // Synchronous return: a deferred callback owns finalization; otherwise
-        // finalize now.
-        if (!deferred) {
-          finalize();
-        }
-        return result;
-      } catch (error) {
-        finalize(error);
-        throw error;
-      }
-    });
-  };
-
-  // Preserve the original name for stack traces / debugging.
-  try {
-    Object.defineProperty(wrapped, 'name', {
-      value: original.name || methodName,
-      configurable: true,
-    });
-  } catch {
-    // Ignore — non-fatal.
-  }
-  // Preserve arity too. Mongoose doesn't inspect it for statics/methods/query
-  // helpers today, but the `...args` wrapper otherwise reports length 0 — the
-  // same latent footgun the hook wrapper's `defineProperty` guards against.
-  try {
-    Object.defineProperty(wrapped, 'length', {
-      value: original.length,
-      configurable: true,
-    });
-  } catch {
-    // Ignore — non-fatal.
-  }
-  setMarker(wrapped, WRAPPED_METHOD_FLAG);
-  return wrapped;
-}
-
-/**
- * Wraps every user-defined function on a schema in place (statics / methods /
- * query) at model-compile time. Mutating the schema's collections before
- * compilation means Mongoose copies the wrapped versions onto the Model, its
- * prototype, and its query class.
- *
- * Wrapping is unconditional and idempotent: each wrapper decides per Mongoose
- * instance at call time whether to actually trace (honoring that instance's
- * `enabled` flag and include/exclude selectors). This keeps a schema shared
- * across instances correct — a function excluded by one instance can still be
- * traced by another, and vice versa — while a function is only ever wrapped
- * once.
- */
-/**
- * Functions Mongoose itself injects into `schema.statics`/`methods`/`query`
- * (e.g. the `timestamps: true` option adds an `initializeTimestamps` instance
- * method). These are framework internals, not user code, so we skip them to
- * avoid noisy spans. Names starting with `$` (Mongoose's internal prefix) are
- * also skipped.
- */
-const MONGOOSE_INTERNAL_FUNCTION_NAMES = new Set<string>([
-  'initializeTimestamps',
-]);
-
-function isMongooseInternalFunctionName(name: string): boolean {
-  return name.startsWith('$') || MONGOOSE_INTERNAL_FUNCTION_NAMES.has(name);
-}
-
-/**
- * Detects a compiled Mongoose Model assigned onto a schema collection — e.g.
- * the `Patches` model attached to `schema.statics` by history/audit plugins
- * (`schema.statics.Patches = mongoose.model(...)`). A Model is a constructor
- * function carrying its own statics (`find`, `create`, …); wrapping it in a
- * plain tracing function would drop those and break callers, so it must be
- * skipped — both at the compile-time scan and on later assignment.
- */
-function isMongooseModelLike(fn: any): boolean {
-  try {
-    return (
-      typeof fn === 'function' &&
-      typeof fn.modelName === 'string' &&
-      fn.schema != null
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** Whether a value assigned to a schema collection should be wrapped. */
-function shouldWrapCustomFunction(name: string, value: unknown): boolean {
-  return (
-    isFunction(value) &&
-    !isMongooseInternalFunctionName(name) &&
-    !hasMarker(value, WRAPPED_METHOD_FLAG) &&
-    !isMongooseModelLike(value)
-  );
-}
-
-function instrumentSchemaCustomFunctions(schema: any): void {
-  if (!schema) {
-    return;
-  }
-
-  // Wraps the functions already present on a collection, then replaces it with
-  // a write-trapping Proxy so anything added *later* is wrapped as it is
-  // assigned. This makes tracing independent of the order in which custom
-  // functions are attached relative to `instrumentMongoose()`.
-  //
-  // Scope note: the common case (e.g. a model that attaches all its statics
-  // before its single `mongoose.model()` call) is already covered by the
-  // up-front scan below — Mongoose copies those at compile time. The Proxy is
-  // the defensive path for functions added *after* the first compile: a late
-  // plugin, or a schema compiled into more than one model. Mongoose does not
-  // back-propagate post-compile `schema.statics` writes to an already-compiled
-  // model, so the Proxy matters when the schema is compiled again afterwards.
-  const wrapCollection = (
-    collection: any,
-    methodType: CustomMethodType,
-  ): any => {
-    if (!collection || collection[PROXIED_COLLECTION_FLAG]) {
-      return collection;
-    }
-
-    for (const name of Object.keys(collection)) {
-      const fn = collection[name];
-      if (isMongooseModelLike(fn)) {
-        continue;
-      }
-      if (shouldWrapCustomFunction(name, fn)) {
-        collection[name] = wrapCustomFunction(fn, name, methodType);
-      }
-    }
-
-    try {
-      Object.defineProperty(collection, PROXIED_COLLECTION_FLAG, {
-        value: true,
-        enumerable: false,
-        configurable: true,
-      });
-    } catch {
-      // Can't mark it — fall back to the (already wrapped) plain object.
-      return collection;
-    }
-
-    return new Proxy(collection, {
-      set(target, prop, value): boolean {
-        // SAFETY: a proxy set trap writes whatever key it was given; the
-        // collection this wraps is mongoose's, whose members are untyped here.
-        (target as any)[prop] =
-          typeof prop === 'string' && shouldWrapCustomFunction(prop, value)
-            ? wrapCustomFunction(value, prop, methodType)
-            : value;
-        return true;
-      },
-    });
-  };
-
-  schema.statics = wrapCollection(schema.statics, 'static');
-  schema.methods = wrapCollection(schema.methods, 'instance');
-  schema.query = wrapCollection(schema.query, 'query');
-}
-
-/**
- * Patches `mongoose.model()` (and `Connection.prototype.model()`) so custom
- * functions are wrapped automatically as each model compiles. Idempotent per
- * host and per function. Whether a wrapped function actually traces is decided
- * per instance at call time, so it is safe for the patch to be global.
- */
-function patchModelFactory(m: any, config: ResolvedConfig): void {
-  if (!config.customMethods.enabled) {
-    return;
-  }
-
-  const patchHost = (host: any): void => {
-    if (!host || typeof host.model !== 'function' || host[MODEL_PATCHED_FLAG]) {
-      return;
-    }
-    const originalModel = host.model;
-    host.model = function patchedModel(
-      this: any,
-      nameOrSchema: any,
-      schema?: any,
-      ...rest: any[]
-    ): any {
-      if (asRecord(schema)) {
-        try {
-          instrumentSchemaCustomFunctions(schema);
-        } catch {
-          // Never let instrumentation break model compilation.
-        }
-      }
-      return callFunction(originalModel, this, [nameOrSchema, schema, ...rest]);
-    };
-    host[MODEL_PATCHED_FLAG] = true;
-  };
-
-  patchHost(m);
-  if (m.Connection?.prototype) {
-    patchHost(m.Connection.prototype);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Main instrumentation function
-// ---------------------------------------------------------------------------
 
 /**
  * Instruments Mongoose with OpenTelemetry tracing.
@@ -1756,9 +409,9 @@ export function instrumentMongoose(
   const resolvedRedactor = config?.statementRedactor ?? 'default';
 
   const finalConfig: ResolvedConfig = {
-    dbName: config?.dbName || '',
-    peerName: config?.peerName || '',
-    peerPort: config?.peerPort || 27_017,
+    dbName: config?.dbName || undefined,
+    peerName: config?.peerName || undefined,
+    peerPort: config?.peerPort || undefined,
     tracerName: config?.tracerName || DEFAULT_TRACER_NAME,
     captureCollectionName: config?.captureCollectionName ?? true,
     instrumentHooks: resolveHookSelector(config?.instrumentHooks),
@@ -1793,15 +446,6 @@ export function instrumentMongoose(
     patchSchemaHooks(m.Schema, tracer, finalConfig);
   }
 
-  // Helper functions
-  const getModelCollectionName = (model: any) => {
-    try {
-      return model.collection?.collectionName || model.modelName;
-    } catch {
-      return;
-    }
-  };
-
   // Patch Query-returning methods on Model
   const queryMethods: Array<{ method: string; operation: string }> = [
     { method: 'find', operation: 'find' },
@@ -1814,6 +458,8 @@ export function instrumentMongoose(
     { method: 'deleteMany', operation: 'deleteMany' },
     { method: 'updateOne', operation: 'updateOne' },
     { method: 'updateMany', operation: 'updateMany' },
+    { method: 'replaceOne', operation: 'replaceOne' },
+    { method: 'distinct', operation: 'distinct' },
     { method: 'countDocuments', operation: 'countDocuments' },
     { method: 'estimatedDocumentCount', operation: 'estimatedDocumentCount' },
   ];
@@ -1823,8 +469,7 @@ export function instrumentMongoose(
       m.Model,
       method,
       operation,
-      getModelCollectionName,
-      (model: any) => model.modelName,
+      describeModel,
       tracer,
       finalConfig,
       captureStatement,
@@ -1844,23 +489,7 @@ export function instrumentMongoose(
         m.Model.prototype,
         method,
         method,
-        (doc: any) => {
-          try {
-            return (
-              doc.constructor?.collection?.collectionName ||
-              doc.constructor?.modelName
-            );
-          } catch {
-            return;
-          }
-        },
-        (doc: any) => {
-          try {
-            return doc.constructor?.modelName;
-          } catch {
-            return;
-          }
-        },
+        describeDocument,
         tracer,
         finalConfig,
         captureStatement,
@@ -1876,19 +505,29 @@ export function instrumentMongoose(
         m.Model,
         method,
         method,
-        (model: any) => {
-          try {
-            return model.collection?.collectionName;
-          } catch {
-            return;
-          }
-        },
-        (model: any) => model.modelName,
+        describeModel,
         tracer,
         finalConfig,
         captureStatement,
       );
     }
+  }
+
+  // `connection.aggregate()` runs a database-level pipeline (`$currentOp`,
+  // `$documents`): no model, no collection, so the span names the database.
+  const connectionPrototype = asRecord(m.connection)
+    ? Object.getPrototypeOf(m.connection)
+    : undefined;
+  if (isFunction(connectionPrototype?.aggregate)) {
+    wrapStaticMethod(
+      connectionPrototype,
+      'aggregate',
+      'aggregate',
+      describeConnection,
+      tracer,
+      finalConfig,
+      captureStatement,
+    );
   }
 
   // Patch Query chainable methods

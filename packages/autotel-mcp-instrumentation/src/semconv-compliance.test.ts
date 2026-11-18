@@ -43,6 +43,7 @@ vi.mock('autotel', () => ({
         recordException: vi.fn(),
         recordError: vi.fn(),
         updateName: vi.fn(),
+        event: vi.fn(),
         track: vi.fn(),
       };
       hoisted.traceCalls.push({ options, ctx });

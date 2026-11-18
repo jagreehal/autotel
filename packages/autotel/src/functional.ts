@@ -218,6 +218,7 @@ const INACTIVE_CTX_METHODS: Record<string, (...args: never[]) => unknown> = {
   addLinks: noop,
   updateName: noop,
   recordError: noop,
+  event: noop,
   track: noop,
   isRecording: () => false,
   getBaggage: () => {},

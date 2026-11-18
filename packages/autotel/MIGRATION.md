@@ -10,10 +10,18 @@ Autotel v3 aligns with OpenTelemetry's Span Events deprecation direction:
 
 ## What to Change
 
-### 1. Replace app-level `ctx.addEvent(...)` with the request logger
+### 1. Replace app-level `ctx.addEvent(...)` with `ctx.event(...)`
 
-Application code should emit events through the request logger, which writes
-correlated log records and updates the canonical log line:
+`ctx.event(name, attributes)` records an OpenTelemetry event: a log record whose
+`eventName` is `name`, carrying the span's trace and span id. It is the same call
+as autotel-web's `s.event`, and it exports by default once there is an endpoint (`logs: false` turns it off):
+
+```ts
+ctx.event('checkout.payment_started', { method: 'card', amount });
+```
+
+For a log line rather than an event, use the request logger, which also updates
+the canonical log line:
 
 ```ts
 const log = getRequestLogger(ctx);

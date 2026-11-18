@@ -5,6 +5,7 @@ import {
   getSdk,
   init,
 } from './init';
+import { logExportMode } from './log-export-mode';
 import { safeRequire } from './node-require';
 import { shutdown } from './shutdown';
 
@@ -54,6 +55,7 @@ describe('init() and OpenFeature', () => {
     installFakeOpenFeature();
     init({ service: 'flags-test', endpoint: 'http://127.0.0.1:4318' });
     expect(exportsLogs()).toBe(true);
+    expect(logExportMode()).toBe('all');
   });
 
   it("treats logs: 'auto' as unset", () => {
@@ -76,14 +78,14 @@ describe('init() and OpenFeature', () => {
     expect(exportsLogs()).toBe(false);
   });
 
-  it('leaves log export off without OpenFeature', () => {
+  it('exports only events without OpenFeature', () => {
     // This workspace has the SDK installed; an app without it cannot load it.
     _setOptionalRequireForTesting(((id: string) =>
       id === '@openfeature/server-sdk'
         ? undefined
         : safeRequire(id)) as typeof safeRequire);
     init({ service: 'flags-test', endpoint: 'http://127.0.0.1:4318' });
-    expect(exportsLogs()).toBe(false);
+    expect(logExportMode()).toBe('events');
   });
 
   it('registers nothing with openFeature: false', () => {

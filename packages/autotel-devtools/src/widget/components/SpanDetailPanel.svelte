@@ -162,7 +162,13 @@
   const autoAttributeRows = $derived(
     filteredAttributes.filter(([key]) => !isAppAttribute(key)),
   );
-  let showAutoAttributeRows = $state(false);
+  // Collapsed behind what the app set, but open when the app set nothing:
+  // a closed section under "no attributes" looks like an empty span.
+  // Null until the user toggles it.
+  let autoAttributesToggled = $state<boolean | null>(null);
+  const showAutoAttributeRows = $derived(
+    autoAttributesToggled ?? appAttributeRows.length === 0,
+  );
 
   // Code location → clickable editor deep-link (feature: code location linking)
   const codeLocation = $derived(
@@ -704,7 +710,7 @@
                   label={`Resource & auto (${autoAttributeRows.length})`}
                   expanded={showAutoAttributeRows || isAttrFiltered}
                   onToggle={() =>
-                    (showAutoAttributeRows = !showAutoAttributeRows)}
+                    (autoAttributesToggled = !showAutoAttributeRows)}
                 >
                   <div
                     class="bg-subtle rounded p-3 border border-line font-mono text-xs h-[300px] min-h-[120px] overflow-auto resize-y"

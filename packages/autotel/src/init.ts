@@ -48,14 +48,8 @@ import {
   PeriodicExportingMetricReader,
   type MetricReader,
 } from '@opentelemetry/sdk-metrics';
-import {
-  BatchLogRecordProcessor,
-  type LogRecordProcessor,
-} from '@opentelemetry/sdk-logs';
-import {
-  buildPostHogLogProcessors,
-  RedactingLogRecordProcessor,
-} from './posthog-logs';
+import { buildLogRecordProcessors, resolveLogExportMode } from './log-pipeline';
+import { setLogExportMode } from './log-export-mode';
 import {
   TailSamplingSpanProcessor,
   findTailSamplingProcessors,
@@ -82,7 +76,6 @@ import {
   type SpanFilterPredicate,
 } from './filtering-span-processor';
 import {
-  PolicyLogRecordProcessor,
   PolicyMetricExporter,
   policySpanFilter,
   setPolicies,
@@ -102,7 +95,6 @@ import {
 } from './attribute-redacting-processor';
 import { createStringRedactor, type StringRedactor } from './redact-values';
 import { PrettyConsoleExporter } from './pretty-console-exporter';
-import { debugLogProcessor } from './debug-log-processor';
 import { resolveConfigFromEnv } from './env-config';
 import { loadYamlConfig } from './yaml-config';
 import { safeRequire } from './node-require';
@@ -155,7 +147,6 @@ import {
   missingInstrumentations,
 } from './auto-instrumentations';
 import {
-  createLogExporter,
   createMetricExporter,
   metricTemporalityFor,
   createTraceExporter,
@@ -477,6 +468,7 @@ export function init(cfg: AutotelConfig): void {
         : 'auto'
       : mergedConfig.logs,
   );
+  const logExport = resolveLogExportMode(logsEnabled, mergedConfig.logs);
 
   // The embedded server runs in this process; its port is kept out of tracing.
   let devtoolsPort: number | undefined;
@@ -919,93 +911,25 @@ export function init(cfg: AutotelConfig): void {
     }
   }
 
-  let logRecordProcessors: LogRecordProcessor[] | undefined;
-  if (
-    configuredLogRecordProcessors &&
-    configuredLogRecordProcessors.length > 0
-  ) {
-    // Redacted like every other log path: a processor the caller brings is
-    // where logs most often leave the process.
-    logRecordProcessors = configuredLogRecordProcessors.map((processor) =>
-      logRedactor
-        ? new RedactingLogRecordProcessor(
-            processor,
-            logRedactor,
-            logKeyIsSensitive,
-          )
-        : processor,
-    );
-  }
-
-  // Auto-configure OTLP log exporters when logs are enabled.
-  if (logsEnabled) {
-    for (const destination of otlpDestinations) {
-      if (!destinationSupportsSignal(destination, 'logs')) continue;
-
-      const logExporter = createLogExporter(destination.protocol, {
-        url: formatEndpointUrl(
-          destination.endpoint,
-          'logs',
-          destination.protocol,
-        ),
-        headers: destination.headers,
-      });
-
-      let processor: LogRecordProcessor = new BatchLogRecordProcessor({
-        exporter: logExporter,
-      });
-      if (logRedactor) {
-        processor = new RedactingLogRecordProcessor(
-          processor,
-          logRedactor,
-          logKeyIsSensitive,
-        );
-      }
-      if (!logRecordProcessors) {
-        logRecordProcessors = [];
-      }
-      logRecordProcessors.push(processor);
-    }
-
-    if (
-      otlpDestinations.some((destination) =>
-        destinationSupportsSignal(destination, 'logs'),
-      )
-    ) {
-      logger.info({}, '[autotel] OTLP log exporter configured');
-    }
-  }
-
-  // `debug` shows what is exported, so with logs on it shows the log records too.
-  if (logsEnabled && debugMode) {
-    logRecordProcessors = [
-      ...(logRecordProcessors ?? []),
-      debugLogProcessor(debugMode, logRedactor, logKeyIsSensitive),
-    ];
-  }
-
-  // PostHog OTLP logs integration
-  const posthogProcessors = buildPostHogLogProcessors(
-    mergedConfig.posthog,
-    logRedactor,
-    logKeyIsSensitive,
+  const logRecordProcessors = buildLogRecordProcessors({
+    mode: logExport,
+    configured: configuredLogRecordProcessors,
+    destinations: otlpDestinations,
+    redactor: logRedactor,
+    isSensitiveKey: logKeyIsSensitive,
+    debugMode,
+    posthog: mergedConfig.posthog,
+    policies: mergedConfig.policies,
+    logger,
+  });
+  // Your own processors and PostHog get records whatever `logs` says, so a
+  // dropped-event warning only applies when nothing receives them.
+  setLogExportMode(
+    logExport,
+    logRecordProcessors?.length
+      ? undefined
+      : (message) => logger.warn({}, message),
   );
-  if (posthogProcessors.length > 0) {
-    if (!logRecordProcessors) {
-      logRecordProcessors = [];
-    }
-    logRecordProcessors.push(...posthogProcessors);
-    logger.info({}, '[autotel] PostHog OTLP logs configured');
-  }
-
-  // Wrap every log processor with the policy applier so `log` policies apply on
-  // all export paths. Gated on `policies` being configured, not on the policy
-  // set being non-empty — the set is reloaded at runtime.
-  if (mergedConfig.policies && logRecordProcessors) {
-    logRecordProcessors = logRecordProcessors.map(
-      (processor) => new PolicyLogRecordProcessor(processor),
-    );
-  }
 
   applyAutotelDefaults(
     mergedConfig.instrumentations,

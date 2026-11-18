@@ -18,6 +18,7 @@ OpenTelemetry instrumentation for Mongoose with stable semantic conventions, `db
   - `server.address`
   - `server.port`
 - Uses stable span names like `find users`
+- Reads `server.address`, `server.port` and `db.namespace` from the connection each model uses, so an app with several connections labels each span with its own server and database
 
 ## Installation
 
@@ -229,9 +230,9 @@ instances/connections honors each instance's own configuration.
 import type { InstrumentMongooseConfig } from 'autotel-mongoose';
 
 const config: InstrumentMongooseConfig = {
-  dbName: 'myapp',
-  peerName: 'mongodb.internal',
-  peerPort: 27017,
+  dbName: 'myapp', // default: the model's connection
+  peerName: 'mongodb.internal', // default: the model's connection
+  peerPort: 27017, // default: the model's connection
   tracerName: 'autotel-mongoose',
   captureCollectionName: true,
   instrumentHooks: false,
@@ -399,7 +400,9 @@ Limitations:
 
 ## Notes
 
-- Query and aggregate operations are traced automatically
+- Query and aggregate operations are traced automatically, `replaceOne()` and `distinct()` included
+- `connection.aggregate()` (a database-level pipeline such as `$currentOp` or `$documents`) gets a `mongoose.aggregate` span naming the connection's database
+- A query or aggregate read through `.cursor()`, `for await`, `eachAsync()` or as a stream gets one span that ends when the cursor is exhausted, closed or fails. It covers the cursor's whole life, including the time your code spends on each document
 - Instance methods like `save()` and `deleteOne()` are traced
 - Static methods like `create()`, `insertMany()`, `aggregate()`, and `bulkWrite()` are traced
 - User-defined statics, instance methods, and query helpers are traced automatically (see above)

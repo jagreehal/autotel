@@ -7,7 +7,7 @@
   import { AlertCircle } from '@lucide/svelte';
   import { formatDuration } from '../utils';
   import { serviceColor } from '../utils/serviceColor';
-  import { summarizeTrace } from '../utils/traceSummary';
+  import { summarizeTrace, traceCardSections } from '../utils/traceSummary';
   import { appAttributes } from '../utils/keyAttributes';
   import { spanAttributeGrids } from './SpanHoverCard.svelte';
   import type { TraceData } from '../types';
@@ -18,6 +18,7 @@
   let { trace }: Props = $props();
 
   const summary = $derived(summarizeTrace(trace));
+  const sections = $derived(traceCardSections(trace, summary));
 </script>
 
 <div
@@ -30,7 +31,7 @@
     {trace.rootSpan.name || 'unknown'}
   </div>
 
-  {#if summary.services.length > 1}
+  {#if sections.services}
     <div class="mt-2 flex flex-wrap gap-1">
       {#each summary.services as { name, spans } (name)}
         {@const color = serviceColor(name)}
@@ -43,7 +44,7 @@
     </div>
   {/if}
 
-  {#if summary.errorOrigin}
+  {#if sections.failure && summary.errorOrigin}
     {@const origin = summary.errorOrigin}
     <div class="mt-2 pt-2 border-t border-line-subtle text-danger">
       <div class="flex items-center gap-1 font-medium">
@@ -59,7 +60,7 @@
     </div>
   {/if}
 
-  {#if summary.slowest.length > 0 && trace.spans.length > 1}
+  {#if sections.timing}
     <div class="mt-2 pt-2 border-t border-line-subtle">
       <div class="text-fg-subtle mb-1">Where the time went (self time)</div>
       <div
@@ -90,5 +91,7 @@
     </div>
   {/if}
 
-  {@render spanAttributeGrids(trace.rootSpan.attributes ?? {})}
+  {#if sections.attributes}
+    {@render spanAttributeGrids(trace.rootSpan.attributes ?? {})}
+  {/if}
 </div>

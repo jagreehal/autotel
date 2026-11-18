@@ -589,7 +589,7 @@ const specialistAgent = withTracing({ name: 'agent.specialist' })(
       'agent.model': 'gpt-4o',
     });
 
-    ctx.track('specialist_engaged', { plan_length: plan.length });
+    ctx.event('specialist_engaged', { plan_length: plan.length });
 
     const result = await generateText({
       model: openai('gpt-4o'),
@@ -649,7 +649,7 @@ export const runMultiAgentWorkflow = withTracing({
 
   // Step 1: Triage
   const triage = await triageAgent(userRequest);
-  ctx.track('triage_complete', {
+  ctx.event('triage_complete', {
     requires_specialist: triage.requiresSpecialist,
   });
 
@@ -657,14 +657,14 @@ export const runMultiAgentWorkflow = withTracing({
   let response;
   if (triage.requiresSpecialist) {
     response = await specialistAgent(triage.plan);
-    ctx.track('specialist_complete', { requires_qa: response.requiresQA });
+    ctx.event('specialist_complete', { requires_qa: response.requiresQA });
   }
 
   // Step 3: QA (if needed)
   let qa;
   if (response?.requiresQA) {
     qa = await qaAgent(response.response);
-    ctx.track('qa_complete', { approved: qa.approved });
+    ctx.event('qa_complete', { approved: qa.approved });
   }
 
   // Track workflow completion
@@ -764,14 +764,14 @@ export const ragPipeline = withTracing({ name: 'rag.pipeline' })(
     });
 
     const embedding = await generateEmbeddings(query);
-    ctx.track('embeddings_generated');
+    ctx.event('embeddings_generated');
 
     const searchResults = await vectorSearch(embedding);
-    ctx.track('search_completed', { results_count: searchResults.length });
+    ctx.event('search_completed', { results_count: searchResults.length });
 
     const context = searchResults.map((r) => r.content);
     const response = await generateWithContext(query, context);
-    ctx.track('generation_completed', { response_length: response.length });
+    ctx.event('generation_completed', { response_length: response.length });
 
     track('rag.pipeline_completed', {
       user_id: userId,
@@ -992,19 +992,19 @@ export const generateWithQualityCheck = withTracing({
 
       do {
         attempt++;
-        ctx.track('generation_attempt', { attempt });
+        ctx.event('generation_attempt', { attempt });
 
         content = await generateContent(prompt, 'gpt-4o');
         evaluation = await evaluateQuality(content);
 
         if (evaluation.passesThreshold) {
-          ctx.track('quality_passed', {
+          ctx.event('quality_passed', {
             attempt,
             score: evaluation.score,
           });
           break;
         } else if (attempt < maxAttempts) {
-          ctx.track('quality_failed_retrying', {
+          ctx.event('quality_failed_retrying', {
             attempt,
             score: evaluation.score,
             feedback: evaluation.feedback,

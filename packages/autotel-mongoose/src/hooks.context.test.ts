@@ -12,7 +12,7 @@ import {
 } from '@opentelemetry/sdk-trace';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import type { Tracer } from 'autotel';
-import { wrapHookHandler } from './instrumentation';
+import { wrapHookHandler } from './hooks';
 import type { ResolvedConfig } from './types';
 
 // Unlike hooks.test.ts, this suite registers a *real* AsyncLocalStorage
@@ -37,9 +37,6 @@ afterAll(async () => {
 const tracer: Tracer = provider.getTracer('autotel-mongoose-context-test');
 
 const hookConfig = {
-  dbName: '',
-  peerName: '',
-  peerPort: 27_017,
   tracerName: 'autotel-mongoose-context-test',
   captureCollectionName: true,
   instrumentHooks: true,

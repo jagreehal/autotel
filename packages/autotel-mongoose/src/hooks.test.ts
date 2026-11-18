@@ -6,7 +6,7 @@ import {
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace';
 import type { Tracer } from 'autotel';
-import { wrapHookHandler } from './instrumentation';
+import { wrapHookHandler } from './hooks';
 import type { ResolvedConfig } from './types';
 
 // These are unit tests driven against Kareem (Mongoose's hook library)
@@ -25,9 +25,6 @@ const tracer: Tracer = provider.getTracer('autotel-mongoose-hooks-test');
 
 // Minimal resolved config — only the fields `wrapHookHandler` reads matter.
 const hookConfig = {
-  dbName: '',
-  peerName: '',
-  peerPort: 27_017,
   tracerName: 'autotel-mongoose-hooks-test',
   captureCollectionName: true,
   instrumentHooks: true,

@@ -59,9 +59,9 @@ instrumentMongoose(mongoose, {
 
 ```typescript
 interface InstrumentMongooseConfig {
-  dbName?: string; // Sets db.namespace on spans
-  peerName?: string; // Sets server.address on spans
-  peerPort?: number; // Sets server.port (default: 27017)
+  dbName?: string; // Sets db.namespace (default: the model's connection)
+  peerName?: string; // Sets server.address (default: the model's connection)
+  peerPort?: number; // Sets server.port (default: the model's connection)
   tracerName?: string; // Default: 'autotel-mongoose'
   captureCollectionName?: boolean; // Include db.collection.name (default: true)
   instrumentHooks?: MethodSelector; // Schema pre/post hooks (default: false; true skips init)
@@ -89,19 +89,21 @@ interface InstrumentMongooseConfig {
 | `db.system.name`     | Always (`mongodb`)                                                  |
 | `db.operation.name`  | Always (e.g., `find`, `insertMany`)                                 |
 | `db.collection.name` | When `captureCollectionName: true` (default)                        |
-| `db.namespace`       | When `dbName` is set                                                |
+| `db.namespace`       | From `dbName`, else the model's connection                          |
 | `db.query.text`      | When statement serialization is enabled (default: value-free shape) |
 | `db.statement.hash`  | Always: operation, collection and value-free shape, hashed          |
 | `db.plan.*`          | When `explain` is set                                               |
-| `server.address`     | When `peerName` is set                                              |
-| `server.port`        | When `peerPort` is set                                              |
+| `server.address`     | From `peerName`, else the model's connection                        |
+| `server.port`        | From `peerPort`, else the model's connection                        |
 
 Span names follow `<operation> <collectionName>` (e.g., `find users`) or fall back to `mongoose.<operation>`.
 
 ### What is instrumented
 
 **Query-returning Model methods** (spans created; `exec()` wrapped for finalization):
-`find`, `findOne`, `findById`, `findOneAndUpdate`, `findOneAndDelete`, `findOneAndReplace`, `deleteOne`, `deleteMany`, `updateOne`, `updateMany`, `countDocuments`, `estimatedDocumentCount`
+`find`, `findOne`, `findById`, `findOneAndUpdate`, `findOneAndDelete`, `findOneAndReplace`, `deleteOne`, `deleteMany`, `updateOne`, `updateMany`, `replaceOne`, `distinct`, `countDocuments`, `estimatedDocumentCount`
+
+`connection.aggregate()` gets a `mongoose.aggregate` span. A query or aggregate read through `.cursor()`, `for await`, `eachAsync()` or as a stream gets one span that ends when the cursor is exhausted, closed or fails.
 
 **Model static methods** (spans created; promise finalization):
 `create`, `insertMany`, `aggregate`, `bulkWrite`

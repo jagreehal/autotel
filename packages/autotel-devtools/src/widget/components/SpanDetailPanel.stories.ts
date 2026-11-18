@@ -72,11 +72,11 @@ type Story = StoryObj<typeof meta>;
  */
 export const Attributes: Story = {
   play: async ({ canvas }) => {
-    // Every key here is resource or auto-instrumentation: collapsed by default.
+    // Every key here is resource or auto-instrumentation, and the app set
+    // none, so the section opens on its own.
     await expect(
       await canvas.findByText('Your code set no attributes on this span.'),
     ).toBeInTheDocument();
-    await userEvent.click(canvas.getByText(/Resource & auto \(/));
     await expect(
       await canvas.findByText('deployment.environment'),
     ).toBeInTheDocument();
@@ -89,7 +89,6 @@ export const Attributes: Story = {
 export const Dark: Story = {
   globals: { theme: 'dark' },
   play: async ({ canvas }) => {
-    await userEvent.click(await canvas.findByText(/Resource & auto \(/));
     await expect(
       await canvas.findByText('datadog.host.name'),
     ).toBeInTheDocument();

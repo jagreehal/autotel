@@ -550,10 +550,16 @@ export interface AutotelConfig {
 
   /**
    * OTLP logs configuration
-   * - true: auto-configure OTLP log exporter from endpoint
-   * - false: disabled
-   * - 'auto' or unset: disabled, unless `canonicalLogLines` writes through the
-   *   Logs API or OpenFeature is installed (its evaluations are log events)
+   * - true: auto-configure OTLP log exporter from endpoint, for every record
+   * - false: disabled, events included
+   * - 'auto' or unset: events only (records with an `eventName`: `ctx.event`,
+   *   `transition()` history, flag evaluations), as autotel-web sends them.
+   *   Every record when `canonicalLogLines` writes through the Logs API or
+   *   OpenFeature is installed (its evaluations are log events)
+   *
+   * This governs autotel's own OTLP exporter and the `debug` printer. Your
+   * `logRecordProcessors` and the PostHog logs integration get every record
+   * whatever it says: configuring them is the request.
    *
    * When enabled and an endpoint is configured, autotel will automatically
    * create a BatchLogRecordProcessor with an OTLPLogExporter - no manual
@@ -888,7 +894,7 @@ export interface AutotelConfig {
    *
    * When enabled: Outputs spans to console AND sends to backend (if endpoint/exporter configured)
    *
-   * With `logs: true`, log records are printed too: one line each in
+   * Events are printed too, and with `logs: true` every log record: one line each in
    * `'pretty'` mode (severity, body, attributes, trace id), the raw
    * `ConsoleLogRecordExporter` output with `true`. No endpoint is needed:
    *

@@ -49,7 +49,8 @@ Space on the cursor row for a card that names the services the trace crossed,
 where a failure started, which spans spent the most time themselves, and the
 root span's attributes. In the span panel, resource
 and auto-instrumentation attributes (`service.*`, `deployment.*`, `code.*`,
-`http.*`, `db.*`) sit in a collapsed **Resource & auto** section. Previews
+`http.*`, `db.*`) sit in a **Resource & auto** section, collapsed unless your
+code set nothing on the span. Previews
 mask values whose keys look like credentials (`password`, `token`,
 `api_key`).
 

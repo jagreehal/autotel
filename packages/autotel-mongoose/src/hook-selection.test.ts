@@ -17,7 +17,8 @@ import {
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace';
 import type { Tracer } from 'autotel';
-import { instrumentMongoose, wrapHookHandler } from './instrumentation';
+import { wrapHookHandler } from './hooks';
+import { instrumentMongoose } from './instrumentation';
 import type { InstrumentMongooseConfig, ResolvedConfig } from './types';
 
 const exporter = new InMemorySpanExporter();
@@ -153,9 +154,6 @@ describe('which hooks belong to Mongoose', () => {
 
 describe('what a hook span is called', () => {
   const config = {
-    dbName: '',
-    peerName: '',
-    peerPort: 27_017,
     tracerName: 'autotel-mongoose-selection-test',
     captureCollectionName: true,
     instrumentHooks: true,

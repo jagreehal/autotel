@@ -34,6 +34,19 @@ Package uses explicit exports (check `package.json` exports field) for tree-shak
   `autotel.state.transitions` counter, independent of trace sampling. Call it
   after the write succeeded and only when a document changed. The entity id is
   never a metric attribute.
+- `ctx.event(name, attributes)` - an OpenTelemetry event in a span, the same
+  call as autotel-web's `s.event`. `src/otel-event.ts` (`emitOtelEvent`) gives
+  it, `transition()` history and flag evaluations one record shape: the name
+  as `eventName`, body and `event.name` attribute, at INFO. `src/log-pipeline.ts`
+  builds the log processors: with `logs` unset only records with an
+  `eventName` export (`EventsOnlyLogRecordProcessor`), `logs: true` exports
+  every record, `logs: false` none. `OTEL_LOGS_EXPORTER=none` counts as off; any
+  other value leaves export to the SDK, so autotel adds no processor of its
+  own (one would replace the SDK's exporter). The mode governs only autotel's
+  exporter and the debug printer: caller `logRecordProcessors` and PostHog get
+  every record, and the dropped-event warning fires only when neither exists. `src/log-export-mode.ts` holds
+  the resolved mode, apart from `init`, so emitters read it without an import
+  cycle. `ctx.track` is product analytics for subscribers, not an OTel event.
 - `autotel/logger` - Pino integration
 - `autotel/event` - Events API (`Event`, `track`)
 - `autotel/metric` - Metrics helpers
@@ -75,16 +88,13 @@ Package uses explicit exports (check `package.json` exports field) for tree-shak
   since the events are the complete record; `logs: false` wins. The span keeps
   the first evaluation only (attributes cannot be removed, so later ones would
   mix fields) and never `error.type`.
-  The event goes through `track` (correlated log) and **only** `track` — there
-  is no `Span.addEvent` fallback, because a fallback is how the Logs API
-  direction quietly becomes optional; a caller holding a raw span passes its
-  own `track` (in the browser, `emitEvent` from `autotel-web`), and
-  `autotelOpenFeatureHook` falls back to an actual `@opentelemetry/api`
-  record. **Not** `emitCorrelatedEvent`: that helper prefers `Span.addEvent`
+  The event goes through the sink's `track` when it has one, otherwise
+  `emitOtelEvent()`, and never `Span.addEvent`: a fallback is how the Logs API
+  direction quietly becomes optional. A caller holding a raw span passes its
+  own `track` (in the browser, `emitEvent` from `autotel-web`). **Not** `emitCorrelatedEvent`: that helper prefers `Span.addEvent`
   when the target has one, so routing through it lands the evaluation exactly
   where no log or event pipeline will look — the failure the Logs API invariant
-  exists to prevent. `logs.getLogger` no-ops without a `LoggerProvider`, so the
-  fallback costs nothing in an app that exports no logs. Reasons are
+  exists to prevent. Reasons are
   case-normalised to the registry's lower snake case: a provider reporting
   `TARGETING_MATCH` and one reporting `targeting_match` must not become two
   buckets. Values stay typed — `feature_flag.result.value` permits a boolean or a

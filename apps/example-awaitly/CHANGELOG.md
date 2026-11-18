@@ -1,4 +1,4 @@
-# @jagreehal/awaitly-example
+# @jagreehal/example-awaitly
 
 ## 1.0.79
 

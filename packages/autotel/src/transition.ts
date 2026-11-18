@@ -29,9 +29,8 @@ import {
   type Attributes,
   type Counter,
   type Meter,
-  logs,
-  SeverityNumber,
 } from '@opentelemetry/api';
+import { emitOtelEvent } from './otel-event';
 import { getConfig as getRuntimeConfig } from './config';
 import { getConfig, getLogger, isInitialized } from './init';
 import { track } from './track';
@@ -177,15 +176,7 @@ export function transition(input: TransitionInput): void {
     });
 
     if (identified) {
-      guarded(() =>
-        logs.getLogger('autotel').emit({
-          eventName: STATE_TRANSITION_EVENT,
-          body: STATE_TRANSITION_EVENT,
-          severityNumber: SeverityNumber.INFO,
-          severityText: 'INFO',
-          attributes: identified,
-        }),
-      );
+      guarded(() => emitOtelEvent(STATE_TRANSITION_EVENT, identified));
     }
 
     // Subscribers see the id-free attributes. track() warns when nothing is

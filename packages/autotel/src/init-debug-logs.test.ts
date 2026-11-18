@@ -1,7 +1,14 @@
 import { inspect } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { logs, SeverityNumber } from '@opentelemetry/api';
-import { init } from './init';
+import {
+  InMemoryLogRecordExporter,
+  SimpleLogRecordProcessor,
+} from '@opentelemetry/sdk-logs';
+import { getLogger, init } from './init';
+import { AutotelSdk, type AutotelSdkOptions } from './sdk';
+import { logExportMode } from './log-export-mode';
+import { emitOtelEvent, resetOtelEventWarningForTesting } from './otel-event';
 import { shutdown } from './shutdown';
 
 /** Lines written to the console, captured until `release()` is called. */
@@ -69,7 +76,7 @@ describe('debug prints log records', () => {
     expect(output).toContain('severityText');
   });
 
-  it('not at all unless logs are on: debug alone stays about spans', async () => {
+  it('only events when logs are unset: plain log records wait for logs: true', async () => {
     // Installed OpenFeature turns logs on by itself (its evaluations are log
     // events), and this repo has it; rule it out so "no logs" means no logs.
     init({ service: 'debug-logs', debug: 'pretty', openFeature: false });
@@ -100,5 +107,104 @@ describe('debug prints log records', () => {
     );
 
     expect(output).not.toContain('person@example.com');
+  });
+
+  it('events with logs unset, which export by default as on autotel-web', async () => {
+    init({ service: 'debug-logs', debug: 'pretty', openFeature: false });
+
+    const output = await printedOnce('checkout.started', () =>
+      emitOtelEvent('checkout.started', { 'cart.items': 2 }),
+    );
+
+    expect(output).toContain('cart.items=2');
+  });
+});
+
+describe('logs: false', () => {
+  it('drops events too, and says so once', async () => {
+    resetOtelEventWarningForTesting();
+    init({ service: 'debug-logs', debug: 'pretty', logs: false });
+    const warn = vi.spyOn(getLogger(), 'warn');
+    const console = captureConsole();
+    try {
+      emitOtelEvent('checkout.started', {});
+      emitOtelEvent('checkout.finished', {});
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(console.text()).not.toContain('checkout.started');
+    } finally {
+      console.release();
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[1])).toContain('logs: false');
+  });
+});
+
+describe('OTEL_LOGS_EXPORTER, when logs is unset', () => {
+  afterEach(() => {
+    delete process.env.OTEL_LOGS_EXPORTER;
+  });
+
+  it('=none turns log export off, events included, and warns', () => {
+    process.env.OTEL_LOGS_EXPORTER = 'none';
+    resetOtelEventWarningForTesting();
+    init({ service: 'debug-logs', openFeature: false });
+    const warn = vi.spyOn(getLogger(), 'warn');
+
+    emitOtelEvent('checkout.started', {});
+
+    expect(logExportMode()).toBe('off');
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('=otlp leaves export to the SDK, even with debug on', () => {
+    process.env.OTEL_LOGS_EXPORTER = 'otlp';
+    let options: AutotelSdkOptions | undefined;
+    init({
+      service: 'debug-logs',
+      debug: 'pretty',
+      openFeature: false,
+      sdkFactory: (defaults) => {
+        options = defaults;
+        return new AutotelSdk(defaults);
+      },
+    });
+
+    expect(logExportMode()).toBe('env');
+    // Any processor passed in would replace the SDK's own exporter.
+    expect(options?.logRecordProcessors).toBeUndefined();
+  });
+});
+
+describe('your own log processors', () => {
+  it('get every record whatever logs says, plain logs included', async () => {
+    const exporter = new InMemoryLogRecordExporter();
+    init({
+      service: 'debug-logs',
+      openFeature: false,
+      logRecordProcessors: [new SimpleLogRecordProcessor({ exporter })],
+    });
+
+    emitHello();
+    emitOtelEvent('checkout.started', {});
+
+    await expect
+      .poll(() => exporter.getFinishedLogRecords().map((r) => r.body))
+      .toEqual(['hello from the logs api', 'checkout.started']);
+  });
+
+  it('receive events with logs: false, so nothing warns of a drop', async () => {
+    resetOtelEventWarningForTesting();
+    const exporter = new InMemoryLogRecordExporter();
+    init({
+      service: 'debug-logs',
+      logs: false,
+      logRecordProcessors: [new SimpleLogRecordProcessor({ exporter })],
+    });
+    const warn = vi.spyOn(getLogger(), 'warn');
+
+    emitOtelEvent('checkout.started', {});
+
+    await expect.poll(() => exporter.getFinishedLogRecords()).toHaveLength(1);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

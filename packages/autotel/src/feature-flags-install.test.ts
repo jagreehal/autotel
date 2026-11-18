@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { context, trace, logs } from '@opentelemetry/api';
+import { context, trace, logs, SeverityNumber } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import {
   autotelOpenFeatureHook,
@@ -130,9 +130,13 @@ describe('recordFeatureFlag without a sink', () => {
     });
     expect(emit).toHaveBeenCalledWith({
       eventName: 'feature_flag.evaluation',
+      body: 'feature_flag.evaluation',
+      severityNumber: SeverityNumber.INFO,
+      severityText: 'INFO',
       attributes: {
         'feature_flag.key': 'new-checkout',
         'feature_flag.result.value': true,
+        'event.name': 'feature_flag.evaluation',
       },
     });
   });

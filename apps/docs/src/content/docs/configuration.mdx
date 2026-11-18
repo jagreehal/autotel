@@ -64,6 +64,26 @@ init({
 });
 ```
 
+## Events export by default, logs on request
+
+With `logs` unset, the endpoint's log exporter sends events only: records with
+an `eventName`, such as `ctx.event(...)`, `transition({ history: true })` and
+feature-flag evaluations. That matches autotel-web, whose events export once it
+has an endpoint.
+
+| `logs`                          | Exports                                              |
+| ------------------------------- | ---------------------------------------------------- |
+| unset                           | events only                                          |
+| `true` (or `AUTOTEL_LOGS=on`)   | every log record, pino, winston and console included |
+| `false` (or `AUTOTEL_LOGS=off`) | nothing; the first dropped event logs a warning      |
+
+A set `OTEL_LOGS_EXPORTER` governs log export itself unless `logs: true` asks
+for autotel's exporter: `none` counts as off.
+
+`logs` governs autotel's own exporter. Processors you pass in
+`logRecordProcessors`, and the PostHog logs integration, receive every record
+whatever it says.
+
 ## No endpoint means no export
 
 With no `endpoint` from `init()`, YAML or `OTEL_EXPORTER_OTLP_ENDPOINT`, there is
