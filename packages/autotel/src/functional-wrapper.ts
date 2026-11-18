@@ -28,6 +28,12 @@ import {
   type Sampler,
   type SamplingContext,
 } from './sampling';
+import {
+  errorTypeOf,
+  exceptionOf,
+  isError as isErrorValue,
+  toError,
+} from './structured-error';
 import { getEventQueue } from './track';
 import {
   createTraceContext,
@@ -338,43 +344,75 @@ function finalizeThrownSpan(
     'operation.duration': duration,
   };
 
-  if (isError && !isError(error)) {
-    callCounter?.add(1, { operation: spanName, status: 'success' });
+  // The thrown value can carry throwing getters. The span always ends and the
+  // caller rethrows the original value; an isError that throws counts as a failure.
+  let failed = true;
+  try {
+    failed = isError === undefined || isError(error);
+  } catch {
+    // Stays a failure.
+  }
+
+  try {
+    if (!failed) {
+      callCounter?.add(1, { operation: spanName, status: 'success' });
+      durationHistogram?.record(duration, {
+        operation: spanName,
+        status: 'success',
+      });
+      span.setStatus({ code: SpanStatusCode.OK });
+      span.setAttributes({ ...baseAttributes, 'operation.success': true });
+      handleTailSampling(true, duration);
+      return;
+    }
+
+    callCounter?.add(1, { operation: spanName, status: 'error' });
     durationHistogram?.record(duration, {
       operation: spanName,
-      status: 'success',
+      status: 'error',
     });
-    span.setStatus({ code: SpanStatusCode.OK });
-    span.setAttributes({ ...baseAttributes, 'operation.success': true });
-    handleTailSampling(true, duration);
-    span.end();
-    return;
-  }
+    span.setStatus({ code: SpanStatusCode.ERROR, message: 'Unknown error' });
+    span.setAttributes({
+      ...baseAttributes,
+      'operation.success': false,
+      error: true,
+    });
 
-  callCounter?.add(1, { operation: spanName, status: 'error' });
-  durationHistogram?.record(duration, { operation: spanName, status: 'error' });
-  const truncatedMessage = truncateErrorMessage(
-    error instanceof Error ? error.message : 'Unknown error',
-  );
-
-  span.setStatus({ code: SpanStatusCode.ERROR, message: truncatedMessage });
-  span.setAttributes({
-    ...baseAttributes,
-    'operation.success': false,
-    error: true,
-    'exception.type': error instanceof Error ? error.constructor.name : 'Error',
-    'exception.message': truncatedMessage,
-  });
-  if (error instanceof Error && error.stack) {
-    span.setAttribute(
-      'exception.stack',
-      error.stack.slice(0, FUNCTIONAL_ERROR_MESSAGE_LIMIT),
+    const thrown = toError(error);
+    const errorType = errorTypeOf(error);
+    // Each field read on its own, so the tail-sampling verdict below still runs.
+    const exception = exceptionOf(thrown, errorType);
+    const { message, stack } = exception;
+    const truncatedMessage = truncateErrorMessage(
+      (isErrorValue(error) ? message : undefined) ?? 'Unknown error',
     );
+
+    span.setStatus({ code: SpanStatusCode.ERROR, message: truncatedMessage });
+    span.setAttributes({
+      'exception.type': errorType,
+      'exception.message': truncatedMessage,
+    });
+    // Matches ctx.recordError(); an error.type the function set itself wins.
+    // SAFETY: an SDK span (and the test collector's) exposes the attributes set
+    // so far; a span that does not reads as undefined and gets error.type set.
+    const setSoFar = (span as { attributes?: Attributes }).attributes;
+    if (setSoFar?.['error.type'] === undefined) {
+      span.setAttribute('error.type', errorType);
+    }
+    if (isErrorValue(error) && stack) {
+      span.setAttribute(
+        'exception.stack',
+        stack.slice(0, FUNCTIONAL_ERROR_MESSAGE_LIMIT),
+      );
+    }
+    span.recordException(exception);
+    // The original error, so a sampler can check its class or code.
+    handleTailSampling(false, duration, thrown);
+  } catch {
+    // The error status set above stands.
+  } finally {
+    span.end();
   }
-  const thrown = error instanceof Error ? error : new Error(String(error));
-  span.recordException(thrown);
-  handleTailSampling(false, duration, thrown);
-  span.end();
 }
 
 function createRootTelemetryFlusher(

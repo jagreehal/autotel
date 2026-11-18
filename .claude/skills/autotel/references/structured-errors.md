@@ -36,7 +36,7 @@ throw createStructuredError({
 
 When recorded on a span, fields map to:
 
-- `error.type` - error name
+- `error.type` - the error's `name` when set, otherwise its class. An error thrown out of `trace()` gets the same value
 - `error.message` - message
 - `error.why` - why
 - `error.fix` - fix

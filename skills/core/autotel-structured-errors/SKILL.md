@@ -97,7 +97,7 @@ if (billing.PAYMENT_DECLINED.match(err)) retryWithDifferentCard();
 
 Builders return the same `StructuredError`, so `parseError()` still works. Codes default to `namespace.KEY`. A function `message` or `why` takes typed params enforced at every call site. `.match()` compares the catalog code, so renaming an entry breaks the compile instead of skipping the branch.
 
-**Record on current span:** `createStructuredError()` only builds the error; it touches no span. Thrown out of a `trace()` body, it sets the span's ERROR status and records the exception. The structured fields (`error.why`, `error.fix`, `error.link`, `error.code`, `error.status`) reach the span only through `recordStructuredError(ctx, error)` or the request logger's `.error(error, fields)`:
+**Record on current span:** `createStructuredError()` only builds the error; it touches no span. Thrown out of a `trace()` body, it sets the span's ERROR status and `error.type` and records the exception. The structured fields (`error.why`, `error.fix`, `error.link`, `error.code`, `error.status`) reach the span only through `recordStructuredError(ctx, error)` or the request logger's `.error(error, fields)`:
 
 ```typescript
 import { recordStructuredError } from 'autotel';

@@ -33,6 +33,15 @@ export function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/** A string field of a thrown value, or undefined when the read throws or yields a non-string. */
+export function readString(read: () => string | undefined): string | undefined {
+  try {
+    return asString(read());
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The value as a map of strings - a header bag, say - or undefined when it is
  * not an object at all. Entries whose value is not a string are left out.
