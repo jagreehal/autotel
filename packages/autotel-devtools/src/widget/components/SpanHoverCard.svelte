@@ -1,3 +1,10 @@
+<script module lang="ts">
+  import { appAttributes, keyAttributes } from '../utils/keyAttributes';
+  import type { SpanAttributes } from '../types';
+  // The trace list's card shows a root span's attributes the same way.
+  export { spanAttributeGrids };
+</script>
+
 <script lang="ts">
   /**
    * Hover card for a waterfall row: the full span name (the column truncates)
@@ -5,7 +12,6 @@
    */
   import { AlertCircle } from '@lucide/svelte';
   import { formatDuration } from '../utils';
-  import { appAttributes, keyAttributes } from '../utils/keyAttributes';
   import type { SpanNode, TraceData } from '../types';
   import { countDescendants } from './WaterfallRow.svelte';
 
@@ -20,18 +26,6 @@
     trace.duration > 0 ? (span.duration / trace.duration) * 100 : 0,
   );
   const descendants = $derived(countDescendants(node));
-  // App attributes in full, then the key protocol ones.
-  const appAttrs = $derived(
-    appAttributes(
-      span.attributes ?? {},
-      Number.POSITIVE_INFINITY,
-      Number.POSITIVE_INFINITY,
-    ),
-  );
-  const keyAttrs = $derived.by(() => {
-    const shown = new Set(appAttrs.map(([k]) => k));
-    return keyAttributes(span.attributes ?? {}).filter(([k]) => !shown.has(k));
-  });
 </script>
 
 {#snippet attributeGrid(
@@ -49,6 +43,18 @@
       {/each}
     </div>
   {/if}
+{/snippet}
+
+<!-- App attributes in full, then the key protocol ones not already shown. -->
+{#snippet spanAttributeGrids(attributes: SpanAttributes)}
+  {@const app = appAttributes(attributes)}
+  {@const shown = new Set(app.map(([k]) => k))}
+  {@render attributeGrid(app, 'text-fg-muted', 'font-medium')}
+  {@render attributeGrid(
+    keyAttributes(attributes).filter(([k]) => !shown.has(k)),
+    'text-fg-subtle',
+    '',
+  )}
 {/snippet}
 
 <div
@@ -86,6 +92,5 @@
       <span class="break-all">{span.status.message || 'Error'}</span>
     </div>
   {/if}
-  {@render attributeGrid(appAttrs, 'text-fg-muted', 'font-medium')}
-  {@render attributeGrid(keyAttrs, 'text-fg-subtle', '')}
+  {@render spanAttributeGrids(span.attributes ?? {})}
 </div>

@@ -23,6 +23,7 @@ export const TRACE_LIST_SHORTCUTS: Shortcut[] = [
   { keys: ['/'], description: 'Focus search filter' },
   { keys: ['Esc'], description: 'Clear selection / clear search' },
   { keys: ['CmdOrCtrl', 'A'], description: 'Select all traces' },
+  { keys: ['Space'], description: 'Peek at the row' },
   { keys: ['?'], description: 'Show/hide keyboard shortcuts' },
 ];
 

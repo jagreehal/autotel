@@ -175,7 +175,7 @@ process. Point them at the bound port, or free the original.
 - ✅ **Query language** over traces and logs, run as SQL against a sqlite store (see below)
 - ✅ **Persistence**: `--db` keeps telemetry across restarts; retention applies count and byte caps
 - ✅ Traces view with waterfall (tree connectors, event markers, critical path) + flame graph
-- ✅ **Your attributes first**: timeline rows, hover cards and trace-list tags show the attributes your code set; the span panel lists them above a collapsed "Resource & auto" section
+- ✅ **Your attributes first**: hovering a timeline row shows the attributes your code set, and hovering a trace-list row (or Space on the cursor row) shows the services it crossed, where a failure started, the slowest spans by self time and the root's attributes; the span panel lists them above a collapsed "Resource & auto" section
 - ✅ Logs view with a query bar and severity filtering
 - ✅ Clear empties the server's store along with the browser's; the Traces tab opens on the trace list
 - ✅ **Metrics view**: server-reduced time series, merged histogram distributions, interpolated quantiles, sparklines, and capped exemplars that open the trace behind a spike

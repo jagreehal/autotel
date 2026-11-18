@@ -111,6 +111,7 @@
   import type { TraceData } from '../types';
   import WaterfallRow, { getSpanKindColor } from './WaterfallRow.svelte';
   import SpanHoverCard from './SpanHoverCard.svelte';
+  import { useHoverCard } from './hoverCard.svelte';
   import ResizeHandle from './ResizablePanel.svelte';
   import { useResizable } from './resizable.svelte';
 
@@ -169,7 +170,7 @@
     },
   });
   const nameCol = useResizable({
-    initial: 420,
+    initial: 200,
     min: 120,
     minOther: MIN_TIMELINE,
     containerRef: columnContainer(() => durationCol.size),
@@ -204,33 +205,12 @@
     `left: ${nameWidth}px; right: ${durationWidth}px;`,
   );
 
-  // One hover card for the whole list, anchored under the hovered name cell.
-  // Delayed on first entry so scanning down the tree does not flash cards;
-  // moving between rows while one is open swaps immediately.
-  let hover = $state<{
-    node: SpanNode;
-    top: number;
-    left: number;
-    above: boolean;
-  } | null>(null);
-  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
-  function onRowHover(node: SpanNode, target: HTMLElement | null) {
-    clearTimeout(hoverTimer);
-    if (!target || !rootEl) {
-      hover = null;
-      return;
-    }
-    const root = rootEl.getBoundingClientRect();
-    const cell = target.getBoundingClientRect();
-    const above = cell.top - root.top > root.height / 2;
-    const next = {
-      node,
-      above,
-      top: (above ? cell.top : cell.bottom) - root.top,
-      left: Math.min(cell.left - root.left + 8, Math.max(0, root.width - 428)),
-    };
-    hoverTimer = setTimeout(() => (hover = next), hover ? 0 : 250);
-  }
+  const hoverCard = useHoverCard<SpanNode>(() => rootEl);
+  // A card for a span of the previous trace must not outlive it.
+  $effect(() => {
+    void trace;
+    hoverCard.hide();
+  });
 
   let collapsed = $state(new Set<string>());
   let showCritical = $state(true);
@@ -476,7 +456,7 @@
     bind:this={scrollEl}
     onscroll={(event) => {
       scrollTop = event.currentTarget.scrollTop;
-      hover = null;
+      hoverCard.hide();
     }}
     class="flex-1 overflow-auto relative"
   >
@@ -519,7 +499,7 @@
             {durationWidth}
             onSelect={() => onSpanSelect?.(node.span)}
             onToggleCollapse={() => toggleCollapse(node.span.spanId)}
-            onHover={(target) => onRowHover(node, target)}
+            onHover={(target) => hoverCard.show(node, target)}
           />
         </div>
       {/each}
@@ -537,12 +517,9 @@
     </div>
   </div>
 
-  {#if hover}
-    <div
-      class="absolute z-40 pointer-events-none"
-      style={`top: ${hover.top}px; left: ${hover.left}px;${hover.above ? ' transform: translateY(-100%);' : ''}`}
-    >
-      <SpanHoverCard node={hover.node} {trace} />
+  {#if hoverCard.card}
+    <div class="absolute z-40 pointer-events-none" style={hoverCard.style}>
+      <SpanHoverCard node={hoverCard.card.item} {trace} />
     </div>
   {/if}
 

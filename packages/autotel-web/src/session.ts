@@ -43,8 +43,69 @@ interface SessionState {
 
 export type SessionIdProvider = () => string | undefined;
 
+/** Why a session ended; the value of `session.end.reason`. */
+export type SessionEndReason = 'timeout' | 'max_duration' | 'unload';
+
+export interface SessionStart {
+  id: string;
+  /** The session this one replaced, when it began by rolling one over. */
+  previousId?: string;
+}
+
+export interface SessionEnd {
+  id: string;
+  reason: SessionEndReason;
+  /** How long the session ran, in milliseconds. */
+  durationMs: number;
+}
+
+/** Session options shared by `init()` and `initFull()`. */
+export interface SessionConfig {
+  /** Idle gap that ends a session. @default 1_800_000 (30 minutes) */
+  timeoutMs?: number;
+  /**
+   * Longest a session may run however active it is; the next read after that
+   * starts a new one, linked by `session.previous_id`. Unset, a session lasts
+   * for as long as activity continues.
+   */
+  maxDurationMs?: number;
+  /** Use another SDK's session id instead of minting one. */
+  id?: SessionIdProvider;
+  /**
+   * Emit `session.start` / `session.end` events, so session count and session
+   * duration are direct queries rather than something a backend has to infer
+   * by grouping every span it has.
+   *
+   * @default false
+   */
+  emitEvents?: boolean;
+  /**
+   * Send `session.id` in the W3C `baggage` header, so the API's server
+   * span carries the same session as the browser's, a request rejected
+   * in middleware included. Same destinations as all baggage:
+   * same-origin, plus `baggage.allowedOrigins`. The API needs
+   * `init({ baggage: { keys: ['session.id'] } })` to copy it on as `session.id`, and a
+   * cross-origin API must allow `baggage` in its CORS preflight.
+   *
+   * @default false
+   */
+  propagate?: boolean;
+  /**
+   * Called where `session.start` is emitted (whether or not `emitEvents` is
+   * on): a new session, or this page picking one up again after a reload or
+   * after `onEnd` reported `unload`. Not called for a session another SDK owns.
+   * A throw is swallowed.
+   */
+  onStart?: (session: SessionStart) => void;
+  /** Called where `session.end` is emitted; same rules as `onStart`. */
+  onEnd?: (session: SessionEnd) => void;
+}
+
 let enabled = true;
 let timeoutMs = DEFAULT_TIMEOUT_MS;
+let maxDurationMs: number | undefined;
+let onStart: SessionConfig['onStart'];
+let onEnd: SessionConfig['onEnd'];
 let idProvider: SessionIdProvider | undefined;
 /**
  * The session of the join that owns `session.id` (see `autotel-web/join`).
@@ -72,24 +133,55 @@ function emit(name: string, attributes: Record<string, string | number>): void {
   emitEvent(name, attributes);
 }
 
-function announceStart(id: string): void {
+/** An app callback must never be why a span lost its session. */
+function notify<T>(callback: ((value: T) => void) | undefined, value: T): void {
+  try {
+    callback?.(value);
+  } catch {
+    // The app's own error; the session is already settled either way.
+  }
+}
+
+function announceStart(id: string, previousId: string | undefined): void {
   if (announced === id) return;
   announced = id;
   emit(WEB_EVENT.SESSION_START, { [SESSION.ID]: id });
+  notify(onStart, previousId === undefined ? { id } : { id, previousId });
 }
 
 function announceEnd(
   session: SessionState,
   endedAt: number,
-  reason: 'timeout' | 'unload',
+  reason: SessionEndReason,
 ): void {
+  const durationMs = endedAt - session.startedAt;
   emit(WEB_EVENT.SESSION_END, {
     [SESSION.ID]: session.id,
-    [AUTOTEL_WEB.SESSION_DURATION]: Math.round(
-      (endedAt - session.startedAt) / 1000,
-    ),
+    [AUTOTEL_WEB.SESSION_DURATION]: Math.round(durationMs / 1000),
     [AUTOTEL_WEB.SESSION_END_REASON]: reason,
   });
+  notify(onEnd, { id: session.id, reason, durationMs });
+}
+
+/**
+ * Why `session` is over at `now`, and when it ended, or `undefined` while it
+ * is still live. Idleness wins a tie: a session that went quiet ended when it
+ * went quiet, whatever its age.
+ */
+function endOf(
+  session: SessionState,
+  now: number,
+): { reason: SessionEndReason; endedAt: number } | undefined {
+  if (now - session.lastActivity > timeoutMs) {
+    return { reason: 'timeout', endedAt: session.lastActivity };
+  }
+  if (maxDurationMs !== undefined && now - session.startedAt >= maxDurationMs) {
+    return {
+      reason: 'max_duration',
+      endedAt: session.startedAt + maxDurationMs,
+    };
+  }
+  return undefined;
 }
 
 /**
@@ -258,16 +350,7 @@ export function setJoinSessionProvider(
  * Configure session tracking. Called by `init()` / `initFull()`; exported so a
  * host app can turn it off or lengthen the window without re-initializing.
  */
-export function configureSession(
-  config:
-    | false
-    | {
-        timeoutMs?: number;
-        id?: SessionIdProvider;
-        emitEvents?: boolean;
-        propagate?: boolean;
-      } = {},
-): void {
+export function configureSession(config: false | SessionConfig = {}): void {
   if (config === false) {
     enabled = false;
     idProvider = undefined;
@@ -277,6 +360,9 @@ export function configureSession(
   }
   enabled = true;
   timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  maxDurationMs = config.maxDurationMs;
+  onStart = config.onStart;
+  onEnd = config.onEnd;
   idProvider = config.id;
   emitEvents = config.emitEvents ?? false;
   setSessionBaggage(
@@ -346,10 +432,11 @@ export function getSessionAttributes(): Record<string, string> | undefined {
 function resolveSession(): Record<string, string> | undefined {
   const now = Date.now();
   const restored = state ?? readStored();
+  const ended = restored ? endOf(restored, now) : undefined;
 
   if (!restored) {
     state = { id: newId(), lastActivity: now, startedAt: now };
-  } else if (now - restored.lastActivity > timeoutMs) {
+  } else if (ended) {
     state = {
       id: newId(),
       lastActivity: now,
@@ -361,13 +448,13 @@ function resolveSession(): Record<string, string> | undefined {
     // record it is writing — which re-enters here, finds the same expired
     // session, and rolls it over again, for as long as the stack holds.
     writeStored(state);
-    announceEnd(restored, restored.lastActivity, 'timeout');
+    announceEnd(restored, ended.endedAt, ended.reason);
   } else {
     state = { ...restored, lastActivity: now };
   }
 
   writeStored(state);
-  announceStart(state.id);
+  announceStart(state.id, state.previousId);
 
   const previousId = state.previousId;
   state.previousId = undefined;
@@ -380,6 +467,9 @@ function resolveSession(): Record<string, string> | undefined {
 export function resetSessionForTesting(): void {
   enabled = true;
   timeoutMs = DEFAULT_TIMEOUT_MS;
+  maxDurationMs = undefined;
+  onStart = undefined;
+  onEnd = undefined;
   idProvider = undefined;
   joinIdProvider = undefined;
   provisional.clear();

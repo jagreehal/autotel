@@ -53,6 +53,15 @@ describe('an endpoint carrying its key as a query', () => {
     );
   });
 
+  it('derives the metrics path the same way as logs', () => {
+    expect(
+      otlpEndpointFor('https://otel.example.com/v1/traces', 'metrics'),
+    ).toBe('https://otel.example.com/v1/metrics');
+    expect(otlpEndpointFor('http://localhost:4318', 'metrics')).toBe(
+      'http://localhost:4318/v1/metrics',
+    );
+  });
+
   it('swaps the signal path and keeps the query', () => {
     expect(otlpEndpointFor(sentry, 'logs')).toBe(
       'https://o1.ingest.sentry.io/api/2/integration/otlp/v1/logs?sentry_key=abc',
@@ -100,6 +109,18 @@ describe('selfInstrumentationIgnoreUrls', () => {
 
   it('returns nothing when no endpoint is configured', () => {
     expect(selfInstrumentationIgnoreUrls(undefined)).toEqual([]);
+  });
+
+  it('ignores the metrics export too, which autotel-web/metrics sends to the same endpoint', () => {
+    expect(
+      ignores('http://localhost:4318', 'http://localhost:4318/v1/metrics'),
+    ).toBe(true);
+    expect(
+      ignores(
+        'https://otel.example.com/v1/traces',
+        'https://otel.example.com/v1/metrics',
+      ),
+    ).toBe(true);
   });
 
   describe('given the page origin', () => {

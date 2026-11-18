@@ -15,6 +15,7 @@
     ArrowUp,
     ArrowDown,
   } from '@lucide/svelte';
+  import { useHoverCard } from './hoverCard.svelte';
   import {
     sortedTracesSignal,
     selectedTraceSignal,
@@ -54,7 +55,7 @@
   import CopyButton from './CopyButton.svelte';
   import FacetFilter from './FacetFilter.svelte';
   import QueryBar from './QueryBar.svelte';
-  import { appAttributes, shortKey } from '../utils/keyAttributes';
+  import TraceHoverCard from './TraceHoverCard.svelte';
   import TimeWindowPicker from './TimeWindowPicker.svelte';
   import TailPill from './TailPill.svelte';
   import { createTraceQuery } from '../signalQuery.svelte';
@@ -274,6 +275,57 @@
 
   // Keyboard row navigation over the filtered list.
   let listRef: HTMLDivElement | undefined = $state();
+  let rootRef: HTMLDivElement | undefined = $state();
+
+  // The waterfall's hover card for the root span, drawn in the view rather
+  // than the scrolling list so a short list cannot clip it.
+  const hoverCard = useHoverCard<TraceData>(() => rootRef, {
+    width: 528,
+    height: 360,
+  });
+
+  // Space peeks at the cursor row: the hover card, opened from the keyboard
+  // and following the cursor until Space or Esc closes it.
+  let peeking = $state(false);
+  function closeCard() {
+    peeking = false;
+    hoverCard.hide();
+  }
+  // The list leaves the page while a trace is open, and no mouseleave fires
+  // for rows that are gone: a card left open would return on Back.
+  $effect(() => {
+    void selectedTrace;
+    closeCard();
+  });
+  function placePeek() {
+    const trace = filtered[nav.cursor];
+    const anchor = listRef?.querySelector<HTMLElement>(
+      `[data-row-index="${nav.cursor}"] [data-peek-anchor]`,
+    );
+    if (trace && anchor) hoverCard.show(trace, anchor, 0);
+    else hoverCard.hide();
+  }
+  $effect(() => {
+    if (!peeking) return;
+    void nav.cursor;
+    queueMicrotask(placePeek);
+  });
+  function onListKeyDown(event: KeyboardEvent) {
+    // Only on the list itself: Space on a focused row checkbox still ticks it.
+    if (event.target === event.currentTarget && event.key === ' ') {
+      if (nav.cursor < 0) return;
+      event.preventDefault();
+      if (peeking) closeCard();
+      else peeking = true;
+      return;
+    }
+    if (peeking && event.key === 'Escape') {
+      event.stopPropagation();
+      closeCard();
+      return;
+    }
+    nav.onKeyDown(event);
+  }
 
   const nav = useListKeyboardNav({
     count: () => filtered.length,
@@ -362,11 +414,6 @@
   {@const isError = trace.status === 'ERROR'}
   {@const sc = serviceColor(trace.service || 'unknown')}
   {@const isCursor = nav.cursor === index}
-  {@const rootAttrs = appAttributes(
-    trace.rootSpan.attributes ?? {},
-    Number.POSITIVE_INFINITY,
-    24,
-  )}
   <div
     class={cn(
       'group trace-grid px-4 py-2 border-b border-line-subtle cursor-pointer transition-colors',
@@ -384,6 +431,12 @@
     aria-selected={isCursor}
     tabindex="-1"
     data-row-index={index}
+    onmouseenter={(e) =>
+      hoverCard.show(
+        trace,
+        e.currentTarget.querySelector<HTMLElement>('[data-peek-anchor]'),
+      )}
+    onmouseleave={() => hoverCard.hide()}
     data-focus-inset
     onclick={() => {
       nav.cursor = index;
@@ -426,29 +479,9 @@
       {#if isError}
         <AlertCircle size={13} class="text-danger flex-shrink-0" />
       {/if}
-      <span class="truncate text-sm text-fg" title={trace.rootSpan.name}>
+      <span class="truncate text-sm text-fg" data-peek-anchor>
         {trace.rootSpan.name || 'unknown'}
       </span>
-      <!-- Root span's own attributes. Zero flex-basis: the operation name takes
-           its full width first and tags get what is left. Tags wrap inside a
-           one-line clip, and the zero-width spacer keeps the visible line
-           non-empty, so a tag wider than the space left wraps out of view
-           instead of sitting there truncated: each tag shows whole or not at
-           all. -->
-      {#if rootAttrs.length > 0}
-        <span
-          class="flex flex-wrap flex-[1_1_0%] min-w-0 h-5 overflow-hidden"
-          title={rootAttrs.map(([k, v]) => `${k}=${v}`).join('\n')}
-        >
-          <span class="w-0 h-5" aria-hidden="true"></span>
-          {#each rootAttrs as [key, value] (key)}
-            <span
-              class="mr-1 whitespace-nowrap px-1.5 rounded bg-subtle border border-line-subtle font-mono text-[10px] leading-[18px] text-fg-muted"
-              ><span class="text-fg-subtle">{shortKey(key)}=</span>{value}</span
-            >
-          {/each}
-        </span>
-      {/if}
       {#if trace.partial}
         <span
           class="flex-shrink-0 px-1.5 py-0.5 rounded bg-warning-bg text-warning text-[10px] font-medium uppercase tracking-wide"
@@ -505,7 +538,7 @@
 {#if selectedTrace}
   <TraceDetailView trace={selectedTrace} />
 {:else}
-  <div class="flex flex-col h-full">
+  <div bind:this={rootRef} class="relative flex flex-col h-full">
     <!-- Header -->
     <div
       class="px-4 py-3 border-b border-line flex items-center justify-between gap-2"
@@ -675,10 +708,11 @@
     <div
       bind:this={listRef}
       class="trace-list-container flex-1 overflow-auto focus:outline-none"
+      onscroll={() => (peeking ? placePeek() : hoverCard.hide())}
       role="listbox"
       aria-label="Traces"
       tabindex="0"
-      onkeydown={nav.onKeyDown}
+      onkeydown={onListKeyDown}
     >
       {#if traceQuery.loading.value && !traceQuery.ready.value && traces.length === 0}
         <div class="text-center text-fg-subtle text-sm py-12">
@@ -773,6 +807,12 @@
         </div>
       {/if}
     </div>
+    {#if hoverCard.card}
+      {@const trace = hoverCard.card.item}
+      <div class="absolute z-40 pointer-events-none" style={hoverCard.style}>
+        <TraceHoverCard {trace} />
+      </div>
+    {/if}
 
     {#if showImport}
       <TraceImportModal

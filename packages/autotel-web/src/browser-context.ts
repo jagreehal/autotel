@@ -92,3 +92,30 @@ export function releaseResourceAttributes(config: ReleaseConfig) {
     }),
   };
 }
+
+/**
+ * What `init()` / `initFull()` named the page, for a signal set up after them
+ * (`autotel-web/metrics`) to default to. Recorded with or without an
+ * `endpoint`: a page may name itself in `init` and send metrics elsewhere.
+ */
+export interface PageIdentity {
+  service: string;
+  endpoint?: string;
+  /** `service.version` and `deployment.environment.name`, where configured. */
+  resource: Record<string, string>;
+}
+
+let identity: PageIdentity | undefined;
+
+export function setPageIdentity(value: PageIdentity): void {
+  identity = value;
+}
+
+export function pageIdentity(): PageIdentity | undefined {
+  return identity;
+}
+
+/** @internal Reset for testing */
+export function resetPageIdentityForTesting(): void {
+  identity = undefined;
+}

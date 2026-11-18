@@ -49,6 +49,12 @@
 // Core initialization
 export { init, setBaggage, clearBaggage, type AutotelWebConfig } from './init';
 export { identify, clearIdentity, type IdentityAttributes } from './identity';
+export type {
+  SessionConfig,
+  SessionEnd,
+  SessionEndReason,
+  SessionStart,
+} from './session';
 
 // Span exporter
 export {

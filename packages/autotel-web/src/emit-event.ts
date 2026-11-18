@@ -17,7 +17,20 @@
 /** Attribute values an OTLP log record can carry. */
 export type EventAttributes = Record<string, string | number | boolean>;
 
-export type EventSink = (name: string, attributes: EventAttributes) => void;
+/**
+ * The span an event belongs to, as the log record's `traceId` / `spanId`:
+ * how a log-based event is correlated, in place of `Span.addEvent`.
+ */
+export interface EventTrace {
+  traceId: string;
+  spanId: string;
+}
+
+export type EventSink = (
+  name: string,
+  attributes: EventAttributes,
+  trace?: EventTrace,
+) => void;
 
 let sink: EventSink | undefined;
 
@@ -30,10 +43,14 @@ export function setEventSink(fn: EventSink | undefined): void {
  * Emit one event. Never throws: an event describes something the application
  * did, and must not become the reason that thing fails.
  */
-export function emitEvent(name: string, attributes: EventAttributes): void {
+export function emitEvent(
+  name: string,
+  attributes: EventAttributes,
+  trace?: EventTrace,
+): void {
   if (!sink) return;
   try {
-    sink(name, attributes);
+    sink(name, attributes, trace);
   } catch {
     // A failed export is not the caller's problem.
   }

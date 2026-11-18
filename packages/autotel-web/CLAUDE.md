@@ -46,6 +46,22 @@ rather than a nice-to-have.
 - `src/session.ts`: `session.id` / `session.previous_id`, plus optional
   `session.start` / `session.end`. A session another SDK owns (`id` provider)
   emits no lifecycle events — claiming it began when we first asked is a guess.
+  Ends on idleness (`timeoutMs`, ended at the last activity) or age
+  (`maxDurationMs`, ended at the cap); idleness wins a tie. `onStart` / `onEnd`
+  fire at exactly the points the events are emitted, inside the same settled,
+  re-entry-guarded section, and swallow what they throw. `SessionConfig` is the
+  one options type for `init()`, `initFull()` (minus `id`) and
+  `configureSession`.
+- `src/metrics.ts` (`autotel-web/metrics`): counters, up-down counters and
+  histograms on the metrics SDK, its own entry so lean and full mode never
+  bundle it. Defaults to `init`/`initFull`'s service, endpoint and release
+  through `pageIdentity()` in `browser-context.ts`, recorded with or without
+  an endpoint. **Delta temporality**:
+  every tab shares one resource, so cumulative series from two tabs read as
+  resets. The `create*` helpers resolve their instrument lazily per provider
+  generation: module-scope instruments made before `initMetrics()` would
+  otherwise stay API no-ops forever. `/v1/metrics` is in
+  `selfInstrumentationIgnoreUrls`, so the export is never traced.
 - `src/identity.ts`: `identify()` / `clearIdentity()`. `user.id` (from
   `USER` in semconv) plus app attributes, stamped before session and
   caller attributes on spans (both modes), logs and events. Never sent off
@@ -184,7 +200,10 @@ rather than a nice-to-have.
   exporter hashes a private page-scoped key, minted once and never exported. A
   per-record coin flip keeps fragments of every page instead of a share of whole
   ones, which is the failure session-consistent sampling exists to avoid.
-- **Sampling covers every signal, and is wired at both entry points.**
+- **Sampling covers every signal except metrics, and is wired at both entry points.**
+  Metrics are the exception on purpose: a metric is already an aggregate, so
+  sampling sessions turns every count into an estimate; and they never carry
+  `session.id`, which would make one series per visit.
   `sampleRate` reaches spans, logs and events through the exporter, hashed on
   the same `session.id`. With `session: false` there is no key to be consistent
   about, so the draw is per record — never "keep everything", which makes the

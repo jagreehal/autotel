@@ -174,6 +174,63 @@ to a user on every later browser record.
 
 In lean mode `sampleRate` also sets the sampled flag on the `traceparent` the page sends, with or without an `endpoint`. Set it to your API's head-sampling ratio and a parent-based server sampler keeps the sessions the browser keeps.
 
+A session also ends at `maxDurationMs` however active it is (off by default).
+`onStart` and `onEnd` run where `session.start` / `session.end` would be
+emitted, with or without `emitEvents`:
+
+```typescript
+initFull({
+  service: 'web',
+  endpoint,
+  session: {
+    maxDurationMs: 4 * 60 * 60_000,
+    onStart: ({ id, previousId }) => resetPerSessionState(),
+    onEnd: ({ id, reason, durationMs }) => {}, // 'timeout' | 'max_duration' | 'unload'
+  },
+});
+```
+
+## Metrics
+
+Counters, up-down counters and histograms come from `autotel-web/metrics`, so a
+page that counts nothing ships none of the metrics SDK:
+
+```typescript
+import {
+  initMetrics,
+  createCounter,
+  createHistogram,
+} from 'autotel-web/metrics';
+
+initMetrics(); // same service, endpoint and release as init / initFull
+
+createCounter('app.checkout.completed').add(1, { plan: 'pro' });
+createHistogram('app.render.duration', { unit: 'ms' }).record(12.5);
+```
+
+Metrics export delta temporality, since every tab reports under the same
+resource; a Prometheus backend needs the collector's `deltatocumulative`
+processor. `sampleRate` and `session.id` do not apply. Instruments declared at
+module scope start recording once `initMetrics()` runs. Export runs every
+`exportIntervalMs` (15s) and again when the page is hidden.
+
+## More exporters and propagators
+
+```typescript
+initFull({
+  service: 'web',
+  endpoint, // keeps exporting OTLP
+  spanExporters: [new ZipkinExporter(), new ConsoleSpanExporter()],
+  propagator: new B3Propagator(), // instead of W3C traceparent
+});
+```
+
+Each exporter gets its own batch, so one that fails does not hold back the
+others. Requests an exporter starts inside `export()` are not traced; add the
+URL of one that sends later to `ignoreUrls`. `span()` hands its callback a
+handle with `setAttribute` and `event`, which stays bound to its span after an
+`await`.
+
 ## Remote config
 
 The sampling rate that was fine last week is drowning the collector; a browser
@@ -288,3 +345,4 @@ See [PostHog](/autotel/integrations/posthog/).
 - `autotel-web/full`: Full mode (~40-50KB)
 - `autotel-web/privacy`: Privacy manager
 - `autotel-web/baggage`: `setBaggage` / `clearBaggage` without the rest of the SDK
+- `autotel-web/metrics`: counters and histograms, delta temporality

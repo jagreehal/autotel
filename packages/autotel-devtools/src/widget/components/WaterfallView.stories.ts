@@ -49,25 +49,10 @@ export const WideNameColumn: Story = {
   },
 };
 
-/**
- * Rows show the first attributes the app set, so five `statements.send_user`
- * siblings read as u1…u5 and the failed one is visible without a click.
- * Resource and auto-instrumentation attributes stay off the rows.
- */
-export const AppAttributesOnRows: Story = {
-  args: { trace: makeBatchSendTrace() },
-};
-
 /** The hover card lists the app's attributes in full, above the protocol ones. */
 export const AppAttributesHoverCard: Story = {
   args: { trace: makeBatchSendTrace() },
   play: async ({ canvas, userEvent }) => {
     await userEvent.hover(canvas.getAllByText('statements.send_user')[3]!);
   },
-};
-
-/** A narrow viewer: the span name keeps its room, the attributes truncate. */
-export const AppAttributesNarrow: Story = {
-  args: { trace: makeBatchSendTrace() },
-  globals: { viewport: { value: 'tablet', isRotated: false } },
 };

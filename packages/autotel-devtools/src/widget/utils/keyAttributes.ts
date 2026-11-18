@@ -150,26 +150,14 @@ export function isAppAttribute(key: string): boolean {
   return !AUTO_NAMESPACES.has(namespaceOf(key));
 }
 
-/**
- * The app's own attributes in insertion order, values stringified, sensitive
- * ones masked. `maxLength` caps each value for one-line previews; pass
- * Infinity where the full value has room (the hover card).
- */
+/** The app's own attributes in insertion order, full length, credentials masked. */
 export function appAttributes(
   attributes: SpanAttributes,
-  max = Number.POSITIVE_INFINITY,
-  maxLength = 60,
 ): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   for (const [key, value] of Object.entries(attributes)) {
-    if (out.length >= max) break;
     if (value === undefined || value === null || !isAppAttribute(key)) continue;
-    out.push([key, previewValue(key, value, maxLength)]);
+    out.push([key, previewValue(key, value, Number.POSITIVE_INFINITY)]);
   }
   return out;
-}
-
-/** `statements.outcome` → `outcome`: the label a one-line preview has room for. */
-export function shortKey(key: string): string {
-  return key.slice(key.lastIndexOf('.') + 1);
 }

@@ -15,6 +15,7 @@ import type {
   DockPosition,
 } from './types';
 import { buildResourceSummaries } from './utils/resources';
+import { readStored, writeStored } from './utils/persisted';
 import type { TimeZonePreference } from './timeFormat';
 import {
   DEFAULT_SELECTION,
@@ -73,14 +74,8 @@ export type ThemeValue = 'system' | 'light' | 'dark';
 export const themeSignal = signal<ThemeValue>('system');
 
 export function getInitialTheme(): ThemeValue {
-  try {
-    const stored = localStorage.getItem('autotel-devtools-theme');
-    if (stored === 'light' || stored === 'dark' || stored === 'system')
-      return stored;
-  } catch {
-    /* localStorage unavailable (SSR / sandboxed iframe) */
-  }
-  return 'system';
+  const stored = readStored('autotel-devtools-theme');
+  return stored === 'light' || stored === 'dark' ? stored : 'system';
 }
 
 const THEME_CYCLE: ThemeValue[] = ['system', 'light', 'dark'];
@@ -88,11 +83,7 @@ export function cycleTheme() {
   const idx = THEME_CYCLE.indexOf(themeSignal.value);
   const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
   themeSignal.value = next;
-  try {
-    localStorage.setItem('autotel-devtools-theme', next);
-  } catch {
-    /* localStorage unavailable */
-  }
+  writeStored('autotel-devtools-theme', next);
 }
 
 // ===== Editor scheme (code-location deep links) =====
@@ -102,25 +93,15 @@ export type EditorSchemeValue = 'vscode' | 'cursor' | 'webstorm';
 const EDITOR_SCHEME_KEY = 'autotel-devtools-editor';
 
 function readEditorScheme(): EditorSchemeValue {
-  try {
-    const stored = localStorage.getItem(EDITOR_SCHEME_KEY);
-    if (stored === 'vscode' || stored === 'cursor' || stored === 'webstorm')
-      return stored;
-  } catch {
-    /* localStorage unavailable */
-  }
-  return 'vscode';
+  const stored = readStored(EDITOR_SCHEME_KEY);
+  return stored === 'cursor' || stored === 'webstorm' ? stored : 'vscode';
 }
 
 export const editorSchemeSignal = signal<EditorSchemeValue>(readEditorScheme());
 
 export function setEditorScheme(scheme: EditorSchemeValue) {
   editorSchemeSignal.value = scheme;
-  try {
-    localStorage.setItem(EDITOR_SCHEME_KEY, scheme);
-  } catch {
-    /* localStorage unavailable */
-  }
+  writeStored(EDITOR_SCHEME_KEY, scheme);
 }
 
 // ===== Keyboard-shortcut help modal =====

@@ -9,6 +9,8 @@
 
 import {
   releaseResourceAttributes,
+  resetPageIdentityForTesting,
+  setPageIdentity,
   type ReleaseConfig,
 } from './browser-context';
 import { createTraceparent, parseTraceparent } from './traceparent';
@@ -31,7 +33,11 @@ import {
   setSampleRate,
   resetForTesting as resetExporter,
 } from './span-exporter';
-import { configureSession, endSessionOnUnload } from './session';
+import {
+  configureSession,
+  endSessionOnUnload,
+  type SessionConfig,
+} from './session';
 import { urlTemplate } from './url-template';
 import {
   setBaggage as setBaggageInternal,
@@ -217,6 +223,20 @@ export interface AutotelWebConfig extends ReleaseConfig {
   };
 
   /**
+   * Fraction of sessions to export, 0..1. Default 1.
+   *
+   * Hashed on `session.id`, so a sampled visit is kept whole — and applied to
+   * spans, logs and events alike, since a visit whose events survive but whose
+   * spans do not is unreadable either way. With `session: false` there is no
+   * key to be consistent about and the draw is per record.
+   *
+   * Also sets the sampled flag on the `traceparent` this page sends, with or
+   * without an `endpoint`, so a parent-based server sampler keeps the same
+   * sessions.
+   */
+  sampleRate?: number;
+
+  /**
    * Session identity stamped on every browser span as `session.id`, so spans
    * from one visit can be reassembled into a journey.
    *
@@ -239,45 +259,7 @@ export interface AutotelWebConfig extends ReleaseConfig {
    *
    * @default { timeoutMs: 1_800_000 }
    */
-  /**
-   * Fraction of sessions to export, 0..1. Default 1.
-   *
-   * Hashed on `session.id`, so a sampled visit is kept whole — and applied to
-   * spans, logs and events alike, since a visit whose events survive but whose
-   * spans do not is unreadable either way. With `session: false` there is no
-   * key to be consistent about and the draw is per record.
-   *
-   * Also sets the sampled flag on the `traceparent` this page sends, with or
-   * without an `endpoint`, so a parent-based server sampler keeps the same
-   * sessions.
-   */
-  sampleRate?: number;
-
-  session?:
-    | false
-    | {
-        timeoutMs?: number;
-        id?: () => string | undefined;
-        /**
-         * Send `session.id` in the W3C `baggage` header, so the API's server
-         * span carries the same session as the browser's, a request rejected
-         * in middleware included. Same destinations as all baggage:
-         * same-origin, plus `baggage.allowedOrigins`. The API needs
-         * `init({ baggage: { keys: ['session.id'] } })` to copy it on as `session.id`, and a
-         * cross-origin API must allow `baggage` in its CORS preflight.
-         *
-         * @default false
-         */
-        propagate?: boolean;
-        /**
-         * Emit `session.start` / `session.end` events, so session count and session
-         * duration are direct queries rather than something a backend has to infer
-         * by grouping every span it has.
-         *
-         * @default false
-         */
-        emitEvents?: boolean;
-      };
+  session?: false | SessionConfig;
 }
 
 let isInitialized = false;
@@ -387,6 +369,11 @@ export function init(userConfig: AutotelWebConfig): void {
   }
 
   isInitialized = true;
+  setPageIdentity({
+    service: config.service,
+    ...(config.endpoint !== undefined && { endpoint: config.endpoint }),
+    resource: releaseResourceAttributes(config),
+  });
 
   if (config.debug) {
     console.log('[autotel-web] Initialized successfully', {
@@ -974,6 +961,7 @@ export function resetForTesting(): void {
   privacyManager = undefined;
   resetExporter();
   resetBaggageForTesting();
+  resetPageIdentityForTesting();
 
   // Restore original fetch/XHR if they were patched
   // Then clear the stored originals so next test can set up fresh mocks

@@ -4,7 +4,6 @@ import {
   appAttributes,
   isResourceAttribute,
   isAppAttribute,
-  shortKey,
 } from './keyAttributes';
 
 describe('keyAttributes', () => {
@@ -64,7 +63,7 @@ describe('appAttributes', () => {
   });
 });
 
-describe('preview masking and length', () => {
+describe('preview masking', () => {
   it('masks credential-shaped string values, keeps counts', () => {
     expect(
       appAttributes({
@@ -83,16 +82,9 @@ describe('preview masking and length', () => {
     ]);
   });
 
-  it('caps values at 60 by default, uncapped on request', () => {
-    const long = 'a'.repeat(100);
-    expect(appAttributes({ id: long })[0]![1]).toBe(`${'a'.repeat(60)}…`);
-    expect(
-      appAttributes(
-        { id: long },
-        Number.POSITIVE_INFINITY,
-        Number.POSITIVE_INFINITY,
-      )[0]![1],
-    ).toBe(long);
+  it('keeps values whole', () => {
+    const long = 'a'.repeat(200);
+    expect(appAttributes({ id: long })[0]![1]).toBe(long);
   });
 });
 
@@ -105,10 +97,5 @@ describe('attribute classification', () => {
     // Auto-instrumentation, but not resource.
     expect(isResourceAttribute('http.route')).toBe(false);
     expect(isAppAttribute('http.route')).toBe(false);
-  });
-
-  it('shortKey keeps the last segment', () => {
-    expect(shortKey('statements.outcome')).toBe('outcome');
-    expect(shortKey('retries')).toBe('retries');
   });
 });

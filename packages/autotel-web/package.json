@@ -26,6 +26,10 @@
     "./join": {
       "types": "./dist/join.d.ts",
       "import": "./dist/join.js"
+    },
+    "./metrics": {
+      "types": "./dist/metrics.d.ts",
+      "import": "./dist/metrics.js"
     }
   },
   "files": [
@@ -64,12 +68,14 @@
   "dependencies": {
     "@opentelemetry/api": "^1.10.0",
     "@opentelemetry/core": "^3.1.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.301.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.301.0",
     "@opentelemetry/instrumentation": "^0.301.0",
     "@opentelemetry/instrumentation-document-load": "^0.70.0",
     "@opentelemetry/instrumentation-fetch": "^0.301.0",
     "@opentelemetry/instrumentation-xml-http-request": "^0.301.0",
     "@opentelemetry/resources": "^3.1.0",
+    "@opentelemetry/sdk-metrics": "^3.1.0",
     "@opentelemetry/sdk-trace": "^3.1.0",
     "web-vitals": "^6.2.3"
   },

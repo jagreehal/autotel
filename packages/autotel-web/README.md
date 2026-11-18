@@ -28,6 +28,7 @@ Lightweight browser SDK for distributed tracing and RUM (**~5.4KB gzipped** in l
 ✅ **[Breadcrumbs](#breadcrumbs)** - what the user did before the error, attached to it
 ✅ **[Reliable delivery](#delivery)** - retries, offline queueing, and no retrying past an ad blocker
 ✅ **[Console → OTLP logs](#console-output-as-log-records)** - a log signal, not just traces
+✅ **[Metrics](#metrics)** - counters and histograms from `autotel-web/metrics`, delta temporality, no cost unless imported
 
 ## Installation
 
@@ -199,6 +200,34 @@ has been _on screen_ — scroll position plus viewport height. On a page shorter
 than the window nothing scrolls, so a scroll-only reading says 0% and a fully
 read page looks like a bounce.
 
+## Sessions
+
+Every span, log and event carries `session.id`: a random, tab-scoped id held in
+`sessionStorage`. A session ends when it goes idle for `timeoutMs`, or reaches
+`maxDurationMs` however busy it is; the next one carries `session.previous_id`
+on its first span. Both modes take the same options:
+
+```typescript
+initFull({
+  service: 'web',
+  endpoint,
+  session: {
+    timeoutMs: 30 * 60_000, // idle gap that ends a session (default 30 minutes)
+    maxDurationMs: 4 * 60 * 60_000, // hard cap, off by default
+    emitEvents: true, // session.start / session.end log events
+    onStart: ({ id, previousId }) => resetPerSessionState(),
+    onEnd: ({ id, reason, durationMs }) => {}, // reason: 'timeout' | 'max_duration' | 'unload'
+  },
+});
+```
+
+`onStart` and `onEnd` fire exactly where `session.start` / `session.end` would
+be emitted, whether or not `emitEvents` is on: a new session, and this page
+picking a session up again after a reload, or, on a page that exports, after
+the tab was hidden (reported as `unload`). They run once the new session is settled, so reading the session
+inside one returns the new id, and a callback that throws is ignored. A
+session another SDK owns (`session.id` provider, or a join) reports neither.
+
 ## Sampling keeps whole sessions
 
 `sampleRate` hashes the session id rather than rolling per span. Random
@@ -248,6 +277,46 @@ from programmatic logs, so a dashboard can tell "the app said this" from
 This is not the same thing as [breadcrumbs](#breadcrumbs): this feeds the log
 pipeline, breadcrumbs attach the same output to an exception for whoever is
 reading the error. Enabling both is reasonable.
+
+## Metrics
+
+Counters, up-down counters and histograms, from their own entry so pages that
+count nothing ship none of the metrics SDK:
+
+```typescript
+import { initFull } from 'autotel-web/full';
+import {
+  initMetrics,
+  createCounter,
+  createHistogram,
+} from 'autotel-web/metrics';
+
+initFull({ service: 'web', endpoint: 'https://otel.example.com' });
+initMetrics(); // same service, endpoint and release as initFull / init
+
+const checkouts = createCounter('app.checkout.completed');
+const renderMs = createHistogram('app.render.duration', { unit: 'ms' });
+
+checkouts.add(1, { plan: 'pro' });
+renderMs.record(12.5);
+```
+
+- **Declare anywhere.** Instruments made at module scope, before your entry
+  point calls `initMetrics()`, start recording once it has; what they record
+  before that is dropped.
+- **Delta temporality.** Every tab reports under the same resource, so
+  cumulative series from two tabs look like one counter resetting. Deltas add
+  up. A Prometheus backend needs the collector's `deltatocumulative` processor.
+- **Not sampled, and no `session.id`.** `sampleRate` covers spans, logs and
+  events; a metric is already an aggregate, and sampling it turns every count
+  into an estimate. A per-session attribute would make one series per visit.
+- **Exported** every `exportIntervalMs` (default 15s) to `/v1/metrics`, and once
+  more when the page is hidden. `flushMetrics()` sends now; `shutdownMetrics()`
+  flushes and stops.
+- `initMetrics({ service, endpoint, version, environment })` overrides what
+  `init` / `initFull` configured, and works without either.
+  `metricReaders: [...]` adds readers, e.g. a console exporter while
+  developing.
 
 ## Delivery
 
@@ -471,6 +540,34 @@ initFull({
 Exported as `service.version` and `deployment.environment.name` on every span,
 log and event, in both modes. Backends match source maps and group regressions
 by the version, and filter by the environment (Datadog's `version` and `env`).
+
+### Other exporters and propagation formats
+
+`endpoint` covers OTLP/HTTP JSON. For anything else, add exporters beside it;
+each gets its own batch, so one that is slow or down does not hold back the
+others:
+
+```typescript
+import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace';
+import { ZipkinExporter } from '@opentelemetry/exporter-zipkin';
+import { B3Propagator } from '@opentelemetry/propagator-b3';
+
+initFull({
+  service: 'web',
+  endpoint, // keeps exporting OTLP
+  spanExporters: [new ZipkinExporter(), new ConsoleSpanExporter()],
+  ignoreUrls: ['http://localhost:9411'], // only for a send deferred past export()
+  propagator: new B3Propagator(), // instead of W3C traceparent
+});
+```
+
+`propagator` changes the header format only: which requests carry it is still
+`propagateTo` and `privacy`, and `baggage` is sent separately. A request an
+extra exporter starts while exporting is not traced, so its uploads never
+become spans; `ignoreUrls` is only needed for one that sends after `export()`
+returns. `spanProcessor` replaces the whole export pipeline (`endpoint` and
+`spanExporters` included, with a warning if both are set); `spanEnrichers`
+decorate spans without exporting them.
 
 ### Joining the SDKs already on your page
 
@@ -900,7 +997,11 @@ Initialize full browser tracing. Import from `autotel-web/full`. Call once, clie
 interface AutotelWebFullConfig {
   service: string;
   endpoint?: string; // OTLP traces URL (e.g. https://api.example.com/v1/traces)
-  spanProcessor?: SpanProcessor; // Custom processor instead of endpoint
+  spanExporters?: SpanExporter[]; // more destinations beside endpoint, each batched
+  spanProcessor?: SpanProcessor; // replaces endpoint + spanExporters
+  spanEnrichers?: SpanProcessor[]; // decorate spans ahead of export
+  propagator?: TextMapPropagator; // default W3C trace context
+  session?: false | Omit<SessionConfig, 'id'>; // see Sessions
   sampleRate?: number; // 0-1, e.g. 0.1 in production
   sampler?: Sampler; // Custom sampler (overrides sampleRate)
   captureNavigation?: boolean; // default true
@@ -955,18 +1056,26 @@ For **custom attributes and real spans** in the browser, use **full mode** (`aut
 
 ### `span(name, fn)` (full mode only)
 
-Create a manual span. Import from `autotel-web/full`:
+Create a manual span. Import from `autotel-web/full`. It ends when the
+callback returns, or when the promise it returns settles; a throw or rejection
+marks it as an error.
 
 ```typescript
 import { span } from 'autotel-web/full';
 
-const result = await span('processData', (s) => {
-  s.setAttribute('data.size', data.length);
-  const out = processData(data);
-  s.end();
-  return out;
+const user = await span('load-user', async (s) => {
+  s.setAttribute('user.id', id);
+  const res = await fetch(`/api/users/${id}`); // the fetch span is a child
+  s.event('user.loaded', { status: res.status }); // still this span, after the await
+  return res.json();
 });
 ```
+
+The handle (`setAttribute`, `event`, `end`) belongs to its span, so it keeps
+working after an `await`, where the module-level `setAttribute` / `addEvent`
+below have no active span to find without Zone.js. `s.event()` is a log-based
+event (an OTLP log record carrying the span's trace and span id), like every
+other browser event, so it needs an `endpoint`.
 
 ### `setAttribute(key, value)` / `addEvent(name, attributes)` (full mode only)
 
@@ -1566,6 +1675,19 @@ Because the entire flow is inside a single `trace()` call, the fetch call runs "
 
 **Use explicit `trace()` when:** You have a clear "one user action → one chain of async work" and you're okay wrapping that chain once.
 
+#### 4. A Span Handle Instead of "the Active Span"
+
+Annotating a span after an `await` is where Zone.js usually gets reached for.
+`span()` sidesteps the question: its callback holds the span, so nothing has to
+be looked up.
+
+```typescript
+await span('save', async (s) => {
+  await fetch('/api/save', { method: 'POST', body });
+  s.event('save.done'); // tied to 'save', no context needed
+});
+```
+
 ### Summary: Zone.js vs autotel-web
 
 | Need                                                               | Zone.js                          | autotel-web approach                                                                                               |
@@ -1573,6 +1695,7 @@ Because the entire flow is inside a single `trace()` call, the fetch call runs "
 | Trace from browser to backend                                      | Not required                     | Lean mode: inject `traceparent`; backend continues trace.                                                          |
 | Real browser spans (navigation, fetch, Web Vitals)                 | Not required for the common path | Full mode: instrument fetch/XHR and document load so context is preserved on the wire and in the main async chain. |
 | Context across arbitrary async (setTimeout, third‑party callbacks) | Helps                            | Explicit `trace()` around the whole flow; or accept best-effort.                                                   |
+| Annotate a span after an `await`                                   | Helps                            | `span()` hands its callback the span; `s.event()` needs no context.                                                |
 | Small bundle, no global patching                                   | N/A                              | Lean mode is ~1.6 KB; full mode avoids Zone.                                                                       |
 | Fewer framework/tooling issues                                     | N/A                              | No Zone dependency.                                                                                                |
 

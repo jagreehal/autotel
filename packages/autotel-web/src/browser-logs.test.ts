@@ -187,3 +187,29 @@ describe('ambient enrichment never overwrites an explicit attribute', () => {
     expect(entry.attributes.map((a) => a.key)).toContain('session.id');
   });
 });
+
+interface SentLogRecords {
+  resourceLogs: {
+    scopeLogs: { logRecords: { traceId?: string; spanId?: string }[] }[];
+  }[];
+}
+
+function firstLogRecord() {
+  const [, init] = fetchMock.mock.calls[0] ?? [];
+  // SAFETY: the exporter's OTLP/JSON log requests are the only calls fetchMock receives.
+  const body = JSON.parse(String(init?.body)) as SentLogRecords;
+  return body.resourceLogs[0]?.scopeLogs[0]?.logRecords[0];
+}
+
+describe('events tied to a span', () => {
+  it("carry the span's ids as the log record's traceId and spanId", () => {
+    const trace = { traceId: 'a'.repeat(32), spanId: 'b'.repeat(16) };
+    recordEvent('user.loaded', { status: 200 }, trace);
+    expect(firstLogRecord()).toMatchObject(trace);
+  });
+
+  it('carry none when no span is given', () => {
+    recordEvent('app.jank', {});
+    expect(firstLogRecord()).not.toHaveProperty('traceId');
+  });
+});

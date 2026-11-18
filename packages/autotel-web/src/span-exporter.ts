@@ -27,6 +27,8 @@ import {
   samplingKeyFor,
   settledSessionId,
 } from './session';
+// Type only: the sink is injected so this module never imports the emitters.
+import type { EventTrace } from './emit-event';
 import { getIdentityAttributes } from './identity';
 import { otlpEndpointFor, type OtlpSignal } from './otlp-endpoint';
 import { sampleByKey } from './sampling';
@@ -530,6 +532,7 @@ export function recordLog(
 export function recordEvent(
   name: string,
   attributes: Record<string, string | number | boolean> = {},
+  trace?: EventTrace,
 ): void {
   if (exportEndpoint === undefined || !enabledSignals.has('logs') || !sampled())
     return;
@@ -537,6 +540,7 @@ export function recordEvent(
     scope: 'autotel-web',
     timeUnixNano: String(Date.now() * 1_000_000),
     eventName: name,
+    ...trace,
     severityNumber: SEVERITY.info.number,
     severityText: SEVERITY.info.text,
     attributes: otlpAttributes({

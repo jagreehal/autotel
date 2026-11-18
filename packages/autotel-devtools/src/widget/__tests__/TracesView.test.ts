@@ -1,10 +1,22 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  afterEach,
+  beforeEach,
+  onTestFinished,
+  vi,
+} from 'vitest';
 import { cleanup, render, screen, fireEvent } from '@testing-library/svelte';
 import TracesView from '../components/TracesView.svelte';
-import { clearAllData, updateWidgetData } from '../store.svelte';
+import {
+  clearAllData,
+  setSelectedTrace,
+  updateWidgetData,
+} from '../store.svelte';
 import type { SpanData, TraceData } from '../types';
 
 function makeTrace(id: string, extra: Partial<TraceData> = {}): TraceData {
@@ -70,7 +82,7 @@ describe('TracesView — selection and fragments', () => {
   });
 });
 
-describe('TracesView: root span app attributes', () => {
+describe('TracesView: root span app attributes on hover', () => {
   beforeEach(() => {
     clearAllData();
     vi.stubGlobal(
@@ -84,24 +96,66 @@ describe('TracesView: root span app attributes', () => {
     vi.unstubAllGlobals();
   });
 
-  it('tags the operation with app attributes only, credentials masked', async () => {
+  it('hovering anywhere on the row opens the root span card, credentials masked', async () => {
     const trace = makeTrace('a');
     trace.rootSpan.attributes = {
       'service.name': 'worker',
-      'code.function': 'send',
       'statements.batch_id': 'b-17',
       'auth.token': 'secret-value',
-      'statements.count': 5,
-      'statements.channel': 'email',
     };
     render(TracesView);
     updateWidgetData({ traces: [trace] });
-    expect(await screen.findByText('b-17')).toBeTruthy();
-    expect(screen.queryByText('worker')).toBeNull();
-    expect(screen.queryByText('send')).toBeNull();
-    expect(screen.queryByText('secret-value')).toBeNull();
-    expect(screen.getByText('[redacted]')).toBeTruthy();
-    // Every app attribute is offered; the clipped wrap decides what fits.
-    expect(screen.getByText('email')).toBeTruthy();
+    // Nothing inline on the row.
+    expect(screen.queryByText('b-17')).toBeNull();
+    // Anywhere on the row, not just the name.
+    const row = (await screen.findByText(trace.rootSpan.name)).closest(
+      '[data-row-index]',
+    )!;
+    await fireEvent.mouseEnter(row);
+    const card = await screen.findByRole('tooltip');
+    expect(card.textContent).toContain('statements.batch_id');
+    expect(card.textContent).toContain('b-17');
+    expect(card.textContent).toContain('[redacted]');
+    expect(card.textContent).not.toContain('secret-value');
+  });
+
+  it('Space peeks at the cursor row, Esc closes it', async () => {
+    const trace = makeTrace('a');
+    trace.rootSpan.attributes = { 'statements.batch_id': 'b-17' };
+    render(TracesView);
+    updateWidgetData({ traces: [trace] });
+    // jsdom has no scrollIntoView; the cursor move calls it.
+    Element.prototype.scrollIntoView = () => {};
+    onTestFinished(() => {
+      // SAFETY: the stub above is the only scrollIntoView on this prototype.
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    });
+    const list = await screen.findByRole('listbox', { name: 'Traces' });
+    await fireEvent.keyDown(list, { key: 'ArrowDown' });
+    await fireEvent.keyDown(list, { key: ' ' });
+    expect((await screen.findByRole('tooltip')).textContent).toContain('b-17');
+    await fireEvent.keyDown(list, { key: 'Escape' });
+    await vi.waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+  });
+
+  it('drops the hover card when a trace opens, so Back does not bring it back', async () => {
+    const trace = makeTrace('a');
+    trace.rootSpan.attributes = { 'order.id': 'o1' };
+    render(TracesView);
+    updateWidgetData({ traces: [trace] });
+    const name = () =>
+      screen.queryByText(trace.rootSpan.name, {
+        selector: '[data-peek-anchor]',
+      });
+    const row = (await screen.findByText(trace.rootSpan.name)).closest(
+      '[data-row-index]',
+    )!;
+    await fireEvent.mouseEnter(row);
+    await screen.findByRole('tooltip');
+    setSelectedTrace(trace.traceId);
+    await vi.waitFor(() => expect(name()).toBeNull());
+    setSelectedTrace(null);
+    await vi.waitFor(() => expect(name()).not.toBeNull());
+    expect(screen.queryByRole('tooltip')).toBeNull();
   });
 });
