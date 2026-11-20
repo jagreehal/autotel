@@ -200,9 +200,15 @@ describe('explain', () => {
       if (found.length < 2) throw new Error('waiting for both aggregates');
       return found;
     });
-    const [byStatus, byTotal] = spans;
-    expect(byStatus!.attributes['db.query.text']).toContain('"status"');
-    expect(byTotal!.attributes['db.query.text']).toContain('"total"');
+    // Spans finish in either order, so match each by its query text.
+    const byText = (field: string) =>
+      spans.find((s) =>
+        String(s.attributes['db.query.text']).includes(`"${field}"`),
+      );
+    const byStatus = byText('status');
+    const byTotal = byText('total');
+    expect(byStatus).toBeDefined();
+    expect(byTotal).toBeDefined();
     expect(byStatus!.attributes['db.statement.hash']).not.toBe(
       byTotal!.attributes['db.statement.hash'],
     );

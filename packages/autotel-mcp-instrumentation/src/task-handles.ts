@@ -28,11 +28,12 @@
  * Off by default: the parameters change the tool schemas agents see.
  */
 
-import { context, createContextKey } from '@opentelemetry/api';
+import { context, createContextKey, propagation } from '@opentelemetry/api';
 
 export const SESSION_ID_PARAM = 'session_id';
 export const AGENT_ID_PARAM = 'agent_id';
 export const INTENT_PARAM = 'context';
+export const MODEL_PARAM = 'agent_model';
 export const GET_MORE_TOOLS = 'get_more_tools';
 /** Key mirrored into `structuredContent`; also declared on output schemas. */
 export const MCP_SESSION_KEY = 'mcp_session';
@@ -52,6 +53,10 @@ const AGENT_ID_DESCRIPTION =
 
 export const DEFAULT_INTENT_DESCRIPTION =
   "Explain why you are calling this tool and how it fits into the user's overall goal. This parameter is used for analytics and user intent tracking. YOU MUST provide 15-25 words (count carefully). NEVER use first person ('I', 'we', 'you') - maintain third-person perspective. NEVER include sensitive information such as credentials, passwords, or personal data.";
+
+// Not eval-tuned yet: a plain request.
+export const DEFAULT_MODEL_DESCRIPTION =
+  'The model you are running as, as you know it (for example claude-opus-5-5). Send the same value on every call. Used for analytics only; it is never checked.';
 
 const ISSUED_TEXT = (id: string) =>
   `[session_id issued — see this tool's session_id parameter description]\nsession_id: ${id}\nThis is the first-call issuance described in this tool's session_id parameter description.`;
@@ -108,25 +113,75 @@ export interface TaskHandleOptions {
    * becomes `gen_ai.conversation.id`; nothing is added to tool schemas.
    */
   resolveSessionId?: IdentifyFn;
+  /**
+   * A tool argument that already carries your conversation id. Read as the
+   * session (`sessionSource: 'argument'`), left in place for the handler, and
+   * nothing is added to schemas. `resolveSessionId` wins when it answers.
+   */
+  argument?: string;
+  /**
+   * Keep asking the agent for `session_id` when `resolveSessionId` or
+   * `argument` is set, as the fallback for a call they give nothing for: the
+   * application's session first, then the agent's handle. Default: off when
+   * either is set (no schema change), on otherwise.
+   */
+  inject?: boolean;
 }
+
+/**
+ * An agent-reported fact: `true` adds our parameter; `{ argument }` reads a
+ * parameter your tools already declare (left in place for the handler), and
+ * adds it under that name to tools that lack it.
+ */
+export type AgentFieldOption =
+  boolean | { description?: string; argument?: string };
+
+/**
+ * The tool as the server defines it for this caller, before any injection:
+ * low-level servers whose tool schemas depend on the caller, so one cached
+ * listing cannot say which arguments were ours to strip.
+ */
+export type ResolveOriginalTool = (
+  name: string,
+  request: unknown,
+  ctx: unknown,
+) => unknown;
 
 export interface TaskHandleConfig {
   sessionHandles?: boolean | TaskHandleOptions;
-  captureIntent?: boolean | { description?: string };
+  resolveOriginalTool?: ResolveOriginalTool;
+  captureIntent?: AgentFieldOption;
+  captureModel?: AgentFieldOption;
   reportMissingTools?: boolean;
   identify?: IdentifyFn;
 }
 
 // ── What the tool span reads ───────────────────────────────────────────────
 
+/**
+ * Where the session came from, in the order it is chosen: the application
+ * (`hook`: `resolveSessionId`; `context`: baggage `session.id` on the request
+ * context; `argument`: a selected tool argument), then the agent's handle
+ * (`supplied`, `minted`, `invalid`; `foreign` when the tool owns the
+ * parameter), then the MCP transport session (`transport`, set on the span).
+ */
 export type SessionSource =
-  'minted' | 'supplied' | 'invalid' | 'foreign' | 'hook';
+  | 'minted'
+  | 'supplied'
+  | 'invalid'
+  | 'foreign'
+  | 'hook'
+  | 'context'
+  | 'argument'
+  | 'transport';
 
 export interface TaskFacts {
   conversationId?: string;
   sessionSource?: SessionSource;
   agentId?: string;
   intent?: string;
+  /** The model the agent says it is running as (unverified). */
+  model?: string;
   /** What a `get_more_tools` call said was missing. */
   missingTool?: string;
   /** Set once `identify` settles; read when the span ends, never awaited. */
@@ -158,12 +213,29 @@ function handleArg(args: unknown, name: string): string | undefined {
   return trimmed === '' ? undefined : trimmed;
 }
 
+interface AgentField {
+  param: string;
+  description: string;
+  /** Selected by the user: read even where the tool declares it itself. */
+  selected: boolean;
+}
+
 interface Plan {
   session: boolean;
   agentId: boolean;
-  intent?: string;
+  intent?: AgentField;
+  model?: AgentField;
   missingTools: boolean;
 }
+
+/**
+ * A schema that takes argument names it does not list: an injected name could
+ * be one the tool reads, and stripping it would take it from the handler.
+ */
+const acceptsAnyName = (schema: Json) =>
+  schema.additionalProperties === true ||
+  isRecord(schema.additionalProperties) ||
+  isRecord(schema.patternProperties);
 
 /** Per tool: the parameters we added, so we strip exactly those. */
 export interface Injected {
@@ -210,7 +282,7 @@ export function injectIntoTools(tools: unknown[], plan: Plan): InjectedListing {
     const added = new Set<string>();
     params.set(tool.name, added);
     const original = isRecord(tool.inputSchema) ? tool.inputSchema : {};
-    if (isComposed(original)) return tool;
+    if (isComposed(original) || acceptsAnyName(original)) return tool;
 
     // SAFETY: a tool's inputSchema is JSON Schema, which round-trips JSON.
     const schema = structuredClone(original) as Json;
@@ -238,7 +310,15 @@ export function injectIntoTools(tools: unknown[], plan: Plan): InjectedListing {
       });
     // get_more_tools' own `context` is its real parameter, not intent.
     if (plan.intent && tool.name !== GET_MORE_TOOLS)
-      add(INTENT_PARAM, { type: 'string', description: plan.intent });
+      add(plan.intent.param, {
+        type: 'string',
+        description: plan.intent.description,
+      });
+    if (plan.model && tool.name !== GET_MORE_TOOLS)
+      add(plan.model.param, {
+        type: 'string',
+        description: plan.model.description,
+      });
 
     if (added.size === 0) return tool;
     schema.required = required;
@@ -323,7 +403,10 @@ export function announce(
   const sc = out.structuredContent;
   if (structured && isRecord(sc) && !(MCP_SESSION_KEY in sc)) {
     const state: Json = {};
-    const ours = sessionSource !== 'foreign' && sessionSource !== 'hook';
+    const ours =
+      sessionSource === 'minted' ||
+      sessionSource === 'supplied' ||
+      sessionSource === 'invalid';
     if (ours && conversationId) state.session_id = conversationId;
     if (agentId) state.agent_id = agentId;
     if (ours && sessionSource)
@@ -366,23 +449,49 @@ function planOf(config: TaskHandleConfig): Plan | undefined {
   const handles = config.sessionHandles;
   const options: TaskHandleOptions = isRecord(handles) ? handles : {};
   const plan: Plan = {
-    // A resolver replaces the injected parameter: nothing to ask the agent.
-    session: Boolean(handles) && !options.resolveSessionId,
+    // An application session (resolver or selected argument) replaces the
+    // injected parameter: nothing to ask the agent.
+    session:
+      Boolean(handles) &&
+      (options.inject ?? (!options.resolveSessionId && !options.argument)),
     agentId: Boolean(handles) && options.agentId === true,
-    intent: config.captureIntent
-      ? (isRecord(config.captureIntent) && config.captureIntent.description) ||
-        DEFAULT_INTENT_DESCRIPTION
-      : undefined,
+    intent: fieldOf(
+      config.captureIntent,
+      INTENT_PARAM,
+      DEFAULT_INTENT_DESCRIPTION,
+    ),
+    model: fieldOf(config.captureModel, MODEL_PARAM, DEFAULT_MODEL_DESCRIPTION),
     missingTools: config.reportMissingTools === true,
   };
-  const hooks = options.resolveSessionId || config.identify;
+  // `sessionHandles` alone, even with nothing injected, still looks up the
+  // application's session (baggage, resolver, argument).
+  const hooks =
+    Boolean(handles) ||
+    options.resolveSessionId ||
+    options.argument ||
+    config.identify;
   return plan.session ||
     plan.agentId ||
     plan.intent ||
+    plan.model ||
     plan.missingTools ||
     hooks
     ? plan
     : undefined;
+}
+
+function fieldOf(
+  option: AgentFieldOption | undefined,
+  param: string,
+  description: string,
+): AgentField | undefined {
+  if (!option) return undefined;
+  const o = isRecord(option) ? option : {};
+  return {
+    param: o.argument || param,
+    description: o.description || description,
+    selected: Boolean(o.argument),
+  };
 }
 
 /** A hook that may be slow or throw, contained: it can only lose its value. */
@@ -423,6 +532,13 @@ export function installTaskHandles(
   const options: TaskHandleOptions = isRecord(config.sessionHandles)
     ? config.sessionHandles
     : {};
+  const hasHandles = Boolean(config.sessionHandles);
+  // Nothing can be injected (baggage or hooks only): no listing to consult.
+  const injects =
+    plan.session ||
+    plan.agentId ||
+    Boolean(plan.intent || plan.model) ||
+    plan.missingTools;
 
   let originalList: Handler | undefined;
   let listWrapper: Handler | undefined;
@@ -463,6 +579,42 @@ export function installTaskHandles(
     return injected;
   }
 
+  /**
+   * What was injected into `name` for this caller: the tool as the server
+   * defines it for them, injected as a listing would be. A resolver that
+   * knows no such tool proves nothing was ours, beyond a built-in
+   * `get_more_tools`; one that throws or takes over 5s proves nothing at all,
+   * so `get_more_tools` is left to the server's own handler.
+   */
+  async function originalTool(
+    name: string,
+    request: unknown,
+    ctx: unknown,
+  ): Promise<Injected | undefined> {
+    const unknown = Symbol('unknown');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const tool = await Promise.race([
+        Promise.resolve(config.resolveOriginalTool!(name, request, ctx)),
+        new Promise<typeof unknown>((resolve) => {
+          timer = setTimeout(() => resolve(unknown), 5000);
+        }),
+      ]);
+      if (tool === unknown) throw new Error('timed out');
+      // No such tool of the server's: the listing would hold our own
+      // get_more_tools, so its fields are injected as listed.
+      return injectIntoTools(isRecord(tool) ? [tool] : [], plan!).injected;
+    } catch {
+      return {
+        params: new Map(),
+        ownsMissingTool: true,
+        structured: new Set(),
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   const arm = () => {
     const handlers = low._requestHandlers;
     const list = handlers.get('tools/list');
@@ -493,7 +645,11 @@ export function installTaskHandles(
             : undefined;
         const name = typeof params?.name === 'string' ? params.name : '';
         const args = params?.arguments;
-        const map = await ensureInjected(name, ctx);
+        const map = injects
+          ? await (config.resolveOriginalTool
+              ? originalTool(name, request, ctx)
+              : ensureInjected(name, ctx))
+          : undefined;
         // Strip only what the listing proves we added to this tool. A tool we
         // cannot find was never advertised with our parameters, so every
         // argument it receives is its own.
@@ -501,12 +657,8 @@ export function installTaskHandles(
         const userId = settle(config.identify, request, ctx);
 
         const facts: TaskFacts = {};
-        if (plan.session) {
-          Object.assign(
-            facts,
-            resolveSession(args, strip.has(SESSION_ID_PARAM)),
-          );
-        } else if (options.resolveSessionId) {
+        // The application's session first: it knows the conversation.
+        if (options.resolveSessionId) {
           // The id is a label, not worth latency: give up quickly.
           let timer: ReturnType<typeof setTimeout> | undefined;
           const hooked = await Promise.race([
@@ -521,10 +673,41 @@ export function installTaskHandles(
             facts.sessionSource = 'hook';
           }
         }
+        if (!facts.conversationId && hasHandles) {
+          const scoped = propagation
+            .getActiveBaggage()
+            ?.getEntry('session.id')
+            ?.value.trim();
+          if (scoped) {
+            facts.conversationId = scoped;
+            facts.sessionSource = 'context';
+          }
+        }
+        if (!facts.conversationId && options.argument) {
+          const selected = handleArg(args, options.argument);
+          if (selected) {
+            facts.conversationId = selected;
+            facts.sessionSource = 'argument';
+          }
+        }
+        // Then the agent's handle: echoed, or issued now.
+        if (!facts.conversationId && plan.session)
+          Object.assign(
+            facts,
+            resolveSession(args, strip.has(SESSION_ID_PARAM)),
+          );
         if (plan.agentId && strip.has(AGENT_ID_PARAM))
           facts.agentId = handleArg(args, AGENT_ID_PARAM);
-        if (plan.intent && strip.has(INTENT_PARAM))
-          facts.intent = handleArg(args, INTENT_PARAM);
+        // Ours, or the tool's own field the user selected; never a field the
+        // tool owns that nobody selected.
+        const read = (field: AgentField | undefined) =>
+          field && (strip.has(field.param) || field.selected)
+            ? handleArg(args, field.param)
+            : undefined;
+        if (name !== GET_MORE_TOOLS) {
+          facts.intent = read(plan.intent);
+          facts.model = read(plan.model);
+        }
         const answerMissing =
           plan.missingTools && name === GET_MORE_TOOLS && !map?.ownsMissingTool;
         if (answerMissing) facts.missingTool = handleArg(args, INTENT_PARAM);

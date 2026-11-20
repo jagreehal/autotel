@@ -175,20 +175,21 @@ AWS's `@aws/durable-execution-sdk-js-otel` plugin emits the durable spans (workf
 ```typescript
 import { init } from 'autotel';
 import { withDurableExecution } from '@aws/durable-execution-sdk-js';
-import { ExecutionOtelPlugin } from '@aws/durable-execution-sdk-js-otel';
+import { createOtelPluginFactory } from '@aws/durable-execution-sdk-js-otel';
 import { autotelContextExtractor, durableFlush } from 'autotel-aws/durable';
 
 init({ service: 'orders' });
 
 export const handler = withDurableExecution(workflow, {
   plugins: [
-    new ExecutionOtelPlugin({ contextExtractor: autotelContextExtractor }),
+    createOtelPluginFactory({ contextExtractor: autotelContextExtractor }),
     durableFlush(),
   ],
 });
 ```
 
-- `durableFlush()` flushes autotel at the end of each invocation, before Lambda freezes the environment.
+- `durableFlush()` flushes autotel's events, spans, logs and metrics at the end of each invocation, before Lambda freezes the environment.
+- Needs `@aws/durable-execution-sdk-js` 3 and plugin 2.1+: `plugins` takes factories, and `ExecutionOtelPlugin` / `InvocationOtelPlugin` are gone. `mode: 'invocation'` selects the invocation view.
 - `autotelContextExtractor` keeps the trace from Lambda's X-Ray header and lets autotel's sampler decide. It also puts an execution started by `ctx.invoke(name, fn, withInvokeTraceContext(payload))` in the caller's trace.
 - `durableExecutionContext(event)` gives a consumer of `Durable Execution Status Change` events the execution's trace (needs `lambda:GetDurableExecution`).
 
@@ -267,9 +268,13 @@ export const handler = wrapHandler(async (event) => { ... });
 
 `captureResponse: true` serialises the full response to a span attribute. Payloads over 4 096 bytes are replaced with `lambda.response.truncated = true` and `lambda.response.size`, but the serialisation still happens. Avoid on high-throughput or large-payload handlers.
 
-### HIGH: Registering AWS's durable plugin without durableFlush()
+### HIGH: Using `new ExecutionOtelPlugin()` with SDK 3
 
-Under `init()`, AWS's plugin sees the global provider proxy and cannot flush it, so a frozen Lambda environment holds the spans. List `durableFlush()` after the plugin.
+Core SDK 3 takes plugin factories (`{ createPlugin }`), and plugin 2.x removed the classes. Use `createOtelPluginFactory()`, plus `durableFlush()` (order does not matter).
+
+### MEDIUM: Tail sampling a durable execution
+
+Each invocation of a resumed execution asks the sampler again. A tail-sampling preset decides per invocation and can keep only part of an execution; use a policy that decides by trace ID.
 
 ### MEDIUM: Using AWS's default extractor without active tracing
 

@@ -1,0 +1,37 @@
+# Consumer-driven: what the cross-sell model relies on, and nothing more.
+# Written by the consumer, checked against the provider's contract with
+# `autotel-datacontract satisfies`.
+apiVersion: 'v3.2.0'
+kind: 'DataContract'
+id: 'cross-sell-model-inputs'
+version: '1.0.0'
+status: 'active'
+
+schema:
+  - name: 'customers'
+    properties:
+      - name: 'customer_id'
+        logicalType: 'string'
+        authoritativeDefinitions:
+          - type: 'semantics'
+            url: 'https://example.com/ns/Customer.id'
+      - name: 'annual_premium'
+        logicalType: 'integer'
+        required: true
+      - name: 'customer_status'
+        quality:
+          # The model handles these four; the provider may send fewer, never others.
+          - metric: 'invalidValues'
+            arguments:
+              validValues: ['active', 'lapsed', 'cancelled', 'frozen']
+            mustBe: 0
+
+slaProperties:
+  - property: 'freshness'
+    value: 2
+    unit: 'day'
+    element: 'customers.last_updated_at'
+
+servers:
+  - server: 'production'
+    type: 'sqlite'

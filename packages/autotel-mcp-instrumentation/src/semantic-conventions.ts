@@ -115,8 +115,13 @@ export const MCP_SEMCONV = {
   CONVERSATION_ID: 'gen_ai.conversation.id',
   AGENT_ID: 'gen_ai.agent.id',
   USER_ID: 'user.id',
-  SESSION_HANDLE_SOURCE: 'mcp.session_handle.source', // minted|supplied|invalid|foreign|hook
+  SESSION_HANDLE_SOURCE: 'mcp.session_handle.source', // minted|supplied|invalid|foreign|hook|argument
   TOOL_CALL_INTENT: 'mcp.tool.call.intent',
+  // The model the agent says it runs as: reported, never verified.
+  AGENT_MODEL: 'mcp.agent.model',
+  // The MCP client software as it names itself (clientInfo): not a user, not a credential.
+  CLIENT_NAME: 'mcp.client.name',
+  CLIENT_VERSION: 'mcp.client.version',
   MISSING_TOOL_DESCRIPTION: 'mcp.missing_tool.description',
 } as const;
 
@@ -157,6 +162,9 @@ export type McpFailureCategory =
  */
 export const MCP_PROTOCOL_VERSION_META_KEY =
   'io.modelcontextprotocol/protocolVersion';
+
+/** `_meta` envelope key carrying the client's name and version (2026-07-28). Mirrors the SDK's `CLIENT_INFO_META_KEY`. */
+export const MCP_CLIENT_INFO_META_KEY = 'io.modelcontextprotocol/clientInfo';
 
 /** Security event names (emitted via ctx.track). */
 export const MCP_SECURITY_EVENT = {

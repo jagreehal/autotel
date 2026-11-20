@@ -104,7 +104,7 @@ AWS's OpenTelemetry plugin, `@aws/durable-execution-sdk-js-otel`, traces durable
 ```typescript
 import { init } from 'autotel';
 import { withDurableExecution } from '@aws/durable-execution-sdk-js';
-import { ExecutionOtelPlugin } from '@aws/durable-execution-sdk-js-otel';
+import { createOtelPluginFactory } from '@aws/durable-execution-sdk-js-otel';
 import { autotelContextExtractor, durableFlush } from 'autotel-aws/durable';
 
 init({ service: 'orders' });
@@ -117,17 +117,17 @@ export const handler = withDurableExecution(
   },
   {
     plugins: [
-      new ExecutionOtelPlugin({ contextExtractor: autotelContextExtractor }),
+      createOtelPluginFactory({ contextExtractor: autotelContextExtractor }),
       durableFlush(),
     ],
   },
 );
 ```
 
-- `durableFlush()` flushes autotel at the end of each invocation, before Lambda freezes the environment.
+- `durableFlush()` flushes autotel's events, spans, logs and metrics at the end of each invocation, before Lambda freezes the environment.
 - `autotelContextExtractor` keeps the trace and parent from Lambda's X-Ray header and lets autotel's sampler decide. Lambda sends `Sampled=0` unless X-Ray active tracing is on.
 
-Spans you create inside a step nest under its attempt span. `InvocationOtelPlugin` works the same way.
+Requires `@aws/durable-execution-sdk-js` 3 and `@aws/durable-execution-sdk-js-otel` 2.1 or later. Spans you create inside a step nest under its attempt span. `createOtelPluginFactory({ mode: 'invocation', ... })` selects the invocation view. Use a sampler that decides by trace ID: a tail-sampling preset decides per invocation and can keep only part of an execution.
 
 ### Chained invokes
 

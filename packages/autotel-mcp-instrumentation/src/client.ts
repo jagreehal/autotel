@@ -23,6 +23,13 @@ import {
   safeStringify,
 } from './security';
 import { errorName } from './error-name.js';
+import {
+  capturedPayload,
+  failureMessage,
+  recordableError,
+  rethrowOriginal,
+  thrownInSpan,
+} from './content.js';
 import type { McpMetricAttributes } from './types.js';
 import {
   asRecord,
@@ -214,9 +221,10 @@ function wrapDiscoveryMethod(
         return result;
       } catch (error) {
         const failure = thrownFailure(error);
+        const recorded = recordableError(config, error, spanName);
 
         if (config.captureErrors) {
-          ctx.recordError(error);
+          ctx.recordError(recorded);
           ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, errorName(error));
           applyFailureGrouping(ctx, failure.text);
         }
@@ -233,9 +241,9 @@ function wrapDiscoveryMethod(
           recordClientOperationDuration(durationS, metricAttrs);
         }
 
-        throw error;
+        throw thrownInSpan(error, recorded);
       }
-    })();
+    })().catch(rethrowOriginal);
   };
 }
 
@@ -333,17 +341,13 @@ export function instrumentMcpClient<T extends Record<string, any>>(
 
             // Opt-in: tool arguments
             if (mergedConfig.captureToolArgs && args !== undefined) {
-              try {
-                ctx.setAttribute(
-                  MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
-                  JSON.stringify(args),
-                );
-              } catch {
-                ctx.setAttribute(
-                  MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
-                  '[Circular or non-serializable]',
-                );
-              }
+              const captured = capturedPayload(mergedConfig, args, {
+                kind: 'input',
+                type: 'tool',
+                name,
+              });
+              if (captured !== undefined)
+                ctx.setAttribute(MCP_SEMCONV.TOOL_CALL_ARGUMENTS, captured);
             }
 
             // Custom attributes (pre-call)
@@ -426,17 +430,13 @@ export function instrumentMcpClient<T extends Record<string, any>>(
 
               // Opt-in: tool results
               if (mergedConfig.captureToolResults && result !== undefined) {
-                try {
-                  ctx.setAttribute(
-                    MCP_SEMCONV.TOOL_CALL_RESULT,
-                    JSON.stringify(result),
-                  );
-                } catch {
-                  ctx.setAttribute(
-                    MCP_SEMCONV.TOOL_CALL_RESULT,
-                    '[Circular or non-serializable]',
-                  );
-                }
+                const captured = capturedPayload(mergedConfig, result, {
+                  kind: 'output',
+                  type: 'tool',
+                  name,
+                });
+                if (captured !== undefined)
+                  ctx.setAttribute(MCP_SEMCONV.TOOL_CALL_RESULT, captured);
               }
 
               // Custom attributes (post-call with result)
@@ -460,11 +460,14 @@ export function instrumentMcpClient<T extends Record<string, any>>(
               let failureCategory: McpFailureCategory | undefined;
               if (failed) {
                 ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, 'tool_error');
-                failureCategory = applyFailureGrouping(
-                  ctx,
-                  extractFailureText(result),
-                );
-                ctx.setStatus({ code: SpanStatusCode.ERROR });
+                const failureText = extractFailureText(result);
+                failureCategory = applyFailureGrouping(ctx, failureText);
+                ctx.setStatus({
+                  code: SpanStatusCode.ERROR,
+                  message: mergedConfig.captureErrors
+                    ? failureMessage(mergedConfig, failureText, name)
+                    : undefined,
+                });
               } else {
                 ctx.setStatus({ code: SpanStatusCode.OK });
               }
@@ -487,9 +490,10 @@ export function instrumentMcpClient<T extends Record<string, any>>(
               return result;
             } catch (error) {
               const failure = thrownFailure(error);
+              const recorded = recordableError(mergedConfig, error, name);
 
               if (mergedConfig.captureErrors) {
-                ctx.recordError(error);
+                ctx.recordError(recorded);
                 ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, errorName(error));
                 applyFailureGrouping(ctx, failure.text);
               }
@@ -517,9 +521,9 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 );
               }
 
-              throw error;
+              throw thrownInSpan(error, recorded);
             }
-          })();
+          })().catch(rethrowOriginal);
         };
       }
 
@@ -628,9 +632,10 @@ export function instrumentMcpClient<T extends Record<string, any>>(
               return result;
             } catch (error) {
               const failure = thrownFailure(error);
+              const recorded = recordableError(mergedConfig, error, uri);
 
               if (mergedConfig.captureErrors) {
-                ctx.recordError(error);
+                ctx.recordError(recorded);
                 ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, errorName(error));
                 applyFailureGrouping(ctx, failure.text);
               }
@@ -648,9 +653,9 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 recordClientOperationDuration(durationS, metricAttrs);
               }
 
-              throw error;
+              throw thrownInSpan(error, recorded);
             }
-          })();
+          })().catch(rethrowOriginal);
         };
       }
 
@@ -759,9 +764,10 @@ export function instrumentMcpClient<T extends Record<string, any>>(
               return result;
             } catch (error) {
               const failure = thrownFailure(error);
+              const recorded = recordableError(mergedConfig, error, name);
 
               if (mergedConfig.captureErrors) {
-                ctx.recordError(error);
+                ctx.recordError(recorded);
                 ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, errorName(error));
                 applyFailureGrouping(ctx, failure.text);
               }
@@ -779,9 +785,9 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 recordClientOperationDuration(durationS, metricAttrs);
               }
 
-              throw error;
+              throw thrownInSpan(error, recorded);
             }
-          })();
+          })().catch(rethrowOriginal);
         };
       }
 

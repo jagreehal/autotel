@@ -22,10 +22,18 @@ export type { TraceMcpHandlerOptions } from './server';
 
 export { instrumentMcpClient, instrumentMcpTransport } from './client';
 
-export type { McpInstrumentationConfig, McpTraceMeta } from './types';
+export type {
+  McpInstrumentationConfig,
+  McpTraceMeta,
+  PayloadInfo,
+  TextInfo,
+} from './types';
+// What a span may record of an error, for wrappers that record their own.
+export { recordableError } from './content';
 export type {
   IdentifyFn,
   TaskHandleOptions,
+  AgentFieldOption,
   SessionSource,
 } from './task-handles';
 

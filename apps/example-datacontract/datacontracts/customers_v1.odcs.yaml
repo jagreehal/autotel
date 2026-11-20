@@ -1,0 +1,121 @@
+# The contract from "Data Contracts" (Harrer & Wider, martinfowler.com, 2026),
+# with a server and an element on retention so every promise can be measured.
+apiVersion: 'v3.2.0'
+kind: 'DataContract'
+id: 'customers'
+name: 'Customers'
+version: '1.0.0'
+status: 'active'
+
+description:
+  purpose: 'Provides customer master data for analytics and reporting'
+  usage: 'Used by analytics team for customer insights and cross-sell prediction'
+  limitations: 'Contains only customers with an active policy'
+
+schema:
+  - name: 'customers'
+    physicalType: 'table'
+    description: 'All customers holding a life insurance policy since 2020-01-01'
+    quality:
+      - type: 'sql'
+        description: 'Expect at least 3 rows'
+        query: 'select count(*) from customers'
+        mustBeGreaterOrEqualTo: 3
+    properties:
+      - name: 'customer_id'
+        logicalType: 'string'
+        primaryKey: true
+        authoritativeDefinitions:
+          - type: 'semantics'
+            url: 'https://example.com/ns/Customer.id'
+      - name: 'customer_name'
+        businessName: 'Customer Name'
+        logicalType: 'string'
+        physicalType: 'VARCHAR(100)'
+        required: true
+        examples: ['Alex Doe']
+        classification: 'restricted'
+        tags: ['pii:true']
+        quality:
+          - type: 'sql'
+            description: 'Expect less than 1% empty name fields'
+            query: |
+              SELECT AVG(CASE WHEN customer_name IS NULL OR TRIM(customer_name) = '' THEN 1 ELSE 0 END)
+              FROM customers
+            mustBeLessThan: 0.01
+      - name: 'annual_premium'
+        logicalType: 'integer'
+        physicalType: 'INTEGER'
+        description: 'Annual premium in cents'
+        required: true
+        logicalTypeOptions:
+          minimum: 0
+      - name: 'customer_status'
+        logicalType: 'string'
+        physicalType: 'TEXT'
+        examples: ['active']
+        quality:
+          - type: 'library'
+            description: 'Only valid customer statuses'
+            metric: 'invalidValues'
+            arguments:
+              validValues: ['active', 'lapsed', 'cancelled']
+            mustBe: 0
+      - name: 'last_updated_at'
+        logicalType: 'timestamp'
+        physicalType: 'TIMESTAMP'
+        description: 'Timestamp of the last update to the customer record'
+
+team:
+  name: 'customer-data'
+  members:
+    - username: 'carola@example.com'
+      name: 'Carola Doe'
+      role: 'Owner'
+
+support:
+  - channel: '#customer-data-support'
+    tool: 'slack'
+
+slaProperties:
+  - property: 'retention'
+    value: 5
+    unit: 'year'
+    element: 'customers.last_updated_at'
+    description: 'Data will be deleted after 5 years'
+  - property: 'freshness'
+    value: 24
+    unit: 'hours'
+    element: 'customers.last_updated_at'
+    description: 'Within 24 hours of the last update'
+
+servers:
+  - server: 'production'
+    type: 'sqlite'
+    environment: 'prod'
+
+roles:
+  - role: 'customers_reader'
+    access: 'read'
+    description: 'Read access to all customer data'
+
+context:
+  instructions: >
+    Use this data for analytics on life insurance customers.
+    Annual premiums are stored in cents; divide by 100 before
+    reporting amounts.
+  constraints:
+    - constraint: >
+        Do not use this data to make decisions about individual
+        customers, such as pricing a policy or assessing a claim.
+  verifiedStatements:
+    - question: 'How many active customers do we have?'
+      answer: |
+        SELECT COUNT(*)
+        FROM customers
+        WHERE customer_status = 'active'
+
+price:
+  priceAmount: 10
+  priceCurrency: 'USD'
+  priceUnit: 'per TB scanned'

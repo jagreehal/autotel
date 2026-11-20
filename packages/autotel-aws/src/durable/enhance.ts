@@ -5,7 +5,7 @@
  */
 
 import { flush } from 'autotel';
-import type { DurableInstrumentationPlugin } from '@aws/durable-execution-sdk-js';
+import type { DurableInstrumentationPluginFactory } from '@aws/durable-execution-sdk-js';
 import {
   xRayContextExtractor,
   type ContextExtractor,
@@ -14,20 +14,19 @@ import { invokerSpanContext } from './context';
 
 /**
  * Flushes autotel at the end of every invocation, before Lambda freezes the
- * environment. AWS's plugins flush a provider they hold directly; under
- * `init()` they hold the global proxy, so autotel flushes its own. List it
- * after AWS's plugin: that plugin ends its spans inside the invocation.
+ * environment: queued events, spans, logs and metrics. AWS's plugin flushes its spans
+ * itself. The SDK starts `onInvocationEnd` hooks in registration order but
+ * awaits them together, so this may overlap AWS's flush: it relies on no
+ * order between them.
  */
-export function durableFlush(): DurableInstrumentationPlugin {
+export function durableFlush(): DurableInstrumentationPluginFactory {
   return {
-    async wrapInvocation(_info, fn) {
-      try {
-        return await fn();
-      } finally {
+    createPlugin: () => ({
+      async onInvocationEnd() {
         // Telemetry never fails the invocation.
         await flush().catch(() => {});
-      }
-    },
+      },
+    }),
   };
 }
 

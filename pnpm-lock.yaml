@@ -564,6 +564,28 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  apps/example-datacontract:
+    dependencies:
+      '@opentelemetry/sdk-metrics':
+        specifier: ^3.1.0
+        version: 3.1.0(@opentelemetry/api@1.10.0)
+      autotel:
+        specifier: workspace:*
+        version: link:../../packages/autotel
+      autotel-datacontract:
+        specifier: workspace:*
+        version: link:../../packages/autotel-datacontract
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
   apps/example-datadog:
     dependencies:
       '@datadog/browser-rum':
@@ -2269,17 +2291,17 @@ importers:
         specifier: ^3.1152.0
         version: 3.1152.0
       '@aws/durable-execution-sdk-js':
-        specifier: ^2.7.0
-        version: 2.7.0
+        specifier: ^3.0.0
+        version: 3.0.0
       '@aws/durable-execution-sdk-js-otel':
-        specifier: ^1.2.0
-        version: 1.2.0(@aws/durable-execution-sdk-js@2.7.0)(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-node@2.12.0(@opentelemetry/api@1.10.0))
+        specifier: ^2.1.0
+        version: 2.1.0(@aws/durable-execution-sdk-js@3.0.0)(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-node@2.12.0(@opentelemetry/api@1.10.0))
       '@aws/durable-execution-sdk-js-testing':
-        specifier: ^1.3.1
-        version: 1.3.1(@aws/durable-execution-sdk-js@2.7.0)
+        specifier: ^1.3.2
+        version: 1.3.2(@aws/durable-execution-sdk-js@3.0.0)
       '@middy/core':
         specifier: ^7.9.2
-        version: 7.9.2(@aws/durable-execution-sdk-js@2.7.0)
+        version: 7.9.2(@aws/durable-execution-sdk-js@3.0.0)
       '@opentelemetry/core':
         specifier: 2.12.0
         version: 2.12.0(@opentelemetry/api@1.10.0)
@@ -2506,6 +2528,40 @@ importers:
       vitest-mock-extended:
         specifier: ^5.1.1
         version: 5.1.1(typescript@7.0.2)(vitest@5.0.5)
+
+  packages/autotel-datacontract:
+    dependencies:
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
+    devDependencies:
+      '@opentelemetry/api':
+        specifier: ^1.10.0
+        version: 1.10.0
+      '@opentelemetry/sdk-metrics':
+        specifier: ^3.1.0
+        version: 3.1.0(@opentelemetry/api@1.10.0)
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
+      rimraf:
+        specifier: ^6.1.3
+        version: 6.1.3
+      tsdown:
+        specifier: ^0.23.1
+        version: 0.23.1(@arethetypeswrong/core@0.18.5)(@vue/language-core@3.3.7)(oxc-resolver@11.24.2)(tsx@4.23.15)(typescript@7.0.2)(unrun@0.3.1)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(happy-dom@21.0.3)(jsdom@30.1.3)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/autotel-datadog:
     devDependencies:
@@ -4190,11 +4246,11 @@ packages:
     resolution: {integrity: sha512-ctjVSyCMegrWfXlx6VqzSBFI6UqmQ5ZlnfMhdLIiWmhoH8UAQxSCP5N3OpG7X3k4LnS7ou74C4mt20+bfTW2aQ==}
     engines: {node: '>=20.0.0'}
 
-  '@aws/durable-execution-sdk-js-otel@1.2.0':
-    resolution: {integrity: sha512-qdoLPDvhT/QXboKCdi6my2CA1qG6aZsVCxi2iFsKrqcxqaYAsZp0vSb/Vo6HDAZlfS/b9hHnIaPfUQCZSPj0bA==}
+  '@aws/durable-execution-sdk-js-otel@2.1.0':
+    resolution: {integrity: sha512-Vn0KNO7nlx0oGU72C8u8ICqVnQvlv8LPINRqDNm1AX0ps+dXODS6XHdA2pZ3RaNWpyuPzD58diRz8iDkcuxkMA==}
     engines: {node: '>=22'}
     peerDependencies:
-      '@aws/durable-execution-sdk-js': '>=2.4.0 <3.0.0'
+      '@aws/durable-execution-sdk-js': '>=3.0.0 <4.0.0'
       '@opentelemetry/api': ^1.0.0
       '@opentelemetry/core': ^2.0.0
       '@opentelemetry/sdk-trace-node': ^2.6.1
@@ -4202,15 +4258,15 @@ packages:
       '@aws/durable-execution-sdk-js':
         optional: true
 
-  '@aws/durable-execution-sdk-js-testing@1.3.1':
-    resolution: {integrity: sha512-SMHZlV6SPB2dpyLI5fDcCXruxmwYBvU6izpVKr3fPwxGFleZ2WZP7k8OOALPfRh18zS7Id/nPr3Uw36pq6PYKw==}
+  '@aws/durable-execution-sdk-js-testing@1.3.2':
+    resolution: {integrity: sha512-DpjGaaarcwYddCCm9KgcRU167cGnyDXxmpmcEkMEZaflFNUy2PQGRYmKSiWW/1mGsjNpaBF5xnaYGBaTzl0c2Q==}
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
-      '@aws/durable-execution-sdk-js': '>=1.0.1 <3.0.0'
+      '@aws/durable-execution-sdk-js': '>=1.0.1 <4.0.0'
 
-  '@aws/durable-execution-sdk-js@2.7.0':
-    resolution: {integrity: sha512-re1RrC1WPr02VIMhWy9Q09oP1aj6pHRWYiZcdpUrQWlSBhN4WLYckIBy95XEK0bhIJoxVJqNWCBHyn6ZJIxXLQ==}
+  '@aws/durable-execution-sdk-js@3.0.0':
+    resolution: {integrity: sha512-AlwwMq6NFK5CLYjFm1DPKKQKjY9wAU2OSEOjv2d0kyaGYt5smJkTxxieGSKQFNF1AM86xWJ4B4F6/u0Vcg8Dcg==}
     engines: {node: '>=22'}
 
   '@aws/lambda-invoke-store@0.3.0':
@@ -20138,11 +20194,6 @@ packages:
     resolution: {integrity: sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==}
     engines: {node: '>=18'}
 
-  yaml@2.9.0:
-    resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
-    engines: {node: '>= 14.6'}
-    hasBin: true
-
   yaml@2.9.1:
     resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
     engines: {node: '>= 14.6'}
@@ -21058,22 +21109,22 @@ snapshots:
       '@smithy/types': 4.19.0
       tslib: 2.8.1
 
-  '@aws/durable-execution-sdk-js-otel@1.2.0(@aws/durable-execution-sdk-js@2.7.0)(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-node@2.12.0(@opentelemetry/api@1.10.0))':
+  '@aws/durable-execution-sdk-js-otel@2.1.0(@aws/durable-execution-sdk-js@3.0.0)(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-node@2.12.0(@opentelemetry/api@1.10.0))':
     dependencies:
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/core': 2.12.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-trace-node': 2.12.0(@opentelemetry/api@1.10.0)
     optionalDependencies:
-      '@aws/durable-execution-sdk-js': 2.7.0
+      '@aws/durable-execution-sdk-js': 3.0.0
 
-  '@aws/durable-execution-sdk-js-testing@1.3.1(@aws/durable-execution-sdk-js@2.7.0)':
+  '@aws/durable-execution-sdk-js-testing@1.3.2(@aws/durable-execution-sdk-js@3.0.0)':
     dependencies:
       '@aws-sdk/client-lambda': 3.1152.0
-      '@aws/durable-execution-sdk-js': 2.7.0
+      '@aws/durable-execution-sdk-js': 3.0.0
       '@sinonjs/fake-timers': 15.4.0
       commander: 14.0.3
 
-  '@aws/durable-execution-sdk-js@2.7.0':
+  '@aws/durable-execution-sdk-js@3.0.0':
     dependencies:
       '@aws-sdk/client-lambda': 3.1152.0
 
@@ -23429,11 +23480,11 @@ snapshots:
       - encoding
       - supports-color
 
-  '@middy/core@7.9.2(@aws/durable-execution-sdk-js@2.7.0)':
+  '@middy/core@7.9.2(@aws/durable-execution-sdk-js@3.0.0)':
     dependencies:
       '@middy/util': 7.9.2
     optionalDependencies:
-      '@aws/durable-execution-sdk-js': 2.7.0
+      '@aws/durable-execution-sdk-js': 3.0.0
 
   '@middy/util@7.9.2': {}
 
@@ -31443,7 +31494,7 @@ snapshots:
       unenv: 2.0.0-rc.21
       wrangler: 4.151.1(@cloudflare/workers-types@5.20261018.1)(@types/node@26.6.5)
       ws: 8.21.1
-      yaml: 2.9.0
+      yaml: 2.9.1
     optionalDependencies:
       '@aws-sdk/client-dynamodb': 3.1152.0
       '@aws-sdk/client-lambda': 3.1152.0
@@ -40566,8 +40617,6 @@ snapshots:
   yallist@4.0.0: {}
 
   yallist@5.0.0: {}
-
-  yaml@2.9.0: {}
 
   yaml@2.9.1: {}
 

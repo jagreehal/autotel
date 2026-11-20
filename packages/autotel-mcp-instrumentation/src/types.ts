@@ -1,5 +1,23 @@
 import type { Attributes } from '@opentelemetry/api';
-import type { IdentifyFn, TaskHandleOptions } from './task-handles';
+import type {
+  AgentFieldOption,
+  IdentifyFn,
+  ResolveOriginalTool,
+  TaskHandleOptions,
+} from './task-handles';
+
+/** What a captured payload is, for `redactPayload`. */
+export interface PayloadInfo {
+  kind: 'input' | 'output';
+  type: 'tool' | 'resource' | 'prompt';
+  name: string;
+}
+
+/** What a piece of text is, for `redact`. */
+export interface TextInfo {
+  kind: 'intent' | 'error';
+  name: string;
+}
 import type {
   GuardLike,
   McpSecurityClassifier,
@@ -24,10 +42,50 @@ export interface McpInstrumentationConfig {
   captureToolResults?: boolean;
 
   /**
-   * Whether to capture errors and exceptions
+   * Whether to record failures: error status, `error.type` and the exception
+   * event. The failure's text is kept only with `captureErrorMessages`.
    * @default true
    */
   captureErrors?: boolean;
+
+  /**
+   * Keep the failure's text (the thrown message, or an `isError` result's
+   * text) on the span status and exception event. Tool errors often quote
+   * the input that caused them, so it is off by default; `error.type` and
+   * the failure category are always recorded.
+   * @default false
+   */
+  captureErrorMessages?: boolean;
+
+  /**
+   * Transform captured arguments and results before they are recorded
+   * (`captureToolArgs`, `captureToolResults`). Return what to record; throwing
+   * records nothing. Nothing is scrubbed for you.
+   */
+  redactPayload?: (value: unknown, info: PayloadInfo) => unknown;
+
+  /**
+   * Transform the agent-reported intent and captured failure text before they
+   * are recorded. Return `undefined` to drop it.
+   */
+  redact?: (text: string, info: TextInfo) => string | undefined;
+
+  /**
+   * For low-level servers whose tool schemas depend on the caller: the tool as
+   * the server defines it for this request, before any injection. Without it,
+   * which arguments were injected is read from the last listing.
+   */
+  resolveOriginalTool?: ResolveOriginalTool;
+
+  /**
+   * On a stateless 2025-era Streamable HTTP server, return an opaque
+   * `Mcp-Session-Id` on `initialize` that carries the client's reported name
+   * and version, so later requests (each on a fresh server) still name their
+   * client. A native session id is never replaced. Client-reported, not a
+   * credential.
+   * @default true
+   */
+  statelessClientIdentity?: boolean;
 
   /**
    * Custom function to extract additional span attributes
@@ -64,7 +122,8 @@ export interface McpInstrumentationConfig {
    * back on later ones (SEP-2567 explicit handles), recorded as
    * `gen_ai.conversation.id`. `{ agentId: true }` also asks for a self-chosen
    * `agent_id` (`gen_ai.agent.id`); `{ resolveSessionId }` derives the session
-   * from your own identifier instead and changes no schema. Off by default:
+   * from your own identifier instead and changes no schema; `{ argument }`
+   * reads a conversation id your tools already take. Off by default:
    * agents see the extra parameters.
    */
   sessionHandles?: boolean | TaskHandleOptions;
@@ -73,8 +132,18 @@ export interface McpInstrumentationConfig {
    * Add a `context` parameter asking the agent, in one sentence, why it is
    * calling the tool; recorded as `mcp.tool.call.intent`. Model-written free
    * text: route it through your attribute redactor. Off by default.
+   * `{ argument: 'intent' }` reads a parameter your tools already declare
+   * (left in place for the handler) and adds it to tools that lack it.
    */
-  captureIntent?: boolean | { description?: string };
+  captureIntent?: AgentFieldOption;
+
+  /**
+   * Add an `agent_model` parameter asking the agent which model it runs as;
+   * recorded as `mcp.agent.model`. Unverified: the agent's own report.
+   * `{ argument: 'model' }` reads a parameter your tools already declare.
+   * Off by default.
+   */
+  captureModel?: AgentFieldOption;
 
   /**
    * List a `get_more_tools` tool agents call to report a capability they
@@ -251,10 +320,16 @@ export function resolveConfig(config?: McpInstrumentationConfig): Required<
     | 'securityEventBridge'
     | 'sessionHandles'
     | 'captureIntent'
+    | 'captureModel'
     | 'reportMissingTools'
     | 'identify'
+    | 'redactPayload'
+    | 'redact'
+    | 'resolveOriginalTool'
   >
 > & {
+  redactPayload?: McpInstrumentationConfig['redactPayload'];
+  redact?: McpInstrumentationConfig['redact'];
   customAttributes?: McpInstrumentationConfig['customAttributes'];
   networkTransport?: string;
   sessionId?: string;
@@ -274,6 +349,12 @@ export function resolveConfig(config?: McpInstrumentationConfig): Required<
       config?.captureResults ??
       DEFAULT_CONFIG.captureToolResults,
     captureErrors: config?.captureErrors ?? DEFAULT_CONFIG.captureErrors,
+    captureErrorMessages:
+      config?.captureErrorMessages ?? DEFAULT_CONFIG.captureErrorMessages,
+    statelessClientIdentity:
+      config?.statelessClientIdentity ?? DEFAULT_CONFIG.statelessClientIdentity,
+    redactPayload: config?.redactPayload,
+    redact: config?.redact,
     enableMetrics: config?.enableMetrics ?? DEFAULT_CONFIG.enableMetrics,
     captureDiscoveryOperations:
       config?.captureDiscoveryOperations ??
@@ -320,6 +401,8 @@ export const DEFAULT_CONFIG = {
   captureToolArgs: false,
   captureToolResults: false,
   captureErrors: true,
+  captureErrorMessages: false,
+  statelessClientIdentity: true,
   enableMetrics: true,
   captureDiscoveryOperations: true,
   captureToolAnnotations: true,

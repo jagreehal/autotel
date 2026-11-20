@@ -22,6 +22,7 @@ import {
 import {
   MCP_SEMCONV,
   MCP_METHODS,
+  MCP_CLIENT_INFO_META_KEY,
   MCP_PROTOCOL_VERSION_META_KEY,
 } from './semantic-conventions';
 import { recordServerOperationDuration } from './metrics';
@@ -38,6 +39,18 @@ import {
   type McpToolAnnotations,
 } from './security';
 import { errorName } from './error-name.js';
+import {
+  carryClientIdentity,
+  decodeClientIdentity,
+} from './client-identity.js';
+import {
+  failureMessage,
+  recordableError,
+  capturedPayload,
+  rethrowOriginal,
+  thrownInSpan,
+  redactText,
+} from './content.js';
 import type { McpMetricAttributes } from './types.js';
 import {
   asRecord,
@@ -48,7 +61,10 @@ import {
   readProperty,
 } from './values.js';
 
-type ResolvedConfig = ReturnType<typeof resolveConfig>;
+type ResolvedConfig = ReturnType<typeof resolveConfig> & {
+  /** The connection's client, for a 2025-era request (the SDK's getClientVersion). */
+  connectionClient?: () => unknown;
+};
 
 function securityBridge(
   config: ResolvedConfig,
@@ -189,6 +205,10 @@ interface RequestFacts {
   meta?: Record<string, unknown>;
   sessionId?: string;
   protocolVersion?: string;
+  /** The 2026-07-28 envelope's clientInfo. */
+  client?: unknown;
+  /** The client an `mcpci1.` id names, on a request with no native session. */
+  headerClient?: unknown;
 }
 
 /**
@@ -229,12 +249,25 @@ function readRequestFacts(args: unknown[]): RequestFacts {
         meta: arg.mcpReq._meta,
         sessionId: arg.sessionId,
         protocolVersion: arg.mcpReq.envelope?.[MCP_PROTOCOL_VERSION_META_KEY],
+        client:
+          arg.mcpReq.envelope?.[MCP_CLIENT_INFO_META_KEY] ??
+          arg.mcpReq._meta?.[MCP_CLIENT_INFO_META_KEY],
       };
     }
 
-    // 2025-era: RequestHandlerExtra
+    // 2025-era: RequestHandlerExtra. On stateless HTTP the client named
+    // itself only on initialize; the id we issued then carries it.
     if ('_meta' in arg || 'requestId' in arg) {
-      return { contextIndex: index, meta: arg._meta, sessionId: arg.sessionId };
+      // A transport with sessions owns the header: it is no identity of ours.
+      const headerClient = arg.sessionId
+        ? undefined
+        : decodeClientIdentity(arg.requestInfo?.headers?.['mcp-session-id']);
+      return {
+        contextIndex: index,
+        meta: arg._meta,
+        sessionId: arg.sessionId,
+        ...(headerClient && { headerClient }),
+      };
     }
   }
   return {};
@@ -295,14 +328,41 @@ function getSpanName(
   return `${getMethodName(type)} ${name}`;
 }
 
+function safely(read: (() => unknown) | undefined): unknown {
+  try {
+    return read?.();
+  } catch {
+    return undefined;
+  }
+}
+
+/** The SDK's getClientVersion on an McpServer (`.server`) or a low-level Server. */
+function connectionClientOf(server: unknown): () => unknown {
+  return () => {
+    for (const s of [readProperty(server, 'server'), server]) {
+      const get = readProperty(s, 'getClientVersion');
+      // SAFETY: get was read off s, so s is an object.
+      if (isFunction(get)) return callMethod(get, s as object, []);
+    }
+    return;
+  };
+}
+
 /** What the request-level task handles resolved for this call (task-handles.ts). */
-function applyTaskFacts(ctx: TraceContext, task: TaskFacts): void {
+function applyTaskFacts(
+  ctx: TraceContext,
+  task: TaskFacts,
+  config: ResolvedConfig,
+  name: string,
+): void {
   if (task.conversationId)
     ctx.setAttribute(MCP_SEMCONV.CONVERSATION_ID, task.conversationId);
   if (task.sessionSource)
     ctx.setAttribute(MCP_SEMCONV.SESSION_HANDLE_SOURCE, task.sessionSource);
   if (task.agentId) ctx.setAttribute(MCP_SEMCONV.AGENT_ID, task.agentId);
-  if (task.intent) ctx.setAttribute(MCP_SEMCONV.TOOL_CALL_INTENT, task.intent);
+  const intent = redactText(config, task.intent, { kind: 'intent', name });
+  if (intent) ctx.setAttribute(MCP_SEMCONV.TOOL_CALL_INTENT, intent);
+  if (task.model) ctx.setAttribute(MCP_SEMCONV.AGENT_MODEL, task.model);
   if (task.missingTool)
     ctx.setAttribute(MCP_SEMCONV.MISSING_TOOL_DESCRIPTION, task.missingTool);
 }
@@ -395,7 +455,30 @@ function wrapHandler<T extends (...args: any[]) => any>(
           ctx.setAttribute(MCP_SEMCONV.SESSION_ID, sessionIdText);
         }
 
-        if (task) applyTaskFacts(ctx, task);
+        if (task) applyTaskFacts(ctx, task, config, name);
+        // Last in the session order: the MCP transport's own session, when
+        // nothing chose one (an application session, the agent's handle).
+        if (type === 'tool' && !task?.conversationId && request.sessionId) {
+          const transportSession = asString(request.sessionId);
+          if (transportSession) {
+            ctx.setAttribute(MCP_SEMCONV.CONVERSATION_ID, transportSession);
+            ctx.setAttribute(MCP_SEMCONV.SESSION_HANDLE_SOURCE, 'transport');
+          }
+        }
+
+        // Client software as it names itself: per request on 2026-07-28, from
+        // the initialize handshake on a 2025-era connection.
+        // The negotiated identity wins over the one our header carried.
+        const client = asRecord(
+          request.client ??
+            safely(config.connectionClient) ??
+            (config.statelessClientIdentity ? request.headerClient : undefined),
+        );
+        const clientName = asString(client?.name);
+        const clientVersion = asString(client?.version);
+        if (clientName) ctx.setAttribute(MCP_SEMCONV.CLIENT_NAME, clientName);
+        if (clientVersion)
+          ctx.setAttribute(MCP_SEMCONV.CLIENT_VERSION, clientVersion);
 
         if (manifestAssessmentPromise) {
           applyManifestAssessment(
@@ -429,17 +512,13 @@ function wrapHandler<T extends (...args: any[]) => any>(
           config.captureToolArgs &&
           callPayload !== undefined
         ) {
-          try {
-            ctx.setAttribute(
-              MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
-              JSON.stringify(callPayload),
-            );
-          } catch {
-            ctx.setAttribute(
-              MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
-              '[Circular or non-serializable]',
-            );
-          }
+          const captured = capturedPayload(config, callPayload, {
+            kind: 'input',
+            type,
+            name,
+          });
+          if (captured !== undefined)
+            ctx.setAttribute(MCP_SEMCONV.TOOL_CALL_ARGUMENTS, captured);
         }
 
         // Custom attributes (pre-call)
@@ -493,17 +572,13 @@ function wrapHandler<T extends (...args: any[]) => any>(
             config.captureToolResults &&
             result !== undefined
           ) {
-            try {
-              ctx.setAttribute(
-                MCP_SEMCONV.TOOL_CALL_RESULT,
-                JSON.stringify(result),
-              );
-            } catch {
-              ctx.setAttribute(
-                MCP_SEMCONV.TOOL_CALL_RESULT,
-                '[Circular or non-serializable]',
-              );
-            }
+            const captured = capturedPayload(config, result, {
+              kind: 'output',
+              type,
+              name,
+            });
+            if (captured !== undefined)
+              ctx.setAttribute(MCP_SEMCONV.TOOL_CALL_RESULT, captured);
           }
 
           // Multi-round-trip: a paused call is neither a success nor an
@@ -522,8 +597,9 @@ function wrapHandler<T extends (...args: any[]) => any>(
             failureCategory = applyFailureGrouping(ctx, failureText);
             ctx.setStatus({
               code: SpanStatusCode.ERROR,
-              message:
-                config.captureErrors && failureText ? failureText : undefined,
+              message: config.captureErrors
+                ? failureMessage(config, failureText, name)
+                : undefined,
             });
           } else if (!paused) {
             ctx.setStatus({ code: SpanStatusCode.OK });
@@ -593,15 +669,19 @@ function wrapHandler<T extends (...args: any[]) => any>(
             ? classifyFailure(thrownText)
             : undefined;
 
+          // What the span may say about it: the text only with
+          // captureErrorMessages, through redact.
+          const recorded = recordableError(config, error, name);
+
           // Record exception if configured
           if (config.captureErrors) {
             if ('recordError' in ctx && typeof ctx.recordError === 'function') {
-              ctx.recordError(error);
+              ctx.recordError(recorded);
             } else if (
               'recordException' in ctx &&
               typeof ctx.recordException === 'function'
             ) {
-              ctx.recordException(error);
+              ctx.recordException(recorded as Error);
             }
             ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, errorName(error));
             applyFailureGrouping(ctx, thrownText);
@@ -638,11 +718,94 @@ function wrapHandler<T extends (...args: any[]) => any>(
             recordServerOperationDuration(durationS, metricAttrs);
           }
 
-          throw error;
+          // The span records what it throws, so it throws the recordable
+          // copy; the SDK gets the original back below.
+          throw thrownInSpan(error, recorded);
         }
-      })();
+      })().catch(rethrowOriginal);
     });
   }) as T;
+}
+
+type RequestHandler = (request: unknown, extra: unknown) => unknown;
+
+/** Low-level request methods traced, and how each names its span. */
+const LOW_LEVEL: Record<
+  string,
+  (params: Record<string, unknown> | undefined) => {
+    type: 'tool' | 'resource' | 'prompt';
+    name: string;
+    payload: unknown;
+  }
+> = {
+  'tools/call': (p) => ({
+    type: 'tool',
+    name: asString(p?.name) ?? '',
+    payload: p?.arguments,
+  }),
+  'prompts/get': (p) => ({
+    type: 'prompt',
+    name: asString(p?.name) ?? '',
+    payload: p?.arguments,
+  }),
+  'resources/read': (p) => ({
+    type: 'resource',
+    name: asString(p?.uri) ?? '',
+    payload: undefined,
+  }),
+};
+
+const lowLevelInstalled = new WeakSet<object>();
+
+/**
+ * The low-level `Server` API (`setRequestHandler(CallToolRequestSchema, …)`)
+ * has no `registerTool` to wrap, so its request handlers are traced instead,
+ * with the same spans as a registered tool. The name comes from the request,
+ * as in {@link traceMcpHandler}. Only a handler the SDK has just set is
+ * wrapped: by the time another method is set, a later wrapper (task handles)
+ * may sit over ours, and wrapping it again would trace one call twice.
+ */
+function traceLowLevelHandlers(server: unknown, config: ResolvedConfig): void {
+  const handlers = readProperty(server, '_requestHandlers');
+  const set = readProperty(server, 'setRequestHandler');
+  if (!(handlers instanceof Map) || !isFunction(set)) return;
+  // SAFETY: shape checked just above.
+  const target = server as {
+    setRequestHandler: (...args: unknown[]) => unknown;
+  };
+  if (lowLevelInstalled.has(target)) return;
+  lowLevelInstalled.add(target);
+  const map = handlers as Map<string, RequestHandler>;
+
+  const wrap = (method: string) => {
+    const raw = map.get(method);
+    const read = LOW_LEVEL[method];
+    if (!raw || !read) return;
+    map.set(method, (request, extra) => {
+      const facts = read(asRecord(readProperty(request, 'params')));
+      const traced = wrapHandler(
+        facts.type,
+        facts.name,
+        (_payload: unknown, _extra: unknown) => raw(request, extra),
+        config,
+        facts.type === 'resource' ? facts.name : undefined,
+        undefined,
+        undefined,
+        true,
+      );
+      return traced(facts.payload, extra);
+    });
+  };
+
+  for (const method of Object.keys(LOW_LEVEL)) wrap(method);
+  const original = target.setRequestHandler.bind(target);
+  target.setRequestHandler = (...args: unknown[]) => {
+    const before = new Map(map);
+    const result = original(...args);
+    for (const method of Object.keys(LOW_LEVEL))
+      if (map.get(method) !== before.get(method)) wrap(method);
+    return result;
+  };
 }
 
 /** What {@link traceMcpHandler} is tracing. */
@@ -731,7 +894,14 @@ export function instrumentMcpServer<T extends Record<string, any>>(
   server: T,
   config?: McpInstrumentationConfig,
 ): T {
-  const mergedConfig = resolveConfig(config);
+  const mergedConfig: ResolvedConfig = {
+    ...resolveConfig(config),
+    connectionClient: connectionClientOf(server),
+  };
+  // Tracing first, so request-level task handles wrap the traced handler and
+  // their facts are in context when its span starts.
+  const lowLevel = !isFunction(member(server, 'registerTool'));
+  if (lowLevel) traceLowLevelHandlers(server, mergedConfig);
   if (config)
     installTaskHandles(server, config, (handler) =>
       wrapHandler('tool', GET_MORE_TOOLS, handler, mergedConfig),
@@ -740,6 +910,18 @@ export function instrumentMcpServer<T extends Record<string, any>>(
   return new Proxy(server, {
     get(target, prop) {
       const value = member(target, prop);
+
+      // Stateless Streamable HTTP: keep the client's identity across requests.
+      if (
+        prop === 'connect' &&
+        isFunction(value) &&
+        mergedConfig.statelessClientIdentity
+      ) {
+        return function wrappedConnect(this: any, ...args: unknown[]) {
+          carryClientIdentity(args[0]);
+          return callMethod(value, target, args);
+        };
+      }
 
       // Wrap registerTool (McpServer API: name, config, handler)
       if (prop === 'registerTool' && isFunction(value)) {
