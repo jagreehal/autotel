@@ -362,10 +362,10 @@ export const handler = wrapHandler(async (event) => {
 
 ## Lambda Durable Functions
 
-> **OpenTelemetry SDK 3:** AWS's plugin targets SDK 2 and runs beside autotel on SDK 3 with a single `@opentelemetry/api`. Install it with npm's peer check off, at the version this example uses:
+> **OpenTelemetry SDK 3:** AWS's plugin targets SDK 2 and runs beside autotel on SDK 3 with a single `@opentelemetry/api`. It needs `@aws/durable-execution-sdk-js` 3 and plugin 2.1 or later. Install it with npm's peer check off:
 >
 > ```bash
-> npm install --legacy-peer-deps @aws/durable-execution-sdk-js-otel@1.2.0 \
+> npm install --legacy-peer-deps @aws/durable-execution-sdk-js@^3.0.0 @aws/durable-execution-sdk-js-otel@^2.1.0 \
 >   @opentelemetry/api@1.10.0 @opentelemetry/core@2.12.0 @opentelemetry/sdk-trace-node@2.12.0
 > ```
 
@@ -374,7 +374,7 @@ AWS's [OpenTelemetry plugins](https://docs.aws.amazon.com/durable-execution/) (`
 ```typescript
 import { init } from 'autotel';
 import { withDurableExecution } from '@aws/durable-execution-sdk-js';
-import { ExecutionOtelPlugin } from '@aws/durable-execution-sdk-js-otel';
+import { createOtelPluginFactory } from '@aws/durable-execution-sdk-js-otel';
 import { autotelContextExtractor, durableFlush } from 'autotel-aws/durable';
 
 init({ service: 'orders' });
@@ -387,17 +387,19 @@ export const handler = withDurableExecution(
   },
   {
     plugins: [
-      new ExecutionOtelPlugin({ contextExtractor: autotelContextExtractor }),
+      createOtelPluginFactory({ contextExtractor: autotelContextExtractor }),
       durableFlush(),
     ],
   },
 );
 ```
 
-- **`durableFlush()`** flushes autotel at the end of each invocation, before Lambda freezes the environment. AWS's plugin flushes a provider it holds; under `init()` it holds the global proxy, so autotel flushes its own.
+- **`durableFlush()`** flushes autotel at the end of each invocation, before Lambda freezes the environment. It covers everything autotel holds: events, spans, logs and metrics. The SDK awaits the two plugins' end-of-invocation hooks together, so their order in `plugins` does not matter.
 - **`autotelContextExtractor`** keeps the trace and parent from Lambda's X-Ray header and lets autotel's sampler decide. Lambda sends `Sampled=0` unless X-Ray active tracing is on.
 
-Spans you create inside a step (`span()`, `trace()`, instrumented clients) nest under its attempt span. `InvocationOtelPlugin` works the same way.
+Spans you create inside a step (`span()`, `trace()`, instrumented clients) nest under its attempt span. `createOtelPluginFactory({ mode: 'invocation', ... })` selects AWS's invocation view and works the same way. Register one view only: loading another through `DURABLE_EXECUTION_PLUGINS` as well fails validation.
+
+**Sampling.** AWS's plugin installs its ID generator and sampler on autotel's tracer, so a durable execution keeps one trace across invocations. A resumed execution asks the sampler again in each invocation, so use a policy that decides by trace ID (the default, or `traceidratio`). A tail-sampling preset such as `sampling: 'production'` decides per invocation and can keep only part of an execution.
 
 **Chained invokes.** An execution started by `ctx.invoke()` has its own trace. Wrap the payload, and with `autotelContextExtractor` on the target, it joins the caller's trace:
 

@@ -2,7 +2,7 @@
  * Graceful shutdown with flush and cleanup
  */
 
-import { logs } from '@opentelemetry/api';
+import { logs, metrics } from '@opentelemetry/api';
 import {
   getSdk,
   getLogger,
@@ -77,7 +77,7 @@ const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
 /**
  * Flush all pending telemetry
  *
- * Flushes queued events, OpenTelemetry spans, and log records to their destinations.
+ * Flushes queued events, OpenTelemetry spans, log records and metrics to their destinations.
  * Includes timeout protection to prevent hanging in serverless environments.
  *
  * Safe to call multiple times.
@@ -116,19 +116,22 @@ export async function flush(options?: {
       await (forShutdown ? eventsQueue.shutdown() : eventsQueue.flush());
     }
 
-    // Flush spans and logs independently, so one signal's export error
-    // leaves the other flushed. The shared timeout bounds both.
+    // Flush spans, logs and metrics independently, so one signal's export
+    // error leaves the others flushed. The shared timeout bounds all three.
+    // Logs and metrics are read at flush time to include providers registered
+    // by sdkFactory; before registration the no-op providers have no forceFlush.
+    const flushGlobal = (provider: unknown) => {
+      const forceFlush = readProperty(provider, 'forceFlush');
+      if (isFunction(forceFlush)) return forceFlush.call(provider);
+    };
     await Promise.allSettled([
       Promise.resolve().then(() =>
         getForceFlushableProvider(getSdk())?.forceFlush(),
       ),
-      Promise.resolve().then(() => {
-        // Read at flush time to include providers registered by sdkFactory.
-        // Before registration the no-op provider has no forceFlush.
-        const provider = logs.getLoggerProvider();
-        const forceFlush = readProperty(provider, 'forceFlush');
-        if (isFunction(forceFlush)) return forceFlush.call(provider);
-      }),
+      Promise.resolve().then(() => flushGlobal(logs.getLoggerProvider())),
+      // A periodic reader would otherwise hold metrics until its next interval,
+      // which a frozen serverless environment never reaches.
+      Promise.resolve().then(() => flushGlobal(metrics.getMeterProvider())),
     ]);
   };
 

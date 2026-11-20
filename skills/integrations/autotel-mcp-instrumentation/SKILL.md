@@ -118,6 +118,32 @@ instrumentMcpServer(server, {
 
 The wrapper reads and removes the parameters before the SDK validates the request, so handlers never see them and strict schemas still pass. A tool that declares its own `session_id` or `context` keeps it. Already have a session id? `sessionHandles: { resolveSessionId }` uses yours and changes no schema.
 
+The session comes from the first source that has one, recorded in `mcp.session_handle.source`:
+
+1. Your application: `resolveSessionId` (`hook`), baggage `session.id` on the server's request context (`context`), or `sessionHandles: { argument }` naming a field your tools declare (`argument`).
+2. The agent's handle: `session_id`, issued on `start` (`minted`), echoed back (`supplied`), or refused when the server did not issue it (`invalid`).
+3. The transport's own session (`transport`).
+
+`sessionHandles: { inject: true }` keeps the agent's handle as a fallback beside your resolver. `captureModel: true` adds `agent_model` (`mcp.agent.model`). `captureIntent` and `captureModel` take `{ argument }` to read a field the tool already declares.
+
+**Low-level `Server`.** `instrumentMcpServer` accepts a `Server` with no `registerTool` and traces its `tools/call`, `prompts/get` and `resources/read` handlers. When tool schemas depend on the caller, pass `resolveOriginalTool: (name, request, ctx) => tool` so the wrapper strips only what it added to that caller's schema.
+
+**Client identity.** Spans record `mcp.client.name` / `mcp.client.version`. On stateless 2025-era Streamable HTTP, the `initialize` answer carries an opaque `Mcp-Session-Id` holding the name and version, so later requests to fresh servers still name the client. `statelessClientIdentity: false` turns it off.
+
+## Captured content
+
+```typescript
+instrumentMcpServer(server, {
+  captureToolArgs: true,
+  captureToolResults: true,
+  redactPayload: (value, { kind, name }) => scrub(value), // arguments and results
+  redact: (text, { kind }) => text.replace(EMAIL, '[email]'), // intent and failure text
+  captureErrorMessages: true, // failure text, off by default
+});
+```
+
+`redactPayload` and `redact` apply on server and client. A redactor that throws records nothing for that value. Failed spans keep `error.type`, `error.code` and the failure category; the message appears only with `captureErrorMessages`. Callers and the SDK always receive the original error.
+
 ## Security observability
 
 The MCP boundary is where untrusted data enters an agent. This package makes the
@@ -179,6 +205,12 @@ SDKs, so `args[0]` is the context. Serialising it into a span attribute leaks
 `args[0]` as a payload only if it is not that.
 
 Source: packages/autotel-mcp-instrumentation/src/server.ts
+
+### MEDIUM Expect failure text on spans by default
+
+Spans record a failure's type and category, not its message. Set `captureErrorMessages: true`, with `redact` for anything sensitive.
+
+Source: packages/autotel-mcp-instrumentation/src/content.ts
 
 ### MEDIUM Expect trace context in HTTP headers for MCP
 

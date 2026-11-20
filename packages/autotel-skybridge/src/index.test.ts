@@ -132,8 +132,21 @@ describe('skybridgeTracing', () => {
     );
   });
 
-  it('records the thrown error behind an isError result', async () => {
+  it('records the thrown error behind an isError result, without its text by default', async () => {
     const { client, close } = await connect();
+    await client.callTool({ name: 'boom', arguments: {} });
+    await close();
+    const span = exporter
+      .getFinishedSpans()
+      .find((s) => s.name === 'tools/call boom' && s.kind === 1); // SERVER
+    expect(span?.status.code).toBe(2); // ERROR
+    expect(span?.attributes['error.type']).toBe('tool_error');
+    expect(JSON.stringify(span?.events)).not.toContain('kaboom');
+    expect(span?.status.message).toBeUndefined();
+  });
+
+  it('keeps the thrown error’s text with captureErrorMessages', async () => {
+    const { client, close } = await connect({ captureErrorMessages: true });
     const result = await client.callTool({ name: 'boom', arguments: {} });
     await close();
 
@@ -149,8 +162,8 @@ describe('skybridgeTracing', () => {
     expect(exceptions?.[0]?.attributes?.['exception.message']).toBe('kaboom');
   });
 
-  it("keeps a structured error's fields as error.* attributes", async () => {
-    const { client, close } = await connect();
+  it("keeps a structured error's fields as error.* attributes with captureErrorMessages", async () => {
+    const { client, close } = await connect({ captureErrorMessages: true });
     await client.callTool({ name: 'structured', arguments: {} });
     await close();
 
@@ -164,6 +177,18 @@ describe('skybridgeTracing', () => {
       // The isError verdict still wins over the thrown error's name.
       'error.type': 'tool_error',
     });
+  });
+
+  it("keeps only a structured error's code by default", async () => {
+    const { client, close } = await connect();
+    await client.callTool({ name: 'structured', arguments: {} });
+    await close();
+    const span = exporter
+      .getFinishedSpans()
+      .find((s) => s.name === 'tools/call structured' && s.kind === 1); // SERVER
+    expect(span?.attributes['error.code']).toBe('CARD_DECLINED');
+    expect(span?.attributes['error.why']).toBeUndefined();
+    expect(span?.attributes['error.fix']).toBeUndefined();
   });
 
   it('records no exception when captureErrors is false', async () => {

@@ -3,7 +3,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { logs } from '@opentelemetry/api';
+import { logs, metrics } from '@opentelemetry/api';
+import {
+  AggregationTemporality,
+  InMemoryMetricExporter,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 import { flush, shutdown } from './shutdown';
 import {
   init,
@@ -119,6 +124,59 @@ describe('shutdown module', () => {
       await flush();
 
       expect(mockForceFlush).toHaveBeenCalledOnce();
+    });
+
+    it('exports metrics a periodic reader is still holding', async () => {
+      const exporter = new InMemoryMetricExporter(
+        AggregationTemporality.CUMULATIVE,
+      );
+      init({
+        service: 'test-service',
+        metricReaders: [
+          // An interval no serverless invocation lives to see.
+          new PeriodicExportingMetricReader({
+            exporter,
+            exportIntervalMillis: 600_000,
+          }),
+        ],
+      });
+      try {
+        metrics.getMeter('m').createCounter('orders.placed').add(1);
+        expect(exporter.getMetrics()).toEqual([]);
+
+        await flush();
+
+        const names = exporter
+          .getMetrics()
+          .flatMap((m) => m.scopeMetrics.flatMap((s) => s.metrics))
+          .map((m) => m.descriptor.name);
+        expect(names).toContain('orders.placed');
+      } finally {
+        await shutdown();
+      }
+    });
+
+    it('bounds a hanging meter provider with the same flush timeout', async () => {
+      const forceFlush = vi.fn(() => new Promise<void>(() => {}));
+      const provider = vi
+        .spyOn(metrics, 'getMeterProvider')
+        .mockReturnValue(sdkDouble({ forceFlush }));
+      init({
+        service: 'test-service',
+        sdkFactory: () => sdkDouble({ start: vi.fn(), shutdown: vi.fn() }),
+      });
+      vi.useFakeTimers();
+      try {
+        const flushed = expect(flush({ timeout: 100 })).rejects.toThrow(
+          'Flush timeout after 100ms',
+        );
+        await vi.advanceTimersByTimeAsync(100);
+        await flushed;
+        expect(forceFlush).toHaveBeenCalledOnce();
+      } finally {
+        provider.mockRestore();
+        vi.useRealTimers();
+      }
     });
 
     it('bounds a hanging log provider with the same flush timeout', async () => {

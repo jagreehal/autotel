@@ -12,6 +12,7 @@ import { ctx } from 'autotel';
 import {
   traceMcpHandler,
   type McpInstrumentationConfig,
+  recordableError,
 } from 'autotel-mcp-instrumentation';
 import type { McpMiddlewareFn } from 'skybridge/server';
 
@@ -67,7 +68,8 @@ export function skybridgeTracing(
         const error = TOOL_ERROR in extra ? extra[TOOL_ERROR] : undefined;
         if (error !== undefined && config?.captureErrors !== false) {
           // Structured errors keep why/fix/link/code/details as error.*.
-          ctx.recordError(error);
+          // Its text only with captureErrorMessages, through redact.
+          ctx.recordError(recordableError(config ?? {}, error, name));
         }
         return result;
       },

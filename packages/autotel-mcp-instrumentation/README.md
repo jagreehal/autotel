@@ -194,9 +194,14 @@ on the current revision.
 Wraps an MCP server to automatically trace all registered tools, resources, and
 prompts. Call it on each instance your factory builds.
 
+It also takes a low-level `Server` (both SDKs): its `tools/call`,
+`prompts/get` and `resources/read` request handlers get the same spans, set
+before or after instrumenting. The tool or prompt name then comes from the
+request, as with `traceMcpHandler`.
+
 **Parameters:**
 
-- `server` - `McpServer` instance
+- `server` - `McpServer` or low-level `Server` instance
 - `config` - Optional instrumentation configuration
 
 **Returns:** Instrumented server (Proxy)
@@ -207,7 +212,12 @@ prompts. Call it on each instance your factory builds.
 interface McpInstrumentationConfig {
   captureToolArgs?: boolean; // Arguments as gen_ai.tool.call.arguments (default: false)
   captureToolResults?: boolean; // Results - may contain PII (default: false)
-  captureErrors?: boolean; // Errors and exceptions (default: true)
+  captureErrors?: boolean; // Failures: status, error.type, exception event (default: true)
+  captureErrorMessages?: boolean; // The failure's text on the span (default: false)
+  redactPayload?: (value, { kind, type, name }) => unknown; // Captured arguments and results
+  redact?: (text, { kind, name }) => string | undefined; // Intent and failure text
+  statelessClientIdentity?: boolean; // Client name across stateless HTTP requests (default: true)
+  resolveOriginalTool?: (name, request, ctx) => tool; // Caller-dependent low-level schemas
   enableMetrics?: boolean; // Operation-duration histograms (default: true)
   captureDiscoveryOperations?: boolean; // tools/list, server/discover, ... (default: true)
   // Read per request in preference to this, so it stays correct on a server
@@ -228,6 +238,12 @@ interface McpInstrumentationConfig {
 - `gen_ai.operation.name` - `execute_tool` on tool spans
 - `mcp.protocol.version` - the revision this request declared (2026-07-28)
 - `mcp.session.id` - the connection's session (2025-era only)
+- `gen_ai.conversation.id` - the session the call belongs to, chosen in order
+  (see [Correlating calls](#correlating-calls-on-a-stateless-server)), with
+  `mcp.session_handle.source` saying where it came from
+- `mcp.client.name` / `mcp.client.version` - the client software as it names
+  itself: per request on 2026-07-28 (the `clientInfo` envelope), from
+  `initialize` on a 2025-era connection. Not a user and not a credential
 - `error.type` - `tool_error` when the result carries `isError`
 - `mcp.input_required` - the call paused for input instead of completing (span
   status is left UNSET, since a pause is neither success nor failure)
@@ -456,12 +472,13 @@ const instrumented = instrumentMcpServer(server, {
 
 ## Correlating calls on a stateless server
 
-MCP 2026-07-28 has no session, so two calls from one agent doing one task arrive as strangers. The protocol's answer is an explicit handle the agent carries itself (SEP-2567). Turn it on and every tool gets a `session_id` parameter: the first call sends `start` and is issued an id, later calls echo it, and each span records it as `gen_ai.conversation.id`. All four options are off by default, because agents see the parameters they add.
+MCP 2026-07-28 has no session, so two calls from one agent doing one task arrive as strangers. The protocol's answer is an explicit handle the agent carries itself (SEP-2567). Turn it on and every tool gets a `session_id` parameter: the first call sends `start` and is issued an id, later calls echo it, and each span records it as `gen_ai.conversation.id`. All of these options are off by default, because agents see the parameters they add.
 
 ```typescript
 instrumentMcpServer(server, {
   sessionHandles: { agentId: true }, // session_id, plus a self-chosen agent_id → gen_ai.agent.id
   captureIntent: true, // `context`: one sentence of why → mcp.tool.call.intent
+  captureModel: true, // `agent_model`: the model the agent says it runs as → mcp.agent.model (unverified)
   reportMissingTools: true, // a get_more_tools tool → mcp.missing_tool.description
   identify: (request, ctx) => hashOf(ctx.http?.authInfo?.token), // → user.id, never awaited
 });
@@ -469,9 +486,17 @@ instrumentMcpServer(server, {
 
 - The parameters are read and removed at the request, before the SDK validates it, so your handlers never see them and a strict schema still accepts the call. A tool that declares its own `session_id` or `context` keeps it.
 - The id is announced as the first content block and as `structuredContent.mcp_session` (declared on output schemas, so validating clients accept it). A value this server did not issue is refused, not adopted: `mcp.session_handle.source` is `invalid` and the agent is told to re-send the right one.
-- Already have a session (a token hash, your own id)? `sessionHandles: { resolveSessionId: (request, ctx) => id }` uses it and changes no schema.
+- Already have a session (a token hash, your own id)? `sessionHandles: { resolveSessionId: (request, ctx) => id }` uses it and changes no schema. Your tools already take a conversation id? `sessionHandles: { argument: 'conversation_id' }` reads it (`mcp.session_handle.source: argument`) and leaves it for the handler. Add `inject: true` to keep asking the agent for `session_id` as the fallback for calls those give nothing for.
+- The session is chosen in this order: the application's (`resolveSessionId` → `hook`, baggage `session.id` on the request's context → `context`, a selected argument → `argument`), then the agent's handle (`supplied`, or `minted` and announced), then the MCP transport session (`transport`). When the application chose, nothing is issued or announced.
+- Your tools already have an intent or model field? `captureIntent: { argument: 'reason' }` (or `captureModel: { argument: 'model' }`) reads it where a tool declares it, leaves it for the handler, and adds it under that name to tools that lack it. A field nobody selected is never read, even when its name matches.
+- A schema that accepts any argument name (`additionalProperties: true` or a schema, `patternProperties`, a Zod `catchall`) gets nothing injected: the name could be the tool's own data, and stripping it would take it from the handler.
 - Works per request: a 2026-07-28 server built inside `createMcpHandler` rebuilds what its listing advertised before the first call.
-- `captureIntent` records model-written free text. Route it through your attribute redactor.
+- `captureIntent` records model-written free text. Pass it through `redact` (below) or your attribute redactor.
+- A low-level `Server` whose tool schemas depend on the caller: pass `resolveOriginalTool: (name, request, ctx) => tool`, returning the tool as defined for this caller, so only what was injected into _their_ schema is stripped. Without it the last listing decides.
+
+### Client identity on stateless HTTP
+
+On a stateless 2025-era Streamable HTTP server (`sessionIdGenerator: undefined`, a fresh server per request), the client names itself only on `initialize`. The `initialize` answer carries an opaque `Mcp-Session-Id` (`mcpci1.…`) holding the reported name and version; the client sends it back on every request, a stateless transport does not validate it, and each span records `mcp.client.name` / `mcp.client.version`. It is not recorded as `mcp.session.id`. A transport that issues its own session ids is left alone. Client-reported, never a credential. `statelessClientIdentity: false` turns it off.
 
 ## Security Observability
 
@@ -629,6 +654,19 @@ Both are opt-in, so nothing leaks unless you ask for it:
 const instrumented = instrumentMcpServer(server, {
   captureToolArgs: true, // May contain PII
   captureToolResults: false, // Default - may contain sensitive data
+});
+```
+
+Failure text is off too: a tool's error often quotes the input that caused it, so spans record `error.type` and the failure category, and keep the message only with `captureErrorMessages: true`. The caller still gets the original error.
+
+`redactPayload` and `redact` transform what is captured before it is recorded. A redactor that throws records nothing for that value:
+
+```typescript
+instrumentMcpServer(server, {
+  captureToolArgs: true,
+  captureErrorMessages: true,
+  redactPayload: (value, { kind }) => (kind === 'input' ? scrub(value) : value),
+  redact: (text) => text.replaceAll(/\b\d{4}-\d{4}-\d{4}-\d{4}\b/g, '[card]'),
 });
 ```
 

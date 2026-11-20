@@ -1,0 +1,25 @@
+{
+  "name": "@jagreehal/example-datacontract",
+  "version": "0.0.0",
+  "description": "The 'Data Contracts' article, run end to end with autotel-datacontract: lint, data-first draft, nightly audit, breaking-change gate, consumer-driven contracts, quarantine, tolerant reads, verified statements for agents, and a 30-day track record from OpenTelemetry metrics.",
+  "private": true,
+  "type": "module",
+  "author": "Jag Reehal",
+  "license": "MIT",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "test": "tsx src/index.ts",
+    "type-check": "tsc --noEmit",
+    "contract-check": "autotel-datacontract lint datacontracts/customers_v1.odcs.yaml && autotel-datacontract satisfies datacontracts/customers_v1.odcs.yaml expectations/cross-sell.odcs.yaml"
+  },
+  "dependencies": {
+    "@opentelemetry/sdk-metrics": "^3.1.0",
+    "autotel": "workspace:*",
+    "autotel-datacontract": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

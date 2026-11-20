@@ -1,0 +1,81 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "extends": [
+    "../../tools/oxlint/base.json",
+    "../../tools/oxlint/unicorn.json"
+  ],
+  "plugins": ["typescript", "unicorn"],
+  "categories": {
+    "correctness": "off"
+  },
+  "jsPlugins": [
+    {
+      "name": "eslint-js",
+      "specifier": "oxlint-plugin-eslint"
+    }
+  ],
+  "options": {
+    "typeAware": true
+  },
+  "env": {
+    "builtin": true,
+    "es2026": true
+  },
+  "ignorePatterns": ["dist/**", "schemas/**"],
+  "overrides": [
+    {
+      "files": ["src/**/*.ts"],
+      "rules": {
+        "unicorn/consistent-function-scoping": "off",
+        "unicorn/filename-case": "off",
+        "unicorn/no-null": "off",
+        "unicorn/prefer-top-level-await": "off",
+        "unicorn/no-nested-ternary": "off",
+        "unicorn/no-this-assignment": "off",
+        "unicorn/no-array-for-each": "off",
+        "unicorn/no-array-reduce": "off",
+        "unicorn/prefer-export-from": "off",
+        "unicorn/prefer-type-error": "off",
+        "unicorn/explicit-length-check": "off",
+        "unicorn/prefer-at": "off",
+        "unicorn/prefer-string-slice": "off",
+        "unicorn/no-empty-file": "off",
+        "unicorn/require-module-specifiers": "off",
+        "unicorn/prefer-node-protocol": "off",
+        "no-unused-vars": "off",
+        "typescript/no-explicit-any": "off",
+        "typescript/consistent-type-exports": "error",
+        "typescript/no-this-alias": "off",
+        "typescript/no-unsafe-function-type": "off",
+        "typescript/ban-ts-comment": "off"
+      }
+    },
+    {
+      "files": ["src/**/*.test.ts"],
+      "rules": {
+        "unicorn/consistent-function-scoping": "off",
+        "unicorn/filename-case": "off",
+        "unicorn/no-null": "off",
+        "unicorn/prefer-top-level-await": "off",
+        "unicorn/no-nested-ternary": "off",
+        "unicorn/prefer-node-protocol": "off",
+        "no-unused-vars": "off",
+        "typescript/no-explicit-any": "off",
+        "typescript/consistent-type-exports": "off",
+        "typescript/no-require-imports": "off"
+      }
+    },
+    {
+      "files": ["src/**/*.ts"],
+      "rules": {
+        "eslint-js/no-restricted-syntax": [
+          "error",
+          {
+            "selector": "TSEnumDeclaration",
+            "message": "Enums are not allowed. Use union types or const assertions instead."
+          }
+        ]
+      }
+    }
+  ]
+}
