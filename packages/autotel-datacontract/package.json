@@ -1,6 +1,6 @@
 {
   "name": "autotel-datacontract",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Open Data Contract Standard (ODCS) contracts held to account: validate records and events at runtime with the track record as OpenTelemetry metrics, audit legacy databases for variances and unknowns, draft contracts from existing data, catch breaking changes in CI, and bridge to JSON Schema.",
   "type": "module",
   "main": "./dist/index.js",
