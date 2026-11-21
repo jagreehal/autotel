@@ -1,5 +1,12 @@
 # autotel-devtools
 
+## 31.10.3
+
+### Patch Changes
+
+- Updated dependencies [6574e6b]
+  - autotel@9.5.2
+
 ## 31.10.2
 
 ### Patch Changes

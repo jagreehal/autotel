@@ -1,5 +1,12 @@
 # autotel-schema
 
+## 20.0.25
+
+### Patch Changes
+
+- Updated dependencies [6574e6b]
+  - autotel@9.5.2
+
 ## 20.0.24
 
 ### Patch Changes
