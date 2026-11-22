@@ -29,6 +29,8 @@ Event guidance: for new instrumentation, emit events as correlated logs (via req
 | Error budgets and burn-rate alerts    | `createSloTracker()`, `evaluateBurnRateAlert()`                                                               | `autotel/slo`                          |
 | Record a persisted state change       | `transition({ entity, field, from, to, via })` after the write succeeded                                      | `autotel`                              |
 | Split a metric by feature flag        | OpenFeature: automatic from `init()`. Otherwise `recordFeatureFlag({ key, value })`                           | `autotel/feature-flags`                |
+| Carry request context downstream      | `ctx.setBaggage(key, value)`, or a typed `createSafeBaggageSchema()` / `BusinessBaggage` inside a trace       | `autotel`                              |
+| Same flag answer in every service     | `featureFlagBaggage()` at the edge, `featureFlagBaggageProvider()` downstream                                 | `autotel/feature-flags`                |
 | Flush telemetry on SIGTERM / crash    | `init({ processHandlers: true })`                                                                             | `autotel`                              |
 | Testing                               | `createTraceCollector()`, `InMemorySpanExporter`                                                              | `autotel/testing`, `autotel/exporters` |
 

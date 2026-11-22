@@ -317,20 +317,21 @@ export class DatadogBackend implements TelemetryBackend {
     const toMs = query.endTimeUnixMs ?? Date.now();
     const fromMs = query.startTimeUnixMs ?? toMs - DEFAULT_LOOKBACK_MS;
     const limit = query.limit ?? 20;
-    const events = await this.search(
-      spanFilter(query),
-      fromMs,
-      toMs,
-      Math.min(limit * 20, 1000),
-    );
-    const traceIds = Array.from(
+    const pageSize = Math.min(limit * 20, 1000);
+    const events = await this.search(spanFilter(query), fromMs, toMs, pageSize);
+    const allTraceIds = Array.from(
       new Set(
         events
           .map((event) => event.attributes?.trace_id)
           .filter((traceId): traceId is string => Boolean(traceId)),
       ),
-    ).slice(0, limit);
-    if (traceIds.length === 0) return { items: [], totalCount: 0 };
+    );
+    const traceIds = allTraceIds.slice(0, limit);
+    // Traces are grouped from a page of spans, so fewer traces than `limit`
+    // can still mean more were left out: a full span page may hold them.
+    const more = events.length >= pageSize || allTraceIds.length > limit;
+    if (traceIds.length === 0)
+      return { items: [], totalCount: 0, truncated: more };
     // One hydration request for every trace: the filter matched only some
     // spans of each, and the rest (downstream services) matter.
     const hydrated = await this.search(
@@ -339,18 +340,27 @@ export class DatadogBackend implements TelemetryBackend {
       toMs,
       MAX_PAGE,
     );
-    // A trace crowded out of a full shared page keeps the spans the first
-    // search matched.
+    // A full shared page may have crowded out any trace's spans, including
+    // the ones the first search matched (an error span the query asked for),
+    // so those are kept beside whatever hydration returned.
     const truncated = hydrated.length >= MAX_PAGE;
-    const matched = new Map(groupSpans(events).map((t) => [t.traceId, t]));
-    const byId = new Map(groupSpans(hydrated).map((t) => [t.traceId, t]));
+    const hydratedKeys = new Set(hydrated.map(spanKey));
+    const spans = truncated
+      ? [
+          ...hydrated,
+          ...events.filter(
+            (e) => spanKey(e) === undefined || !hydratedKeys.has(spanKey(e)),
+          ),
+        ]
+      : hydrated;
+    const byId = new Map(groupSpans(spans).map((t) => [t.traceId, t]));
     const items = traceIds
-      .map((traceId) => byId.get(traceId) ?? matched.get(traceId))
+      .map((traceId) => byId.get(traceId))
       .filter((trace): trace is TraceRecord => trace !== undefined)
       .map((trace) => (truncated ? { ...trace, truncated } : trace))
       .filter((trace) => traceMatchesQuery(trace, query))
       .slice(0, limit);
-    return { items, totalCount: items.length };
+    return { items, totalCount: items.length, truncated: more || truncated };
   }
 
   /**
@@ -760,6 +770,15 @@ function spanFilter(query: TraceSearchQuery): string {
 /** Quote a search value when it holds characters Datadog's syntax would split on. */
 function quote(value: string): string {
   return /[\s:()"]/.test(value) ? JSON.stringify(value) : value;
+}
+
+/**
+ * A span's identity within its trace, with the adapter's span id fallback;
+ * `undefined` when the event has no id at all, so it is never a duplicate.
+ */
+function spanKey(event: DatadogSpanEvent): string | undefined {
+  const id = event.attributes?.span_id ?? event.id;
+  return id ? `${event.attributes?.trace_id ?? ''}/${id}` : undefined;
 }
 
 /**

@@ -101,6 +101,19 @@ Package uses explicit exports (check `package.json` exports field) for tree-shak
   number, and stringifying one makes it uncomparable with the flag beside it.
   Use `feature_flag.error.message`; the `feature_flag.evaluation.error.message`
   spelling is deprecated.
+  `featureFlagBaggage()` / `featureFlagBaggageProvider()`
+  (`src/feature-flags-baggage.ts`) carry the edge's evaluations downstream in
+  one W3C baggage entry, `autotel.feature_flags` (deliberately outside the
+  `feature_flag.*` namespace: a baggage-to-span copier would otherwise mint
+  `feature_flag.<key>`). The writer replaces inbound flag baggage, never merges
+  it, so a client cannot forge flags through an edge; the provider is for
+  services behind an edge only. It answers `CACHED` with the edge's version
+  and set id, and throws `FeatureFlagBaggageError` with `code`
+  `FLAG_NOT_FOUND` / `TYPE_MISMATCH` rather than a silent default. Thrown, not
+  returned: OpenFeature types a returned `errorCode` as its own enum, which a
+  structurally typed provider cannot name, so returning one makes the provider
+  unassignable to `setProvider` in a TypeScript app; the SDK reads `code` off a
+  thrown error by shape.
 - And more (see package.json exports)
 
 ## Commands

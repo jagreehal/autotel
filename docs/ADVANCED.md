@@ -330,11 +330,11 @@ const OrderBaggage = createSafeBaggageSchema(
 
 **Guardrails:**
 
-- **Size limits**: `maxKeyLength` (default 64), `maxValueLength` (default 256)
-- **PII detection**: Regex patterns for email, phone, SSN auto-redacted
-- **High-cardinality hashing**: UUIDs and timestamps hashed via FNV-1a
-- **Enum validation**: Rejects values not in the defined set
-- **Type coercion**: Numbers/booleans properly serialized
+- **Where writes go**: inside a trace (`trace.run`, `trace()`, `span()`, `@Trace()`), a write lasts for the rest of the request and goes out on every outgoing call. Inside another OpenTelemetry scope, such as an auto-instrumented request, it lasts for that scope. At the root the schema writes nothing and reports `no_trace` to `onError`.
+- **Size limits**: `maxKeyLength` (default 64) and `maxValueLength` (default 256; a longer value is cut at a whole character). `maxTotalSize` (default and maximum 8192) counts the outgoing `baggage` header in bytes, the way OpenTelemetry sends it. The schema rejects a write the propagator would leave out with a `size` error, and keeps the most writes of a batch that fit.
+- **PII detection**: `redactPII` hashes values that match email, phone, SSN and card patterns.
+- **Hashing**: `hash: true` fields, and values `hashHighCardinality` matches (UUIDs, timestamps), go out as FNV-1a hashes. `fromHeaders()` keeps a hash the sender made, so a hashed ID stays the same at every hop.
+- **Validation**: types, enum values and your `validate` function check each value. A failure goes to `onError`; a write never throws.
 
 ## Workflow & Saga Tracing
 

@@ -7,65 +7,6 @@ import {
 import { invalidValue } from './testing/doubles';
 import { asString } from './values';
 
-// Mock OpenTelemetry propagation API
-vi.mock('@opentelemetry/api', () => {
-  const baggageStore = new Map<string, { value: string }>();
-
-  return {
-    context: {
-      active: vi.fn(() => ({})),
-    },
-    propagation: {
-      getBaggage: vi.fn(() => ({
-        getEntry: (key: string) => baggageStore.get(key),
-        getAllEntries: () =>
-          [...baggageStore.entries()].map(([k, v]) => [k, v]),
-        setEntry: vi.fn((key: string, entry: { value: string }) => {
-          baggageStore.set(key, entry);
-          return {
-            getEntry: (k: string) => baggageStore.get(k),
-            getAllEntries: () =>
-              [...baggageStore.entries()].map(([k, v]) => [k, v]),
-            setEntry: vi.fn(),
-            removeEntry: vi.fn(),
-          };
-        }),
-        removeEntry: vi.fn((key: string) => {
-          baggageStore.delete(key);
-          return {
-            getEntry: (k: string) => baggageStore.get(k),
-            getAllEntries: () => [...baggageStore.entries()],
-            setEntry: vi.fn(),
-            removeEntry: vi.fn(),
-          };
-        }),
-      })),
-      createBaggage: vi.fn(() => ({
-        getEntry: () => {},
-        getAllEntries: () => [],
-        setEntry: vi.fn((key: string, entry: { value: string }) => {
-          baggageStore.set(key, entry);
-          return {
-            getEntry: (k: string) => baggageStore.get(k),
-            getAllEntries: () => [...baggageStore.entries()],
-            setEntry: vi.fn(),
-            removeEntry: vi.fn(),
-          };
-        }),
-        removeEntry: vi.fn(),
-      })),
-      setBaggage: vi.fn(() => ({})),
-      inject: vi.fn((ctx, headers) => {
-        headers['traceparent'] = '00-abc-def-01';
-        for (const [k, v] of baggageStore.entries()) {
-          headers[k] = v.value;
-        }
-      }),
-      extract: vi.fn(() => ({})),
-    },
-  };
-});
-
 describe('Business Baggage', () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -114,6 +114,12 @@ export interface VersionChange {
   to: string;
   /** When the new version's first span in the sample started. */
   changedAtUnixMs: number;
+  /**
+   * When the sample could first tell this was a change: `changedAtUnixMs`
+   * for a version never seen before; for a return to an earlier one, the
+   * span that completed its confirmation, which can be later.
+   */
+  confirmedAtUnixMs: number;
   before: LatencyStats;
   after: LatencyStats;
   /** Positive is worse. */
@@ -121,12 +127,140 @@ export interface VersionChange {
   p95DeltaMs: number;
 }
 
+/**
+ * A flag definition that changed: a rollout widened, a kill switch flipped.
+ * With trunk-based development this changes behaviour as often as a deploy
+ * does, and `service.version` never moves.
+ */
+export interface FlagChange extends VersionChange {
+  /** `feature_flag.key`; `from`/`to` are its `feature_flag.version`. */
+  flag: string;
+}
+
 export interface WhatChangedResult {
   changes: VersionChange[];
+  /** Flags whose `feature_flag.version` changed, newest first. */
+  flagChanges: FlagChange[];
   /** Services seen on one version only across the window. */
   unchanged: Array<{ service: string; version: string }>;
   /** Services whose spans carry no version at all. */
   unversioned: string[];
+}
+
+function groupBy(
+  spans: readonly SpanRecord[],
+  keyOf: (span: SpanRecord) => string | undefined,
+): Map<string, SpanRecord[]> {
+  const groups = new Map<string, SpanRecord[]>();
+  for (const span of spans) {
+    const key = keyOf(span);
+    if (key === undefined) continue;
+    const list = groups.get(key);
+    if (list) list.push(span);
+    else groups.set(key, [span]);
+  }
+  return groups;
+}
+
+/**
+ * Each version the spans moved to, in time order, with the stats either side.
+ * One version means nothing changed.
+ *
+ * A version never seen before is a change the moment it appears. A version
+ * seen before (a rollback, or a rollout repeated after one) is a change once
+ * it fills the next {@link CONFIRM_SPANS} spans in a row: during a rolling
+ * deploy the old and new versions interleave, and that is one change, not a
+ * flip at every span. Spans of a third version confirm nothing about it.
+ */
+/** Spans in a row of an earlier version that confirm a return to it. */
+const CONFIRM_SPANS = 3;
+
+/** The versions a service's spans moved through, and each change between them. */
+interface Transitions {
+  versions: string[];
+  changes: Omit<VersionChange, 'service'>[];
+}
+
+function transitions(
+  spans: readonly SpanRecord[],
+  versionOf: (span: SpanRecord) => string | undefined,
+): Transitions {
+  const versioned = spans
+    .map((span) => ({ span, version: versionOf(span) }))
+    .filter(
+      (entry): entry is { span: SpanRecord; version: string } =>
+        entry.version !== undefined,
+    )
+    .sort((a, b) => a.span.startTimeUnixMs - b.span.startTimeUnixMs);
+  // A full run is needed: a sample's last span or two of the old version
+  // are stragglers, not a rollback, until more spans say otherwise.
+  const fillsNext = (version: string, index: number) => {
+    const next = versioned.slice(index, index + CONFIRM_SPANS);
+    return (
+      next.length === CONFIRM_SPANS &&
+      next.every((entry) => entry.version === version)
+    );
+  };
+
+  const seen = new Set<string>();
+  const switches: Array<{
+    from: string;
+    to: string;
+    at: number;
+    confirmedAt: number;
+  }> = [];
+  let current: string | undefined;
+  versioned.forEach(({ version }, index) => {
+    if (current === undefined) current = version;
+    else if (
+      version !== current &&
+      (!seen.has(version) || fillsNext(version, index))
+    ) {
+      const confirmedBy = seen.has(version) ? index + CONFIRM_SPANS - 1 : index;
+      switches.push({
+        from: current,
+        to: version,
+        at: index,
+        confirmedAt: versioned[confirmedBy]!.span.startTimeUnixMs,
+      });
+      current = version;
+    }
+    seen.add(version);
+  });
+
+  const changes = switches.map(({ from, to, at, confirmedAt }, index) => {
+    const changedAtUnixMs = versioned[at]!.span.startTimeUnixMs;
+    const until = switches[index + 1]?.at ?? versioned.length;
+    const before = latencyStats(
+      versioned
+        .slice(index === 0 ? 0 : switches[index - 1]!.at, at)
+        .filter((entry) => entry.version === from)
+        .map((entry) => entry.span),
+    );
+    const after = latencyStats(
+      versioned
+        .slice(at, until)
+        .filter((entry) => entry.version === to)
+        .map((entry) => entry.span),
+    );
+    return {
+      from,
+      to,
+      changedAtUnixMs,
+      confirmedAtUnixMs: confirmedAt,
+      before,
+      after,
+      errorRateDelta:
+        Math.round((after.errorRate - before.errorRate) * 1000) / 1000,
+      p95DeltaMs: Math.round((after.p95Ms - before.p95Ms) * 1000) / 1000,
+    };
+  });
+  return { versions: Array.from(seen), changes };
+}
+
+function tag(span: SpanRecord, key: string): string | undefined {
+  const value = span.tags[key];
+  return value === undefined ? undefined : String(value);
 }
 
 /**
@@ -134,61 +268,39 @@ export interface WhatChangedResult {
  * changes inside the window, with its error rate and p95 before and after.
  * Works on any backend because it needs no deploy events, only the version
  * every OTel SDK stamps on the resource.
+ *
+ * Flag changes the same way, from `feature_flag.version` on spans that
+ * evaluated the flag, per service, since each service that read the flag is
+ * a place its new definition can break.
  */
 export function whatChanged(spans: readonly SpanRecord[]): WhatChangedResult {
-  const byService = new Map<string, SpanRecord[]>();
-  for (const span of spans) {
-    const list = byService.get(span.serviceName);
-    if (list) list.push(span);
-    else byService.set(span.serviceName, [span]);
-  }
-
   const result: WhatChangedResult = {
     changes: [],
+    flagChanges: [],
     unchanged: [],
     unversioned: [],
   };
-  for (const [service, members] of byService) {
-    const versioned = members.filter((span) => spanVersion(span) !== undefined);
-    if (versioned.length === 0) {
-      result.unversioned.push(service);
-      continue;
-    }
-    const firstSeen = new Map<string, number>();
-    for (const span of versioned) {
-      const version = spanVersion(span)!;
-      const seen = firstSeen.get(version);
-      if (seen === undefined || span.startTimeUnixMs < seen)
-        firstSeen.set(version, span.startTimeUnixMs);
-    }
-    const order = Array.from(firstSeen).sort((a, b) => a[1] - b[1]);
-    if (order.length === 1) {
-      result.unchanged.push({ service, version: order[0]![0] });
-      continue;
-    }
-    for (let index = 1; index < order.length; index++) {
-      const [previous] = order[index - 1]!;
-      const [next, changedAtUnixMs] = order[index]!;
-      const before = latencyStats(
-        versioned.filter((span) => spanVersion(span) === previous),
+  for (const [service, members] of groupBy(spans, (s) => s.serviceName)) {
+    const { versions, changes } = transitions(members, spanVersion);
+    if (versions.length === 0) result.unversioned.push(service);
+    else if (versions.length === 1)
+      result.unchanged.push({ service, version: versions[0]! });
+    for (const change of changes) result.changes.push({ service, ...change });
+  }
+
+  for (const [service, serviceSpans] of groupBy(spans, (s) => s.serviceName)) {
+    const byFlag = groupBy(serviceSpans, (s) => tag(s, 'feature_flag.key'));
+    for (const [flag, members] of byFlag) {
+      const { changes } = transitions(members, (span) =>
+        tag(span, 'feature_flag.version'),
       );
-      const after = latencyStats(
-        versioned.filter((span) => spanVersion(span) === next),
-      );
-      result.changes.push({
-        service,
-        from: previous,
-        to: next,
-        changedAtUnixMs,
-        before,
-        after,
-        errorRateDelta:
-          Math.round((after.errorRate - before.errorRate) * 1000) / 1000,
-        p95DeltaMs: Math.round((after.p95Ms - before.p95Ms) * 1000) / 1000,
-      });
+      for (const change of changes)
+        result.flagChanges.push({ service, flag, ...change });
     }
   }
+
   result.changes.sort((a, b) => b.changedAtUnixMs - a.changedAtUnixMs);
+  result.flagChanges.sort((a, b) => b.changedAtUnixMs - a.changedAtUnixMs);
   return result;
 }
 

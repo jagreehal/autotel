@@ -26,7 +26,11 @@
 import type { TracingOptions, TraceContext } from './functional';
 import { getConfig } from './config';
 import { SpanStatusCode } from '@opentelemetry/api';
-import { createTraceContext, markSpanOk } from './trace-context';
+import {
+  createTraceContext,
+  markSpanOk,
+  runWithTraceContextStorage,
+} from './trace-context';
 import { splitNameOrOptions } from './values';
 
 /**
@@ -145,38 +149,40 @@ export function Trace(
       const config = getConfig();
       const tracer = config.tracer;
 
-      return tracer.startActiveSpan(spanName, async (span) => {
-        try {
-          // Make ctx available via this.ctx for methods that need it
-          const ctx: TraceContext = createTraceContext(span);
-
-          const originalCtx = this.ctx;
+      return runWithTraceContextStorage(() =>
+        tracer.startActiveSpan(spanName, async (span) => {
           try {
-            this.ctx = ctx;
-            const result = await originalMethod.apply(this, args);
-            markSpanOk(span);
-            return result;
-          } finally {
-            // Restore original ctx
-            if (originalCtx === undefined) {
-              delete this.ctx;
-            } else {
-              this.ctx = originalCtx;
+            // Make ctx available via this.ctx for methods that need it
+            const ctx: TraceContext = createTraceContext(span);
+
+            const originalCtx = this.ctx;
+            try {
+              this.ctx = ctx;
+              const result = await originalMethod.apply(this, args);
+              markSpanOk(span);
+              return result;
+            } finally {
+              // Restore original ctx
+              if (originalCtx === undefined) {
+                delete this.ctx;
+              } else {
+                this.ctx = originalCtx;
+              }
             }
+          } catch (error) {
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: error instanceof Error ? error.message : 'Unknown error',
+            });
+            span.recordException(
+              error instanceof Error ? error : new Error(String(error)),
+            );
+            throw error;
+          } finally {
+            span.end();
           }
-        } catch (error) {
-          span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: error instanceof Error ? error.message : 'Unknown error',
-          });
-          span.recordException(
-            error instanceof Error ? error : new Error(String(error)),
-          );
-          throw error;
-        } finally {
-          span.end();
-        }
-      });
+        }),
+      );
     };
   };
 }

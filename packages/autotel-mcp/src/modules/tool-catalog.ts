@@ -85,8 +85,8 @@ export function buildToolCatalog(): ToolCatalogEntry[] {
     {
       name: 'what_changed',
       description:
-        'Version changes in the window with error rate and p95 before and after.',
-      intent: 'tie a regression to a deploy',
+        'Version and feature flag changes in the window with error rate and p95 before and after.',
+      intent: 'tie a regression to a deploy or a flag change',
     },
     {
       name: 'list_llm_models',

@@ -20,7 +20,12 @@ import {
   getActiveTraceContext,
   trace as autotelTrace,
 } from './functional';
-import { autotelOpenFeatureHook, recordFeatureFlag } from './feature-flags';
+import {
+  autotelOpenFeatureHook,
+  featureFlagBaggage,
+  featureFlagBaggageProvider,
+  recordFeatureFlag,
+} from './feature-flags';
 
 const spans = new InMemorySpanExporter();
 const records = new InMemoryLogRecordExporter();
@@ -190,5 +195,56 @@ describe('OpenFeature registered by init()', () => {
       )
       .map((record) => record.attributes['feature_flag.key']);
     expect(keys).toEqual(['raw-a', 'raw-b']);
+  });
+
+  it("records a flag carried from the edge with the edge's variant and version", async () => {
+    await OpenFeature.setProviderAndWait(
+      'downstream',
+      featureFlagBaggageProvider(),
+    );
+    const downstream = OpenFeature.getClient('downstream');
+
+    await run('edge', async () => {
+      const carried = featureFlagBaggage([
+        {
+          flagKey: 'pricing-engine',
+          value: 'v2',
+          variant: 'v2',
+          flagMetadata: { version: 7, flagSetId: 'checkout' },
+        },
+      ]);
+      await context.with(carried, () =>
+        autotelTrace('downstream', () =>
+          downstream.getStringValue('pricing-engine', 'control'),
+        )(),
+      );
+    });
+
+    expect(spanNamed('downstream')?.attributes).toMatchObject({
+      'feature_flag.key': 'pricing-engine',
+      'feature_flag.result.variant': 'v2',
+      'feature_flag.result.reason': 'cached',
+      'feature_flag.provider.name': 'baggage',
+      'feature_flag.version': '7',
+      'feature_flag.set.id': 'checkout',
+    });
+  });
+
+  it('gives the default and records flag_not_found for a flag the edge did not carry', async () => {
+    const downstream = OpenFeature.getClient('downstream');
+    let value: string | undefined;
+    await run('uncarried', async () => {
+      value = await downstream.getStringValue('pricing-engine', 'control');
+    });
+
+    expect(value).toBe('control');
+    const event = records
+      .getFinishedLogRecords()
+      .find(
+        (record) =>
+          record.attributes['feature_flag.provider.name'] === 'baggage' &&
+          record.attributes['error.type'] !== undefined,
+      );
+    expect(event?.attributes['error.type']).toBe('flag_not_found');
   });
 });

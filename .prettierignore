@@ -7,6 +7,9 @@
 # the generator overwrites it on the next run anyway.
 **/.astro/**
 **/.turbo/**
+**/storybook-static/**
+# Local tool state (the impeccable design hook's cache), git-ignored
+.impeccable/
 
 # Fixtures, schemas, and snapshots are DATA, compared byte for byte or shape
 # for shape by the tests that own them. Prettier collapses single-item arrays

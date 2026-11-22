@@ -1496,26 +1496,26 @@ export const processOrder = withTracing({})((ctx) => async (order: Order) => {
   // Type-safe get
   const { orderId, tier, isVip } = OrderBaggage.get(ctx);
 
-  // Check if specific field is set
-  if (OrderBaggage.has(ctx, 'customerId')) {
+  // One field
+  if (OrderBaggage.getValue('customerId') !== undefined) {
     // ...
   }
 
-  // Delete specific field
-  OrderBaggage.delete(ctx, 'amount');
-
-  // Clear all fields
+  // Clear every field of the schema
   OrderBaggage.clear(ctx);
 });
+
+// In a service that receives the headers
+OrderBaggage.fromHeaders({ baggage: incomingBaggageHeader });
 ```
 
 **Guardrails:**
 
-- **Size Limits** - Prevents baggage from growing unbounded
-- **PII Detection** - Auto-redacts email, phone, SSN patterns
-- **High-Cardinality Hashing** - Hashes UUIDs, timestamps to reduce cardinality
-- **Enum Validation** - Rejects invalid enum values
-- **Type Coercion** - Numbers/booleans serialized correctly
+- **Where writes go**: inside a trace (`trace.run`, `trace()`, `span()`, `@Trace()`), a write lasts for the rest of the request and goes out on every outgoing call. Inside another OpenTelemetry scope, such as an auto-instrumented request, it lasts for that scope. At the root the schema writes nothing and reports `no_trace` to `onError`.
+- **Size limits**: `maxKeyLength` (default 64) and `maxValueLength` (default 256; a longer value is cut at a whole character). `maxTotalSize` (default and maximum 8192) counts the outgoing `baggage` header in bytes, the way OpenTelemetry sends it. The schema rejects a write the propagator would leave out with a `size` error, and keeps the most writes of a batch that fit.
+- **PII detection**: `redactPII` hashes values that match email, phone, SSN and card patterns.
+- **Hashing**: `hash: true` fields, and values `hashHighCardinality` matches (UUIDs, timestamps), go out as FNV-1a hashes. `fromHeaders()` keeps a hash the sender made, so a hashed ID stays the same at every hop.
+- **Validation**: types, enum values and your `validate` function check each value. A failure goes to `onError`; a write never throws.
 
 ## Workflow & Saga Tracing
 

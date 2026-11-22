@@ -21,6 +21,8 @@ export { instrumentMcpServer, traceMcpHandler } from './server';
 export type { TraceMcpHandlerOptions } from './server';
 
 export { instrumentMcpClient, instrumentMcpTransport } from './client';
+// MCP Events: the consumer span for an occurrence received by poll or webhook.
+export { processEvent, type McpEventOccurrence } from './events';
 
 export type {
   McpInstrumentationConfig,
@@ -47,7 +49,9 @@ export {
   MCP_SECURITY_EVENT,
   MCP_CHAR_BUDGETS,
   MCP_FAILURE_CATEGORY,
+  MCP_EVENT_NOTIFICATIONS,
   type McpFailureCategory,
+  type McpEventDelivery,
 } from './semantic-conventions';
 
 // Failure grouping — the "is this the same failure?" half of error observability.

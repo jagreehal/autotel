@@ -41,6 +41,8 @@ export type CompareResult =
       differences: CohortDifference[];
       outlierCount: number;
       baselineCount: number;
+      /** Fields left unranked because the queries define the cohorts by them. */
+      ignoredFields: string[];
     }
   /** One side matched nothing, so a fraction over it would mean nothing. */
   | { status: 'empty'; outlierCount: number; baselineCount: number }
@@ -85,6 +87,7 @@ export async function compareCohorts(
     differences?: CohortDifference[];
     outlierCount?: number;
     baselineCount?: number;
+    ignoredFields?: string[];
     error?: string;
     message?: string;
   };
@@ -118,5 +121,6 @@ export async function compareCohorts(
     differences: body.differences ?? [],
     outlierCount,
     baselineCount,
+    ignoredFields: body.ignoredFields ?? [],
   };
 }

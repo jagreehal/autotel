@@ -39,6 +39,8 @@ import {
   type McpToolAnnotations,
 } from './security';
 import { errorName } from './error-name.js';
+import { traceEventsHandlers } from './events';
+import { LOW_LEVEL, patchRequestHandlers } from './request-handlers';
 import {
   carryClientIdentity,
   decodeClientIdentity,
@@ -727,62 +729,21 @@ function wrapHandler<T extends (...args: any[]) => any>(
   }) as T;
 }
 
-type RequestHandler = (request: unknown, extra: unknown) => unknown;
-
-/** Low-level request methods traced, and how each names its span. */
-const LOW_LEVEL: Record<
-  string,
-  (params: Record<string, unknown> | undefined) => {
-    type: 'tool' | 'resource' | 'prompt';
-    name: string;
-    payload: unknown;
-  }
-> = {
-  'tools/call': (p) => ({
-    type: 'tool',
-    name: asString(p?.name) ?? '',
-    payload: p?.arguments,
-  }),
-  'prompts/get': (p) => ({
-    type: 'prompt',
-    name: asString(p?.name) ?? '',
-    payload: p?.arguments,
-  }),
-  'resources/read': (p) => ({
-    type: 'resource',
-    name: asString(p?.uri) ?? '',
-    payload: undefined,
-  }),
-};
-
-const lowLevelInstalled = new WeakSet<object>();
-
 /**
  * The low-level `Server` API (`setRequestHandler(CallToolRequestSchema, …)`)
  * has no `registerTool` to wrap, so its request handlers are traced instead,
  * with the same spans as a registered tool. The name comes from the request,
- * as in {@link traceMcpHandler}. Only a handler the SDK has just set is
- * wrapped: by the time another method is set, a later wrapper (task handles)
- * may sit over ours, and wrapping it again would trace one call twice.
+ * as in {@link traceMcpHandler}.
  */
 function traceLowLevelHandlers(server: unknown, config: ResolvedConfig): void {
-  const handlers = readProperty(server, '_requestHandlers');
-  const set = readProperty(server, 'setRequestHandler');
-  if (!(handlers instanceof Map) || !isFunction(set)) return;
-  // SAFETY: shape checked just above.
-  const target = server as {
-    setRequestHandler: (...args: unknown[]) => unknown;
-  };
-  if (lowLevelInstalled.has(target)) return;
-  lowLevelInstalled.add(target);
-  const map = handlers as Map<string, RequestHandler>;
-
-  const wrap = (method: string) => {
-    const raw = map.get(method);
-    const read = LOW_LEVEL[method];
-    if (!raw || !read) return;
-    map.set(method, (request, extra) => {
-      const facts = read(asRecord(readProperty(request, 'params')));
+  patchRequestHandlers(
+    server,
+    LOW_LEVEL,
+    [...LOW_LEVEL.keys()],
+    (method, raw) => (request, extra) => {
+      const facts = LOW_LEVEL.get(method)!(
+        asRecord(readProperty(request, 'params')),
+      );
       const traced = wrapHandler(
         facts.type,
         facts.name,
@@ -794,18 +755,8 @@ function traceLowLevelHandlers(server: unknown, config: ResolvedConfig): void {
         true,
       );
       return traced(facts.payload, extra);
-    });
-  };
-
-  for (const method of Object.keys(LOW_LEVEL)) wrap(method);
-  const original = target.setRequestHandler.bind(target);
-  target.setRequestHandler = (...args: unknown[]) => {
-    const before = new Map(map);
-    const result = original(...args);
-    for (const method of Object.keys(LOW_LEVEL))
-      if (map.get(method) !== before.get(method)) wrap(method);
-    return result;
-  };
+    },
+  );
 }
 
 /** What {@link traceMcpHandler} is tracing. */
@@ -902,6 +853,7 @@ export function instrumentMcpServer<T extends Record<string, any>>(
   // their facts are in context when its span starts.
   const lowLevel = !isFunction(member(server, 'registerTool'));
   if (lowLevel) traceLowLevelHandlers(server, mergedConfig);
+  traceEventsHandlers(server, mergedConfig);
   if (config)
     installTaskHandles(server, config, (handler) =>
       wrapHandler('tool', GET_MORE_TOOLS, handler, mergedConfig),

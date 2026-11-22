@@ -5,13 +5,16 @@
 import type {
   AttributeValue as OtelAttributeValue,
   Span,
+  Baggage,
   BaggageEntry,
   Context,
   Link,
 } from '@opentelemetry/api';
 import {
   context,
+  createContextKey,
   propagation,
+  ROOT_CONTEXT,
   SpanStatusCode,
   trace as otelTrace,
 } from '@opentelemetry/api';
@@ -69,23 +72,109 @@ export function getContextStorage(): AsyncLocalStorage<AsyncLocalBox<Context>> {
 }
 
 /**
- * Get the active OTel context with the latest stored baggage overlaid.
+ * Get the active OTel context with ctx's baggage writes applied.
  * Span identity always comes from the active OTel scope.
+ *
+ * ctx's setters write to the request's store, which outlives OTel scopes, so
+ * the active context can be older than a write (a parent's context restored
+ * after a child's ctx.setBaggage()) or newer (a `context.with()` entered after
+ * it: featureFlagBaggage at the edge, or an explicit override). Each context
+ * ctx enters is marked with a sequence number and the baggage it carried, and
+ * every context derived from it inherits the mark. For a key ctx wrote after
+ * the active context's mark, the active entry is stale if it is the one the
+ * mark carried (an inherited entry, or inherited absence) or one a later ctx
+ * write replaced; any other entry, or a removal, is a change made since, and
+ * wins. Everything else is the active context's.
  */
 export function getActiveContextWithBaggage(): Context {
   const activeContext = context.active();
   const stored = contextStorage.getStore()?.value;
-  if (!stored) return activeContext;
+  // SAFETY: KEY_WRITES is module-private and writeBaggage() is the only
+  // writer, always with a KeyWrites map.
+  const writes = stored?.getValue(KEY_WRITES) as KeyWrites | undefined;
+  if (!stored || !writes) return activeContext;
 
-  // The stored context exists to retain baggage updates, not span identity.
-  // A nested operation can outlive the scope in which the store was last
-  // updated, leaving its span in the stored context after OTel has restored
-  // the parent as active. Overlaying only the baggage keeps propagation state
-  // while ensuring callers always see the span from the current OTel scope.
-  const storedBaggage = propagation.getBaggage(stored);
-  return storedBaggage
-    ? propagation.setBaggage(activeContext, storedBaggage)
-    : activeContext;
+  const own = new Map(propagation.getBaggage(stored)?.getAllEntries());
+  const activeBaggage =
+    propagation.getBaggage(activeContext) ?? propagation.createBaggage();
+  // SAFETY: WRITE_MARK is module-private; writeBaggage() and
+  // contextWithBaggage() set it, always to a WriteMark.
+  const mark = activeContext.getValue(WRITE_MARK) as WriteMark | undefined;
+  let merged = activeBaggage;
+  for (const [key, write] of writes) {
+    if (mark && write.seq <= mark.seq) continue;
+    const active = rawEntry(activeBaggage, key);
+    // Stale: the entry the mark carried (or its absence), or one a ctx write
+    // replaced, which a context.with() entered before that write still holds.
+    const inherited =
+      (active !== undefined && write.stale.has(active)) ||
+      (mark ? active === rawEntry(mark.baggage, key) : active === undefined);
+    if (!inherited) continue;
+    const entry = own.get(key);
+    merged = entry ? merged.setEntry(key, entry) : merged.removeEntry(key);
+  }
+  return merged === activeBaggage
+    ? activeContext
+    : propagation.setBaggage(activeContext, merged);
+}
+
+/**
+ * The current baggage with `entries` set, for a scope autotel enters around a
+ * callback. Marked like a write: its entries date from now, so a child's
+ * ctx.setBaggage() after it reads as newer once the child returns.
+ */
+export function contextWithBaggage(entries: Record<string, string>): Context {
+  const current = getActiveContextWithBaggage();
+  let baggage = propagation.getBaggage(current) ?? propagation.createBaggage();
+  for (const [key, value] of Object.entries(entries))
+    baggage = baggage.setEntry(key, { value });
+  return propagation
+    .setBaggage(current, baggage)
+    .setValue(WRITE_MARK, { seq: ++writeSeq, baggage } satisfies WriteMark);
+}
+
+/** The entry object itself: `getEntry()` returns a copy, so identity is lost. */
+function rawEntry(baggage: Baggage, key: string): BaggageEntry | undefined {
+  return baggage.getAllEntries().find(([k]) => k === key)?.[1];
+}
+
+/** On contexts ctx's setters enter: when, and the baggage they carried. */
+const WRITE_MARK = createContextKey('autotel.baggage.write_mark');
+type WriteMark = { seq: number; baggage: Baggage };
+
+/**
+ * On the stored context: for each key ctx's setters wrote or deleted, the
+ * latest write's sequence number and the entries it replaced. Those entries
+ * identify stale values in a context entered before ctx wrote anything.
+ */
+const KEY_WRITES = createContextKey('autotel.baggage.key_writes');
+type KeyWrites = ReadonlyMap<
+  string,
+  { seq: number; stale: ReadonlySet<BaggageEntry> }
+>;
+let writeSeq = 0;
+
+/** A UTF-16 surrogate without its pair: not Unicode, and not URI-encodable. */
+export const LONE_SURROGATE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+const LONE_SURROGATES = new RegExp(LONE_SURROGATE.source, 'g');
+
+/** `text` with each lone surrogate replaced by U+FFFD. */
+export function wellFormed(text: string): string {
+  return text.replaceAll(LONE_SURROGATES, '\uFFFD');
+}
+
+/**
+ * Run `fn` with the request store ctx's baggage setters write to, opened as a
+ * run() scope so it ends with `fn`; an enclosing trace's store is reused.
+ * Without one, writes are refused rather than entered into a scope that would
+ * outlive the request.
+ */
+export function runWithTraceContextStorage<TResult>(
+  fn: () => TResult,
+): TResult {
+  if (contextStorage.getStore()) return fn();
+  return contextStorage.run({ value: context.active() }, fn);
 }
 
 /**
@@ -124,10 +213,85 @@ type ContextManagerLike = {
   _asyncLocalStorage?: { enterWith?: (ctx: Context) => void };
 };
 
-function updateActiveContext(newContext: Context): void {
-  // Update our storage first so any helper reads see the new context
-  enterOrRun(contextStorage, newContext);
+/**
+ * Apply one of ctx's baggage writes: an entry per key, `undefined` to delete.
+ *
+ * The store holds the request's own baggage, so it takes the change over what
+ * it already had: built from the merged view instead, it would keep entries a
+ * `context.with()` meant for one callback (featureFlagBaggage at the edge)
+ * after that callback ends. The active context takes the change over the
+ * merged view, so code after the write in the same scope sees everything.
+ * Both get the same entry objects, which is what identity checks compare.
+ */
+export function writeBaggage(
+  requested: Map<string, BaggageEntry | undefined>,
+): boolean {
+  // Lone surrogates become U+FFFD: the propagator URI-encodes every entry on
+  // each outgoing call, and one it cannot encode makes that call throw.
+  const changes = new Map(
+    [...requested].map(([key, entry]) => [
+      wellFormed(key),
+      entry && { ...entry, value: wellFormed(entry.value) },
+    ]),
+  );
+  const apply = (baggage: Baggage) => {
+    let next = baggage;
+    for (const [key, entry] of changes)
+      next = entry ? next.setEntry(key, entry) : next.removeEntry(key);
+    return next;
+  };
+  const store = contextStorage.getStore();
+  if (!store) {
+    // Outside an autotel trace, a write needs a scope to end with. Inside an
+    // OTel context.with() (an auto-instrumented request's span) entering the
+    // context is confined to that callback and what it starts. At the root
+    // nothing bounds it: it would reach everything later on this async chain,
+    // the next request included.
+    const active = context.active();
+    if (active === ROOT_CONTEXT) return false;
+    const baggage =
+      propagation.getBaggage(active) ?? propagation.createBaggage();
+    enterActiveContext(propagation.setBaggage(active, apply(baggage)));
+    return true;
+  }
 
+  const current = getActiveContextWithBaggage();
+  const currentBaggage =
+    propagation.getBaggage(current) ?? propagation.createBaggage();
+  const previous = store.value;
+  // A store with no baggage yet owns none: the merged view would hand it
+  // entries scoped to the active context.
+  const own = propagation.getBaggage(previous) ?? propagation.createBaggage();
+
+  const seq = ++writeSeq;
+  const writes = new Map(
+    // SAFETY: as in getActiveContextWithBaggage(): only writeBaggage() sets
+    // KEY_WRITES, always to a KeyWrites map.
+    previous.getValue(KEY_WRITES) as KeyWrites | undefined,
+  );
+  for (const key of changes.keys()) {
+    const stale = new Set(writes.get(key)?.stale);
+    for (const before of [currentBaggage, own]) {
+      const entry = rawEntry(before, key);
+      if (entry) stale.add(entry);
+    }
+    writes.set(key, { seq, stale });
+  }
+
+  // Update our storage first so any helper reads see the new context
+  store.value = propagation
+    .setBaggage(current, apply(own))
+    .setValue(KEY_WRITES, writes);
+  const entered = apply(currentBaggage);
+  enterActiveContext(
+    propagation
+      .setBaggage(current, entered)
+      .setValue(WRITE_MARK, { seq, baggage: entered } satisfies WriteMark),
+  );
+  return true;
+}
+
+function enterActiveContext(newContext: Context): void {
   // SAFETY: the ContextAPI does not expose its manager, and there is no
   // callback-free way to enter a context without it. Every member below is
   // optional and probed before use, so an API without them takes the fallback.
@@ -350,69 +514,27 @@ export function createTraceContext<
 >(span: Span): TraceContext<TBaggage> {
   const spanContext = span.spanContext();
 
-  // Store the current active context in AsyncLocalStorage so baggage setters can update it
-  // This ensures ctx.setBaggage() changes persist and are visible to OpenTelemetry operations
-  // IMPORTANT: Only initialize if not already set (preserve baggage updates from parent spans)
-  const existingStored = contextStorage.getStore()?.value;
-  if (!existingStored) {
-    const activeContext = context.active();
-    enterOrRun(contextStorage, activeContext);
-  }
-
   // Baggage helpers that always use the current active context
   // This ensures baggage operations work correctly even if context changes
   const baggageHelpers: BaggageMethods<TBaggage> = {
     getBaggage(key: string): string | undefined {
-      // Check active context first (from withBaggage, context.with, etc.)
-      // Then check stored context (from setters)
-      // This ensures both withBaggage() and ctx.setBaggage() work correctly
-      const activeCtx = context.active();
-      let baggage = propagation.getBaggage(activeCtx);
-      if (!baggage) {
-        const storedContext = contextStorage.getStore()?.value;
-        if (storedContext) {
-          baggage = propagation.getBaggage(storedContext);
-        }
-      }
+      // The same merged view nested traces and outgoing calls propagate:
+      // ctx.setBaggage() updates plus anything a later context.with() changed.
+      const baggage = propagation.getBaggage(getActiveContextWithBaggage());
       return baggage?.getEntry(key)?.value;
     },
 
     setBaggage(key: string, value: string): string {
-      // OpenTelemetry contexts are immutable, so we create a new context with updated baggage
-      // Merge stored baggage into the active context so updates never replace
-      // the current span with a span retained by an ancestor's storage scope.
-      const currentContext = getActiveContextWithBaggage();
-      const baggage =
-        propagation.getBaggage(currentContext) ?? propagation.createBaggage();
-      const updated = baggage.setEntry(key, { value });
-      const newContext = propagation.setBaggage(currentContext, updated);
-
-      updateActiveContext(newContext);
-
+      writeBaggage(new Map([[key, { value }]]));
       return value;
     },
 
     deleteBaggage(key: string): void {
-      const currentContext = getActiveContextWithBaggage();
-      const baggage = propagation.getBaggage(currentContext);
-      if (baggage) {
-        const updated = baggage.removeEntry(key);
-        const newContext = propagation.setBaggage(currentContext, updated);
-
-        updateActiveContext(newContext);
-      }
+      writeBaggage(new Map([[key, undefined]]));
     },
 
     getAllBaggage(): Map<string, BaggageEntry> {
-      // Check active context first, then stored context
-      const activeCtx = context.active();
-      let baggage = propagation.getBaggage(activeCtx);
-      if (!baggage) {
-        const storedContext = contextStorage.getStore()?.value;
-        if (storedContext) {
-          baggage = propagation.getBaggage(storedContext);
-        }
-      }
+      const baggage = propagation.getBaggage(getActiveContextWithBaggage());
       if (!baggage) {
         return new Map();
       }
@@ -430,15 +552,7 @@ export function createTraceContext<
     // only when the context declares a baggage schema; the cast bridges the
     // implementation's own signature to that conditional.
     getTypedBaggage: (<T extends UnknownRecord>(namespace?: string) => {
-      // Check active context first, then stored context
-      const activeCtx = context.active();
-      let baggage = propagation.getBaggage(activeCtx);
-      if (!baggage) {
-        const storedContext = contextStorage.getStore()?.value;
-        if (storedContext) {
-          baggage = propagation.getBaggage(storedContext);
-        }
-      }
+      const baggage = propagation.getBaggage(getActiveContextWithBaggage());
       if (!baggage) return;
 
       const prefix = namespace ? `${namespace}.` : '';
@@ -466,20 +580,11 @@ export function createTraceContext<
       namespace: string | undefined,
       value: Partial<T>,
     ) => {
-      const currentContext = getActiveContextWithBaggage();
-      let baggage =
-        propagation.getBaggage(currentContext) ?? propagation.createBaggage();
-
       const prefix = namespace ? `${namespace}.` : '';
-      for (const [key, val] of Object.entries(value)) {
-        if (val !== undefined) {
-          const baggageKey = `${prefix}${key}`;
-          baggage = baggage.setEntry(baggageKey, { value: String(val) });
-        }
-      }
-
-      const newContext = propagation.setBaggage(currentContext, baggage);
-      updateActiveContext(newContext);
+      const entries = Object.entries(value)
+        .filter(([, val]) => val !== undefined)
+        .map(([key, val]) => [`${prefix}${key}`, String(val)] as const);
+      writeBaggage(new Map(entries.map(([key, val]) => [key, { value: val }])));
     }) as TBaggage extends UnknownRecord
       ? <T extends TBaggage>(
           namespace: string | undefined,
@@ -663,17 +768,7 @@ export function defineBaggageSchema<T extends UnknownRecord>(
         }
       }
 
-      // Use the existing withBaggage helper
-      const currentContext = context.active();
-      let baggage =
-        propagation.getBaggage(currentContext) ?? propagation.createBaggage();
-
-      for (const [key, val] of Object.entries(flatBaggage)) {
-        baggage = baggage.setEntry(key, { value: val });
-      }
-
-      const newContext = propagation.setBaggage(currentContext, baggage);
-      return context.with(newContext, fn);
+      return context.with(contextWithBaggage(flatBaggage), fn);
     },
   };
 }
