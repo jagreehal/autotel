@@ -1,5 +1,12 @@
 # autotel-kafka
 
+## 1.0.8
+
+### Patch Changes
+
+- Updated dependencies [3907460]
+  - autotel@9.6.0
+
 ## 1.0.7
 
 ### Patch Changes

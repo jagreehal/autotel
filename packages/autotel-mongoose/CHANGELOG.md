@@ -1,5 +1,14 @@
 # autotel-mongoose
 
+## 32.1.3
+
+### Patch Changes
+
+- Updated dependencies [3907460]
+  - autotel@9.6.0
+  - autotel-db@0.1.1
+  - autotel-mongodb@0.1.2
+
 ## 32.1.2
 
 ### Patch Changes
