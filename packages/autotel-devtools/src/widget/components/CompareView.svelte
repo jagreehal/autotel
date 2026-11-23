@@ -34,19 +34,50 @@
   let outlierQuery = $state('duration > 500');
   let baselineQuery = $state('');
   /**
-   * Each experiment with its own arms, commonest first. Empty hides the picker.
+   * Where cohorts come from without typing: an experiment's arms, or a feature
+   * flag's variants. A flag rollout is an experiment nobody declared — the same
+   * "is the new branch worse?" question, keyed on `feature_flag.*` instead.
+   *
+   * A span holds one flag's attributes (the first it evaluated), so a flag read
+   * second on a span is only in its `feature_flag.evaluation` events, which a
+   * span query cannot see.
+   */
+  const SOURCES = [
+    {
+      kind: 'experiment',
+      group: 'Experiments',
+      armLabel: 'Arm',
+      nameField: 'experiment.name',
+      armField: 'experiment.variant',
+    },
+    {
+      kind: 'flag',
+      group: 'Feature flags',
+      armLabel: 'Variant',
+      nameField: 'feature_flag.key',
+      armField: 'feature_flag.result.variant',
+    },
+  ] as const;
+  type Source = (typeof SOURCES)[number];
+
+  /**
+   * Each experiment or flag with its own arms, commonest first. Empty hides
+   * the picker.
    *
    * Arms come paired with the experiment they ran under rather than as every
-   * `experiment.variant` in the store, so picking one experiment can never
-   * offer an arm belonging to another.
+   * variant in the store, so picking one can never offer an arm belonging to
+   * another.
    */
-  let experiments = $state<Array<{ name: string; arms: string[] }>>([]);
+  let experiments = $state<
+    Array<{ id: string; name: string; source: Source; arms: string[] }>
+  >([]);
   let selectedExperiment = $state('');
   let outlierArm = $state('');
   let baselineArm = $state('');
 
-  const armsFor = (name: string) =>
-    experiments.find((e) => e.name === name)?.arms ?? [];
+  const selected = () => experiments.find((e) => e.id === selectedExperiment);
+  const armsFor = (id: string) =>
+    experiments.find((e) => e.id === id)?.arms ?? [];
 
   function baseUrl(): string | null {
     const wsUrl = connectionUrlSignal.value;
@@ -64,14 +95,15 @@
   const literal = (value: string) =>
     `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
-  async function loadExperiments(): Promise<void> {
-    const base = baseUrl();
-    if (base === null) return;
+  async function loadSource(
+    base: string,
+    source: Source,
+  ): Promise<typeof experiments> {
     try {
       const res = await fetch(
-        `${base}/api/query/attributes?key=experiment.name&pair=experiment.variant`,
+        `${base}/api/query/attributes?key=${source.nameField}&pair=${source.armField}`,
       );
-      if (!res.ok) return;
+      if (!res.ok) return [];
       const body = (await res.json()) as {
         pairs?: Array<{ value: unknown; paired: unknown }>;
       };
@@ -84,11 +116,25 @@
         if (!arms.includes(arm)) arms.push(arm);
         byName.set(name, arms);
       }
-      experiments = [...byName].map(([name, arms]) => ({ name, arms }));
+      return [...byName].map(([name, arms]) => ({
+        id: `${source.kind}:${name}`,
+        name,
+        source,
+        arms,
+      }));
     } catch {
       // A viewer talking to a server without the endpoint keeps the picker
       // hidden and the query boxes working.
+      return [];
     }
+  }
+
+  async function loadExperiments(): Promise<void> {
+    const base = baseUrl();
+    if (base === null) return;
+    experiments = (
+      await Promise.all(SOURCES.map((source) => loadSource(base, source)))
+    ).flat();
   }
 
   $effect(() => {
@@ -103,12 +149,12 @@
    * selectable. The queries name the experiment as well as the variant, so they
    * stay correct where two experiments share a variant label.
    */
-  function useExperiment(name: string): void {
-    selectedExperiment = name;
-    const arms = armsFor(name);
+  function useExperiment(id: string): void {
+    selectedExperiment = id;
+    const arms = armsFor(id);
     outlierArm = arms[0] ?? '';
     baselineArm = arms[1] ?? '';
-    if (name !== '') mark = null;
+    if (id !== '') mark = null;
     writeQueries();
   }
 
@@ -127,13 +173,15 @@
    * for a one-arm experiment the two sides would be the same spans.
    */
   function writeQueries(): void {
-    if (selectedExperiment === '' || outlierArm === '') return;
-    const named = `experiment.name = ${literal(selectedExperiment)}`;
-    outlierQuery = `${named} AND experiment.variant = ${literal(outlierArm)}`;
+    const experiment = selected();
+    if (!experiment || outlierArm === '') return;
+    const { nameField, armField } = experiment.source;
+    const named = `${nameField} = ${literal(experiment.name)}`;
+    outlierQuery = `${named} AND ${armField} = ${literal(outlierArm)}`;
     baselineQuery =
       baselineArm === ''
-        ? `${named} AND experiment.variant != ${literal(outlierArm)}`
-        : `${named} AND experiment.variant = ${literal(baselineArm)}`;
+        ? `${named} AND ${armField} != ${literal(outlierArm)}`
+        : `${named} AND ${armField} = ${literal(baselineArm)}`;
   }
   /** Epoch ms of the marked moment, or null when comparing by query. */
   let mark = $state<number | null>(null);
@@ -182,22 +230,12 @@
 
     running = true;
     try {
-      result = await compareCohorts(
-        {
-          ...sides(),
-          // The arms are the definition of the two cohorts, so they separate
-          // them perfectly and say nothing. Ranking them first would push the
-          // finding the reader came for off the top of the list.
-          ignoreFields:
-            selectedExperiment === ''
-              ? undefined
-              : ['experiment.name', 'experiment.variant'],
-        },
-        {
-          fetch: globalThis.fetch.bind(globalThis),
-          baseUrl,
-        },
-      );
+      // The server leaves out every field the queries filter on (an arm, a
+      // status), since those separate the cohorts by construction.
+      result = await compareCohorts(sides(), {
+        fetch: globalThis.fetch.bind(globalThis),
+        baseUrl,
+      });
     } finally {
       running = false;
     }
@@ -237,22 +275,31 @@
 
     {#if experiments.length > 0}
       <label class="mb-2 block text-[11px] text-fg-muted">
-        Experiment
+        Experiment or flag
         <select
           value={selectedExperiment}
           onchange={(e) => useExperiment(e.currentTarget.value)}
           class="mt-0.5 w-full rounded border border-line bg-subtle px-2 py-1 text-xs text-fg focus:border-accent focus:outline-none"
         >
           <option value="">Compare by query instead</option>
-          {#each experiments as experiment (experiment.name)}
-            <option value={experiment.name}>{experiment.name}</option>
+          {#each SOURCES as source (source.kind)}
+            {@const options = experiments.filter(
+              (e) => e.source.kind === source.kind,
+            )}
+            {#if options.length > 0}
+              <optgroup label={source.group}>
+                {#each options as experiment (experiment.id)}
+                  <option value={experiment.id}>{experiment.name}</option>
+                {/each}
+              </optgroup>
+            {/if}
           {/each}
         </select>
       </label>
       {#if selectedExperiment !== ''}
         <div class="mb-2 grid grid-cols-2 gap-2">
           <label class="block text-[11px] text-fg-muted">
-            Arm
+            {selected()?.source.armLabel ?? 'Arm'}
             <select
               value={outlierArm}
               onchange={(e) => useOutlierArm(e.currentTarget.value)}
@@ -273,7 +320,11 @@
               }}
               class="mt-0.5 w-full rounded border border-line bg-subtle px-2 py-1 text-xs text-fg focus:border-accent focus:outline-none"
             >
-              <option value="">Every other arm</option>
+              <option value=""
+                >Every other {(
+                  selected()?.source.armLabel ?? 'Arm'
+                ).toLowerCase()}</option
+              >
               {#each armsFor(selectedExperiment).filter((a) => a !== outlierArm) as arm (arm)}
                 <option value={arm}>{arm}</option>
               {/each}
@@ -333,6 +384,12 @@
           {result.outlierCount} spans against {result.baselineCount}. A
           hypothesis to check against individual traces, not a conclusion.
         </p>
+        {#if result.ignoredFields.length > 0}
+          <p class="mb-2 text-[11px] text-fg-subtle">
+            Not ranked, because the queries pick the spans by them:
+            <span class="font-mono">{result.ignoredFields.join(', ')}</span>
+          </p>
+        {/if}
         <table class="w-full text-left text-xs">
           <thead class="text-[11px] uppercase tracking-wide text-fg-muted">
             <tr>

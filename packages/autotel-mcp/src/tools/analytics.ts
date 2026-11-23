@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
-import type { LogRecord, SpanRecord, SpanSearchQuery } from '../types';
+import type { LogRecord, SpanSearchQuery } from '../types';
 import {
   READ_ONLY,
   respondSafe,
@@ -18,42 +18,12 @@ import {
 } from '../modules/span-aggregate';
 import { resolveTimeRange } from '../modules/time-range';
 
-/**
- * Samples the whole window in four slices, so an early spike or version
- * change shows up alongside the newest records. Four keeps the request count
- * inside Datadog's spans limit of five a minute.
- */
-const SLICES = 4;
-const PER_SLICE = 250;
+import {
+  sampleAcrossWindow,
+  sampleSpans,
+  queryWindow,
+} from '../modules/window-sample';
 
-/**
- * Adjacent slices share their boundary instant, and a backend with inclusive
- * bounds returns a record sitting on it from both. Count each record by the
- * slice that returned the most copies of it: a boundary record seen once in
- * each slice counts once, while identical records within one slice (a log
- * line repeated in the same millisecond) all still count.
- */
-export function mergeSlices<T>(
-  slices: readonly (readonly T[])[],
-  identity: (item: T) => string,
-): T[] {
-  const kept = new Map<string, T[]>();
-  for (const slice of slices) {
-    const local = new Map<string, T[]>();
-    for (const item of slice) {
-      const key = identity(item);
-      const list = local.get(key);
-      if (list) list.push(item);
-      else local.set(key, [item]);
-    }
-    for (const [key, items] of local) {
-      if (items.length > (kept.get(key)?.length ?? 0)) kept.set(key, items);
-    }
-  }
-  return Array.from(kept.values()).flat();
-}
-
-const spanIdentity = (span: SpanRecord) => `${span.traceId}:${span.spanId}`;
 const logIdentity = (log: LogRecord) =>
   JSON.stringify([
     log.timestampUnixMs,
@@ -63,62 +33,6 @@ const logIdentity = (log: LogRecord) =>
     log.severityText,
     log.body,
   ]);
-
-export async function sampleAcrossWindow<T>(
-  startMs: number,
-  endMs: number,
-  identity: (item: T) => string,
-  fetch: (
-    from: number,
-    to: number,
-    limit: number,
-  ) => Promise<{ items: T[]; truncated?: boolean }>,
-): Promise<{ items: T[]; capped: boolean }> {
-  const width = (endMs - startMs) / SLICES;
-  const slices = await Promise.all(
-    Array.from({ length: SLICES }, (_, index) =>
-      fetch(
-        Math.round(startMs + index * width),
-        Math.round(startMs + (index + 1) * width),
-        PER_SLICE,
-      ),
-    ),
-  );
-  return {
-    items: mergeSlices(
-      slices.map((slice) => slice.items),
-      identity,
-    ),
-    capped: slices.some(
-      (slice) => slice.truncated ?? slice.items.length >= PER_SLICE,
-    ),
-  };
-}
-
-function window(query: { startTimeUnixMs?: number; endTimeUnixMs?: number }) {
-  const endMs = query.endTimeUnixMs ?? Date.now();
-  return { startMs: query.startTimeUnixMs ?? endMs - 60 * 60_000, endMs };
-}
-
-async function sampleSpans(
-  backend: TelemetryBackend,
-  query: SpanSearchQuery,
-): Promise<{ items: SpanRecord[]; capped: boolean }> {
-  const { startMs, endMs } = window(query);
-  return sampleAcrossWindow(
-    startMs,
-    endMs,
-    spanIdentity,
-    async (from, to, limit) => {
-      return backend.searchSpans({
-        ...query,
-        startTimeUnixMs: from,
-        endTimeUnixMs: to,
-        limit,
-      });
-    },
-  );
-}
 
 const SAMPLE_HINT =
   'Computed from a sample: up to 250 spans from each quarter of the window, and at least one quarter hit that cap (counted before any tag or duration filter), so older matches may be missing. Narrow the window or add filters (serviceName, operationName, errorOnly) for numbers closer to exact.';
@@ -201,7 +115,7 @@ function registerSpanAnalytics(
     'what_changed',
     {
       description:
-        'Deployments as the spans record them: every service whose service.version changed inside the window, when, and its error rate and p95 latency before and after. Use first when something broke recently: a regression that lines up with a version change is usually the answer. Needs no deploy events, so it works on every backend; services that report no version are listed as unversioned.',
+        'Deployments as the spans record them: every service whose service.version changed inside the window, when, and its error rate and p95 latency before and after. Use first when something broke recently: a regression that lines up with a version change is usually the answer. Needs no deploy events, so it works on every backend; services that report no version are listed as unversioned. flagChanges does the same for feature flags: every flag whose feature_flag.version changed (a rollout widened, a kill switch flipped), per service that evaluated it, with error rate and p95 before and after. With feature flags behaviour changes without a deploy, so check flagChanges whenever changes is empty.',
       annotations: READ_ONLY,
       inputSchema: z.object({
         serviceName: z.string().min(1).optional(),
@@ -228,21 +142,38 @@ function registerSpanAnalytics(
           lookbackMinutes: input.lookbackMinutes,
           defaultLookbackMinutes: 24 * 60,
         });
-        const sample = await sampleSpans(backend, {
-          ...(input.serviceName ? { service: input.serviceName } : {}),
+        const query: SpanSearchQuery = {
           startTimeUnixMs: range.startTimeUnixMs,
           endTimeUnixMs: range.endTimeUnixMs,
-        });
-        const result = whatChanged(sample.items);
-        return {
-          sampledSpans: sample.items.length,
-          ...result,
-          ...(result.unversioned.length > 0
-            ? {
-                hint: `${result.unversioned.join(', ')} report no service.version, so a deploy of them cannot be seen. Set the version in the SDK resource (autotel init({ version }) or OTEL_RESOURCE_ATTRIBUTES=service.version=...).`,
-              }
-            : {}),
         };
+        if (input.serviceName) query.service = input.serviceName;
+        const sample = await sampleSpans(
+          backend,
+          query,
+          // A change is a boundary between two versions, and a capped quarter
+          // returns only the side after it. Refining costs up to 16 more
+          // requests, so it is skipped on backends with aggregateSpans:
+          // Datadog is the one, and its 5 req/min spans budget cannot afford
+          // them.
+          { refine: backend.aggregateSpans === undefined },
+        );
+        const result = whatChanged(sample.items);
+        const hints = [
+          ...(result.unversioned.length > 0
+            ? [
+                `${result.unversioned.join(', ')} report no service.version, so a deploy of them cannot be seen. Set the version in the SDK resource (autotel init({ version }) or OTEL_RESOURCE_ATTRIBUTES=service.version=...).`,
+              ]
+            : []),
+          ...(sample.capped
+            ? [
+                'Computed from a sample that hit its cap, so a version seen only briefly, or the side of a change before it, may be missing. Narrow the window around the time you suspect for a complete answer.',
+              ]
+            : []),
+        ];
+        const answer: typeof result & { sampledSpans: number; hint?: string } =
+          { sampledSpans: sample.items.length, ...result };
+        if (hints.length > 0) answer.hint = hints.join(' ');
+        return answer;
       }, 'what_changed'),
   );
 }
@@ -290,7 +221,7 @@ function registerLogAnalytics(
     }) =>
       respondSafe(async () => {
         const query = toLogSearchQuery(input);
-        const { startMs, endMs } = window(query);
+        const { startMs, endMs } = queryWindow(query);
         const sample = await sampleAcrossWindow<LogRecord>(
           startMs,
           endMs,

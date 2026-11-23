@@ -7,6 +7,8 @@ import { loadConfig, type AppConfig, type Env } from './config';
 import type { TelemetryBackend } from './backends/telemetry';
 import { createBackend } from './backends/factory';
 import { registerTools } from './tools/index';
+import { registerTelemetryEvents } from './tools/events';
+import { EVENTS_EXTENSION } from './modules/telemetry-events';
 import {
   probeSignalAvailability,
   type RuntimeSignalAvailability,
@@ -80,7 +82,11 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     const server = new McpServer(
       { name: 'autotel-mcp', version: VERSION },
       {
-        capabilities: { tools: {}, resources: {} },
+        capabilities: {
+          tools: {},
+          resources: {},
+          extensions: { [EVENTS_EXTENSION]: {} },
+        },
         cacheHints: {
           'tools/list': CATALOG_CACHE_HINT,
           'resources/list': CATALOG_CACHE_HINT,
@@ -92,6 +98,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       toolsets: config.toolsets,
       omitTools: config.omitTools,
     });
+    registerTelemetryEvents(server, backend);
     return server;
   };
 

@@ -25,6 +25,7 @@ import { handleIssueRoutes } from './issues-http';
 import { readSourceWindow } from './source-file';
 import type { DevtoolsServer } from './server';
 import { joinCoverage, type MapRoute } from './coverage/coverage';
+import { cohortDefinitionFields } from './cohort-fields';
 
 type OtlpSignal = 'traces' | 'logs' | 'metrics';
 
@@ -695,15 +696,26 @@ export function attachDevtoolsRoutes(
           query: body.baseline?.query ?? '',
           window: body.baseline?.window,
         });
+        const ignoredFields = [
+          ...new Set([
+            ...(body.ignoreFields ?? []),
+            ...cohortDefinitionFields(
+              body.outlier?.query ?? '',
+              body.baseline?.query ?? '',
+            ),
+          ]),
+        ];
         sendJson(res, 200, {
           differences: compareCohorts({
             outlier,
             baseline,
-            ignoreFields: body.ignoreFields,
+            ignoreFields: ignoredFields,
             limit: body.limit,
           }),
           outlierCount: outlier.length,
           baselineCount: baseline.length,
+          // Said out loud, so a field missing from the ranking is explained.
+          ignoredFields,
         });
       } catch (e) {
         sendJson(res, 400, {

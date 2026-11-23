@@ -141,6 +141,27 @@ describe('DatadogBackend', () => {
     expect(trace.spans[0]!.tags.env).toBe('prod');
   });
 
+  // Traces come from a page of spans: a full page can hold fewer traces than
+  // asked for and still have left some out.
+  it('says truncated when the span page filled, even with fewer traces than the limit', async () => {
+    const span = searchResponse.data[0]!;
+    installFetch(
+      respond({
+        data: Array.from({ length: 40 }, (_, index) => ({
+          ...span,
+          id: `ev-${index}`,
+          attributes: { ...span.attributes, span_id: `s-${index}` },
+        })),
+      }),
+    );
+    const result = await backend().searchTraces({ limit: 2 });
+    expect(result.items).toHaveLength(1);
+    expect(result.truncated).toBe(true);
+
+    installFetch(respond(searchResponse));
+    expect((await backend().searchTraces({ limit: 10 })).truncated).toBe(false);
+  });
+
   it('converts nanosecond start and duration into ms', async () => {
     installFetch(respond(searchResponse));
 
@@ -502,6 +523,70 @@ describe('DatadogBackend', () => {
     const result = await backend().searchTraces({ limit: 5 });
     expect(result.items.map((t) => t.traceId)).toEqual(['big', 'small']);
     expect(result.items.every((t) => t.truncated)).toBe(true);
+  });
+
+  it('keeps the matched error span when a full hydration page omits it', async () => {
+    const errorSpan = {
+      attributes: {
+        trace_id: 'failing',
+        span_id: 'err',
+        service: 'api',
+        status: 'error',
+      },
+    };
+    const healthy = Array.from({ length: 1000 }, (_, i) => ({
+      attributes: {
+        trace_id: 'failing',
+        span_id: `ok${i}`,
+        service: 'api',
+        status: 'ok',
+      },
+    }));
+    const page = (data: unknown[]) => ({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ data }),
+    });
+    installFetch(
+      vi
+        .fn()
+        .mockResolvedValueOnce(page([errorSpan]))
+        .mockResolvedValueOnce(page(healthy)),
+    );
+
+    const result = await backend().searchTraces({ hasError: true, limit: 5 });
+    expect(result.items.map((t) => t.traceId)).toEqual(['failing']);
+    expect(result.items[0]!.spans.some((s) => s.hasError)).toBe(true);
+    expect(result.items[0]!.truncated).toBe(true);
+    expect(result.truncated).toBe(true);
+  });
+
+  it('keeps matched spans without span_id when hydration has one too', async () => {
+    const errorSpan = {
+      id: 'ev-err',
+      attributes: { trace_id: 'failing', service: 'api', status: 'error' },
+    };
+    const healthy = Array.from({ length: 1000 }, (_, i) => ({
+      id: `ev-ok${i}`,
+      attributes: { trace_id: 'failing', service: 'api', status: 'ok' },
+    }));
+    const page = (data: unknown[]) => ({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ data }),
+    });
+    installFetch(
+      vi
+        .fn()
+        .mockResolvedValueOnce(page([errorSpan]))
+        .mockResolvedValueOnce(page(healthy)),
+    );
+
+    const result = await backend().searchTraces({ hasError: true, limit: 5 });
+    expect(result.items.map((t) => t.traceId)).toEqual(['failing']);
+    expect(result.items[0]!.spans.some((s) => s.hasError)).toBe(true);
   });
 
   it('searches logs and maps OTLP trace correlation', async () => {

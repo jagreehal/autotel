@@ -84,6 +84,22 @@ The `_meta` keys are the bare `traceparent` / `tracestate` / `baggage` names,
 NOT the reserved `io.modelcontextprotocol/*` envelope namespace — that is what
 lets them survive the v2 SDK's envelope lift.
 
+## MCP Events
+
+`instrumentMcpServer` and `instrumentMcpClient` trace MCP Events (SEP-3415)
+with no Events API in the SDK. Register `events/list`, `events/poll`,
+`events/subscribe` and `events/unsubscribe` with `setRequestHandler` on a
+low-level `Server` or on an `McpServer`'s `.server`, and each call gets a
+`{method} {event name}` span. A poll records `mcp.event.count`,
+`mcp.event.truncated` and `mcp.event.has_more`. Each pushed occurrence gets a
+`send {event name}` producer span that writes its trace context into the
+occurrence's `_meta`.
+
+On the client, a `notifications/events/event` handler runs inside a
+`process {event name}` consumer span. For polled or webhook occurrences, wrap
+your reaction in `processEvent(event, react, { delivery })`. `process` spans
+link to the trace in the occurrence's `_meta` and start their own trace.
+
 ## Protocol eras
 
 `2026-07-28` dropped the `initialize` handshake (SEP-2575) and the

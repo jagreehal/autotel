@@ -78,6 +78,20 @@ export interface LoadIssuesResult {
   issues: Issue[];
   /** Where the answer came from: stored issue state, or grouped just now. */
   source: 'stored' | 'computed';
+  /**
+   * Computed from searches that hit their limit, or from traces the backend
+   * returned incomplete, so occurrences (and the issues they would open) may
+   * be missing. Never set for stored issues.
+   */
+  capped?: boolean;
+}
+
+/** A search that filled its page, so it may have left matches out. */
+function full(
+  result: { items: unknown[]; truncated?: boolean },
+  limit: number,
+): boolean {
+  return result.truncated ?? result.items.length >= limit;
 }
 
 export async function loadIssues(
@@ -99,11 +113,13 @@ export async function loadIssues(
   if (stored) return { issues: stored.filter(wanted), source: 'stored' };
 
   const range = { startTimeUnixMs: start, endTimeUnixMs: end };
+  const TRACE_LIMIT = 500;
+  const LOG_LIMIT = 1000;
   const [failed, withExceptions, logs] = await Promise.all([
     backend.searchTraces({
       service: query.service,
       hasError: true,
-      limit: 500,
+      limit: TRACE_LIMIT,
       ...range,
     }),
     // Successful traces that still recorded an exception: handled errors
@@ -113,14 +129,14 @@ export async function loadIssues(
       .searchTraces({
         service: query.service,
         filters: [{ field: 'exception.type', operator: 'exists' }],
-        limit: 500,
+        limit: TRACE_LIMIT,
         ...range,
       })
       .catch(() => ({ items: [] as TraceRecord[] })),
     backend.capabilities().logs === 'available'
       ? backend.searchLogs({
           serviceName: query.service,
-          limit: 1000,
+          limit: LOG_LIMIT,
           ...range,
         })
       : Promise.resolve({ items: [] as LogRecord[] }),
@@ -137,6 +153,12 @@ export async function loadIssues(
       quietMs,
     }).filter(wanted),
     source: 'computed',
+    capped:
+      full(failed, TRACE_LIMIT) ||
+      full(withExceptions, TRACE_LIMIT) ||
+      full(logs, LOG_LIMIT) ||
+      // A trace missing spans may be missing the one that recorded the error.
+      traces.some((trace) => trace.truncated === true),
   };
 }
 

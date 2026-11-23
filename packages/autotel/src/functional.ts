@@ -46,6 +46,7 @@ import type { TraceContext } from './trace-context';
 import {
   createTraceContext,
   getActiveContextWithBaggage,
+  contextWithBaggage,
   getContextStorage,
   markSpanOk,
 } from './trace-context';
@@ -1022,19 +1023,8 @@ export function withBaggage<T = unknown>(
   options: WithBaggageOptions<T>,
 ): T | Promise<T> {
   const { baggage: baggageEntries, fn } = options;
-  const currentContext = context.active();
-
-  // Get existing baggage or create new
-  let updatedBaggage =
-    propagation.getBaggage(currentContext) ?? propagation.createBaggage();
-
-  // Set all baggage entries
-  for (const [key, value] of Object.entries(baggageEntries)) {
-    updatedBaggage = updatedBaggage.setEntry(key, { value });
-  }
-
-  // Create new context with updated baggage
-  const newContext = propagation.setBaggage(currentContext, updatedBaggage);
+  const newContext = contextWithBaggage(baggageEntries);
+  const updatedBaggage = propagation.getBaggage(newContext)!;
 
   // Sync contextStorage so nested traces (via getActiveContextWithBaggage) see the baggage.
   // Use run() instead of enterWith() to properly scope the context changes.

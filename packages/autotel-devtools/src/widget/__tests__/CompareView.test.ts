@@ -161,13 +161,21 @@ describe('CompareView — experiment cohorts', () => {
   /** One round trip: every experiment with its own arms, commonest first. */
   function stubPairs(
     pairs: Array<{ value: string; paired: string; count: number }>,
+    flagPairs: Array<{ value: string; paired: string; count: number }> = [],
   ) {
     const fetchFn = vi.fn(
-      async () =>
-        new Response(JSON.stringify({ pairs }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
+      async (input: RequestInfo | URL) =>
+        new Response(
+          JSON.stringify({
+            pairs: String(input).includes('key=feature_flag.key')
+              ? flagPairs
+              : pairs,
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
     );
     globalThis.fetch = fetchFn as unknown as typeof fetch;
     return fetchFn;
@@ -181,13 +189,17 @@ describe('CompareView — experiment cohorts', () => {
 
     render(CompareView);
 
-    const picker = await screen.findByLabelText('Experiment');
-    await fireEvent.change(picker, { target: { value: 'checkout-pricing' } });
+    const picker = await screen.findByLabelText('Experiment or flag');
+    await fireEvent.change(picker, {
+      target: { value: 'experiment:checkout-pricing' },
+    });
 
     await waitFor(() => {
+      // SAFETY: both labels name the view's query <input> elements.
       const outlier = screen.getByLabelText(
         /Investigating/,
       ) as HTMLInputElement;
+      // SAFETY: as above.
       const baseline = screen.getByLabelText(
         /Compared with/,
       ) as HTMLInputElement;
@@ -209,8 +221,10 @@ describe('CompareView — experiment cohorts', () => {
 
     render(CompareView);
 
-    const picker = await screen.findByLabelText('Experiment');
-    await fireEvent.change(picker, { target: { value: 'checkout-pricing' } });
+    const picker = await screen.findByLabelText('Experiment or flag');
+    await fireEvent.change(picker, {
+      target: { value: 'experiment:checkout-pricing' },
+    });
 
     // `checkout-pricing` ran one arm. Filling the baseline from the commonest
     // variant in the store would name `reranked`, a cohort that cannot match.
@@ -234,8 +248,8 @@ describe('CompareView — experiment cohorts', () => {
     ]);
 
     render(CompareView);
-    await fireEvent.change(await screen.findByLabelText('Experiment'), {
-      target: { value: 'ranking' },
+    await fireEvent.change(await screen.findByLabelText('Experiment or flag'), {
+      target: { value: 'experiment:ranking' },
     });
 
     // Comparing an arm against a group that contains it dilutes the contrast,
@@ -263,46 +277,38 @@ describe('CompareView — experiment cohorts', () => {
     });
   });
 
-  it('ignores the arm attributes, which define the cohorts and would rank first', async () => {
-    let compareBody: Record<string, unknown> | null = null;
-    const fetchFn = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input).includes('/api/query/attributes')) {
-          return new Response(
-            JSON.stringify({
-              pairs: [
-                { value: 'ranking', paired: 'a', count: 2 },
-                { value: 'ranking', paired: 'b', count: 1 },
-              ],
-            }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
-          );
-        }
-        compareBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-        return new Response(
-          JSON.stringify({
-            differences: [],
-            outlierCount: 1,
-            baselineCount: 1,
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      },
+  it('offers the variants of a feature flag as cohorts, like the arms of an experiment', async () => {
+    stubPairs(
+      [],
+      [
+        { value: 'pricing-engine', paired: 'control', count: 9 },
+        { value: 'pricing-engine', paired: 'v2', count: 3 },
+      ],
     );
-    globalThis.fetch = fetchFn as unknown as typeof fetch;
 
     render(CompareView);
-    await fireEvent.change(await screen.findByLabelText('Experiment'), {
-      target: { value: 'ranking' },
+    await fireEvent.change(await screen.findByLabelText('Experiment or flag'), {
+      target: { value: 'flag:pricing-engine' },
     });
-    await fireEvent.click(screen.getByRole('button', { name: /compare/i }));
+    await fireEvent.change(await screen.findByLabelText('Variant'), {
+      target: { value: 'v2' },
+    });
 
     await waitFor(() => {
-      expect(compareBody).not.toBeNull();
-      expect(compareBody?.ignoreFields).toEqual([
-        'experiment.name',
-        'experiment.variant',
-      ]);
+      // SAFETY: both labels name the view's query <input> elements.
+      const outlier = screen.getByLabelText(
+        /Investigating/,
+      ) as HTMLInputElement;
+      // SAFETY: as above.
+      const baseline = screen.getByLabelText(
+        /Compared with/,
+      ) as HTMLInputElement;
+      expect(outlier.value).toBe(
+        'feature_flag.key = "pricing-engine" AND feature_flag.result.variant = "v2"',
+      );
+      expect(baseline.value).toBe(
+        'feature_flag.key = "pricing-engine" AND feature_flag.result.variant != "v2"',
+      );
     });
   });
 
@@ -315,8 +321,8 @@ describe('CompareView — experiment cohorts', () => {
 
     render(CompareView);
 
-    await fireEvent.change(await screen.findByLabelText('Experiment'), {
-      target: { value: 'ranking' },
+    await fireEvent.change(await screen.findByLabelText('Experiment or flag'), {
+      target: { value: 'experiment:ranking' },
     });
     await fireEvent.change(await screen.findByLabelText('Against'), {
       target: { value: 'c' },
@@ -340,8 +346,8 @@ describe('CompareView — experiment cohorts', () => {
 
     render(CompareView);
 
-    await fireEvent.change(await screen.findByLabelText('Experiment'), {
-      target: { value: 'pricing "vip"' },
+    await fireEvent.change(await screen.findByLabelText('Experiment or flag'), {
+      target: { value: 'experiment:pricing "vip"' },
     });
 
     await waitFor(() => {

@@ -13,6 +13,7 @@ import { createMcpHandler } from '@modelcontextprotocol/server';
 import { createApp, MCP_PROTOCOL_VERSION, type App } from '../src/app';
 import { MCP_APP_MIME_TYPE, TRACE_VIEW_URI } from '../src/apps/trace-view';
 import type { AddressInfo } from 'node:net';
+import { z } from 'zod';
 
 /**
  * The wire, end to end, against a real client pinned to 2026-07-28.
@@ -130,6 +131,50 @@ describe('MCP 2026-07-28', () => {
     const [view] = contents as { mimeType?: string; text?: string }[];
     expect(view?.mimeType).toBe(MCP_APP_MIME_TYPE);
     expect(view?.text).toMatch(/^<!doctype html>.*<script>/s);
+
+    await client.close();
+  });
+
+  it('offers telemetry as MCP Events, by poll', async () => {
+    const client = await connect();
+    expect(
+      client.getServerCapabilities()?.extensions?.[
+        'io.modelcontextprotocol/events'
+      ],
+    ).toEqual({});
+
+    // SAFETY: the SDK validated the response against the schema passed here.
+    const listed = (await client.request(
+      { method: 'events/list', params: {} },
+      z.looseObject({ events: z.array(z.looseObject({ name: z.string() })) }),
+    )) as { events: Array<{ name: string; delivery: string[] }> };
+    expect(listed.events.map((e) => [e.name, e.delivery])).toEqual([
+      ['autotel.issue.opened', ['poll']],
+      ['autotel.deploy.detected', ['poll']],
+    ]);
+
+    const PollResult = z.looseObject({
+      events: z.array(z.unknown()),
+      cursor: z.string(),
+      nextPollMs: z.number(),
+    });
+    const fresh = await client.request(
+      {
+        method: 'events/poll',
+        params: { name: 'autotel.issue.opened', cursor: null },
+      },
+      PollResult,
+    );
+    expect(fresh).toMatchObject({ events: [], nextPollMs: 60_000 });
+    // Reading the backend is covered in telemetry-events.test.ts; this
+    // suite's fixture backend has no file to read.
+
+    await expect(
+      client.request(
+        { method: 'events/poll', params: { name: 'made.up', cursor: null } },
+        PollResult,
+      ),
+    ).rejects.toMatchObject({ code: -32_023 });
 
     await client.close();
   });

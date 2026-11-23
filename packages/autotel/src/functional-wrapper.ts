@@ -38,7 +38,7 @@ import { getEventQueue } from './track';
 import {
   createTraceContext,
   getActiveContextWithBaggage,
-  getContextStorage,
+  runWithTraceContextStorage,
   explicitSpanStatus,
   type TraceContext,
 } from './trace-context';
@@ -440,12 +440,6 @@ function createRootTelemetryFlusher(
       );
     }
   };
-}
-
-function runWithTraceContextStorage<TResult>(fn: () => TResult): TResult {
-  const storage = getContextStorage();
-  if (storage.getStore()) return fn();
-  return storage.run({ value: context.active() }, fn);
 }
 
 /** Used when neither the wrapper nor `init()` chose a sampler. */

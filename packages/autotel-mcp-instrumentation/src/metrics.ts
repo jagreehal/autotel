@@ -78,3 +78,67 @@ function getSecurityEvents(): Counter {
 export function recordSecurityEvent(attrs: Attributes): void {
   getSecurityEvents().add(1, attrs);
 }
+
+/** Create an instrument on first use, so a process without a meter pays nothing. */
+function lazily<T>(create: () => T): () => T {
+  let instrument: T | undefined;
+  return () => (instrument ??= create());
+}
+
+const eventCounter = (name: string, description: string) =>
+  lazily(() =>
+    metrics
+      .getMeter('autotel-mcp')
+      .createCounter(name, { description, unit: '{event}' }),
+  );
+
+const eventsDelivered = eventCounter(
+  MCP_METRICS.SERVER_EVENT_DELIVERED,
+  'MCP event occurrences delivered by a server',
+);
+const eventsReceived = eventCounter(
+  MCP_METRICS.CLIENT_EVENT_RECEIVED,
+  'MCP event occurrences received by a client',
+);
+const eventGaps = eventCounter(
+  MCP_METRICS.CLIENT_EVENT_GAPS,
+  'MCP event receipts that reported skipped events',
+);
+const subscriptionsTerminated = eventCounter(
+  MCP_METRICS.CLIENT_EVENT_TERMINATED,
+  'MCP event subscriptions terminated by the server',
+);
+const eventLag = lazily(() =>
+  metrics
+    .getMeter('autotel-mcp')
+    .createHistogram(MCP_METRICS.CLIENT_EVENT_LAG, {
+      description:
+        'Seconds from when an MCP event occurred to when the client received it',
+      unit: 's',
+      advice: { explicitBucketBoundaries: MCP_DURATION_BUCKETS },
+    }),
+);
+
+/** Occurrences a server delivered (poll results and pushed notifications). */
+export function recordEventsDelivered(count: number, attrs: Attributes): void {
+  if (count > 0) eventsDelivered().add(count, attrs);
+}
+
+/** One occurrence received, and how late it arrived. */
+export function recordEventReceived(
+  lagS: number | undefined,
+  attrs: Attributes,
+): void {
+  eventsReceived().add(1, attrs);
+  if (lagS !== undefined) eventLag().record(lagS, attrs);
+}
+
+/** A receipt reported `truncated: true`. */
+export function recordEventGap(attrs: Attributes): void {
+  eventGaps().add(1, attrs);
+}
+
+/** The server ended a subscription. */
+export function recordSubscriptionTerminated(attrs: Attributes): void {
+  subscriptionsTerminated().add(1, attrs);
+}

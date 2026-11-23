@@ -90,6 +90,13 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
 });
 
+/** A backend with only the methods a test's code path calls. */
+function fakeBackend(parts: Partial<TelemetryBackend>): TelemetryBackend {
+  // SAFETY: loadIssues reaches only `capabilities` and the searches each test
+  // provides; a missing method would throw, failing that test loudly.
+  return parts as TelemetryBackend;
+}
+
 describe('occurrencesOf (autotel-mcp records → shared core)', () => {
   it('one issue per bug, the throw site not the 500, identity from the root', () => {
     const [issue, ...rest] = groupOccurrences(
@@ -128,7 +135,7 @@ describe('occurrencesOf (autotel-mcp records → shared core)', () => {
 describe('loadIssues', () => {
   it('groups from traces and logs when the backend keeps no issue state', async () => {
     const now = Date.now();
-    const backend = {
+    const backend = fakeBackend({
       capabilities: () => ({
         traces: 'available',
         metrics: 'available',
@@ -149,18 +156,60 @@ describe('loadIssues', () => {
         ],
         totalCount: 1,
       }),
-    } as unknown as TelemetryBackend;
+    });
     const result = await loadIssues(backend, {
       lookbackMinutes: 60,
       quietMinutes: 60,
       nowUnixMs: now,
     });
     expect(result.source).toBe('computed');
+    expect(result.capped).toBe(false);
     // Equal counts: newest first.
     expect(result.issues.map((i) => [i.source, i.status])).toEqual([
       ['error_log', 'active'],
       ['exception', 'active'],
     ]);
+  });
+
+  // A search that filled its page may have left out an issue's first occurrence.
+  it('says capped when a search hit its limit', async () => {
+    const backend = fakeBackend({
+      capabilities: () => ({
+        traces: 'available',
+        metrics: 'unsupported',
+        logs: 'unsupported',
+      }),
+      searchTraces: async () => ({ items: [], totalCount: 0, truncated: true }),
+    });
+    const result = await loadIssues(backend, {
+      lookbackMinutes: 60,
+      quietMinutes: 60,
+    });
+    expect(result.capped).toBe(true);
+  });
+
+  // Datadog marks a trace incomplete when hydrating it filled the page, while
+  // the search itself fitted.
+  it('says capped when a trace came back missing spans', async () => {
+    const now = Date.now();
+    const backend = fakeBackend({
+      capabilities: () => ({
+        traces: 'available',
+        metrics: 'unsupported',
+        logs: 'unsupported',
+      }),
+      searchTraces: async () => ({
+        items: [{ ...failingRequest('x', now - 1000, 'u'), truncated: true }],
+        totalCount: 1,
+        truncated: false,
+      }),
+    });
+    const result = await loadIssues(backend, {
+      lookbackMinutes: 60,
+      quietMinutes: 60,
+      nowUnixMs: now,
+    });
+    expect(result.capped).toBe(true);
   });
 
   it('reads stored issues, with status, from a real autotel-devtools', async () => {
@@ -430,7 +479,7 @@ describe('createIssueWatcher', () => {
     let traces = [1, 2, 3, 4, 5, 6].map((n) =>
       failingRequest(`t${n}`, Date.now() - 1000 - n, 'u'),
     );
-    const backend = {
+    const backend = fakeBackend({
       capabilities: () => ({
         traces: 'available',
         metrics: 'available',
@@ -442,7 +491,7 @@ describe('createIssueWatcher', () => {
         metrics: [],
         logs: [],
       }),
-    } as unknown as TelemetryBackend;
+    });
     const sent: string[] = [];
     const options = {
       backend,
@@ -554,7 +603,7 @@ describe('loadIssues finds failures in successful traces', () => {
         body: JSON.stringify(okSpan(traceId, type, message)),
       });
     }
-    const backend = {
+    const backend = fakeBackend({
       capabilities: () => ({
         traces: 'available',
         metrics: 'available',
@@ -562,7 +611,7 @@ describe('loadIssues finds failures in successful traces', () => {
       }),
       searchTraces: (query: Parameters<CollectorStore['searchTraces']>[0]) =>
         store.searchTraces(query),
-    } as unknown as TelemetryBackend;
+    });
 
     const { issues } = await loadIssues(backend, {
       lookbackMinutes: 60,
@@ -688,7 +737,7 @@ describe('createIssueWatcher retries what it could not send', () => {
       failingRequest(`r${n}`, Date.now() - n, 'u'),
     );
     let lookups = 0;
-    const backend = {
+    const backend = fakeBackend({
       capabilities: () => ({
         traces: 'available',
         metrics: 'available',
@@ -700,7 +749,7 @@ describe('createIssueWatcher retries what it could not send', () => {
         if (lookups === 1) throw new Error('backend timeout');
         return { trace: null, metrics: [], logs: [] };
       },
-    } as unknown as TelemetryBackend;
+    });
     const sent: string[] = [];
     const watcher = createIssueWatcher({
       backend,

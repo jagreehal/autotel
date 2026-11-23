@@ -31,6 +31,16 @@
 import { trace, type Span } from '@opentelemetry/api';
 import { emitOtelEvent } from './otel-event';
 
+export {
+  FEATURE_FLAG_BAGGAGE_KEY,
+  FeatureFlagBaggageError,
+  featureFlagBaggage,
+  featureFlagBaggageProvider,
+  type BaggageFlagProvider,
+  type BaggageFlagResolution,
+  type CarriedFlagEvaluation,
+} from './feature-flags-baggage';
+
 /** Canonical `feature_flag.*` attribute keys. */
 export const FEATURE_FLAG = {
   KEY: 'feature_flag.key',

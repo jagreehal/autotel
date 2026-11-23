@@ -498,6 +498,76 @@ instrumentMcpServer(server, {
 
 On a stateless 2025-era Streamable HTTP server (`sessionIdGenerator: undefined`, a fresh server per request), the client names itself only on `initialize`. The `initialize` answer carries an opaque `Mcp-Session-Id` (`mcpci1.…`) holding the reported name and version; the client sends it back on every request, a stateless transport does not validate it, and each span records `mcp.client.name` / `mcp.client.version`. It is not recorded as `mcp.session.id`. A transport that issues its own session ids is left alone. Client-reported, never a credential. `statelessClientIdentity: false` turns it off.
 
+## MCP Events
+
+[MCP Events](https://modelcontextprotocol.io/extensions/events/overview)
+(SEP-3415) lets a client subscribe to upstream events and an agent react with
+nobody watching. That is when you most need to answer "why did the agent do
+that?", so the instrumentation leads from the reaction back to the event and
+from the event to what caused it.
+
+The 2026-07-28 SDK has no Events API yet. Register the `events/*` handlers on
+the instrumented server's underlying `Server`, and send them from an
+instrumented client with `request()`: both are traced with no other setup.
+
+```typescript
+const server = instrumentMcpServer(
+  new McpServer({ name: 'incidents', version: '1.0.0' }),
+);
+
+server.server.setRequestHandler(
+  'events/poll',
+  { params: PollParams, result: PollResult },
+  async (params) => ({
+    events: newIncidents(params.cursor).map((incident) => ({
+      eventId: incident.id,
+      name: 'incident.opened',
+      timestamp: incident.openedAt,
+      data: { incidentId: incident.id },
+      // The trace that caused it, if the event is emitted inside one.
+      _meta: injectOtelContextToMeta(),
+    })),
+    cursor: nextCursor,
+    nextPollMs: 30_000,
+  }),
+);
+```
+
+```typescript
+import {
+  instrumentMcpClient,
+  processEvent,
+} from 'autotel-mcp-instrumentation/client';
+
+const client = instrumentMcpClient(
+  new Client({ name: 'agent', version: '1.0.0' }),
+);
+const { events } = await client.request(
+  { method: 'events/poll', params },
+  PollResult,
+);
+for (const event of events) await processEvent(event, () => agent.react(event));
+```
+
+| What                                                                   | Span                                                                   | Notes                                                                                                     |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `events/list`, `events/poll`, `events/subscribe`, `events/unsubscribe` | `{method} {event name}`, client and server                             | A poll records `mcp.event.count`, `.truncated`, `.has_more`                                               |
+| `events/stream`                                                        | `events/stream {event name}`, server                                   | Covers opening the stream and ends at `notifications/events/active`, never the life of the subscription   |
+| A pushed occurrence                                                    | `send {event name}` (producer), then `process {event name}` (consumer) | A handler registered with `setNotificationHandler('notifications/events/event', …)` runs inside `process` |
+| A polled or webhook occurrence                                         | `process {event name}` (consumer)                                      | Call `processEvent(event, react, { delivery })`                                                           |
+
+The `process` span **links** to the trace in the occurrence's `_meta` (the
+upstream cause, or the `send` span) instead of continuing it: the agent's
+reaction is new work. Attributes are `mcp.event.name`, `mcp.event.id` and
+`mcp.event.delivery` (`poll`, `push`, `webhook`), autotel extensions of the
+`mcp.*` namespace. Payloads are never recorded: the spec treats them as
+untrusted.
+
+Metrics: `mcp.server.event.delivered`, `mcp.client.event.received`,
+`mcp.client.event.lag` (seconds from the occurrence's `timestamp` to receipt),
+`mcp.client.event.gaps` (receipts reporting `truncated: true`) and
+`mcp.client.event.subscription.terminated`. None is labelled by event id.
+
 ## Security Observability
 
 MCP is where untrusted data crosses into your agent. The

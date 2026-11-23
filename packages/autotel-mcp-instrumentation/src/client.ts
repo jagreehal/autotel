@@ -24,6 +24,10 @@ import {
 } from './security';
 import { errorName } from './error-name.js';
 import {
+  traceEventsClientRequest,
+  traceEventsNotificationHandler,
+} from './events';
+import {
   capturedPayload,
   failureMessage,
   recordableError,
@@ -791,6 +795,21 @@ export function instrumentMcpClient<T extends Record<string, any>>(
         };
       }
 
+      // MCP Events: `events/*` requests, and the handlers for the
+      // notifications that deliver pushed occurrences.
+      if (prop === 'request' && isFunction(value)) {
+        // SAFETY: isFunction checked it; the wrapper forwards every argument.
+        return traceEventsClientRequest(value as never, target, mergedConfig);
+      }
+      if (prop === 'setNotificationHandler' && isFunction(value)) {
+        return traceEventsNotificationHandler(
+          // SAFETY: as above.
+          value as never,
+          target,
+          mergedConfig,
+        );
+      }
+
       // Discovery operations (when enabled). One table, so adding an era
       // method is a single entry rather than another eight-line block.
       if (mergedConfig.captureDiscoveryOperations) {
@@ -878,3 +897,5 @@ function withTraceMeta(message: unknown): unknown {
     },
   };
 }
+
+export { processEvent, type McpEventOccurrence } from './events';

@@ -30,8 +30,14 @@
  * @module
  */
 
-import { context, propagation } from '@opentelemetry/api';
-import type { TraceContext } from './trace-context';
+import { propagation, ROOT_CONTEXT } from '@opentelemetry/api';
+import { MAX_HEADER_SIZE, planBatch } from './baggage-header';
+import {
+  getActiveContextWithBaggage,
+  LONE_SURROGATE,
+  writeBaggage,
+  type TraceContext,
+} from './trace-context';
 import type { UnknownRecord } from './values';
 import { asBoolean, asNumber, asString, describeValue } from './values';
 
@@ -86,7 +92,11 @@ export interface SafeBaggageOptions {
   /** Maximum value length (default: 256) */
   maxValueLength?: number;
 
-  /** Maximum total baggage size in bytes (default: 8192) */
+  /**
+   * Maximum size of the whole outgoing `baggage` header in bytes, as sent:
+   * URI-encoded, with separators (default and maximum: 8192, the most
+   * OpenTelemetry's propagator sends)
+   */
   maxTotalSize?: number;
 
   /** Prefix for all keys (default: none) */
@@ -131,7 +141,14 @@ export type InferBaggageType<T extends BaggageSchemaDefinition> = {
  * Baggage error details
  */
 export interface BaggageError {
-  type: 'validation' | 'size' | 'pii' | 'key_length' | 'value_length';
+  type:
+    | 'validation'
+    | 'size'
+    | 'pii'
+    | 'key_length'
+    | 'value_length'
+    /** A write with no trace or OTel scope around it to end with. */
+    | 'no_trace';
   key: string;
   message: string;
   value?: unknown;
@@ -147,8 +164,8 @@ export interface SafeBaggageSchema<T extends BaggageSchemaDefinition> {
   get(ctx?: TraceContext): Partial<InferBaggageType<T>>;
 
   /**
-   * Set baggage values in context
-   * Returns new context with baggage (for context propagation)
+   * Set baggage values for the rest of the request, like ctx.setBaggage():
+   * read back by get() and sent on outgoing calls.
    */
   set(
     ctx: TraceContext | undefined,
@@ -204,6 +221,9 @@ const PII_PATTERNS = [
   /\b\d{16}\b/, // Credit card (basic)
 ];
 
+// What hashValue() produces: FNV-1a's 32 bits as hex
+const HASHED = /^h_[\da-f]{1,8}$/;
+
 // High-cardinality value patterns
 const HIGH_CARDINALITY_PATTERNS = [
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, // UUID
@@ -246,8 +266,18 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
     onError,
   } = options;
 
+  // A larger limit cannot hold: the serializer leaves out what would not fit.
+  const headerLimit = Math.min(maxTotalSize, MAX_HEADER_SIZE);
+
   // Validate schema keys
   const schemaKeys = new Set(Object.keys(schema));
+  for (const key of [
+    prefix,
+    ...schemaKeys,
+    ...Object.values(schema).flatMap((f) => f.values ?? []),
+  ])
+    if (LONE_SURROGATE.test(key))
+      throw new Error(`Baggage schema name "${key}" is not valid Unicode`);
   if (allowedKeys) {
     for (const key of schemaKeys) {
       if (!allowedKeys.includes(key)) {
@@ -255,6 +285,29 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
       }
     }
   }
+
+  /**
+   * Whether this schema can turn a value of the field into a hash, so a hash
+   * arriving in a header may be the sender's transform. A boolean never is;
+   * an enum only when one of its own values is PII or high-cardinality.
+   */
+  const mayHash = (fieldDef: BaggageFieldDefinition): boolean => {
+    if (fieldDef.hash) return true;
+    const transforms = (value: string) =>
+      (redactPII && containsPII(value)) ||
+      (hashHighCardinality && isHighCardinality(value));
+    switch (fieldDef.type) {
+      case 'boolean': {
+        return false;
+      }
+      case 'enum': {
+        return fieldDef.values?.some((value) => transforms(value)) ?? false;
+      }
+      default: {
+        return redactPII || hashHighCardinality;
+      }
+    }
+  };
 
   // Prefix a key
   const prefixKey = (key: string): string =>
@@ -280,23 +333,45 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
     return HIGH_CARDINALITY_PATTERNS.some((pattern) => pattern.test(value));
   };
 
-  // Validate and transform a single value
+  const keyFits = (key: string): boolean => {
+    if (prefixKey(key).length <= maxKeyLength) return true;
+    onError?.({
+      type: 'key_length',
+      key,
+      message: `Key "${key}" exceeds max length ${maxKeyLength}`,
+    });
+    return false;
+  };
+
+  const fitLength = (
+    key: string,
+    stringValue: string,
+    fieldDef: BaggageFieldDefinition,
+  ): string | null => {
+    const maxLen = fieldDef.maxLength ?? maxValueLength;
+    if (stringValue.length <= maxLen) return stringValue;
+    onError?.({
+      type: 'value_length',
+      key,
+      message: `Field "${key}" value exceeds max length ${maxLen}`,
+      value: stringValue,
+    });
+    // Whole code points only: slicing mid-pair leaves a lone surrogate.
+    let truncated = '';
+    for (const char of stringValue) {
+      if (truncated.length + char.length > maxLen) break;
+      truncated += char;
+    }
+    return truncated === '' ? null : truncated;
+  };
+
+  // Validate and transform a value the caller supplied
   const validateAndTransform = (
     key: string,
     value: BaggageFieldValue,
     fieldDef: BaggageFieldDefinition,
   ): string | null => {
-    const fullKey = prefixKey(key);
-
-    // Check key length
-    if (fullKey.length > maxKeyLength) {
-      onError?.({
-        type: 'key_length',
-        key,
-        message: `Key "${key}" exceeds max length ${maxKeyLength}`,
-      });
-      return null;
-    }
+    if (!keyFits(key)) return null;
 
     // Handle undefined/null with default
     if (value === undefined || value === null) {
@@ -383,8 +458,26 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
       }
     }
 
-    // Custom validation
-    if (fieldDef.validate && !fieldDef.validate(value)) {
+    if (LONE_SURROGATE.test(stringValue)) {
+      onError?.({
+        type: 'validation',
+        key,
+        message: `Field "${key}" is not valid Unicode (a lone surrogate)`,
+      });
+      return null;
+    }
+
+    // Custom validation: one that throws counts as a failure, so a baggage
+    // write never aborts the caller.
+    let valid = true;
+    if (fieldDef.validate) {
+      try {
+        valid = fieldDef.validate(value);
+      } catch {
+        valid = false;
+      }
+    }
+    if (!valid) {
       onError?.({
         type: 'validation',
         key,
@@ -413,33 +506,60 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
       stringValue = hashValue(stringValue);
     }
 
-    // Length validation
-    const maxLen = fieldDef.maxLength ?? maxValueLength;
-    if (stringValue.length > maxLen) {
-      onError?.({
-        type: 'value_length',
-        key,
-        message: `Field "${key}" value exceeds max length ${maxLen}`,
-        value: stringValue,
-      });
-      stringValue = stringValue.slice(0, maxLen);
-    }
-
-    return stringValue;
+    return fitLength(key, stringValue, fieldDef);
   };
 
-  // Parse value back from baggage string
-  const parseValue = (
+  /**
+   * A value another service wrote, as its header carried it. A hash in a
+   * field this schema can hash ({@link mayHash}) is the sender's transform,
+   * so it is kept as it is (only the
+   * length limits apply): hashing it again would change the identifier at
+   * every hop, and raw-value validation cannot hold for a hash. Any other
+   * value is parsed for its type and imported like a caller's, so a sender
+   * that did not hash still has its value hashed.
+   */
+  const importValue = (
     key: string,
+    raw: string,
+    fieldDef: BaggageFieldDefinition,
+  ): string | null => {
+    if (mayHash(fieldDef) && HASHED.test(raw))
+      return keyFits(key) ? fitLength(key, raw, fieldDef) : null;
+    const parsed = parseValue(raw, fieldDef);
+    if (parsed === undefined) {
+      onError?.({
+        type: 'validation',
+        key,
+        message: `Field "${key}" header value is not a valid ${fieldDef.type}`,
+        value: raw,
+      });
+      return null;
+    }
+    return validateAndTransform(key, parsed, fieldDef);
+  };
+
+  /**
+   * A stored string as its field's type, or `undefined` when it is not one:
+   * a hashed or redacted number, a flag that is not `true`/`false`, an enum
+   * value outside the list. Readers then treat the field as absent.
+   */
+  const parseValue = (
     stringValue: string,
     fieldDef: BaggageFieldDefinition,
-  ): string | number | boolean => {
+  ): string | number | boolean | undefined => {
     switch (fieldDef.type) {
       case 'number': {
-        return Number.parseFloat(stringValue);
+        const numeric = Number(stringValue);
+        return stringValue.trim() !== '' && Number.isFinite(numeric)
+          ? numeric
+          : undefined;
       }
       case 'boolean': {
-        return stringValue === 'true';
+        if (stringValue === 'true') return true;
+        return stringValue === 'false' ? false : undefined;
+      }
+      case 'enum': {
+        return fieldDef.values?.includes(stringValue) ? stringValue : undefined;
       }
       default: {
         return stringValue;
@@ -447,26 +567,63 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
     }
   };
 
+  /**
+   * Write prepared values (field key to baggage string) the same way as
+   * ctx.setBaggage(): for the rest of the request, propagated on outgoing
+   * calls. Outside a trace there is no request to hold them: nothing is
+   * written, and the caller hears why.
+   */
+  const commit = (prepared: Map<string, string>): void => {
+    const baggage =
+      propagation.getBaggage(getActiveContextWithBaggage()) ??
+      propagation.createBaggage();
+    const { accepted, rejected } = planBatch(
+      new Map(baggage.getAllEntries()),
+      [...prepared].map(([key, value]) => ({
+        key,
+        fullKey: prefixKey(key),
+        entry: { value },
+      })),
+      headerLimit,
+    );
+    for (const { key, entry } of rejected)
+      onError?.({
+        type: 'size',
+        key,
+        message: `Adding "${key}" would not fit the baggage header the propagator sends (max ${headerLimit} bytes)`,
+        value: entry.value,
+      });
+    const changes = new Map(
+      accepted.map(({ fullKey, entry }) => [fullKey, entry]),
+    );
+
+    if (changes.size > 0 && !writeBaggage(changes))
+      onError?.({
+        type: 'no_trace',
+        key: [...changes.keys()].join(','),
+        message:
+          'Baggage can only be set inside a trace or an OpenTelemetry context scope',
+      });
+  };
+
+  /** A schema field as stored, parsed; an invalid value reads as absent. */
+  const read = (key: string): string | number | boolean | undefined => {
+    const fieldDef = schema[key];
+    const entry = propagation
+      .getBaggage(getActiveContextWithBaggage())
+      ?.getEntry(prefixKey(key));
+    const parsed =
+      fieldDef && entry ? parseValue(entry.value, fieldDef) : undefined;
+    return parsed ?? fieldDef?.defaultValue;
+  };
+
   return {
     get(): Partial<InferBaggageType<T>> {
-      const baggage = propagation.getBaggage(context.active());
-      if (!baggage) {
-        return {};
-      }
-
       const result: UnknownRecord = {};
-
-      for (const [key, fieldDef] of Object.entries(schema)) {
-        const fullKey = prefixKey(key);
-        const entry = baggage.getEntry(fullKey);
-
-        if (entry) {
-          result[key] = parseValue(key, entry.value, fieldDef);
-        } else if (fieldDef.defaultValue !== undefined) {
-          result[key] = fieldDef.defaultValue;
-        }
+      for (const key of Object.keys(schema)) {
+        const value = read(key);
+        if (value !== undefined) result[key] = value;
       }
-
       // SAFETY: every key came from `schema`, and parseValue produced its
       // value from that field's declared type - which is exactly what
       // InferBaggageType derives. The mapping is the schema's, not a guess.
@@ -474,76 +631,23 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
     },
 
     set(
-      ctx: TraceContext | undefined,
+      _ctx: TraceContext | undefined,
       values: Partial<InferBaggageType<T>>,
     ): void {
-      let baggage =
-        propagation.getBaggage(context.active()) ?? propagation.createBaggage();
-      let totalSize = 0;
-
-      // Calculate existing size
-      for (const [key, entry] of baggage.getAllEntries()) {
-        totalSize += key.length + entry.value.length;
-      }
-
+      const prepared = new Map<string, string>();
       for (const [key, value] of Object.entries(values)) {
         const fieldDef = schema[key];
         if (!fieldDef) continue;
-
-        const fullKey = prefixKey(key);
         const stringValue = validateAndTransform(key, value, fieldDef);
-
-        if (stringValue !== null) {
-          // Check total size
-          const entrySize = fullKey.length + stringValue.length;
-          if (totalSize + entrySize > maxTotalSize) {
-            onError?.({
-              type: 'size',
-              key,
-              message: `Adding "${key}" would exceed max baggage size ${maxTotalSize}`,
-              value,
-            });
-            continue;
-          }
-
-          baggage = baggage.setEntry(fullKey, { value: stringValue });
-          totalSize += entrySize;
-        }
+        if (stringValue !== null) prepared.set(key, stringValue);
       }
-
-      // Update context with new baggage
-      const newContext = propagation.setBaggage(context.active(), baggage);
-      // Note: This only works if the caller propagates the context
-      // In OTel, baggage propagation happens via context.with()
-      // For now we set on active context
-      propagation.setBaggage(newContext, baggage);
+      commit(prepared);
     },
 
     getValue<K extends keyof T>(key: K): InferBaggageType<T>[K] | undefined {
-      const baggage = propagation.getBaggage(context.active());
-      if (!baggage) return undefined;
-
-      const fullKey = prefixKey(String(key));
-      const entry = baggage.getEntry(fullKey);
-      const fieldDef = schema[String(key)];
-
-      if (!entry) {
-        // SAFETY: a field's default is declared alongside its type, so it is
-        // already the type InferBaggageType derives for that key.
-        return fieldDef?.defaultValue as InferBaggageType<T>[K] | undefined;
-      }
-
-      if (!fieldDef) {
-        return undefined;
-      }
-
-      // SAFETY: see the note in get() - parseValue answers in the field's
-      // declared type.
-      return parseValue(
-        String(key),
-        entry.value,
-        fieldDef,
-      ) as InferBaggageType<T>[K];
+      // SAFETY: see the note in get() - read() answers in the field's
+      // declared type, or with its declared default.
+      return read(String(key)) as InferBaggageType<T>[K] | undefined;
     },
 
     setValue<K extends keyof T>(
@@ -557,42 +661,37 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
     },
 
     clear(): void {
-      let baggage = propagation.getBaggage(context.active());
-      if (!baggage) return;
-
-      for (const key of Object.keys(schema)) {
-        const fullKey = prefixKey(key);
-        baggage = baggage.removeEntry(fullKey);
-      }
-
-      propagation.setBaggage(context.active(), baggage);
+      const keys = Object.keys(schema).map((key) => prefixKey(key));
+      if (!writeBaggage(new Map(keys.map((key) => [key, undefined]))))
+        onError?.({
+          type: 'no_trace',
+          key: keys.join(','),
+          message:
+            'Baggage can only be cleared inside a trace or an OpenTelemetry context scope',
+        });
     },
 
     toHeaders() {
       const headers: Record<string, string> = {};
-      propagation.inject(context.active(), headers);
+      propagation.inject(getActiveContextWithBaggage(), headers);
       return headers;
     },
 
-    fromHeaders(headers: Record<string, string>, ctx?: TraceContext): void {
-      const extractedContext = propagation.extract(context.active(), headers);
-      const baggage = propagation.getBaggage(extractedContext);
-
-      if (baggage) {
-        const values: UnknownRecord = {};
-
-        for (const [key, fieldDef] of Object.entries(schema)) {
-          const fullKey = prefixKey(key);
-          const entry = baggage.getEntry(fullKey);
-
-          if (entry) {
-            values[key] = parseValue(key, entry.value, fieldDef);
-          }
-        }
-
-        // SAFETY: see the note in get().
-        this.set(ctx, values as Partial<InferBaggageType<T>>);
+    fromHeaders(headers: Record<string, string>): void {
+      // Against an empty context: only what the headers carry is imported,
+      // never baggage already in scope (a callback's, which would outlive it).
+      const baggage = propagation.getBaggage(
+        propagation.extract(ROOT_CONTEXT, headers),
+      );
+      if (!baggage) return;
+      const prepared = new Map<string, string>();
+      for (const [key, fieldDef] of Object.entries(schema)) {
+        const entry = baggage.getEntry(prefixKey(key));
+        if (!entry) continue;
+        const stringValue = importValue(key, entry.value, fieldDef);
+        if (stringValue !== null) prepared.set(key, stringValue);
       }
+      commit(prepared);
     },
   };
 }

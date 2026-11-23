@@ -67,6 +67,21 @@ export const MCP_SEMCONV = {
   // duration series under a label nothing else there uses.
   INPUT_REQUIRED: 'mcp.input_required',
 
+  // MCP Events (SEP-3415). autotel extensions of the `mcp.*` namespace: the
+  // OTel MCP conventions predate the extension and say nothing about it.
+  /** Event type name, e.g. `email.received`. Server-defined, low cardinality. */
+  EVENT_NAME: 'mcp.event.name',
+  /** `eventId` of one occurrence: spans only, never a metric label. */
+  EVENT_ID: 'mcp.event.id',
+  /** How the occurrence travelled: `poll`, `push` or `webhook`. */
+  EVENT_DELIVERY: 'mcp.event.delivery',
+  /** Occurrences an `events/poll` returned. Zero is the common, cheap case. */
+  EVENT_COUNT: 'mcp.event.count',
+  /** The server could not serve from the cursor: events were skipped. */
+  EVENT_TRUNCATED: 'mcp.event.truncated',
+  /** More events wait beyond this poll's batch. */
+  EVENT_HAS_MORE: 'mcp.event.has_more',
+
   // Payload sizes (chars) — the "contaminated output" / token-exhaustion signal.
   PAYLOAD_ARGUMENTS_SIZE: 'mcp.arguments.size',
   PAYLOAD_RESULT_SIZE: 'mcp.result.size',
@@ -198,7 +213,24 @@ export const MCP_METHODS = {
   PING: 'ping',
   /** Replaces the `initialize` handshake removed in 2026-07-28 (SEP-2575). */
   SERVER_DISCOVER: 'server/discover',
+  EVENTS_LIST: 'events/list',
+  EVENTS_POLL: 'events/poll',
+  EVENTS_STREAM: 'events/stream',
+  EVENTS_SUBSCRIBE: 'events/subscribe',
+  EVENTS_UNSUBSCRIBE: 'events/unsubscribe',
 } as const;
+
+/** Events extension notifications (SEP-3415), server to client. */
+export const MCP_EVENT_NOTIFICATIONS = {
+  EVENT: 'notifications/events/event',
+  ACTIVE: 'notifications/events/active',
+  ERROR: 'notifications/events/error',
+  TERMINATED: 'notifications/events/terminated',
+  HEARTBEAT: 'notifications/events/heartbeat',
+} as const;
+
+/** How an occurrence reached the client (`mcp.event.delivery`). */
+export type McpEventDelivery = 'poll' | 'push' | 'webhook';
 
 /** Metric names from OTel MCP semantic conventions */
 export const MCP_METRICS = {
@@ -206,6 +238,16 @@ export const MCP_METRICS = {
   SERVER_OPERATION_DURATION: 'mcp.server.operation.duration',
   /** Security signals counter (autotel extension). */
   SECURITY_EVENTS: 'mcp.security.events',
+  /** Occurrences a server handed out, by event name and delivery (autotel extension). */
+  SERVER_EVENT_DELIVERED: 'mcp.server.event.delivered',
+  /** Occurrences a client received, by event name and delivery (autotel extension). */
+  CLIENT_EVENT_RECEIVED: 'mcp.client.event.received',
+  /** Seconds from an occurrence's `timestamp` to its receipt (autotel extension). */
+  CLIENT_EVENT_LAG: 'mcp.client.event.lag',
+  /** Receipts that reported `truncated: true`: events were skipped (autotel extension). */
+  CLIENT_EVENT_GAPS: 'mcp.client.event.gaps',
+  /** Subscriptions the server ended (`notifications/events/terminated`) (autotel extension). */
+  CLIENT_EVENT_TERMINATED: 'mcp.client.event.subscription.terminated',
 } as const;
 
 /** Histogram bucket boundaries from spec (seconds) */

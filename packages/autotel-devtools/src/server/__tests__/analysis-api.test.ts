@@ -34,6 +34,7 @@ function otlp(opts: {
   provider: string;
   durationMs: number;
   from: number;
+  failed?: boolean;
 }) {
   const base = BigInt(Date.now() - 60_000) * 1_000_000n;
   return {
@@ -57,12 +58,18 @@ function otlp(opts: {
                 base +
                 BigInt(opts.durationMs) * 1_000_000n
               ).toString(),
-              status: { code: 1 },
+              status: { code: opts.failed ? 2 : 1 },
               attributes: [
                 {
                   key: 'payment.provider',
                   value: { stringValue: opts.provider },
                 },
+                ...(opts.failed
+                  ? [
+                      { key: 'error', value: { boolValue: true } },
+                      { key: 'error.type', value: { stringValue: 'Declined' } },
+                    ]
+                  : []),
               ],
             })),
           },
@@ -114,6 +121,43 @@ describe('POST /api/analysis/compare', () => {
     expect(top.value).toBe('legacy');
     expect(top.outlierFraction).toBe(1);
     expect(top.baselineFraction).toBe(0);
+  });
+
+  it('does not rank the fields the queries define the cohorts by', async () => {
+    const port = await start();
+    await ingest(
+      port,
+      otlp({ count: 30, provider: 'stripe', durationMs: 20, from: 1 }),
+    );
+    await ingest(
+      port,
+      otlp({
+        count: 10,
+        provider: 'legacy',
+        durationMs: 20,
+        from: 100,
+        failed: true,
+      }),
+    );
+
+    const { body } = await compare(port, {
+      outlier: { query: 'status = ERROR' },
+      baseline: { query: '' },
+    });
+
+    // `status`, `error` and `error.type` separate the failures perfectly
+    // because the query picked them by it; the provider is the finding.
+    expect(body.differences[0]).toMatchObject({
+      field: 'payment.provider',
+      value: 'legacy',
+    });
+    const ranked = body.differences.map((d: { field: string }) => d.field);
+    expect(ranked).not.toContain('status');
+    expect(ranked).not.toContain('error');
+    expect(ranked).not.toContain('error.type');
+    expect(body.ignoredFields).toEqual(
+      expect.arrayContaining(['status', 'error', 'error.type']),
+    );
   });
 
   it('reports an unparseable query as a 400, not an empty comparison', async () => {

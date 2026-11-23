@@ -656,6 +656,35 @@ Every backend returns nested attributes as dotted keys (`nested.id: 1`) and arra
 
 </details>
 
+## Events
+
+autotel-mcp offers telemetry as [MCP Events](https://modelcontextprotocol.io/extensions/events/overview)
+(`io.modelcontextprotocol/events`), so an agent can be woken when something
+happens instead of asking on a timer.
+
+| Event                     | Fires when                                                                                          | Arguments            |
+| ------------------------- | --------------------------------------------------------------------------------------------------- | -------------------- |
+| `autotel.issue.opened`    | an error is seen for the first time (a new fingerprint)                                             | `service` (optional) |
+| `autotel.deploy.detected` | a service's spans start reporting a new `service.version`, with error rate and p95 before and after | `service` (optional) |
+
+Delivery is **poll** (`events/poll`), every 60 seconds by `nextPollMs` (5
+minutes on Datadog, whose spans API is rate-limited). The
+server keeps no subscriptions, so push and webhook are not offered. Cursors
+replay up to 24 hours; an older cursor, or one older than `maxAgeMs`, is
+answered from the limit with `truncated: true`, as is a poll whose source was
+capped (a span sample, or the searches issues were grouped from). The cursor
+stays two minutes behind now, so a record the backend indexes late is still
+delivered; events that recent arrive on a later poll, and `maxAgeMs` counts
+back from that point. Event ids come from the upstream facts
+(`issue:<fingerprint>`, `deploy:<service>:<from>:<to>:<changedAtUnixMs>`), so
+a duplicate can be dropped. A deploy event's `timestamp` is when it was
+detected and `changedAt` when the version first appeared; they differ for a
+rollback, which needs three spans in a row of the earlier version to confirm.
+
+Payloads hold identifiers and numbers, never error text, which is untrusted
+input: fetch the details with `get_issue` and `get_trace`. On backends without
+stored issues, "first seen" means first within the last 24 hours.
+
 ## Resources
 
 MCP resources give agents context without burning tool calls:

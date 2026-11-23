@@ -8,7 +8,7 @@ import {
 import { findRootCause, selfTimes } from '../src/modules/correlator';
 import { grafanaAuth } from '../src/backends/factory';
 import { TempoBackend } from '../src/backends/tempo/index';
-import { mergeSlices, sampleAcrossWindow } from '../src/tools/analytics';
+import { mergeSlices, sampleAcrossWindow } from '../src/modules/window-sample';
 import type { LogRecord, SpanRecord } from '../src/types';
 
 function span(overrides: Partial<SpanRecord> & { spanId: string }): SpanRecord {
@@ -104,6 +104,109 @@ describe('whatChanged', () => {
     ]);
     expect(result.unchanged).toEqual([{ service: 'worker', version: '7' }]);
     expect(result.unversioned).toEqual(['legacy']);
+  });
+
+  it('finds a flag change that moved no service version', () => {
+    const f = (version: string, spanId: string, start: number, error = false) =>
+      span({
+        spanId,
+        startTimeUnixMs: start,
+        hasError: error,
+        tags: {
+          'service.version': 'abc123',
+          'feature_flag.key': 'pricing-engine',
+          'feature_flag.version': version,
+        },
+      });
+    const result = whatChanged([
+      f('3', 'a', 0),
+      f('3', 'b', 10),
+      f('4', 'c', 20, true),
+      f('4', 'd', 30),
+      // Spans that evaluated no flag say nothing about one.
+      span({
+        spanId: 'e',
+        startTimeUnixMs: 25,
+        tags: { 'service.version': 'abc123' },
+      }),
+    ]);
+
+    expect(result.changes).toEqual([]);
+    expect(result.unchanged).toEqual([{ service: 'api', version: 'abc123' }]);
+    expect(result.flagChanges).toEqual([
+      expect.objectContaining({
+        service: 'api',
+        flag: 'pricing-engine',
+        from: '3',
+        to: '4',
+        changedAtUnixMs: 20,
+        errorRateDelta: 0.5,
+      }),
+    ]);
+  });
+});
+
+describe('whatChanged rollbacks', () => {
+  const v = (version: string, spanId: string, start: number) =>
+    span({
+      spanId,
+      startTimeUnixMs: start,
+      tags: { 'service.version': version },
+    });
+
+  it('reports a rollback to a version seen earlier', () => {
+    const result = whatChanged([
+      v('A', 'a', 0),
+      v('B', 'b', 10),
+      v('B', 'c', 20),
+      v('A', 'd', 30),
+      v('A', 'e', 40),
+      v('A', 'f', 50),
+    ]);
+    expect(
+      result.changes.map((c) => [c.from, c.to, c.changedAtUnixMs]),
+    ).toEqual([
+      ['B', 'A', 30],
+      ['A', 'B', 10],
+    ]);
+  });
+
+  // An old-version span at the end of the sample is a straggler until more
+  // spans confirm the rollback.
+  it('does not read a straggling old-version span as a rollback', () => {
+    const result = whatChanged(
+      ['A', 'A', 'A', 'B', 'B', 'B', 'A'].map((version, index) =>
+        v(version, String(index), index * 10),
+      ),
+    );
+    expect(result.changes.map((c) => [c.from, c.to])).toEqual([['A', 'B']]);
+  });
+
+  it('reports a rollback and the rollout repeated after it', () => {
+    const result = whatChanged(
+      ['A', 'A', 'A', 'B', 'B', 'B', 'A', 'A', 'A', 'B', 'B', 'B'].map(
+        (version, index) => v(version, String(index), index * 10),
+      ),
+    );
+    expect(
+      result.changes.map((c) => [c.from, c.to, c.changedAtUnixMs]),
+    ).toEqual([
+      ['A', 'B', 90],
+      ['B', 'A', 60],
+      ['A', 'B', 30],
+    ]);
+  });
+
+  // Old and new interleave while a deploy rolls out: one change, not a flip per span.
+  it('reads a rolling deploy as one change', () => {
+    const result = whatChanged([
+      v('A', 'a', 0),
+      v('B', 'b', 10),
+      v('A', 'c', 20),
+      v('B', 'd', 30),
+      v('B', 'e', 40),
+    ]);
+    expect(result.changes.map((c) => [c.from, c.to])).toEqual([['A', 'B']]);
   });
 });
 
@@ -239,6 +342,21 @@ describe('sampling across the window', () => {
     expect(sample.items.sort((a, b) => a - b)).toEqual([
       0, 250, 250, 400, 1000,
     ]);
+  });
+
+  it('refines a full slice so a burst keeps its start, when asked', async () => {
+    // 2,000 records in the last quarter, newest first, as a backend returns them.
+    const at = Array.from({ length: 2000 }, (_, i) => 999 - i * 0.1);
+    const fetch = async (from: number, to: number, limit: number) => ({
+      items: at.filter((t) => t >= from && t < to).slice(0, limit),
+    });
+    const coarse = await sampleAcrossWindow(0, 1000, String, fetch);
+    const refined = await sampleAcrossWindow(0, 1000, String, fetch, {
+      refine: true,
+    });
+    expect(Math.min(...coarse.items)).toBeGreaterThan(970);
+    expect(Math.min(...refined.items)).toBeLessThan(820);
+    expect(refined.capped).toBe(true);
   });
 
   it('keeps distinct records that share a slice', () => {
