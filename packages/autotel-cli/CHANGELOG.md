@@ -1,5 +1,12 @@
 # autotel-cli
 
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies [fb75d1c]
+  - autotel-mcp@1.1.2
+
 ## 1.0.2
 
 ### Patch Changes
