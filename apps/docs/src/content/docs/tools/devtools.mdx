@@ -33,6 +33,9 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 node app.js
 ```
 
+An app that starts before the receiver prints one warning naming the endpoint
+and `npx autotel-devtools`.
+
 Open [http://localhost:4318](http://localhost:4318) for the dashboard. It
 includes a traces waterfall with each trace's logs under it, flame graph, log filtering by severity and
 resource, error aggregation with clickable stack frames

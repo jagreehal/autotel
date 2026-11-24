@@ -117,19 +117,6 @@ jobs:
   mongoose-integration:
     runs-on: ubuntu-latest
 
-    services:
-      mongodb:
-        # MongoDB 8.0 exits at startup on Linux 6.19+ (SERVER-121912), which
-        # ubuntu-latest now runs. 7.0 starts there.
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 12
-
     steps:
       - uses: actions/checkout@v7
 
@@ -142,13 +129,28 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # `docker run` passes mongod the replica set transactions need. 7.0 runs on
+      # ubuntu-latest's Linux 6.19+ kernel (SERVER-121912).
+      - name: Start MongoDB
+        run: |
+          docker run -d --name mongodb -p 27017:27017 mongo:7.0 --replSet rs0 --bind_ip_all
+          for _ in $(seq 30); do
+            docker exec mongodb mongosh --quiet --eval "
+              try { rs.status() } catch { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] }) }
+              if (!db.hello().isWritablePrimary) quit(1)
+            " && exit 0
+            sleep 2
+          done
+          docker logs mongodb
+          exit 1
+
       - name: Run Mongoose and MongoDB integration tests
         # Through turbo, so the workspace packages it imports are built first.
         # `pnpm --filter ... run` calls the script directly and skips that.
         run: pnpm turbo run test:integration --filter=autotel-mongoose --filter=autotel-mongodb
         env:
           # Against the server above, rather than downloading an in-memory one.
-          MONGO_TEST_URI: mongodb://127.0.0.1:27017
+          MONGO_TEST_URI: mongodb://127.0.0.1:27017/?replicaSet=rs0
 
   dependabot-auto-merge:
     needs: [build-and-test, mongoose-integration]

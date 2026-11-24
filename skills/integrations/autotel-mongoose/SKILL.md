@@ -1,7 +1,7 @@
 ---
 name: autotel-mongoose
 description: >
-  Use this skill when adding OpenTelemetry tracing to a Mongoose 8+ application: instrumentMongoose(), value-free query text with a statement hash, query plans and index suggestions from explain, and Schema hook instrumentation.
+  Use this skill when adding OpenTelemetry tracing to a Mongoose 8+ application: instrumentMongoose(), value-free query text with a statement hash, query plans and index suggestions from explain, transaction spans, and Schema hook instrumentation.
 ---
 
 # autotel-mongoose
@@ -93,6 +93,7 @@ interface InstrumentMongooseConfig {
 | `db.query.text`      | When statement serialization is enabled (default: value-free shape) |
 | `db.statement.hash`  | Always: operation, collection and value-free shape, hashed          |
 | `db.plan.*`          | When `explain` is set                                               |
+| `db.transaction.*`   | On `mongoose.transaction` spans                                     |
 | `server.address`     | From `peerName`, else the model's connection                        |
 | `server.port`        | From `peerPort`, else the model's connection                        |
 
@@ -104,6 +105,8 @@ Span names follow `<operation> <collectionName>` (e.g., `find users`) or fall ba
 `find`, `findOne`, `findById`, `findOneAndUpdate`, `findOneAndDelete`, `findOneAndReplace`, `deleteOne`, `deleteMany`, `updateOne`, `updateMany`, `replaceOne`, `distinct`, `countDocuments`, `estimatedDocumentCount`
 
 `connection.aggregate()` gets a `mongoose.aggregate` span. A query or aggregate read through `.cursor()`, `for await`, `eachAsync()` or as a stream gets one span that ends when the cursor is exhausted, closed or fails.
+
+**Transactions**: `connection.transaction()` and `session.withTransaction()` get a `mongoose.transaction` span, with the writes and `mongoose.commitTransaction` / `mongoose.abortTransaction` beneath it. `db.transaction.attempts` counts callback runs; `db.transaction.outcome` is `committed`, `aborted` or `unknown`. Start sessions with Mongoose's `startSession()`.
 
 **Model static methods** (spans created; promise finalization):
 `create`, `insertMany`, `aggregate`, `bulkWrite`
@@ -119,7 +122,7 @@ User-defined `pre` and `post` hooks are wrapped, except `init`, which fires once
 
 ### Statement capture and redaction
 
-By default `db.query.text` is the payload's shape with every value replaced by `?`: `find({ email: 'a@b.c' })` records `{"condition":{"email":"?"},"options":{}}`. The same query with different values gets the same text and the same `db.statement.hash`, so a dashboard or the devtools Queries tab groups repeats, and no user data reaches the span.
+By default `db.query.text` is the payload's shape with every value replaced by `?`: `find({ email: 'a@b.c' })` records `{"condition":{"email":"?"},"options":{}}`. The same query with different values gets the same text and the same `db.statement.hash`, so a dashboard or the devtools Queries tab groups repeats, and no user data reaches the span. A document being written is one `?`, and an update's text is cut at 512 characters.
 
 ```typescript
 // Capture values; the 'default' redactor masks emails, phones, SSNs and cards
@@ -152,6 +155,7 @@ Each query and aggregate span gets the plan MongoDB chose: `db.plan.stages` (`[S
 interface SerializerPayload {
   condition?: Record<string, unknown>; // Query filter (find*, delete*, update*, count*)
   updates?: Record<string, unknown>; // Update document (findOneAndUpdate, updateOne, etc.)
+  updatePipeline?: Record<string, unknown>[]; // The update when it is a pipeline
   options?: Record<string, unknown>; // Query options
   fields?: Record<string, unknown>; // Projection fields
   aggregatePipeline?: unknown[]; // aggregate()

@@ -268,6 +268,17 @@ An explicit `ERROR` status gives the span `operation.success: false` and
 `error: true`, and the call metrics and tail sampling count the operation as
 failed.
 
+For a function that returns Results, pass `result: true`. A returned
+`{ ok: false, error }` then marks the span the same way and sets `error.type`
+from the error:
+
+```typescript
+export const saveOrder = trace(
+  { name: 'order.save', result: true },
+  async (order: Order) => repository.save(order),
+);
+```
+
 Source: packages/autotel/src/functional-wrapper.ts
 
 ## Compatibility

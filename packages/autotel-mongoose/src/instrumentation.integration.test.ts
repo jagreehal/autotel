@@ -151,9 +151,7 @@ describe('instrumentMongoose integration', () => {
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'save',
     );
     expect(saveSpan).toBeDefined();
-    expect(queryTextOf(saveSpan!)).toBe(
-      '{"document":{"name":"?","email":"?","age":"?","_id":"?"}}',
-    );
+    expect(queryTextOf(saveSpan!)).toBe('{"document":"?"}');
   });
 
   it('captures db.query.text for aggregate operations', async () => {
@@ -183,11 +181,8 @@ describe('instrumentMongoose integration', () => {
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'insertMany',
     );
     expect(insertSpan).toBeDefined();
-    // Two documents of one shape are one entry: the text does not grow with
-    // the batch, so batches of any size group together.
-    expect(queryTextOf(insertSpan!)).toBe(
-      '{"documents":[{"name":"?","email":"?","age":"?"}]}',
-    );
+    // The text does not grow with the batch or the documents.
+    expect(queryTextOf(insertSpan!)).toBe('{"documents":"?"}');
   });
 
   it('captures db.query.text for bulkWrite', async () => {
@@ -222,6 +217,48 @@ describe('instrumentMongoose integration', () => {
     expect(queryTextOf(updateSpan!)).toBe(
       '{"condition":{"name":"?"},"updates":{"$set":{"age":"?"}},"options":{}}',
     );
+  });
+
+  it('gives shorthand, $set and mixed updates one form', async () => {
+    await User.updateOne({ name: 'Bob' }, { age: 31 });
+    await User.updateOne({ name: 'Bob' }, { $set: { email: 'b@b.c' } });
+    await User.updateOne({ name: 'Bob' }, { email: 'x', $inc: { age: 1 } });
+    const [shorthand, explicit, mixed] = exporter
+      .getFinishedSpans()
+      .filter((s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'updateOne');
+    expect(shorthand!.attributes['db.statement.hash']).toBe(
+      explicit!.attributes['db.statement.hash'],
+    );
+    expect(queryTextOf(shorthand!)).toContain('"updates":{"$set":{"age":"?"}}');
+    expect(queryTextOf(mixed!)).toContain(
+      '"updates":{"$inc":{"age":"?"},"$set":{"email":"?"}}',
+    );
+  });
+
+  it('keeps each stage of an update pipeline', async () => {
+    const stage = { $set: { age: { $add: ['$age', 1] } } };
+    for (const pipeline of [[stage], [stage, stage]]) {
+      await User.updateOne({ name: 'Bob' }, pipeline, { updatePipeline: true });
+    }
+    const [once, twice] = exporter
+      .getFinishedSpans()
+      .filter((s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'updateOne');
+    expect(queryTextOf(once!)).toContain('"updatePipeline":[{"$set":{"age":');
+    expect(twice!.attributes['db.statement.hash']).not.toBe(
+      once!.attributes['db.statement.hash'],
+    );
+  });
+
+  it('shows a replacement as one value, not its fields', async () => {
+    const filter = { name: 'nobody' };
+    await User.replaceOne(filter, { name: 'a', email: 'a', age: 1 });
+    await User.findOneAndReplace(filter, { name: 'a', email: 'a', age: 1 });
+    const texts = exporter
+      .getFinishedSpans()
+      .filter((s) => s.name.toLowerCase().includes('replace'))
+      .map((s) => queryTextOf(s));
+    expect(texts).toHaveLength(2);
+    for (const text of texts) expect(text).toContain('"updates":"?"');
   });
 
   it('uses stable semantic convention span names', async () => {

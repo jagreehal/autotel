@@ -34,6 +34,7 @@ import {
   isError as isErrorValue,
   toError,
 } from './structured-error';
+import { resultFailure } from './result-failure';
 import { getEventQueue } from './track';
 import {
   createTraceContext,
@@ -129,6 +130,13 @@ export interface TracingOptions<
    * @default every throw is treated as an error
    */
   isError?: (cause: unknown) => boolean;
+  /**
+   * The function returns Results. A returned `{ ok: false, error }` marks the
+   * span ERROR and sets `error.type` from the error, as a throw would. A status
+   * or `error.type` the function set itself wins.
+   * @default false
+   */
+  result?: boolean;
 }
 
 /** Options for `instrument()` batch instrumentation. */
@@ -392,13 +400,7 @@ function finalizeThrownSpan(
       'exception.type': errorType,
       'exception.message': truncatedMessage,
     });
-    // Matches ctx.recordError(); an error.type the function set itself wins.
-    // SAFETY: an SDK span (and the test collector's) exposes the attributes set
-    // so far; a span that does not reads as undefined and gets error.type set.
-    const setSoFar = (span as { attributes?: Attributes }).attributes;
-    if (setSoFar?.['error.type'] === undefined) {
-      span.setAttribute('error.type', errorType);
-    }
+    setErrorType(span, errorType);
     if (isErrorValue(error) && stack) {
       span.setAttribute(
         'exception.stack',
@@ -412,6 +414,16 @@ function finalizeThrownSpan(
     // The error status set above stands.
   } finally {
     span.end();
+  }
+}
+
+/** An error.type the function set itself wins, as with ctx.recordError(). */
+function setErrorType(span: Span, errorType: string): void {
+  // SAFETY: an SDK span (and the test collector's) exposes the attributes set
+  // so far; a span that does not reads as undefined and gets error.type set.
+  const setSoFar = (span as { attributes?: Attributes }).attributes;
+  if (setSoFar?.['error.type'] === undefined) {
+    span.setAttribute('error.type', errorType);
   }
 }
 
@@ -573,7 +585,13 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
               const duration = performance.now() - startTime;
               // An explicit ERROR status marks the operation failed.
               const explicitStatus = explicitSpanStatus(span);
-              const success = explicitStatus !== SpanStatusCode.ERROR;
+              const failure = options.result
+                ? resultFailure(result)
+                : undefined;
+              const success =
+                explicitStatus === undefined
+                  ? failure === undefined
+                  : explicitStatus !== SpanStatusCode.ERROR;
               const status = success ? 'success' : 'error';
               callCounter?.add(1, { operation: spanName, status });
               durationHistogram?.record(duration, {
@@ -585,7 +603,16 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
                 ...options.attributesFromResult?.(result),
               };
               if (explicitStatus === undefined) {
-                span.setStatus({ code: SpanStatusCode.OK });
+                span.setStatus(
+                  failure
+                    ? {
+                        code: SpanStatusCode.ERROR,
+                        message: truncateErrorMessage(
+                          failure.message ?? 'Unknown error',
+                        ),
+                      }
+                    : { code: SpanStatusCode.OK },
+                );
               }
               span.setAttributes({
                 ...argsAttributes,
@@ -596,7 +623,12 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
                 'operation.success': success,
                 ...(success ? {} : { error: true }),
               });
-              handleTailSampling(success, duration);
+              if (failure && !success) setErrorType(span, failure.type);
+              handleTailSampling(
+                success,
+                duration,
+                success ? undefined : failure?.error,
+              );
               span.end();
               return result;
             };

@@ -41,6 +41,7 @@ import {
   settleSpan,
 } from './span-lifecycle';
 import { patchSchemaHooks, resolveHookSelector } from './hooks';
+import { patchStartSession } from './transactions';
 import {
   INSTANCE_REGISTRY,
   resolveCustomMethods,
@@ -88,15 +89,9 @@ function wrapQueryReturningMethod(
       return original.apply(this, args);
     }
 
-    const { collectionName, modelName, connection } = describe(this);
-    const span = createSpan(
-      tracer,
-      operation,
-      modelName,
-      collectionName,
-      config,
-      connection,
-    );
+    const described = describe(this);
+    const { collectionName, connection } = described;
+    const span = createSpan(tracer, operation, described, config);
 
     const finalize = createSpanFinalizer(span);
     return runWithSpan(span, () => {
@@ -174,7 +169,8 @@ function wrapStaticMethod(
   if (!original || hasMarker(original, PATCHED_PROTOTYPE_FLAG)) return;
 
   target[methodName] = function instrumented(this: any, ...args: any[]): any {
-    const { collectionName, modelName, connection } = describe(this);
+    const described = describe(this);
+    const { collectionName, connection } = described;
 
     // Build payload from args before calling original
     const payload: SerializerPayload = {};
@@ -206,14 +202,7 @@ function wrapStaticMethod(
       // Ignore errors in payload extraction
     }
 
-    const span = createSpan(
-      tracer,
-      operation,
-      modelName,
-      collectionName,
-      config,
-      connection,
-    );
+    const span = createSpan(tracer, operation, described, config);
 
     const finalize = createSpanFinalizer(span);
     return runWithSpan(span, () => {
@@ -298,7 +287,8 @@ function wrapInstanceMethod(
   if (!original || hasMarker(original, PATCHED_PROTOTYPE_FLAG)) return;
 
   target[methodName] = function instrumented(this: any, ...args: any[]): any {
-    const { collectionName, modelName, connection } = describe(this);
+    const described = describe(this);
+    const { collectionName } = described;
 
     // Extract document before calling original
     const payload: SerializerPayload = {};
@@ -310,14 +300,7 @@ function wrapInstanceMethod(
       // Ignore errors in document extraction
     }
 
-    const span = createSpan(
-      tracer,
-      operation,
-      modelName,
-      collectionName,
-      config,
-      connection,
-    );
+    const span = createSpan(tracer, operation, described, config);
 
     recordStatement(span, operation, collectionName, payload, captureStatement);
 
@@ -529,6 +512,8 @@ export function instrumentMongoose(
       captureStatement,
     );
   }
+
+  patchStartSession(connectionPrototype, tracer, finalConfig);
 
   // Patch Query chainable methods
   const chainableMethods = [

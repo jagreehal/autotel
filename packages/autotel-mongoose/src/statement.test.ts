@@ -23,6 +23,17 @@ describe('defaultSerializer', () => {
   });
 });
 
+describe('write text', () => {
+  it('is capped', () => {
+    const fields = Object.fromEntries(
+      Array.from({ length: 200 }, (_, i) => [`field${i}`, 1]),
+    );
+    const text = defaultSerializer('updateOne', { updates: { $set: fields } });
+    expect(text.length).toBeLessThan(520);
+    expect(text.endsWith('…')).toBe(true);
+  });
+});
+
 describe('createStatementCapture', () => {
   it('captures no values by default', () => {
     const capture = createStatementCapture({

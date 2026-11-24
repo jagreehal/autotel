@@ -7,7 +7,7 @@ import {
   TracerProvider,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace';
-import { planFromExplain, serializeMongoCommand } from './index';
+import { planFromExplain, traceMongoCommands } from './index';
 
 /**
  * Against a real server, with the real driver and the upstream instrumentation
@@ -26,11 +26,12 @@ describe.skipIf(!uri)('against MongoDB', () => {
       spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
     trace.setGlobalTracerProvider(provider);
-    const instrumentation = new MongoDBInstrumentation({
-      dbStatementSerializer: serializeMongoCommand,
-      // A test has no request span to hang the queries under.
-      requireParentSpan: false,
-    });
+    const instrumentation = traceMongoCommands(
+      new MongoDBInstrumentation({
+        // A test has no request span to hang the queries under.
+        requireParentSpan: false,
+      }),
+    );
     instrumentation.setTracerProvider(provider);
     instrumentation.enable();
 
@@ -70,6 +71,124 @@ describe.skipIf(!uri)('against MongoDB', () => {
     expect(texts[0]).toContain('"filter":{"status":"?","email":"?"}');
     expect(texts[0]).not.toContain('lsid');
     expect(texts[0]).not.toContain('example.com');
+  });
+
+  it('keeps written documents out of the text of every native write', async () => {
+    const users = client.db(database).collection('writes');
+    const wide = Object.fromEntries(
+      Array.from({ length: 100 }, (_, n) => [`field${n}`, n]),
+    );
+    const secret = { secretField: 1 };
+    exporter.reset();
+    await users.insertOne({ ...secret });
+    // Sent without an `_id`, and its first field reads like a command.
+    await users.insertOne(
+      { find: 'secretField', ...secret },
+      { forceServerObjectId: true },
+    );
+    await users.insertMany([{ ...secret }, { ...secret }]);
+    await users.replaceOne({ n: 1 }, { ...secret });
+    await users.findOneAndReplace({ n: 1 }, { ...secret });
+    await users.bulkWrite([
+      { insertOne: { document: { ...secret } } },
+      { replaceOne: { filter: { n: 1 }, replacement: { ...secret } } },
+      { updateOne: { filter: { n: 1 }, update: { $set: { kept: 1 } } } },
+    ]);
+    const { version } = await client.db('admin').command({ buildInfo: 1 });
+    const bulk = Number.parseInt(String(version), 10) >= 8;
+    if (bulk) {
+      const namespace = `${database}.writes`;
+      await client.bulkWrite([
+        { name: 'insertOne', namespace, document: { ...secret } },
+        {
+          name: 'replaceOne',
+          namespace,
+          filter: { n: 1 },
+          replacement: { ...secret },
+        },
+        {
+          name: 'updateOne',
+          namespace,
+          filter: { n: 1 },
+          update: { $set: { kept: 1 } },
+        },
+      ]);
+    }
+    if (bulk) {
+      const last = exporter.getFinishedSpans().at(-1);
+      expect(last?.attributes['db.query.text']).toContain(
+        `{"insert":"${database}.writes","document":"?"}`,
+      );
+    }
+    await users.updateOne({ n: 1 }, { $set: wide });
+
+    const written = exporter
+      .getFinishedSpans()
+      .map((span) => String(span.attributes['db.query.text']));
+    expect(written.length).toBeGreaterThanOrEqual(bulk ? 10 : 9);
+    expect(written.filter((text) => text.includes('secretField'))).toEqual([]);
+    expect(Math.max(...written.map((text) => text.length))).toBe(513);
+    expect(written.filter((text) => text.includes('"kept"'))).toHaveLength(
+      bulk ? 2 : 1,
+    );
+  });
+
+  it('names the collection of every command, sent through $cmd or not', async () => {
+    const db = client.db(database);
+    const texts = async (name: string) => {
+      const users = db.collection(name);
+      exporter.reset();
+      await users.find({ n: 1 }).toArray();
+      await users.aggregate([{ $match: { n: 1 } }]).toArray();
+      await users.distinct('n');
+      await users.estimatedDocumentCount();
+      await users.findOneAndUpdate({ n: 1 }, { $set: { n: 2 } });
+      await users.updateOne({ n: 1 }, { $set: { n: 2 } });
+      await users.find({ n: 1 }).explain();
+      await db.command({ find: name, filter: { n: 1 } });
+      await db.command({ count: name, query: { n: 1 } });
+      await db.command({ insert: name, documents: [{ secretField: 1 }] });
+      await db.command({
+        findAndModify: name,
+        query: { n: 1 },
+        update: { secretField: 1 },
+      });
+      const spans = exporter.getFinishedSpans();
+      for (const span of spans) {
+        expect(span.attributes['db.collection.name']).toBe(name);
+        expect(span.name.endsWith(` ${name}`)).toBe(true);
+      }
+      return spans.map((span) => String(span.attributes['db.query.text']));
+    };
+    const orders = await texts('orders');
+    const carts = await texts('carts');
+    expect(orders).toHaveLength(11);
+    for (const [index, text] of orders.entries()) {
+      expect(text).toContain('"orders"');
+      expect(carts[index]).toBe(text.replaceAll('"orders"', '"carts"'));
+      expect(text).not.toContain('secretField');
+    }
+  });
+
+  it('sends a command whose values describe themselves', async () => {
+    const value = { toBSON: () => ({ kind: 'converted' }), self: {} };
+    value.self = value;
+    const users = client.db(database).collection('converted');
+    await users.insertOne({ value });
+    expect(await users.findOne({ value })).toMatchObject({
+      value: { kind: 'converted' },
+    });
+  });
+
+  it('sends the document it would without tracing', async () => {
+    let reads = 0;
+    const documents = Object.defineProperty([{}], 0, {
+      get: () => ({ n: ++reads }),
+      enumerable: true,
+    });
+    const db = client.db(database);
+    await db.command({ insert: 'getters', documents });
+    expect(await db.collection('getters').findOne()).toMatchObject({ n: 1 });
   });
 
   it('reads a live explain: a collection scan, and the index that fixes it', async () => {

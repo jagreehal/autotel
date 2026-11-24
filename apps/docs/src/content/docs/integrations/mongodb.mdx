@@ -11,25 +11,37 @@ uses it by default. For the plain `mongodb` driver, plug it into the official
 ## Installation
 
 ```bash
-npm install autotel autotel-mongodb
+npm install autotel autotel-mongodb mongodb @opentelemetry/instrumentation-mongodb
 ```
 
 ## Query text that groups
 
 ```typescript
+// instrumentation.ts, loaded first: node --import ./instrumentation.ts app.ts
+import 'autotel/register';
 import { init } from 'autotel';
-import { serializeMongoCommand } from 'autotel-mongodb';
+import { MongoDBInstrumentation } from '@opentelemetry/instrumentation-mongodb';
+import { traceMongoCommands } from 'autotel-mongodb';
 
 init({
   service: 'my-app',
-  autoInstrumentations: {
-    mongodb: { dbStatementSerializer: serializeMongoCommand },
-  },
+  instrumentations: [traceMongoCommands(new MongoDBInstrumentation())],
 });
 ```
 
-`users.findOne({ email: 'alice@example.com' })` and
-`users.findOne({ email: 'bob@example.com' })` now record the same
+```typescript
+// app.ts
+import { trace } from 'autotel';
+
+await trace.run('user.load', () =>
+  users.findOne({ email: 'alice@example.com' }),
+);
+```
+
+The instrumentation traces calls made inside a span. To trace the rest, pass
+`new MongoDBInstrumentation({ requireParentSpan: false })`.
+
+A lookup of `alice@example.com` and one of `bob@example.com` now record the same
 `db.query.text`:
 
 ```json
@@ -43,12 +55,18 @@ init({
 
 Every value is `?`, so nothing user-supplied reaches the span and there is no
 redactor to miss a case. A list of values is one `?`, so `$in` lists of any
-length are the same statement. Batches (`insertMany`, bulk writes) and `$or`
-branches keep one entry per distinct shape, so a batch of 3 documents and one
-of 3,000 match. Pipelines keep every stage, in order. Session fields that change per call (`lsid`,
-`$clusterTime`, `txnNumber`) are dropped.
+length are the same statement. A document being written (insert, replacement) is
+one `?`. An update keeps its operators and the fields they set, and its text is
+cut at 512 characters. Bulk writes and `$or` branches keep one entry per distinct
+shape, so a batch of 3 and one of 3,000 match. Pipelines keep every stage, in
+order. Session fields that change per call (`lsid`, `$clusterTime`, `txnNumber`)
+are dropped.
 
-`serializeMongoStatement(value)` does the same for any filter, update or
+`traceMongoCommands` also sets `db.collection.name` to the collection the command
+acts on. Group these spans by it and `db.query.text`. A `dbStatementSerializer`
+you configure keeps the text; set one to export values.
+
+`serializeMongoStatement(value)` does the same for any filter, projection or
 pipeline, without treating its first field as a collection name.
 
 ## Query plans

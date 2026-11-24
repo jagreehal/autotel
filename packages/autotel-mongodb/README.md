@@ -7,24 +7,37 @@ and groups, and `db.plan.*` from `explain()` with an index suggestion.
 into the official `@opentelemetry/instrumentation-mongodb`.
 
 ```bash
-npm install autotel-mongodb
+npm install autotel autotel-mongodb mongodb @opentelemetry/instrumentation-mongodb
 ```
 
 ## Query text
 
 ```typescript
+// instrumentation.ts, loaded first: node --import ./instrumentation.ts app.ts
+import 'autotel/register';
 import { init } from 'autotel';
-import { serializeMongoCommand } from 'autotel-mongodb';
+import { MongoDBInstrumentation } from '@opentelemetry/instrumentation-mongodb';
+import { traceMongoCommands } from 'autotel-mongodb';
 
 init({
   service: 'my-app',
-  autoInstrumentations: {
-    mongodb: { dbStatementSerializer: serializeMongoCommand },
-  },
+  instrumentations: [traceMongoCommands(new MongoDBInstrumentation())],
 });
 ```
 
-`users.findOne({ email: 'alice@example.com' })` records:
+```typescript
+// app.ts
+import { trace } from 'autotel';
+
+await trace.run('user.load', () =>
+  users.findOne({ email: 'alice@example.com' }),
+);
+```
+
+The instrumentation traces calls made inside a span. To trace the rest, pass
+`new MongoDBInstrumentation({ requireParentSpan: false })`.
+
+The query records:
 
 ```json
 {
@@ -35,18 +48,30 @@ init({
 }
 ```
 
-- Every value is `?`: nothing user-supplied reaches the span, and the same query
-  with different values has the same text.
+- Every value is `?`: user data stays out of the span, and the same query with
+  different values has the same text.
 - A list of values is one `?`, so `$in` lists of any length are one statement.
-  Batches (`insertMany` documents, bulk writes, update and delete batches) and
-  `$or` / `$and` / `$nor` branches keep one entry per distinct shape, so a batch
-  of 3 and one of 3,000 match. Every other array, an aggregation pipeline above
-  all, keeps every entry in order: one `$match` stage and two are different
-  queries.
-- `serializeMongoCommand` keeps the collection a driver command names and drops
-  the per-call session fields (`lsid`, `$clusterTime`, `txnNumber`, `$db`).
-- `serializeMongoStatement` does the rest for any filter, update or pipeline,
-  and treats every field as data.
+  Batches (bulk writes, update and delete batches) and `$or` / `$and` / `$nor`
+  branches keep one entry per distinct shape, so a batch of 3 and one of 3,000
+  match. Other arrays, such as a pipeline, keep each entry in order.
+- A document being written (insert, replacement) is one `?`. An update keeps its
+  operators and the fields they set, and its text is cut at 512 characters.
+- `traceMongoCommands` gives each span the text and `db.collection.name` of the
+  command it ran, for driver 3 to 7, and drops per-call session fields (`lsid`,
+  `$clusterTime`, `txnNumber`, `$db`). It reads data fields and leaves getters and
+  methods uncalled, showing `?` for what they hold.
+- A `dbStatementSerializer` you configure keeps the text. Set one to export
+  values: without it, text stays value-free under `enhancedDatabaseReporting` too.
+- `traceMongoCommands` replaces two private methods of the instrumentation. With a
+  version that renames one, it warns at startup and the text is `"?"`.
+- Group native spans by `db.collection.name` and `db.query.text`;
+  `db.statement.hash` comes with `autotel-mongoose`.
+- `serializeMongoStatement` reads any filter, projection or pipeline, and treats
+  each field as data.
+- `serializeMongoPayload(operation, payload)` reads a Mongoose operation, with
+  shorthand updates as the `$set` they become. `mongoPayloadKey` is the text to
+  hash: it drops the fields an update sets, so one write is one hash.
+- `serializeMongoCommand` is deprecated in favour of `traceMongoCommands`.
 
 ## Query plans
 

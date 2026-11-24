@@ -23,6 +23,8 @@ export type MongoDocument = { [key: string]: MongoValue };
 export interface SerializerPayload {
   condition?: MongoDocument;
   updates?: MongoDocument;
+  /** The update when it is a pipeline; `updates` is unset then. */
+  updatePipeline?: MongoDocument[];
   options?: MongoDocument;
   fields?: MongoDocument;
   aggregatePipeline?: unknown[];
