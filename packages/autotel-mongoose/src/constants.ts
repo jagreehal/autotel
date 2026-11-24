@@ -22,4 +22,9 @@ export const ATTR_MONGOOSE_METHOD_PARAMETERS =
 export const ATTR_MONGOOSE_METHOD_PARAMETER_COUNT =
   'mongoose.method.parameter_count' as const;
 
+/** How many times `withTransaction` ran its callback: above 1 means a retry. */
+export const ATTR_DB_TRANSACTION_ATTEMPTS = 'db.transaction.attempts' as const;
+/** One of: "committed" | "aborted" | "unknown" (the commit's result was lost). */
+export const ATTR_DB_TRANSACTION_OUTCOME = 'db.transaction.outcome' as const;
+
 export const DB_SYSTEM_NAME_VALUE_MONGODB = 'mongodb' as const;

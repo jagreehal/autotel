@@ -1,32 +1,45 @@
 ---
 name: autotel-mongodb
 description: >
-  Use this skill when tracing the plain MongoDB driver with autotel: value-free db.query.text that groups repeated queries (serializeMongoCommand for @opentelemetry/instrumentation-mongodb), and reading explain() output into db.plan.* attributes with an index suggestion (planFromExplain).
+  Use this skill when tracing the plain MongoDB driver with autotel: value-free db.query.text that groups repeated queries (traceMongoCommands around @opentelemetry/instrumentation-mongodb), and reading explain() output into db.plan.* attributes with an index suggestion (planFromExplain).
 ---
 
 # autotel-mongodb
 
-MongoDB query insight for OpenTelemetry. `autotel-mongoose` uses it by default; with the plain `mongodb` driver you plug it into the official instrumentation that `init()` loads.
+MongoDB query insight for OpenTelemetry. `autotel-mongoose` uses it by default; with the plain `mongodb` driver you wrap the official instrumentation and pass it to `init()`.
 
 ## Setup
 
 ```bash
-npm install autotel autotel-mongodb
+npm install autotel autotel-mongodb mongodb @opentelemetry/instrumentation-mongodb
 ```
 
 ```typescript
+// instrumentation.ts, loaded first: node --import ./instrumentation.ts app.ts
+import 'autotel/register';
 import { init } from 'autotel';
-import { serializeMongoCommand } from 'autotel-mongodb';
+import { MongoDBInstrumentation } from '@opentelemetry/instrumentation-mongodb';
+import { traceMongoCommands } from 'autotel-mongodb';
 
 init({
   service: 'my-app',
-  autoInstrumentations: {
-    mongodb: { dbStatementSerializer: serializeMongoCommand },
-  },
+  instrumentations: [traceMongoCommands(new MongoDBInstrumentation())],
 });
 ```
 
-`users.findOne({ email: 'alice@example.com' })` now records:
+```typescript
+// app.ts
+import { trace } from 'autotel';
+
+await trace.run('user.load', () =>
+  users.findOne({ email: 'alice@example.com' }),
+);
+```
+
+The instrumentation traces calls made inside a span. To trace the rest, pass
+`new MongoDBInstrumentation({ requireParentSpan: false })`.
+
+The query now records:
 
 ```json
 {
@@ -41,10 +54,11 @@ init({
 
 ### Value-free statements
 
-- `serializeMongoCommand(command)`: for a whole driver command. Keeps the collection the command names and drops per-session fields (`lsid`, `$clusterTime`, `txnNumber`, `$db`).
-- `serializeMongoStatement(value)`: for any filter, update or pipeline. Every field is data.
+- `traceMongoCommands(instrumentation)`: gives each native span the text and `db.collection.name` of the command it ran. A `dbStatementSerializer` you configure keeps the text; set one to export values. Group these spans by `db.collection.name` and `db.query.text`.
+- `serializeMongoStatement(value)`: for any filter, projection or pipeline. Every field is data.
+- `serializeMongoPayload(operation, payload)` and `mongoPayloadKey(operation, payload)`: the text and the hash key of a Mongoose operation. Shorthand updates read as `$set`; the key drops the fields an update sets.
 
-Every value becomes `?`. A list of values (`$in: [1, 2, 3]`) is one `?`. Batches (`insertMany` documents, bulk writes) and `$or` / `$and` branches keep one entry per distinct shape, so a batch of 3 and one of 3,000 group together. Pipelines keep every stage, in order.
+Every value becomes `?`. A list of values (`$in: [1, 2, 3]`) is one `?`. Written documents are one `?`, and an update's text is cut at 512 characters. Bulk writes and `$or` / `$and` branches keep one entry per distinct shape, so a batch of 3 and one of 3,000 group together. Pipelines keep every stage, in order.
 
 ### Query plans
 
@@ -78,10 +92,10 @@ if (plan) span.setAttributes(planAttributes(plan));
 
 ## Common Mistakes
 
-### HIGH: Passing `serializeMongoStatement` to the driver instrumentation
+### HIGH: Passing a serializer to the driver instrumentation
 
 ```typescript
-// Collection names become "?" too
+// Receives part of some commands: an inserted document or a bare filter
 init({
   service: 'my-app',
   autoInstrumentations: {
@@ -89,12 +103,10 @@ init({
   },
 });
 
-// The command serializer keeps them
+// Reads the whole command
 init({
   service: 'my-app',
-  autoInstrumentations: {
-    mongodb: { dbStatementSerializer: serializeMongoCommand },
-  },
+  instrumentations: [traceMongoCommands(new MongoDBInstrumentation())],
 });
 ```
 

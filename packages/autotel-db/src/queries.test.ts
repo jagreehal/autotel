@@ -24,11 +24,26 @@ describe('queryIdentity', () => {
   it('prefers the hash, then the text, then the operation on its collection', () => {
     expect(
       queryIdentity({ 'db.statement.hash': 'h', 'db.query.text': 't' }),
-    ).toBe('hash:||h');
-    expect(queryIdentity({ 'db.statement': 't' })).toBe('text:||t');
+    ).toBe('["hash","","","h"]');
+    expect(queryIdentity({ 'db.statement': 't' })).toBe(
+      '["text","","","","t"]',
+    );
+    expect(
+      queryIdentity({ 'db.query.text': 't', 'db.collection.name': 'a' }),
+    ).not.toBe(
+      queryIdentity({ 'db.query.text': 't', 'db.collection.name': 'b' }),
+    );
     expect(
       queryIdentity({ 'db.system.name': 'redis', 'db.operation.name': 'GET' }),
-    ).toBe('op:redis||GET ');
+    ).toBe('["op","redis","","GET",""]');
+    const keyOf = (collection: string, statement: string) =>
+      queryIdentity({
+        'db.query.text': statement,
+        'db.collection.name': collection,
+      });
+    expect(keyOf('orders|-- comment', 'SELECT 1')).not.toBe(
+      keyOf('orders', '-- comment|SELECT 1'),
+    );
     expect(queryIdentity({ 'http.method': 'GET' })).toBeUndefined();
   });
 

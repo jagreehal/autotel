@@ -204,6 +204,8 @@ Look for export failures with an HTTP status, e.g. `401`.
 
 The default protocol is OTLP over HTTP with a JSON body. `protocol: 'http/protobuf'` or `'grpc'` needs the matching `@opentelemetry/exporter-*-otlp-proto` / `-grpc` packages installed in the app.
 
+An endpoint that refuses the connection gets one warning at any log level, starting `[autotel] Nothing is listening on`.
+
 Common exporter errors:
 
 | Status        | Meaning                   | Fix                                                                    |
@@ -215,6 +217,7 @@ Common exporter errors:
 | `429`         | Rate-limited              | Lower the sampling baseline; honour `retry-after`                      |
 | `502/503/504` | Upstream unhealthy        | Often transient; add retries; check backend status                     |
 | Network error | DNS / firewall            | `curl -v <url>` from the same network                                  |
+| ECONNREFUSED  | Receiver is not running   | Start it (`npx autotel-devtools` locally) or correct the endpoint      |
 
 ## Step 6: Network / TLS
 

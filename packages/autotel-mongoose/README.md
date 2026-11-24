@@ -5,7 +5,8 @@ OpenTelemetry instrumentation for Mongoose with stable semantic conventions, `db
 ## What It Adds
 
 - Captures `db.query.text` as the query's shape, every value replaced by `?`, so no user data reaches the span and the same query always reads the same
-- Sets `db.statement.hash` on every operation, to group repeated queries (an N+1 is one hash, many spans)
+- Sets `db.statement.hash` on every operation, to group repeated queries and writes (an N+1 is one hash, many spans)
+- Traces transactions: a `mongoose.transaction` span with its attempts and outcome, and spans for the commit and abort
 - With `explain`, adds `db.plan.*`: stages, indexes used, documents examined, and the `createIndex` call a collection scan is missing
 - Redacts PII by default (Autotel's `'default'` preset) in whatever a custom serializer emits
 - Supports custom `dbStatementSerializer` functions with the same payload shape as the OpenTelemetry MongoDB plugin
@@ -243,19 +244,33 @@ const config: InstrumentMongooseConfig = {
 };
 ```
 
+## Transactions
+
+`connection.transaction()` and `session.withTransaction()` get a
+`mongoose.transaction` span with the writes, `mongoose.commitTransaction` and
+`mongoose.abortTransaction` beneath it:
+
+- `db.transaction.attempts`: how many times the callback ran, so 2 means one retry
+- `db.transaction.outcome`: `committed`, `aborted`, or `unknown` when the commit's result did not reach the driver
+
+A session you drive by hand (`startTransaction()`, `commitTransaction()`) gets
+the commit and abort spans. Start sessions with Mongoose's `startSession()`, on
+the connection or on `mongoose`.
+
 ## Statement Capture
 
 By default `db.query.text` is the payload's shape, from `autotel-mongodb`:
 field names and operators, every value `?`. `find({ email: 'a@b.c' })` records
 `{"condition":{"email":"?"},"options":{}}`, as does every other find by email.
-A list of values is one `?`, and an `insertMany` batch keeps one entry per
-distinct document shape, so batches of any size are one statement. Pipelines
-keep every stage in order. The payload is read when `exec()` starts, so
-`find().where('age').gt(0)` and `.lt(0)` are different statements.
+A list of values is one `?`, and so is a document being written (insert, save,
+replacement). An update keeps its operators and the fields they set, cut at 512
+characters. Pipelines keep every stage in order. The payload is read when
+`exec()` starts, so `find().where('age').gt(0)` and `.lt(0)` are different
+statements.
 
-`db.statement.hash` is computed from the operation, the collection and that
-shape on every operation, whatever the serializer below emits, and even when
-capture is off.
+Every operation gets a `db.statement.hash`, with any serializer below and with
+capture off. It hashes the operation, the collection and that shape, leaving out
+the fields an update sets.
 
 You can disable statement capture entirely:
 

@@ -306,12 +306,36 @@ function endpointForLog(url: string | undefined): string {
   }
 }
 
+/** Endpoints already warned about, so three signals give one warning. */
+const unreachableEndpoints = new Set<string>();
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- boundary: whatever the exporter reported
+function warnIfNothingListens(error: unknown, url: string | undefined): void {
+  // A refused connection arrives as a Node error, a fetch cause, or gRPC text.
+  const failure = asRecord(error);
+  const refused =
+    failure?.code === 'ECONNREFUSED' ||
+    asRecord(failure?.cause)?.code === 'ECONNREFUSED' ||
+    asString(failure?.message)?.includes('ECONNREFUSED');
+  if (!refused) return;
+  const endpoint = endpointForLog(url).replace(
+    /\/v1\/(traces|metrics|logs)$/,
+    '',
+  );
+  if (unreachableEndpoints.has(endpoint)) return;
+  unreachableEndpoints.add(endpoint);
+  console.warn(
+    `[autotel] Nothing is listening on ${endpoint}, so telemetry is being dropped. If this is autotel-devtools, start it with: npx autotel-devtools`,
+  );
+}
+
 /**
- * Warn once, at any log level, when the backend rejects an export outright.
+ * Warn once, at any log level, when nothing listens at the endpoint or the
+ * backend rejects an export outright.
  * The OTLP exporters report failures through `diag`, which prints only when
  * OTEL_LOG_LEVEL is set.
  */
-function warnOnRejection<I>(
+function warnOnFailedExport<I>(
   exporter: {
     export(items: I, resultCallback: (result: ExportResult) => void): void;
   },
@@ -328,6 +352,7 @@ function warnOnRejection<I>(
     original(items, (result) => {
       const error = asRecord(result.error);
       const status = error?.code;
+      warnIfNothingListens(result.error, url);
       if (!warned && typeof status === 'number' && rejected.has(status)) {
         warned = true;
         const message = asString(error?.message) ?? '';
@@ -348,7 +373,7 @@ export function createTraceExporter(
   config: OTLPExporterConfig,
 ): SpanExporter {
   const exporter = buildTraceExporter(protocol, config);
-  warnOnRejection(exporter, protocol, 'traces', config.url);
+  warnOnFailedExport(exporter, protocol, 'traces', config.url);
   return exporter;
 }
 
@@ -359,7 +384,7 @@ export function createMetricExporter(
   },
 ): PushMetricExporter {
   const exporter = buildMetricExporter(protocol, config);
-  warnOnRejection(exporter, protocol, 'metrics', config.url);
+  warnOnFailedExport(exporter, protocol, 'metrics', config.url);
   return exporter;
 }
 
@@ -368,7 +393,7 @@ export function createLogExporter(
   config: OTLPExporterConfig,
 ): LogRecordExporter {
   const exporter = buildLogExporter(protocol, config);
-  warnOnRejection(exporter, protocol, 'logs', config.url);
+  warnOnFailedExport(exporter, protocol, 'logs', config.url);
   return exporter;
 }
 

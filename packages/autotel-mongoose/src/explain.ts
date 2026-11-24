@@ -24,6 +24,7 @@ export function explainCommand(
 ): MongoCommand | undefined {
   const filter = payload.condition ?? {};
   const options = payload.options ?? {};
+  const update = payload.updates ?? payload.updatePipeline ?? {};
   const sort = options.sort;
   // What changes how the server runs the query, and so the plan it picks: a
   // `hint` forcing an index or a scan, a `collation` that rules out an index
@@ -68,7 +69,7 @@ export function explainCommand(
         updates: [
           defined({
             q: filter,
-            u: payload.updates ?? {},
+            u: update,
             multi: operation === 'updateMany',
             upsert: options.upsert,
             arrayFilters: options.arrayFilters,
@@ -98,7 +99,7 @@ export function explainCommand(
         findAndModify: collection,
         query: filter,
         sort,
-        update: payload.updates ?? {},
+        update,
         upsert: options.upsert,
         arrayFilters: options.arrayFilters,
         ...planning,

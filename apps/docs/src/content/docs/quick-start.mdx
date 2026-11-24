@@ -71,6 +71,16 @@ const user = await trace.run('user.create', async (ctx) => {
 **`trace` wraps, `trace.run` runs.** Every `trace(...)` form returns a wrapper
 and executes nothing, so importing a module of them has no side effects.
 
+A function that returns Results takes `result: true`. A returned
+`{ ok: false, error }` marks the span ERROR and sets `error.type` from the error:
+
+```typescript
+export const saveOrder = trace(
+  { name: 'order.save', result: true },
+  async (order: Order) => repository.save(order),
+);
+```
+
 ## 4. Request-Scoped Logging
 
 ```typescript

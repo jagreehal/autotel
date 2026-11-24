@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createTraceExporter } from './otlp-exporters';
+import { createLogExporter, createTraceExporter } from './otlp-exporters';
 
 /** The slice of `@grpc/grpc-js` the gRPC test uses; not a dependency of ours. */
 interface GrpcJs {
@@ -47,6 +47,28 @@ describe('rejected exports', () => {
     expect(warn.mock.calls[0]?.[0]).toBe(
       `[autotel] traces export to ${endpoint} rejected: 403 Forbidden ({"errors":["API key is missing or invalid"]}). Telemetry is being dropped.`,
     );
+  });
+
+  it('warns once when nothing listens, whatever the signal', async () => {
+    const probe = createServer();
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    // SAFETY: a listening TCP server's address is an AddressInfo.
+    const base = `http://127.0.0.1:${(probe.address() as AddressInfo).port}`;
+    await new Promise((resolve) => probe.close(resolve));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Shorter than the exporter's first retry delay, so it reports at once.
+    const timeoutMillis = 500;
+    for (const exporter of [
+      createTraceExporter('http', { url: `${base}/v1/traces`, timeoutMillis }),
+      createLogExporter('http', { url: `${base}/v1/logs`, timeoutMillis }),
+    ]) {
+      await new Promise((resolve) => exporter.export([], resolve));
+    }
+
+    expect(warn.mock.calls.map(([message]) => message)).toEqual([
+      `[autotel] Nothing is listening on ${base}, so telemetry is being dropped. If this is autotel-devtools, start it with: npx autotel-devtools`,
+    ]);
   });
 
   it('warns once when a gRPC backend rejects the key', async () => {

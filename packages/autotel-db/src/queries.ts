@@ -225,25 +225,30 @@ export function readPlan(
 
 /**
  * Which statement a span ran, as a grouping key: the statement hash when the
- * instrumentation set one, else the query text, else the operation on its
- * collection, scoped to the database system and namespace so the same
- * statement against two databases stays two statements. `undefined` for a
- * span that is not a database call.
+ * instrumentation set one, else the query text and collection, else the
+ * operation on its collection, scoped to the database system and namespace so
+ * the same statement against two databases stays two statements. `undefined`
+ * for a span that is not a database call.
  */
 export function queryIdentity(
   attributes: SpanAttributeBag,
 ): string | undefined {
   const system = text(attributes, 'db.system.name', 'db.system');
-  const scope = `${system ?? ''}|${text(attributes, 'db.namespace', 'db.name') ?? ''}`;
+  const namespace = text(attributes, 'db.namespace', 'db.name');
+  // JSON keeps each part distinct, whatever characters it holds.
+  const identity = (...parts: Array<string | undefined>) =>
+    JSON.stringify(parts.map((part) => part ?? ''));
   const hash = text(attributes, ATTR_DB_STATEMENT_HASH);
-  if (hash) return `hash:${scope}|${hash}`;
+  if (hash) return identity('hash', system, namespace, hash);
   const statement = text(attributes, 'db.query.text', 'db.statement');
-  if (statement) return `text:${scope}|${statement}`;
+  const collection = text(attributes, 'db.collection.name', 'db.sql.table');
+  // A Mongo filter's text leaves its collection out.
+  if (statement) {
+    return identity('text', system, namespace, collection, statement);
+  }
   if (!system) return undefined;
-  const operation = text(attributes, 'db.operation.name', 'db.operation') ?? '';
-  const collection =
-    text(attributes, 'db.collection.name', 'db.sql.table') ?? '';
-  return `op:${scope}|${operation} ${collection}`;
+  const operation = text(attributes, 'db.operation.name', 'db.operation');
+  return identity('op', system, namespace, operation, collection);
 }
 
 type Building = QueryGroup & {

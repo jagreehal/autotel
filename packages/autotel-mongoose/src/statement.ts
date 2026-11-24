@@ -1,5 +1,5 @@
 import { createStringRedactor, type StringRedactor } from 'autotel';
-import { serializeMongoStatement } from 'autotel-mongodb';
+import { serializeMongoPayload } from 'autotel-mongodb';
 import type {
   SerializerPayload,
   InstrumentMongooseConfig,
@@ -10,14 +10,15 @@ import type {
 /**
  * Default serializer: the payload's shape with every value replaced by `?`,
  * so the same query with different values has the same text and no user data
- * reaches the span. Pass `(op, payload) => JSON.stringify(payload)` as
+ * reaches the span. Documents a write carries are one `?`, and an update's text
+ * is cut at 512 characters. Pass `(op, payload) => JSON.stringify(payload)` as
  * `dbStatementSerializer` to capture values (redacted by `statementRedactor`).
  */
 export function defaultSerializer(
-  _operation: string,
+  operation: string,
   payload: SerializerPayload,
 ): string {
-  return serializeMongoStatement(payload);
+  return serializeMongoPayload(operation, payload);
 }
 
 export type StatementCaptureFn = (

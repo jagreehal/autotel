@@ -29,7 +29,7 @@ import {
   planUnavailableAttributes,
   type ExplainMode,
 } from 'autotel-db';
-import { planFromExplain, serializeMongoStatement } from 'autotel-mongodb';
+import { mongoPayloadKey, planFromExplain } from 'autotel-mongodb';
 import { type StatementCaptureFn } from './statement';
 import { traceCursor } from './cursor';
 import {
@@ -49,7 +49,7 @@ interface ConnectionInfo {
 }
 
 /** What an operation runs against: read off the Model, Document or Connection it was called on. */
-interface OperationTarget {
+export interface OperationTarget {
   collectionName?: string;
   modelName?: string;
   connection?: ConnectionInfo;
@@ -83,10 +83,9 @@ export const describeConnection: DescribeTarget = (connection) => ({
 export function createSpan(
   tracer: Tracer,
   operation: string,
-  modelName: string | undefined,
-  collectionName: string | undefined,
+  { modelName, collectionName, connection }: OperationTarget,
   config: ResolvedConfig,
-  connection: ConnectionInfo | undefined,
+  kind: SpanKind = SpanKind.CLIENT,
 ): Span {
   const spanName = collectionName
     ? `${operation} ${collectionName}`
@@ -111,7 +110,7 @@ export function createSpan(
   const port = config.peerPort ?? connection?.port;
   if (port !== undefined) attributes[ATTR_SERVER_PORT] = port;
 
-  return tracer.startSpan(spanName, { kind: SpanKind.CLIENT, attributes });
+  return tracer.startSpan(spanName, { kind, attributes });
 }
 
 /**
@@ -157,9 +156,9 @@ export function createSpanFinalizer(span: Span): Finalize {
 /**
  * Sets `db.query.text` (through the user's serializer and redactor) and
  * `db.statement.hash`. The hash is always taken from the value-free shape,
- * whatever the serializer emits, and from the operation and collection, which
- * the payload does not name, so it groups the same query and nothing else
- * even when text capture is off.
+ * without the documents a write carries, whatever the serializer emits, and
+ * from the operation and collection, which the payload does not name, so it
+ * groups the same query and nothing else even when text capture is off.
  */
 export function recordStatement(
   span: Span,
@@ -176,7 +175,7 @@ export function recordStatement(
     span.setAttribute(
       ATTR_DB_STATEMENT_HASH,
       hashStatement(
-        `${operation} ${collectionName ?? ''} ${serializeMongoStatement(payload)}`,
+        `${operation} ${collectionName ?? ''} ${mongoPayloadKey(operation, payload)}`,
       ),
     );
   } catch {
@@ -220,7 +219,8 @@ export function readQueryPayload(
   try {
     const getFilter = asFunction(query.getFilter);
     if (getFilter) payload.condition = mongoDocument(getFilter.call(query));
-    payload.updates = mongoDocument(query._update);
+    if (Array.isArray(query._update)) payload.updatePipeline = query._update;
+    else payload.updates = mongoDocument(query._update);
     const getOptions = asFunction(query.getOptions);
     if (getOptions) payload.options = mongoDocument(getOptions.call(query));
     payload.fields = mongoDocument(query._fields);

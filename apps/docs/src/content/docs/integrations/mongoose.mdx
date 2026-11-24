@@ -48,12 +48,12 @@ own span.
 `db.query.text` is the query's shape: field names and operators, with every
 value replaced by `?`. Nothing user-supplied reaches the span, so there is
 nothing for a redactor to miss, and the same query with different values has
-the same text. An `insertMany` records one entry per distinct document shape,
-so batches of any size are one statement.
+the same text. A document being written (insert, save, replacement) is one `?`,
+and an update's text is cut at 512 characters.
 
-`db.statement.hash` is set on every operation, from the operation, the
-collection and that shape, even when `dbStatementSerializer` is `false` or
-captures values. Group a trace's spans by it to find an N+1: one hash, many
+Every operation gets a `db.statement.hash`, including when
+`dbStatementSerializer` is `false` or captures values. It hashes the operation,
+the collection and that shape, leaving out the fields an update sets. Group a trace's spans by it to find an N+1: one hash, many
 spans. The `find_repeated_queries` tool in `autotel-mcp` does that for you.
 
 To capture values anyway, pass a serializer. `statementRedactor` (the
@@ -94,6 +94,19 @@ development, in CI, or for a sample of traffic.
 
 The attributes are the ones [MongoDB](/integrations/mongodb#query-plans)
 documents, shared with Drizzle's Postgres plans.
+
+## Transactions
+
+`connection.transaction()` and `session.withTransaction()` get a
+`mongoose.transaction` span with the writes, `mongoose.commitTransaction` and
+`mongoose.abortTransaction` beneath it:
+
+- `db.transaction.attempts`: how many times the callback ran, so 2 means one retry
+- `db.transaction.outcome`: `committed`, `aborted`, or `unknown` when the commit's result did not reach the driver
+
+A session you drive by hand (`startTransaction()`, `commitTransaction()`) gets
+the commit and abort spans. Start sessions with Mongoose's `startSession()`, on
+the connection or on `mongoose`.
 
 ## Hook Instrumentation
 
@@ -164,4 +177,5 @@ Uses stable OTel conventions:
 - `server.address` / `server.port`
 
 Plus autotel's own, shared across its database instrumentations:
-`db.statement.hash`, and `db.plan.*` when `explain` is on.
+`db.statement.hash`, `db.transaction.*` on transaction spans, and `db.plan.*`
+when `explain` is on.

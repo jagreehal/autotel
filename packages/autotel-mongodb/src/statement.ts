@@ -1,78 +1,41 @@
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-unsafe-dictionary-type, anti-slop/no-known-value-widening, anti-slop/no-runtime-typeof -- boundary: whatever the driver or application passed */
 /**
- * Turn a MongoDB command, filter, update or pipeline into `db.query.text` with
- * every value replaced by `?`.
+ * Turn a MongoDB filter, projection or pipeline into `db.query.text` with every
+ * value replaced by `?`.
  *
  * What is left is the query's shape: field names, operators and structure.
  * That is what a reader groups by, and it carries no user data, so there is
  * nothing for a redactor to miss. `find({ email: 'a@b.c' })` and
  * `find({ email: 'x@y.z' })` serialize to the same text and hash together.
+ *
+ * Every field is data, whatever it is called.
  */
 export function serializeMongoStatement(value: unknown): string {
   return JSON.stringify(withoutValues(value)) ?? '"?"';
 }
 
 /**
- * {@link serializeMongoStatement} for a whole driver command, as
- * `@opentelemetry/instrumentation-mongodb` hands its `dbStatementSerializer`:
- * the collection the command names is kept (`{"find":"users",…}`) and the
- * per-session fields are dropped.
- *
- * A separate function rather than a guess, because a command and a bare
- * filter with a `find` field look the same, and in the filter it is data.
+ * Logical operators, whose branches are interchangeable: one entry per distinct
+ * shape is kept. Every other array of documents is an ordered program, a
+ * pipeline above all, and keeps every entry in order: one `$match` and two are
+ * different queries.
  */
-export function serializeMongoCommand(command: unknown): string {
-  return JSON.stringify(withoutValues(command, true)) ?? '"?"';
-}
+const LOGICAL_KEYS = new Set(['$or', '$and', '$nor']);
 
-/**
- * Keys a driver adds to every command that change per call or per session and
- * say nothing about the query. Leaving them in would give each call its own
- * text.
- */
-const SESSION_KEYS = new Set([
-  'lsid',
-  '$clusterTime',
-  '$db',
-  'txnNumber',
-  'autocommit',
-  'startTransaction',
-]);
-
-/**
- * Arrays whose entries are interchangeable: a batch of documents or writes, and
- * the branches of a logical operator. Each keeps one entry per distinct
- * shape, so a batch of 3 and one of 3000 are the same statement. Every other
- * array of documents is an ordered program, an aggregation pipeline above
- * all, and keeps every entry in order: one `$match` and two are different
- * queries.
- */
-const BATCH_KEYS = new Set([
-  'documents',
-  'operations',
-  'updates',
-  'deletes',
-  '$or',
-  '$and',
-  '$nor',
-]);
-
-function withoutValues(
-  value: unknown,
-  isCommand = false,
-  key?: string,
-): unknown {
+export function withoutValues(value: unknown, key?: string): unknown {
   if (Array.isArray(value)) {
     // A list of values (`$in: [1, 2, 3]`, tags, ids) is one value whatever
     // its length.
+    const elements = elementsOf(value);
     if (
-      value.every(
+      elements.every(
         (element) => !isPlainObject(element) && !Array.isArray(element),
       )
     ) {
-      return value.length === 0 ? [] : ['?'];
+      return elements.length === 0 ? [] : ['?'];
     }
-    const stripped = value.map((element) => withoutValues(element));
-    if (key === undefined || !BATCH_KEYS.has(key)) return stripped;
+    const stripped = elements.map((element) => withoutValues(element));
+    if (key === undefined || !LOGICAL_KEYS.has(key)) return stripped;
     const seen = new Map<string, unknown>();
     for (const element of stripped) seen.set(JSON.stringify(element), element);
     return [...seen.values()];
@@ -93,46 +56,48 @@ function withoutValues(
     return '?';
   }
 
-  const out: Record<string, unknown> = {};
-  for (const [index, key] of keys.entries()) {
-    if (isCommand && SESSION_KEYS.has(key)) continue;
-    const field = value[key];
-    // Absent, as JSON.stringify would have it: a payload without an update
-    // is not the same statement as one whose update is a value.
-    if (field === undefined) continue;
-    // A command document names its collection in its first field
-    // (`{ find: 'users', filter: … }`). That is not user data, and without it
-    // a find on users and a find on orders would read as the same statement.
-    const keepCollection =
-      isCommand &&
-      index === 0 &&
-      COMMANDS.has(key) &&
-      typeof field === 'string';
-    out[key] = keepCollection ? field : withoutValues(field, false, key);
-  }
-  return out;
+  return mapFields(value, (field, name) => withoutValues(field, name));
 }
 
-/** Commands whose first field is the collection they act on. */
-const COMMANDS = new Set([
-  'find',
-  'aggregate',
-  'count',
-  'distinct',
-  'insert',
-  'update',
-  'delete',
-  'findAndModify',
-  'createIndexes',
-  'listIndexes',
-  'drop',
-  'mapReduce',
-]);
+/**
+ * An array's elements, read by index as BSON does, without running its methods.
+ * An element behind a getter reads as undefined.
+ */
+export function elementsOf(array: readonly unknown[]): unknown[] {
+  return Array.from(
+    { length: array.length },
+    (_, index): unknown => Object.getOwnPropertyDescriptor(array, index)?.value,
+  );
+}
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+/** Absent fields are dropped, as JSON.stringify would. */
+export function mapFields(
+  value: Record<string, unknown>,
+  map: (field: unknown, key: string) => unknown,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, field]) => field !== undefined)
+      .map(([key, field]) => [key, map(field, key)]),
+  );
+}
+
+/**
+ * An object whose fields can be read without running application code. One with
+ * a getter counts as a value.
+ */
+export function isPlainObject(
+  value: unknown,
+): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null) return false;
   const prototype: unknown = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  const fields = Object.getOwnPropertyDescriptors(value);
+  if (Object.values(fields).some((field) => field.get !== undefined)) {
+    return false;
+  }
+  // BSON sends what toBSON() returns, so the object itself is a value.
+  return !('toBSON' in value && typeof value.toBSON === 'function');
 }
 
 /** Extended JSON wrappers, which are one value however they are spelled. */

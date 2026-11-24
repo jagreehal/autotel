@@ -679,7 +679,7 @@ export const createUser = withTracing({})(
 
 Available helpers: `traceId`, `spanId`, `correlationId`, `setAttribute`, `setAttributes`, `setStatus`, `getBaggage`, `setBaggage`, `deleteBaggage`, `getAllBaggage`.
 
-An operation that returns normally counts as a success. To report a failure you return as a value, such as an HTTP 502, call `ctx.setStatus({ code: SpanStatusCode.ERROR })` before returning: the span gets `operation.success: false` and `error: true`, and metrics and tail sampling count it as failed.
+An operation that returns normally counts as a success. To report a failure you return as a value, such as an HTTP 502, call `ctx.setStatus({ code: SpanStatusCode.ERROR })` before returning: the span gets `operation.success: false` and `error: true`, and metrics and tail sampling count it as failed. When the function returns Results, pass `result: true` instead: `trace({ name: 'order.save', result: true }, saveOrder)` does the same for a returned `{ ok: false, error }` and sets `error.type` from the error.
 
 > **Errors and events:** prefer `recordStructuredError(ctx, error)` and the
 > request logger over the raw `Span.recordException` / `Span.addEvent` APIs.
@@ -3053,6 +3053,14 @@ When a backend rejects an export with HTTP 401, 403 or 404 (gRPC `UNAUTHENTICATE
 ```
 
 Check the API key and endpoint. Set `OTEL_LOG_LEVEL=debug` for every export attempt.
+
+### Unreachable endpoint
+
+When an endpoint refuses the connection, autotel prints one warning for it, shared by traces, metrics and logs:
+
+```text
+[autotel] Nothing is listening on http://localhost:4318, so telemetry is being dropped. If this is autotel-devtools, start it with: npx autotel-devtools
+```
 
 ### Quick Debug Mode (Recommended)
 
