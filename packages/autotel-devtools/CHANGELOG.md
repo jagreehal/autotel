@@ -1,5 +1,11 @@
 # autotel-devtools
 
+## 31.11.2
+
+### Patch Changes
+
+- 7c39b5e: The full-page viewer's size budget makes room for feature flag comparison in the Compare tab.
+
 ## 31.11.1
 
 ### Patch Changes
