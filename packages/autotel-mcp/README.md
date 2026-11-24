@@ -574,7 +574,7 @@ Every backend returns nested attributes as dotted keys (`nested.id: 1`) and arra
 - **list_issues**: Failures (thrown and handled exceptions, HTTP 5xx, error logs, log floods, runaway alarms) grouped into issues with status, count, first/last seen, trend, regression, versions and affected users/accounts/sessions
 - **get_issue**: One issue's stack trace, latest trace and its logs, and the service logs around it: the context to hand a coding agent
 - **check_slos**: Report SLO violations given p99 latency and error rate targets
-- **what_changed**: Every service whose `service.version` changed in the window, when, and its error rate and p95 before and after. Built from spans, so it needs no deploy events
+- **what_changed**: Every service whose `service.version` changed in the window, and every feature flag whose `feature_flag.version` changed, when, and the error rate and p95 before and after. Pass `serviceName` to look at one service. Built from spans, so it needs no deploy events
 
 </details>
 

@@ -131,7 +131,8 @@ SAVE20                          # a bare word is free text
 **Fields.** Traces: `service`, `name`, `kind`, `duration`, `status`, `trace_id`,
 `span_id`, `parent_span_id`. Logs: `service`, `severity`, `severity_number`,
 `trace_id`, `span_id`, `body`. Anything else is looked up as an attribute, so
-every attribute a service emits is queryable without being declared.
+every attribute a service emits is queryable without being declared. `service`
+and `duration` have an index per trace: use them to narrow a large history.
 
 **Free text** matches those fields and every attribute value — so an order id
 or coupon code set with `ctx.setAttribute` finds its span when typed on its

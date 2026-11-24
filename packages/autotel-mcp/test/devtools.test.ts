@@ -672,12 +672,17 @@ describe('DevtoolsBackend — store-backed queries', () => {
       _input: Parameters<typeof fetch>[0],
       init?: RequestInit,
     ) => {
-      const body = JSON.parse(String(init?.body ?? '{}')) as {
-        window?: unknown;
+      const { window } = JSON.parse(String(init?.body ?? '{}')) as {
+        window?: { start: number; end: number };
       };
+      // Devtools windows by trace start.
+      const inWindow =
+        !window ||
+        (crossingTrace.startTime >= window.start &&
+          crossingTrace.startTime <= window.end);
       return new Response(
         JSON.stringify({
-          traces: body.window ? [] : [crossingTrace],
+          traces: inWindow ? [crossingTrace] : [],
           nextCursor: null,
         }),
         { status: 200 },
@@ -691,6 +696,43 @@ describe('DevtoolsBackend — store-backed queries', () => {
 
     expect(result.items.map((item) => item.spanId)).toEqual(['in-window']);
   });
+
+  it('bounds a span search by the end of its window', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () =>
+        Response.json({ traces: [], nextCursor: null }),
+      );
+
+    await new DevtoolsBackend(BASE).searchSpans({
+      startTimeUnixMs: 2_000,
+      endTimeUnixMs: 2_800,
+    });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.window.end).toBe(2_800);
+    // Includes traces that start before the epoch.
+    expect(body.window.start).toBe(-Number.MAX_VALUE);
+  });
+
+  it.each(['searchSpans', 'searchTraces'] as const)(
+    '%s filters an unbounded window itself',
+    async (method) => {
+      const fetchMock = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementation(async () =>
+          Response.json({ traces: [], nextCursor: null }),
+        );
+
+      await new DevtoolsBackend(BASE)[method]({
+        startTimeUnixMs: 0,
+        endTimeUnixMs: Number.POSITIVE_INFINITY,
+      });
+
+      const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+      expect(body).not.toHaveProperty('window');
+    },
+  );
 
   it('applies minimum duration to the whole trace rather than each span', async () => {
     const longTrace = trace({

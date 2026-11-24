@@ -63,8 +63,8 @@ mask values whose keys look like credentials (`password`, `token`,
   (default: in-memory)
 - `--max-traces <n>`: Traces retained before the oldest are pruned (default:
   `100000`)
-- `--db-max-size <size>`: Logical store cap, e.g. `512mb` or `2gb` (default:
-  `512mb` in memory, `2gb` on disk)
+- `--db-max-size <size>`: Logical store cap for rows and indexes, e.g. `512mb` or
+  `2gb` (default: `512mb` in memory, `2gb` on disk)
 - `--grpc-port <n>`: OTLP/gRPC port (default: `4317`)
 - `-p, --port <port>`: Port (default: `4318`). If the port is taken, falls
   forward to the next free port and prints a warning. When the original port is
