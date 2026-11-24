@@ -54,6 +54,7 @@ tests, which import from source, keep passing. Run it alone with:
 pnpm check-exports-map
 pnpm bundle-size          # compare dist sizes against bundle-size-baseline.json
 pnpm bundle-size:update   # accept intentional growth, then commit the baseline
+pnpm --filter autotel-devtools test:dist   # built ESM smoke test + widget size budgets (after pnpm build)
 ```
 
 `check-semconv-drift` checks every dotted name in the hand-maintained name
