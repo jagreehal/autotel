@@ -28,10 +28,11 @@ export function parseTimestamp(input: string, nowMs = Date.now()): number {
     const amount = Number(rel[2]);
     const unit = rel[3];
     const ms = UNIT_TO_MS.get(unit);
-    if (!Number.isFinite(amount) || !ms) {
+    const offset = ms ? amount * ms : Number.NaN;
+    if (!Number.isFinite(offset)) {
       throw new Error(`Invalid relative time expression: ${input}`);
     }
-    return op === '-' ? nowMs - amount * ms : nowMs + amount * ms;
+    return op === '-' ? nowMs - offset : nowMs + offset;
   }
 
   const parsed = Date.parse(input);

@@ -376,6 +376,132 @@ describe('DevtoolsStore — querying', () => {
     expect(new Set(ids).size).toBe(3);
   });
 
+  it('pages a filtered query through traces that share a start time', () => {
+    const startTime = 5_000;
+    const tied = Array.from({ length: 7 }, (_, index) => {
+      const traceId = `tied-${index}`;
+      return trace({ spans: [span({ traceId, startTime })], service: 'tied' });
+    });
+    store.ingestTraces(tied);
+
+    const ids: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = store.queryTraces({
+        query: 'service = tied',
+        window: { start: 0, end: startTime },
+        limit: 3,
+        cursor,
+      });
+      ids.push(...page.traces.map((t) => t.traceId));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor && ids.length <= tied.length);
+
+    expect(ids).toEqual(
+      tied.map((t) => t.traceId).sort((a, b) => b.localeCompare(a)),
+    );
+  });
+
+  // No window, so the seek can come from the cursor alone.
+  it.each([
+    ['service = api', 'idx_spans_trace_service (trace_id=? AND service=?)'],
+    ['duration = 10', 'idx_spans_trace_duration (trace_id=? AND duration=?)'],
+    ['duration > 10', 'idx_spans_trace_duration (trace_id=? AND duration>?)'],
+  ])(
+    'seeks to the page after a cursor and to the spans: %s',
+    (query, probe) => {
+      const { nextCursor } = store.queryTraces({ query: '', limit: 1 });
+      expect(nextCursor).not.toBeNull();
+
+      const prepare = vi.spyOn(DatabaseSync.prototype, 'prepare');
+      store.queryTraces({ query, limit: 1, cursor: nextCursor ?? undefined });
+      const sql = prepare.mock.calls
+        .map(([text]) => text)
+        .find((text) => text.includes('EXISTS'))!;
+      prepare.mockRestore();
+
+      const db = new DatabaseSync(join(dir, 'test.db'));
+      const plan = db
+        .prepare(`EXPLAIN QUERY PLAN ${sql}`)
+        .all(...Array.from({ length: sql.split('?').length - 1 }, () => 1))
+        .map((row) => String(row.detail));
+      db.close();
+
+      expect(plan).toContain(
+        'SEARCH t USING INDEX idx_traces_start (start_time<?)',
+      );
+      expect(plan).not.toContain('MULTI-INDEX OR');
+      expect(plan).toContainEqual(expect.stringContaining(probe));
+    },
+  );
+
+  // Arrival order differs from id, service and duration order.
+  const arrivals: Array<[id: string, service: string, duration: number]> = [
+    ['z', 'zeta', 30],
+    ['a', 'beta', 20],
+    ['m', 'alpha', 10],
+  ];
+
+  it('reads spans that start together in the order they arrived', () => {
+    const spans = arrivals.map(([spanId, service, duration]) =>
+      span({
+        traceId: 'ties',
+        spanId,
+        startTime: 5_000,
+        duration,
+        attributes: { 'service.name': service },
+      }),
+    );
+    store.ingestTraces([trace({ spans })]);
+
+    const { traces } = store.queryTraces({ query: 'trace_id = ties' });
+    const ids = ['z', 'a', 'm'];
+    expect(traces[0].spans.map((s) => s.spanId)).toEqual(ids);
+    expect(store.getTrace('ties')?.spans.map((s) => s.spanId)).toEqual(ids);
+  });
+
+  it('ranks spans of equal duration in the order they arrived', () => {
+    const spans = arrivals.map(([spanId, service]) =>
+      span({
+        traceId: 'ties',
+        spanId,
+        startTime: 5_000,
+        duration: 10,
+        attributes: { 'service.name': service },
+      }),
+    );
+    store.ingestTraces([trace({ spans })]);
+
+    expect(
+      store.describeTrace('ties')?.slowestSpans.map((s) => s.spanId),
+    ).toEqual(['z', 'a', 'm']);
+  });
+
+  it('replaces the trace index of a database written by an earlier release', () => {
+    store.close();
+    const path = join(dir, 'test.db');
+    const old = new DatabaseSync(path);
+    old.exec('DROP INDEX idx_spans_trace_service');
+    old.exec('DROP INDEX idx_spans_trace_duration');
+    old.exec('CREATE INDEX idx_spans_trace ON spans(trace_id)');
+    old.close();
+
+    store = new DevtoolsStore({ path });
+
+    expect(
+      store.queryTraces({ query: 'service = api' }).traces.length,
+    ).toBeGreaterThan(0);
+    const db = new DatabaseSync(path);
+    const indexes = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'index'")
+      .all()
+      .map((row) => row.name);
+    db.close();
+    expect(indexes).toContain('idx_spans_trace_service');
+    expect(indexes).toContain('idx_spans_trace_duration');
+    expect(indexes).not.toContain('idx_spans_trace');
+  });
+
   it('reports an invalid query as an error rather than throwing', () => {
     const result = store.queryTraces({ query: 'service =' });
     expect(result.errors).toBeDefined();

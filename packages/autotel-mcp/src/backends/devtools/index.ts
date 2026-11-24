@@ -324,14 +324,8 @@ export class DevtoolsBackend implements TelemetryBackend {
     query: TraceSearchQuery,
     wanted: number,
     accepts: (trace: TraceRecord) => boolean,
-    pushDownWindow = true,
+    window = traceWindow(query),
   ): Promise<TraceRecord[] | null> {
-    const window =
-      pushDownWindow &&
-      query.startTimeUnixMs !== undefined &&
-      query.endTimeUnixMs !== undefined
-        ? { start: query.startTimeUnixMs, end: query.endTimeUnixMs }
-        : undefined;
     const matches: TraceRecord[] = [];
     const ok = await this.scanStore(
       compileTraceQuery(query),
@@ -489,9 +483,9 @@ export class DevtoolsBackend implements TelemetryBackend {
           (span) =>
             spanWithinTimeWindow(span, query) && spanMatchesQuery(span, query),
         ),
-      // The devtools endpoint windows by trace start. A trace can begin before
-      // the requested span window and still contain an in-window child.
-      false,
+      // The devtools endpoint windows by trace start, and a trace starts with
+      // its earliest span, so a span window bounds the trace from above.
+      traceWindow({ ...query, startTimeUnixMs: -Number.MAX_VALUE }),
     );
     let records = pushed;
     if (!records) {
@@ -753,6 +747,19 @@ function resolveStatus(
     return code;
   }
   return inferErrorStatusFromTags(tags);
+}
+
+/** The query's window, when both ends are finite and so survive JSON. */
+function traceWindow(
+  query: TraceSearchQuery,
+): { start: number; end: number } | undefined {
+  const { startTimeUnixMs: start, endTimeUnixMs: end } = query;
+  return start !== undefined &&
+    end !== undefined &&
+    Number.isFinite(start) &&
+    Number.isFinite(end)
+    ? { start, end }
+    : undefined;
 }
 
 /** True when the trace overlaps the query's time window (no window ⇒ always). */

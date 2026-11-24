@@ -15,8 +15,25 @@ import {
 } from '../src/modules/query-filters';
 import { buildServiceMap } from '../src/modules/service-map';
 import { unresolvedFilterHint } from '../src/tools/shared';
+import { parseTimestamp } from '../src/modules/time-range';
 import { summarizeTrace } from '../src/modules/trace-summary';
 import type { TraceRecord } from '../src/types';
+
+describe('parseTimestamp', () => {
+  it.each(['+', '-'])(
+    'rejects a relative time that overflows: now%s',
+    (sign) => {
+      const input = `now${sign}${'9'.repeat(308)}y`;
+      expect(() => parseTimestamp(input)).toThrow(
+        'Invalid relative time expression',
+      );
+    },
+  );
+
+  it('accepts a relative time in range', () => {
+    expect(parseTimestamp('now-2h', 10_000_000)).toBe(2_800_000);
+  });
+});
 
 describe('collector validation', () => {
   it('accepts a minimal OTLP receiver config', () => {

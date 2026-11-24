@@ -455,7 +455,10 @@ CREATE INDEX IF NOT EXISTS idx_logs_trace     ON logs(trace_id);
 CREATE INDEX IF NOT EXISTS idx_logs_severity  ON logs(severity_number, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_series_name    ON metric_series(name);
 CREATE INDEX IF NOT EXISTS idx_points_time    ON metric_points(series_id, timestamp);
-CREATE INDEX IF NOT EXISTS idx_spans_trace    ON spans(trace_id);
+-- Trace first, so a filter on service or duration is one probe per trace.
+DROP INDEX IF EXISTS idx_spans_trace;
+CREATE INDEX IF NOT EXISTS idx_spans_trace_service ON spans(trace_id, service);
+CREATE INDEX IF NOT EXISTS idx_spans_trace_duration ON spans(trace_id, duration);
 CREATE INDEX IF NOT EXISTS idx_spans_start    ON spans(start_time DESC);
 CREATE INDEX IF NOT EXISTS idx_spans_service  ON spans(service, start_time DESC);
 CREATE INDEX IF NOT EXISTS idx_spans_duration ON spans(duration DESC);
@@ -819,8 +822,9 @@ export class DevtoolsStore {
       Math.max(1, args.limit ?? DEFAULT_LIMIT),
     );
 
-    const clauses = [`s.trace_id = t.trace_id`, whereSql];
-    const queryParams: unknown[] = [...params];
+    // Bounds on the trace itself, so sqlite seeks to the page by start time.
+    const clauses: string[] = [];
+    const queryParams: unknown[] = [];
 
     if (args.window) {
       clauses.push('t.start_time >= ? AND t.start_time <= ?');
@@ -831,18 +835,21 @@ export class DevtoolsStore {
     if (cursor) {
       // Keyset pagination: strictly older than the last row, with trace_id
       // breaking ties so two traces sharing a millisecond can't hide each other.
-      clauses.push(
-        '(t.start_time < ? OR (t.start_time = ? AND t.trace_id < ?))',
-      );
-      queryParams.push(cursor.startTime, cursor.startTime, cursor.traceId);
+      clauses.push('(t.start_time, t.trace_id) < (?, ?)');
+      queryParams.push(cursor.startTime, cursor.traceId);
     }
 
     // `EXISTS` rather than a join + DISTINCT: a trace appears once however many
     // of its spans match, and sqlite can stop at the first matching span.
+    clauses.push(
+      `EXISTS (SELECT 1 FROM spans s WHERE s.trace_id = t.trace_id AND ${whereSql})`,
+    );
+    queryParams.push(...params);
+
     const rows = this.db
       .prepare(
         `SELECT t.* FROM traces t
-         WHERE EXISTS (SELECT 1 FROM spans s WHERE ${clauses.join(' AND ')})
+         WHERE ${clauses.join(' AND ')}
          ORDER BY t.start_time DESC, t.trace_id DESC
          LIMIT ?`,
       )
@@ -1187,7 +1194,7 @@ export class DevtoolsStore {
       .prepare(
         `
       SELECT span_id, name, service, duration, status_code, attributes
-      FROM spans WHERE trace_id = ? ORDER BY duration DESC
+      FROM spans WHERE trace_id = ? ORDER BY duration DESC, rowid ASC
     `,
       )
       .all(traceId) as unknown as Array<{
@@ -1885,7 +1892,7 @@ export class DevtoolsStore {
     const spanRows = this.db
       .prepare(
         `SELECT * FROM spans WHERE trace_id IN (${placeholders})
-         ORDER BY trace_id ASC, start_time ASC`,
+         ORDER BY trace_id ASC, start_time ASC, rowid ASC`,
       )
       .all(
         ...(rows.map((row) => row.trace_id) as never[]),
@@ -1905,7 +1912,9 @@ export class DevtoolsStore {
 
   private hydrateTrace(row: TraceRow): TraceData {
     const spanRows = this.db
-      .prepare('SELECT * FROM spans WHERE trace_id = ? ORDER BY start_time ASC')
+      .prepare(
+        'SELECT * FROM spans WHERE trace_id = ? ORDER BY start_time ASC, rowid ASC',
+      )
       .all(row.trace_id) as unknown as SpanRow[];
 
     return this.assembleTrace(row, spanRows.map(hydrateSpan));

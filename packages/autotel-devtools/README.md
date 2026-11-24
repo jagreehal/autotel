@@ -571,7 +571,7 @@ Options:
 - `--db, -d` - sqlite file backing the store, so telemetry survives a restart (default: in-memory, which keeps everything until the process exits)
 - `--max-traces` - Traces retained in the store before the oldest are pruned (default: 100000). Pruning runs every 30s.
 - `--grpc-port` - OTLP/gRPC port (default: 4317). If busy, the receiver reports the fallback port.
-- `--db-max-size` - Logical sqlite retention cap (`512mb`, `2gb`, etc.). Defaults to 512 MiB in memory and 2 GiB on disk.
+- `--db-max-size` - Logical sqlite retention cap (`512mb`, `2gb`, etc.). Counts rows and indexes. Defaults to 512 MiB in memory and 2 GiB on disk.
 
 When bound to a loopback host, the receiver listens on **both** `127.0.0.1`
 and `::1`, so a client connecting via `localhost` reaches it regardless of how
