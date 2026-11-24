@@ -65,6 +65,10 @@ jobs:
       - name: Compare bundle sizes against baseline
         run: node scripts/check-bundle-size.mjs
 
+      # The same check autotel-devtools runs in prepublishOnly.
+      - name: Check autotel-devtools dist and widget size budgets
+        run: pnpm --filter autotel-devtools test:dist
+
       - name: Build Storybook (autotel-devtools)
         run: pnpm turbo run build-storybook --filter=autotel-devtools
 

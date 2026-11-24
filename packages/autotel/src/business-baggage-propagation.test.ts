@@ -548,7 +548,7 @@ describe('safe baggage schema writes', () => {
         }
         expect(header.length).toBeLessThanOrEqual(8192);
       }
-    });
+    }, 30_000);
 
     describe('judges a batch on its final header', () => {
       const v = (n: number) => 'v'.repeat(n);

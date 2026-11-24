@@ -40,7 +40,10 @@ const budgets = [
   // full-page only; the embedded widget pays only the keyframes. Main
   // 752,920 / 223,511; with it 763,969 / 227,069 measured.
   // +1 KB raw / +0.5 KB gzip for the same hover card: 766,373 / 228,090.
-  { file: 'fullpage.global.js', raw: 767_000, gzip: 228_500 },
+  // +2 KB raw / +0.5 KB gzip for comparing feature flag variants in Compare
+  // (#443) and the statement identity from #445: 766,852 / 228,222 before
+  // both, 767,860 / 228,587 measured.
+  { file: 'fullpage.global.js', raw: 769_000, gzip: 229_000 },
 ];
 
 let failed = false;
