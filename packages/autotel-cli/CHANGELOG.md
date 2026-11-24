@@ -1,5 +1,11 @@
 # autotel-cli
 
+## 1.0.2
+
+### Patch Changes
+
+- autotel-mcp@1.1.1
+
 ## 1.0.1
 
 ### Patch Changes
