@@ -324,6 +324,29 @@ describe('shutdown module', () => {
   });
 
   describe('shutdown()', () => {
+    it('resolves when the final flush times out because no collector answers', async () => {
+      const forceFlush = vi.fn(() => new Promise<void>(() => {}));
+      const sdkShutdown = vi.fn();
+      init({
+        service: 'test-service',
+        sdkFactory: () =>
+          sdkDouble({
+            getTracerProvider: () => ({ forceFlush }),
+            shutdown: sdkShutdown,
+            start: vi.fn(),
+          }),
+      });
+      vi.useFakeTimers();
+      try {
+        const done = expect(shutdown()).resolves.toBeUndefined();
+        await vi.advanceTimersByTimeAsync(2000);
+        await done;
+        expect(sdkShutdown).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should flush and shutdown SDK', async () => {
       init({
         service: 'test-service',
