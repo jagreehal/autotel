@@ -74,6 +74,8 @@ function isUnreachableEndpointError(cause: unknown, depth = 0): boolean {
 
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
 
+const FLUSH_TIMEOUT_CODE = 'AUTOTEL_FLUSH_TIMEOUT';
+
 /**
  * Flush all pending telemetry
  *
@@ -147,7 +149,12 @@ export async function flush(options?: {
       }),
       new Promise<void>((_, reject) => {
         timeoutHandle = setTimeout(
-          () => reject(new Error(flushTimeoutMessage(timeout))),
+          () =>
+            reject(
+              Object.assign(new Error(flushTimeoutMessage(timeout)), {
+                code: FLUSH_TIMEOUT_CODE,
+              }),
+            ),
           timeout,
         );
         // Use unref() to allow Node to exit if flush completes first
@@ -186,7 +193,8 @@ export async function flush(options?: {
  * The SDK shutdown (which exports anything a tail sampler still holds) is
  * bounded by `timeout`, else `init({ shutdownTimeoutMs })`, else 10s. Past it, shutdown logs a warning,
  * cleans up and resolves, so an unreachable endpoint never holds the process
- * open. A real shutdown error is still thrown after cleanup.
+ * open. A final flush that times out or finds no collector also logs a warning
+ * and resolves. Other shutdown errors are thrown after cleanup.
  *
  * @param options.timeout - Milliseconds to wait for the SDK; overrides
  *   `shutdownTimeoutMs` from `init()` (default 10000)
@@ -215,13 +223,21 @@ export async function shutdown(options?: { timeout?: number }): Promise<void> {
     await flush({ forShutdown: true });
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    shutdownError = err;
-    logger.error(
-      {
-        err,
-      },
-      '[autotel] Flush failed during shutdown, continuing cleanup',
-    );
+    // A missing collector gets a warning, matching the SDK shutdown timeout below.
+    if (
+      errorCode(error) === FLUSH_TIMEOUT_CODE ||
+      isUnreachableEndpointError(error)
+    ) {
+      logger.warn({ err }, '[autotel] Flush did not complete during shutdown');
+    } else {
+      shutdownError = err;
+      logger.error(
+        {
+          err,
+        },
+        '[autotel] Flush failed during shutdown, continuing cleanup',
+      );
+    }
   }
 
   // Always shutdown SDK and clean up resources

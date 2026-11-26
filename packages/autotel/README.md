@@ -2884,7 +2884,7 @@ await flush({ timeout: 5000 }); // 5 second timeout
 ### Batch Jobs and Child Processes
 
 - **Stopped jobs:** with `processHandlers: true`, a SIGTERM, SIGINT or fatal error ends each span still running with ERROR status and `error.type` set to the signal or the error's class. The job exports its whole trace, root included.
-- **Shutdown timeout:** `shutdown()` waits up to 10 seconds for the SDK. Change it with `init({ shutdownTimeoutMs })` or `shutdown({ timeout })`.
+- **Shutdown timeout:** `shutdown()` waits up to 10 seconds for the SDK. Change it with `init({ shutdownTimeoutMs })` or `shutdown({ timeout })`. When the final flush times out or finds no collector, `shutdown()` logs a warning and resolves.
 - **Job attributes:** `requestCtx.setAttribute()` from a nested step tags the job's root span, and spans the job starts afterwards inherit the attribute.
 - **Parent trace:** a process started with `TRACEPARENT` continues that trace. Pass `{ TRACEPARENT: injectTraceContext().traceparent }` from `autotel/http` in the child's environment.
 - **Links:** `ctx.addLink(createLinkFromHeaders(headers))` skips a `null` link, so a job without a stored traceparent needs no guard.
