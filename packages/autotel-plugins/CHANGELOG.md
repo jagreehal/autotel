@@ -1,5 +1,13 @@
 # autotel-plugins
 
+## 1.0.10
+
+### Patch Changes
+
+- Updated dependencies [83343d0]
+  - autotel@9.7.1
+  - autotel-kafka@1.0.10
+
 ## 1.0.9
 
 ### Patch Changes
