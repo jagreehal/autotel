@@ -13,6 +13,7 @@ import type {
   AttributeRedactorPreset,
 } from './attribute-redacting-processor';
 import { requireModule } from './node-require';
+import { asString } from './values';
 import {
   resolveProtocol,
   type AutotelProtocol,
@@ -24,7 +25,9 @@ import type { AutotelConfig } from './autotel-config';
  * Resolve the effective attribute redactor. Explicit config wins (`false`
  * disables). Otherwise the `AUTOTEL_REDACT_PII` env var controls it, and as a
  * final default PII redaction is auto-enabled in production (any case, so
- * `Production` and `PRODUCTION` count).
+ * `Production` and `PRODUCTION` count). Every other environment still masks
+ * URL query values: staging exports to real backends too, and a query string
+ * carries tokens and emails that no value pattern recognises.
  */
 export function resolveAttributeRedactor(
   explicit:
@@ -49,7 +52,7 @@ export function resolveAttributeRedactor(
 
   return environment.trim().toLowerCase() === 'production'
     ? 'default'
-    : undefined;
+    : { urlQueryValues: true };
 }
 
 /**
@@ -82,8 +85,15 @@ function detectCommitSha(): string | undefined {
   );
 }
 
-export function detectEnvironmentAttributes(): Record<string, string> {
-  const attrs: Record<string, string> = {};
+/** Deployment facts read from CI and host environment variables. */
+interface EnvironmentAttributes {
+  'service.commit.sha'?: string;
+  'service.region'?: string;
+  'service.deploy.version'?: string;
+}
+
+export function detectEnvironmentAttributes(): EnvironmentAttributes {
+  const attrs: EnvironmentAttributes = {};
 
   const commitSha =
     detectCommitSha() || process.env.AWS_CODEPIPELINE_EXECUTION_ID;
@@ -168,11 +178,18 @@ export function resolveDebugFlag(
   return configFlag ?? false;
 }
 
+/** The `key=value,key=value` form of OTLP headers, as OTEL_EXPORTER_OTLP_HEADERS writes them. */
+function isHeaderString(
+  headers: Record<string, string> | string,
+): headers is string {
+  return asString(headers) !== undefined;
+}
+
 export function normalizeOtlpHeaders(
   headers?: Record<string, string> | string,
 ): Record<string, string> | undefined {
   if (!headers) return undefined;
-  if (typeof headers !== 'string') return headers;
+  if (!isHeaderString(headers)) return headers;
 
   const parsed: Record<string, string> = {};
   for (const pair of headers.split(',')) {

@@ -68,7 +68,7 @@ export interface WrapStartHandlerConfig extends TanStackInstrumentationConfig {
 export const DEFAULT_CONFIG: Required<
   Omit<TanStackInstrumentationConfig, 'customAttributes' | 'service'>
 > = {
-  captureArgs: true,
+  captureArgs: false,
   captureResults: false,
   captureErrors: true,
   captureHeaders: ['x-request-id'],

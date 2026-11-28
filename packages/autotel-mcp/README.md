@@ -538,7 +538,7 @@ AUTOTEL_OMIT_TOOLS=service_map npx autotel-mcp
 ```
 
 `core` is everything for investigating traces, metrics and logs. `llm` is the
-LLM analytics and `agent_usage`. `collector` and `semconv` are the collector
+LLM analytics, `mcp_sessions` and `agent_usage`. `collector` and `semconv` are the collector
 config and semantic-convention references; `estimate` is
 `estimate_telemetry_cost`.
 
@@ -603,6 +603,7 @@ Every backend returns nested attributes as dotted keys (`nested.id: 1`) and arra
 - **get_llm_expensive_traces**: Top traces by token count
 - **get_llm_slow_traces**: Slowest LLM traces
 - **list_llm_tools**: Tool/function call usage by name
+- **mcp_sessions**: How agents use an MCP server instrumented with `autotel-mcp-instrumentation`: sessions in call order with each call's intent, user, client and model; an outcome per session (`completed`, `recovered`, `failed`, `paused`, `missing_tool`); the common tool paths with their completion rate; where failed sessions stop; and the capabilities agents asked for and did not find
 
 </details>
 
@@ -684,6 +685,24 @@ rollback, which needs three spans in a row of the earlier version to confirm.
 Payloads hold identifiers and numbers, never error text, which is untrusted
 input: fetch the details with `get_issue` and `get_trace`. On backends without
 stored issues, "first seen" means first within the last 24 hours.
+
+## Skills
+
+autotel-mcp publishes skills over MCP (`io.modelcontextprotocol/skills`), so
+an agent that connects gets the investigation playbooks with the tools, with
+nothing separate to install, and they update with the server:
+
+| Skill                 | What it covers                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `autotel-mcp`         | Which of this server's tools to reach for, and in what order                         |
+| `analyze-traces`      | Debugging errors and latency, following a request across services, attribute hygiene |
+| `debug-missing-spans` | Walking code → SDK → sampler → exporter → backend when expected spans never arrive   |
+
+Clients that implement the extension call `skills/list` and `skills/get`; each
+entry lists every file with its sha256 digest and size. Every file is also a
+`skill://<name>/<path>` resource, so a client without the extension can still
+read them with `resources/read`. The skills are generated from the repository's
+`skills/` directory (`pnpm sync:skills`), and a test fails when they drift.
 
 ## Resources
 

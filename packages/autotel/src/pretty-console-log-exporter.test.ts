@@ -32,6 +32,21 @@ describe('PrettyConsoleLogExporter', () => {
     );
   });
 
+  it('escapes control characters a client could use to rewrite the terminal', () => {
+    const line = plain.format(
+      record({
+        severityText: 'info',
+        body: 'ok\r\u001B[2Kfake line',
+        attributes: { 'user_agent.original': 'x\n\u009B2J' },
+      }),
+    );
+    expect(line).toBe(
+      String.raw`log  INFO   ok\r\u001b[2Kfake line  user_agent.original=x\n\u009b2J`,
+    );
+    // oxlint-disable-next-line no-control-regex -- matching control characters is the point
+    expect(line).not.toMatch(/[\u0000-\u001F\u007F-\u009F]/);
+  });
+
   it('names the severity from its number when there is no text', () => {
     expect(
       plain.format(

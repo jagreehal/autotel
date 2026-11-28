@@ -15,6 +15,30 @@ export default defineConfig({
        */
       disable404Route: true,
       favicon: '/favicon.svg',
+      head: [
+        {
+          tag: 'meta',
+          attrs: {
+            property: 'og:image',
+            content:
+              'https://jagreehal.github.io/autotel/media/social-preview.png',
+          },
+        },
+        { tag: 'meta', attrs: { property: 'og:image:width', content: '1280' } },
+        { tag: 'meta', attrs: { property: 'og:image:height', content: '640' } },
+        {
+          tag: 'meta',
+          attrs: { name: 'twitter:card', content: 'summary_large_image' },
+        },
+        {
+          tag: 'meta',
+          attrs: {
+            name: 'twitter:image',
+            content:
+              'https://jagreehal.github.io/autotel/media/social-preview.png',
+          },
+        },
+      ],
       components: {
         PageTitle: './src/components/PageTitle.astro',
         ThemeProvider: './src/components/ThemeProvider.astro',

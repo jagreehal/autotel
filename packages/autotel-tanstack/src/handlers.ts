@@ -3,6 +3,7 @@ import { trace, init } from 'autotel';
 import { extractContextFromRequest } from './context';
 import { isControlFlowSignal, isRealError } from './control-flow';
 import { isExcludedPath } from './route-filter';
+import { httpServerStatus } from './http-status';
 import { requestSpan } from './request-name';
 import {
   type WrapStartHandlerConfig,
@@ -11,11 +12,12 @@ import {
 } from './types';
 
 /**
- * Request handler type (compatible with TanStack Start handlers)
+ * Request handler type (compatible with TanStack Start handlers). The options
+ * are only forwarded, so their type is whatever the wrapped handler declares.
  */
-type RequestHandler = (
+type RequestHandler<TOptions> = (
   request: Request,
-  opts?: { context?: Record<string, unknown> },
+  opts?: TOptions,
 ) => Promise<Response> | Response;
 
 /**
@@ -50,7 +52,7 @@ type RequestHandler = (
  */
 export function wrapStartHandler(
   config: WrapStartHandlerConfig = {},
-): (handler: RequestHandler) => RequestHandler {
+): <TOptions>(handler: RequestHandler<TOptions>) => RequestHandler<TOptions> {
   const mergedConfig = { ...DEFAULT_CONFIG, ...config };
 
   // Initialize autotel with provided configuration
@@ -78,10 +80,12 @@ export function wrapStartHandler(
     headers,
   });
 
-  return function wrapHandler(handler: RequestHandler): RequestHandler {
+  return function wrapHandler<TOptions>(
+    handler: RequestHandler<TOptions>,
+  ): RequestHandler<TOptions> {
     return async function tracedHandler(
       request: Request,
-      opts?: { context?: Record<string, unknown> },
+      opts?: TOptions,
     ): Promise<Response> {
       const url = new URL(request.url);
 
@@ -114,7 +118,7 @@ export function wrapStartHandler(
             });
 
             if (url.search) {
-              ctx.setAttribute(SPAN_ATTRIBUTES.URL_QUERY, url.search);
+              ctx.setAttribute(SPAN_ATTRIBUTES.URL_QUERY, url.search.slice(1));
             }
 
             // Capture configured headers
@@ -137,9 +141,7 @@ export function wrapStartHandler(
                 name: spanName,
                 request,
               });
-              ctx.setAttributes(
-                customAttrs as Record<string, string | number | boolean>,
-              );
+              ctx.setAttributes(customAttrs);
             }
 
             const startTime = Date.now();
@@ -157,15 +159,7 @@ export function wrapStartHandler(
                 response.status,
               );
 
-              // Set status based on HTTP status code
-              if (response.status >= 400) {
-                ctx.setStatus({
-                  code: SpanStatusCode.ERROR,
-                  message: `HTTP ${response.status}`,
-                });
-              } else {
-                ctx.setStatus({ code: SpanStatusCode.OK });
-              }
+              ctx.setStatus(httpServerStatus(response.status));
 
               return response;
             } catch (error) {
@@ -222,13 +216,15 @@ export function wrapStartHandler(
  */
 export function createTracedHandler(
   config: Omit<WrapStartHandlerConfig, 'endpoint' | 'headers' | 'service'> = {},
-): (handler: RequestHandler) => RequestHandler {
+): <TOptions>(handler: RequestHandler<TOptions>) => RequestHandler<TOptions> {
   const mergedConfig = { ...DEFAULT_CONFIG, ...config };
 
-  return function wrapHandler(handler: RequestHandler): RequestHandler {
+  return function wrapHandler<TOptions>(
+    handler: RequestHandler<TOptions>,
+  ): RequestHandler<TOptions> {
     return async function tracedHandler(
       request: Request,
-      opts?: { context?: Record<string, unknown> },
+      opts?: TOptions,
     ): Promise<Response> {
       const url = new URL(request.url);
 
@@ -257,7 +253,7 @@ export function createTracedHandler(
             });
 
             if (url.search) {
-              ctx.setAttribute(SPAN_ATTRIBUTES.URL_QUERY, url.search);
+              ctx.setAttribute(SPAN_ATTRIBUTES.URL_QUERY, url.search.slice(1));
             }
 
             if (mergedConfig.captureHeaders) {
@@ -278,9 +274,7 @@ export function createTracedHandler(
                 name: spanName,
                 request,
               });
-              ctx.setAttributes(
-                customAttrs as Record<string, string | number | boolean>,
-              );
+              ctx.setAttributes(customAttrs);
             }
 
             const startTime = Date.now();
@@ -298,14 +292,7 @@ export function createTracedHandler(
                 response.status,
               );
 
-              if (response.status >= 400) {
-                ctx.setStatus({
-                  code: SpanStatusCode.ERROR,
-                  message: `HTTP ${response.status}`,
-                });
-              } else {
-                ctx.setStatus({ code: SpanStatusCode.OK });
-              }
+              ctx.setStatus(httpServerStatus(response.status));
 
               return response;
             } catch (error) {

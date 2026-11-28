@@ -492,6 +492,7 @@ instrumentMcpServer(server, {
 - A schema that accepts any argument name (`additionalProperties: true` or a schema, `patternProperties`, a Zod `catchall`) gets nothing injected: the name could be the tool's own data, and stripping it would take it from the handler.
 - Works per request: a 2026-07-28 server built inside `createMcpHandler` rebuilds what its listing advertised before the first call.
 - `captureIntent` records model-written free text. Pass it through `redact` (below) or your attribute redactor.
+- [`autotel-mcp`](../autotel-mcp/README.md)'s `mcp_sessions` tool reads these spans back as sessions: each call's intent in order, how each session ended, the tool paths agents take most often with their completion rate, and the capabilities agents asked for and did not find.
 - A low-level `Server` whose tool schemas depend on the caller: pass `resolveOriginalTool: (name, request, ctx) => tool`, returning the tool as defined for this caller, so only what was injected into _their_ schema is stripped. Without it the last listing decides.
 
 ### Client identity on stateless HTTP
@@ -567,6 +568,45 @@ Metrics: `mcp.server.event.delivered`, `mcp.client.event.received`,
 `mcp.client.event.lag` (seconds from the occurrence's `timestamp` to receipt),
 `mcp.client.event.gaps` (receipts reporting `truncated: true`) and
 `mcp.client.event.subscription.terminated`. None is labelled by event id.
+
+## Tasks and Skills over MCP
+
+Neither SDK has an API for these yet. A server's handlers for them sit on its
+request-handler map, and a client sends them with `request()`: an
+instrumented server and client trace them with no other setup, like MCP
+Events.
+
+**Tasks.** A tool call that runs as a task answers with the task, not the
+result, so its span measures accepting the work. That span, on both sides,
+carries `mcp.task.augmented: true`, `mcp.task.id` and `mcp.task.status`,
+and stays UNSET: nothing has completed yet. The duration metric gets
+`mcp.task.augmented` too, so a latency panel can keep "accepted" apart from
+"did the work", as `mcp.input_required` does for a pause. The follow-up
+requests are traced with the task's id:
+
+| Request                        | Span attributes                  | Notes                                                                                                                             |
+| ------------------------------ | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `tasks/get`                    | `mcp.task.id`, `mcp.task.status` | On 2026-07-28 it carries the outcome: a `failed` task, or a `completed` one whose result is a tool error, makes the span an error |
+| `tasks/update`, `tasks/cancel` | `mcp.task.id`, `mcp.task.status` |                                                                                                                                   |
+| `tasks/result` (2025-11-25)    | `mcp.task.id`                    | A result with `isError` makes the span an error                                                                                   |
+| `tasks/list` (2025-11-25)      | `mcp.task.count`                 |                                                                                                                                   |
+
+Both shapes are understood: 2026-07-28's Tasks extension
+(`io.modelcontextprotocol/tasks`, a flat `{ resultType: "task", taskId, … }`)
+and 2025-11-25's experimental feature (`{ task: { taskId, … } }`). A request
+made on behalf of a task (`_meta["io.modelcontextprotocol/related-task"]`)
+gets `mcp.task.id` too. A task id is never a metric label.
+
+**Elicitation.** When a paused call is retried with the user's answers, its span
+records `mcp.elicitation.action`: `accept`, `decline` or `cancel`, one per
+answer. A `tasks/update` carrying answers records it too.
+
+**Skills over MCP** (`io.modelcontextprotocol/skills`). `skills/list` records
+`mcp.skill.count`. `skills/get` is named after the skill the server served
+(`skills/get refunds`) and records `mcp.skill.name` and `mcp.skill.uri`; the
+skill's name also labels the duration metric. A URI the server does not serve
+stays off the span name and the metric, since it came from the client. Reading
+a skill's files is an ordinary `resources/read skill://…` span.
 
 ## Security Observability
 

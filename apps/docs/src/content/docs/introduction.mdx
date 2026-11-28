@@ -5,6 +5,20 @@ description: What Autotel is and how it differs from vanilla OpenTelemetry.
 
 Autotel is a zero-boilerplate OpenTelemetry wrapper for TypeScript. It replaces 30+ lines of SDK setup with a single `init()` call and replaces manual span lifecycle with functional `trace()` wrappers.
 
+<video
+  src="/autotel/media/devtools-demo.mp4"
+  poster="/autotel/media/devtools-trace.png"
+  autoplay
+  muted
+  loop
+  playsinline
+  width="1280"
+  height="800"
+  aria-label="A checkout click in the browser traced through shop-api, shop-auth, shop-worker and SQLite, then opened in autotel-devtools as a waterfall and a service map"
+></video>
+
+One click in the browser, traced through four services and opened in [autotel-devtools](/autotel/tools/devtools/). Run it with `pnpm --filter @jagreehal/example-devtools start`.
+
 ## Core Philosophy
 
 - **Write once, observe everywhere**: One instrumentation surface; many backends via OTLP.

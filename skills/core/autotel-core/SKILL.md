@@ -58,7 +58,7 @@ init({
 
 - **`service`**: required. `OTEL_SERVICE_NAME` fills it when the key is left out.
 - **`version`**: defaults to `version` in `package.json` in the working directory, else `'1.0.0'`.
-- **`environment`**: defaults to `NODE_ENV`, else `'development'`. Sets `deployment.environment.name` (and the legacy `deployment.environment`). `'production'` also switches on PII redaction (`attributeRedactor: 'default'`) unless you pass `attributeRedactor: false` or set `AUTOTEL_REDACT_PII=off`.
+- **`environment`**: defaults to `NODE_ENV`, else `'development'`. Sets `deployment.environment.name` (and the legacy `deployment.environment`). `'production'` also switches on PII redaction (`attributeRedactor: 'default'`) unless you pass `attributeRedactor: false` or set `AUTOTEL_REDACT_PII=off`. Query parameter values (`url.full`, `url.query`) are recorded as `REDACTED` in every environment. The `default` preset redacts any key ending in password, secret, token, api key, credential(s) or authorization (`accessToken`, `client_secret`), and masks vendor tokens (`ghp_***`, `sk-ant-***`, `AKIA***`), PEM private keys and URL passwords under any key.
 - **`endpoint`**: the OTLP base URL; autotel appends `/v1/traces`, `/v1/metrics`, `/v1/logs`. Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT`. With neither (and no `destinations` / exporters / processors) **nothing is exported**: there is no localhost default.
 - **`headers`**: an object or a `'key=value,key2=value2'` string. Falls back to `OTEL_EXPORTER_OTLP_HEADERS`.
 - **`protocol`**: `'http'` (OTLP/HTTP with a JSON body, the default), `'http/protobuf'` or `'grpc'`. The last two need the matching `@opentelemetry/exporter-*-otlp-proto` / `-grpc` packages in your app. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL`.

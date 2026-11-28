@@ -116,8 +116,26 @@ to ride and no session for a trace to be orphaned from.
 | `mcp.input_required`   | set when a handler returns `inputRequired(...)` | n/a — elicitation is push-style   |
 
 A handler that returns `inputRequired(...)` paused rather than completed: the
-span gets `mcp.input_required=true` and its status is left UNSET, so a pause is
-counted as neither work nor a success, and the client's retry is not a duplicate.
+span gets `mcp.input_required=true` and status UNSET, so a pause counts as
+neither work nor a success, and the client's retry is not a duplicate. The
+retried call records the user's answers as `mcp.elicitation.action`
+(`accept`, `decline`, `cancel`).
+
+### Tasks and Skills over MCP
+
+Both are traced with no setup, server and client.
+
+- A tool call that runs as a task (`resultType: "task"`, or 2025-11-25's
+  `{ task }`) gets `mcp.task.augmented`, `mcp.task.id` and `mcp.task.status`,
+  status UNSET, and `mcp.task.augmented` on its duration metric. Filter it out
+  of latency panels the way you filter `mcp.input_required`.
+- `tasks/get`, `tasks/update` and `tasks/cancel` carry the task id and status.
+  A `tasks/get` reporting a failed task, or a tool error in its result, is an
+  error span. 2025-11-25's `tasks/result` and `tasks/list` are traced too.
+- `skills/get` is named after the skill served (`skills/get refunds`) and
+  labels its metric with `mcp.skill.name`; `skills/list` records
+  `mcp.skill.count`. Skill files are ordinary `resources/read skill://…` spans.
+- Task ids are span attributes only. Never put one on a metric.
 
 ## Correlating calls on a stateless server
 

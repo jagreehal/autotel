@@ -4,7 +4,7 @@ import { DEFAULT_CONFIG, SPAN_ATTRIBUTES } from './types';
 describe('types', () => {
   describe('DEFAULT_CONFIG', () => {
     it('should have sensible defaults', () => {
-      expect(DEFAULT_CONFIG.captureArgs).toBe(true);
+      expect(DEFAULT_CONFIG.captureArgs).toBe(false);
       expect(DEFAULT_CONFIG.captureResults).toBe(false);
       expect(DEFAULT_CONFIG.captureErrors).toBe(true);
       expect(DEFAULT_CONFIG.sampling).toBe('adaptive');

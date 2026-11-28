@@ -82,6 +82,34 @@ export const MCP_SEMCONV = {
   /** More events wait beyond this poll's batch. */
   EVENT_HAS_MORE: 'mcp.event.has_more',
 
+  // Tasks (MCP 2026-07-28). autotel extensions of the `mcp.*` namespace.
+  /** A task's id: spans only, never a metric label (one series per task). */
+  TASK_ID: 'mcp.task.id',
+  /** `working`, `input_required`, `completed`, `failed` or `cancelled`. */
+  TASK_STATUS: 'mcp.task.status',
+  /**
+   * The call returned a task instead of a result: its duration is the time to
+   * accept the work, not to do it. On the span and the duration metric, so a
+   * latency panel can keep the two apart, as `mcp.input_required` does for a pause.
+   */
+  TASK_AUGMENTED: 'mcp.task.augmented',
+  /** Tasks a `tasks/list` returned. */
+  TASK_COUNT: 'mcp.task.count',
+
+  /**
+   * What the user answered each elicitation a paused call asked:
+   * `accept`, `decline` or `cancel`, one per answer. On the retried request.
+   */
+  ELICITATION_ACTION: 'mcp.elicitation.action',
+
+  // Skills over MCP (`io.modelcontextprotocol/skills`, SEP-2640).
+  /** The skill's `name` from its frontmatter. Server-defined, low cardinality. */
+  SKILL_NAME: 'mcp.skill.name',
+  /** URI of the skill's `SKILL.md`. */
+  SKILL_URI: 'mcp.skill.uri',
+  /** Skills a `skills/list` returned. */
+  SKILL_COUNT: 'mcp.skill.count',
+
   // Payload sizes (chars) — the "contaminated output" / token-exhaustion signal.
   PAYLOAD_ARGUMENTS_SIZE: 'mcp.arguments.size',
   PAYLOAD_RESULT_SIZE: 'mcp.result.size',
@@ -181,6 +209,19 @@ export const MCP_PROTOCOL_VERSION_META_KEY =
 /** `_meta` envelope key carrying the client's name and version (2026-07-28). Mirrors the SDK's `CLIENT_INFO_META_KEY`. */
 export const MCP_CLIENT_INFO_META_KEY = 'io.modelcontextprotocol/clientInfo';
 
+/** `_meta` envelope key carrying the client's per-request capabilities (2026-07-28). */
+export const MCP_CLIENT_CAPABILITIES_META_KEY =
+  'io.modelcontextprotocol/clientCapabilities';
+
+/** The Tasks extension's identifier (SEP-2663). */
+export const MCP_TASKS_EXTENSION = 'io.modelcontextprotocol/tasks';
+
+/** The Skills extension's identifier (SEP-2640). */
+export const MCP_SKILLS_EXTENSION = 'io.modelcontextprotocol/skills';
+
+/** `_meta` key naming the task a message belongs to (`{ taskId }`). */
+export const MCP_RELATED_TASK_META_KEY = 'io.modelcontextprotocol/related-task';
+
 /** Security event names (emitted via ctx.track). */
 export const MCP_SECURITY_EVENT = {
   INJECTION_SUSPECTED: 'mcp.security.injection_suspected',
@@ -218,6 +259,16 @@ export const MCP_METHODS = {
   EVENTS_STREAM: 'events/stream',
   EVENTS_SUBSCRIBE: 'events/subscribe',
   EVENTS_UNSUBSCRIBE: 'events/unsubscribe',
+  TASKS_GET: 'tasks/get',
+  TASKS_RESULT: 'tasks/result',
+  TASKS_CANCEL: 'tasks/cancel',
+  TASKS_LIST: 'tasks/list',
+  /** Tasks extension (2026-07-28): answers a task's `inputRequests`. */
+  TASKS_UPDATE: 'tasks/update',
+  SKILLS_LIST: 'skills/list',
+  SKILLS_GET: 'skills/get',
+  /** Skills extension, optional (`directoryRead: true`). */
+  RESOURCES_DIRECTORY_READ: 'resources/directory/read',
 } as const;
 
 /** Events extension notifications (SEP-3415), server to client. */

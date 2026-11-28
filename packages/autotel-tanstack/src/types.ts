@@ -35,15 +35,23 @@ export interface TanStackInstrumentationConfig {
   service?: string;
 
   /**
-   * Whether to capture function arguments as span attributes
-   * Warning: May contain PII, review before enabling in production
-   * @default true
+   * Whether to capture server function input as a span attribute
+   * (`tanstack.server_function.args`, the input as JSON). Off by default: it
+   * is whatever the client sent, a login form's password included. The
+   * redactor matches attribute names, not keys inside that JSON, so
+   * `{"password":"hunter2"}` is exported as sent. Turn it on only for
+   * functions whose input holds no secrets, or redact the whole attribute:
+   * `init({ attributeRedactor: { paths: ['tanstack.server_function.args'] } })`.
+   * A custom config replaces the preset, so add
+   * `keyPatterns: [REDACTOR_PATTERNS.sensitiveKey]` beside `paths`.
+   * @default false
    */
   captureArgs?: boolean;
 
   /**
-   * Whether to capture function results as span attributes
-   * Warning: May contain PII, disable in production
+   * Whether to capture function results as a span attribute
+   * (`tanstack.server_function.result`, as JSON). Keys inside the JSON are
+   * not redacted, as with `captureArgs`.
    * @default false
    */
   captureResults?: boolean;
@@ -76,11 +84,8 @@ export interface TanStackInstrumentationConfig {
   router?: RouteMatcher;
 
   /**
-   * Sampling strategy
-   * - 'always': Sample all requests (100%)
-   * - 'adaptive': Use autotel's adaptive sampling (errors + slow = 100%, baseline 10%)
-   * - 'never': Disable sampling (for testing/debugging)
-   * @default 'adaptive'
+   * @deprecated Has no effect. Sampling is decided per trace by
+   * `init({ sampling })` in autotel, for every span in the trace.
    */
   sampling?: 'always' | 'adaptive' | 'never';
 
@@ -120,8 +125,8 @@ export interface TraceServerFnConfig {
   name?: string;
 
   /**
-   * Whether to capture function arguments
-   * @default true
+   * Whether to capture function arguments (what the client sent)
+   * @default false
    */
   captureArgs?: boolean;
 
@@ -178,7 +183,7 @@ export interface WrapStartHandlerConfig extends TanStackInstrumentationConfig {
 export const DEFAULT_CONFIG: Required<
   Omit<TanStackInstrumentationConfig, 'customAttributes' | 'service' | 'router'>
 > = {
-  captureArgs: true,
+  captureArgs: false,
   captureResults: false,
   captureErrors: true,
   captureHeaders: ['x-request-id'],

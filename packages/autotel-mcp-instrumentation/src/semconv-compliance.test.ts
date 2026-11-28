@@ -1,27 +1,62 @@
+/* oxlint-disable anti-slop/no-module-mocking -- The wrappers import autotel's tracer, OTel's context API, metric recorders and propagation directly, with no injection seam; replacing these mocks needs production changes. */
+import type { Attributes, AttributeValue, Context } from '@opentelemetry/api';
+import type { withTracing } from 'autotel';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { extractOtelContextFromMeta } from './context';
 import {
   MCP_DURATION_BUCKETS,
   MCP_FAILURE_CATEGORY,
   MCP_SEMCONV,
 } from './semantic-conventions';
 import type { McpInstrumentationConfig } from './types';
-import type { McpArguments, McpHandler } from './types.js';
+import type { McpToolAnnotations } from './security';
+import type { McpArguments, McpHandler, McpHandlerArgument } from './types.js';
 
-const hoisted = vi.hoisted(() => ({
-  traceCalls: [] as Array<{ options: unknown; ctx: any }>,
-  clientMetricAttrs: [] as Array<Record<string, unknown>>,
-  serverMetricAttrs: [] as Array<Record<string, unknown>>,
-  securityEvents: [] as Array<Record<string, unknown>>,
-  extractedMeta: [] as unknown[],
-}));
+type TracingOptions = Parameters<typeof withTracing>[0];
+type ExtractedMeta = Parameters<typeof extractOtelContextFromMeta>[0];
+
+/** One span the mocked `withTracing` opened, with its fake trace context. */
+interface TraceCall {
+  options: TracingOptions;
+  ctx: any;
+}
+
+/** The tool config these tests register: the fields the wrapper reads. */
+interface ToolConfig {
+  description?: string;
+  annotations?: McpToolAnnotations;
+  parameters?: Record<string, { description?: string }>;
+}
+
+/** The resource config these tests register. */
+interface ResourceConfig {
+  description?: string;
+  mimeType?: string;
+}
+
+const hoisted = vi.hoisted(() => {
+  const traceCalls: TraceCall[] = [];
+  const clientMetricAttrs: Attributes[] = [];
+  const serverMetricAttrs: Attributes[] = [];
+  const securityEvents: Attributes[] = [];
+  const extractedMeta: ExtractedMeta[] = [];
+  return {
+    traceCalls,
+    clientMetricAttrs,
+    serverMetricAttrs,
+    securityEvents,
+    extractedMeta,
+  };
+});
 
 vi.mock('@opentelemetry/api', () => ({
   SpanStatusCode: {
+    UNSET: 0,
     OK: 1,
     ERROR: 2,
   },
   context: {
-    with: (_ctx: unknown, fn: () => unknown) => fn(),
+    with: <T>(_ctx: Context, fn: () => T) => fn(),
     // task-handles reads its facts off the active context; none are set here.
     active: () => ({ getValue: () => null }),
   },
@@ -34,8 +69,8 @@ vi.mock('autotel', () => ({
     SERVER: 'server',
   },
   withTracing:
-    (options: unknown) =>
-    (factory: (ctx: any) => (...args: any[]) => unknown) => {
+    (options: TracingOptions) =>
+    <R>(factory: (ctx: any) => R) => {
       const ctx = {
         setAttribute: vi.fn(),
         setAttributes: vi.fn(),
@@ -55,30 +90,24 @@ vi.mock('./context', () => ({
   injectOtelContextToMeta: () => ({
     traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
   }),
-  extractOtelContextFromMeta: (meta: unknown) => {
+  extractOtelContextFromMeta: (meta: ExtractedMeta) => {
     hoisted.extractedMeta.push(meta);
     return {};
   },
-  serverParentContext: (meta: unknown) => {
+  serverParentContext: (meta: ExtractedMeta) => {
     hoisted.extractedMeta.push(meta);
     return {};
   },
 }));
 
 vi.mock('./metrics', () => ({
-  recordClientOperationDuration: (
-    _durationS: number,
-    attrs: Record<string, unknown>,
-  ) => {
+  recordClientOperationDuration: (_durationS: number, attrs: Attributes) => {
     hoisted.clientMetricAttrs.push(attrs);
   },
-  recordServerOperationDuration: (
-    _durationS: number,
-    attrs: Record<string, unknown>,
-  ) => {
+  recordServerOperationDuration: (_durationS: number, attrs: Attributes) => {
     hoisted.serverMetricAttrs.push(attrs);
   },
-  recordSecurityEvent: (attrs: Record<string, unknown>) => {
+  recordSecurityEvent: (attrs: Attributes) => {
     hoisted.securityEvents.push(attrs);
   },
 }));
@@ -93,7 +122,7 @@ describe('MCP semconv compliance', () => {
   });
 
   /** The value the most recent span set for `key`, or undefined. */
-  function attributeValue(key: string): unknown {
+  function attributeValue(key: string): AttributeValue | undefined {
     const calls = hoisted.traceCalls.at(-1)?.ctx.setAttribute.mock.calls ?? [];
     return calls.findLast((call: unknown[]) => call[0] === key)?.[1];
   }
@@ -138,8 +167,8 @@ describe('MCP semconv compliance', () => {
       registerResource: vi.fn(
         (
           _name: string,
-          _uriOrTemplate: unknown,
-          _config: unknown,
+          _uriOrTemplate: string,
+          _config: ResourceConfig,
           readCallback: McpHandler,
         ) => {
           wrappedRead = readCallback;
@@ -191,8 +220,8 @@ describe('MCP semconv compliance', () => {
       registerResource: vi.fn(
         (
           _name: string,
-          _uriOrTemplate: unknown,
-          _config: unknown,
+          _uriOrTemplate: string,
+          _config: ResourceConfig,
           readCallback: McpHandler,
         ) => {
           wrappedRead = readCallback;
@@ -245,7 +274,7 @@ describe('MCP semconv compliance', () => {
     let wrappedTool: McpHandler | undefined;
     const server = {
       registerTool: vi.fn(
-        (_name: string, _config: unknown, toolHandler: McpHandler) => {
+        (_name: string, _config: ToolConfig, toolHandler: McpHandler) => {
           wrappedTool = toolHandler;
         },
       ),
@@ -295,7 +324,7 @@ describe('MCP semconv compliance', () => {
     let wrappedTool: McpHandler | undefined;
     const server = {
       registerTool: vi.fn(
-        (_name: string, _config: unknown, toolHandler: McpHandler) => {
+        (_name: string, _config: ToolConfig, toolHandler: McpHandler) => {
           wrappedTool = toolHandler;
         },
       ),
@@ -330,7 +359,7 @@ describe('MCP semconv compliance', () => {
     let wrappedTool: McpHandler | undefined;
     const server = {
       registerTool: vi.fn(
-        (_name: string, _config: unknown, toolHandler: McpHandler) => {
+        (_name: string, _config: ToolConfig, toolHandler: McpHandler) => {
           wrappedTool = toolHandler;
         },
       ),
@@ -467,8 +496,8 @@ describe('MCP semconv compliance', () => {
       registerResource: vi.fn(
         (
           _name: string,
-          _uriOrTemplate: unknown,
-          _config: unknown,
+          _uriOrTemplate: string,
+          _config: ResourceConfig,
           readCallback: McpHandler,
         ) => {
           wrappedRead = readCallback;
@@ -525,8 +554,10 @@ describe('MCP semconv compliance', () => {
       true,
     );
     // A pause is neither success nor failure — claiming OK would let a
-    // success-rate panel count it as completed work.
-    expect(ctx.setStatus).not.toHaveBeenCalled();
+    // success-rate panel count it as completed work. UNSET is set outright:
+    // a span left without a status is reported as OK when it ends.
+    expect(ctx.setStatus).toHaveBeenCalledWith({ code: 0 }); // UNSET
+    expect(ctx.setStatus).not.toHaveBeenCalledWith({ code: 1 }); // OK
   });
 
   it('does not mistake a result field named requestState for a pause', async () => {
@@ -666,14 +697,14 @@ describe('MCP semconv compliance', () => {
 
   async function registerServerTool(
     config: McpInstrumentationConfig,
-    toolConfig: Record<string, unknown>,
+    toolConfig: ToolConfig,
     handler: McpHandler,
   ) {
     const { instrumentMcpServer } = await import('./server');
     let wrappedTool: McpHandler | undefined;
     const server = {
       registerTool: vi.fn(
-        (_name: string, _config: unknown, toolHandler: McpHandler) => {
+        (_name: string, _config: ToolConfig, toolHandler: McpHandler) => {
           wrappedTool = toolHandler;
         },
       ),
@@ -1188,7 +1219,7 @@ describe('MCP semconv compliance', () => {
   it('keeps a client-supplied name off the span name and metric when the SDK rejects the request', async () => {
     const { traceMcpHandler } = await import('./server');
     const traced = traceMcpHandler(
-      async (_ctx: unknown) => {
+      async (_ctx: McpHandlerArgument) => {
         throw Object.assign(new Error('Tool nope-123 not found'), {
           code: -32_602,
         });
@@ -1392,7 +1423,7 @@ describe('MCP semconv compliance', () => {
             async (_params: {
               name: string;
               arguments?: McpArguments;
-            }): Promise<unknown> => {
+            }): Promise<never> => {
               throw Object.assign(new Error(message), { name: 'TimeoutError' });
             },
           ),
@@ -1424,11 +1455,9 @@ describe('MCP semconv compliance', () => {
     const { instrumentMcpClient } = await import('./client');
 
     const readClient = instrumentMcpClient({
-      readResource: vi.fn(
-        async (_params: { uri: string }): Promise<unknown> => {
-          throw new Error('ECONNREFUSED 10.0.0.4:5432');
-        },
-      ),
+      readResource: vi.fn(async (_params: { uri: string }): Promise<never> => {
+        throw new Error('ECONNREFUSED 10.0.0.4:5432');
+      }),
     });
     await expect(
       readClient.readResource({ uri: 'weather://config' }),
@@ -1438,7 +1467,7 @@ describe('MCP semconv compliance', () => {
     );
 
     const promptClient = instrumentMcpClient({
-      getPrompt: vi.fn(async (_params: { name: string }): Promise<unknown> => {
+      getPrompt: vi.fn(async (_params: { name: string }): Promise<never> => {
         throw new Error('403 Forbidden: scope missing');
       }),
     });

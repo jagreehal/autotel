@@ -7,7 +7,6 @@ import {
 } from '@opentelemetry/sdk-logs';
 import * as Clock from 'effect/Clock';
 import * as Effect from 'effect/Effect';
-import type * as LogLevel from 'effect/LogLevel';
 import * as References from 'effect/References';
 import { layer, loggerLayer } from './index.js';
 
@@ -122,7 +121,8 @@ describe('the surrounding autotel span', () => {
   });
 });
 
-type LogRecord = Record<string, unknown>;
+type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
+type LogRecord = { [key: string]: Json };
 
 async function captureLogs(
   effect: Effect.Effect<unknown, unknown, never>,
@@ -143,6 +143,7 @@ async function captureLogs(
 
   return lines.flatMap((line) => {
     try {
+      // SAFETY: each line is one JSON object the logger wrote; JSON.parse yields JSON.
       return [JSON.parse(line) as LogRecord];
     } catch {
       return [];
@@ -189,10 +190,7 @@ describe('layer', () => {
         Effect.provide(
           layer({ serviceName: 'svc-opts', logs: { level: 'debug' } }),
         ),
-        Effect.provideService(
-          References.MinimumLogLevel,
-          'Trace' as LogLevel.LogLevel,
-        ),
+        Effect.provideService(References.MinimumLogLevel, 'Trace'),
       ),
     );
 
@@ -377,10 +375,7 @@ describe('loggerLayer', () => {
           Effect.provide(
             loggerLayer({ serviceName: 'svc-verbose', level: 'debug' }),
           ),
-          Effect.provideService(
-            References.MinimumLogLevel,
-            'Trace' as LogLevel.LogLevel,
-          ),
+          Effect.provideService(References.MinimumLogLevel, 'Trace'),
         ),
       );
 
@@ -394,10 +389,7 @@ describe('loggerLayer', () => {
     const records = await captureLogs(
       Effect.logDebug('quiet').pipe(
         Effect.provide(loggerLayer({ serviceName: 'svc-quiet' })),
-        Effect.provideService(
-          References.MinimumLogLevel,
-          'Trace' as LogLevel.LogLevel,
-        ),
+        Effect.provideService(References.MinimumLogLevel, 'Trace'),
       ),
     );
 
@@ -439,8 +431,8 @@ describe('loggerLayer', () => {
       ),
     );
 
-    expect(
-      records.find((r) => typeof r.msg === 'string' && r.msg.includes('o-9')),
-    ).toMatchObject({ msg: 'order {"id":"o-9"} 42' });
+    expect(records.find((r) => String(r.msg).includes('o-9'))).toMatchObject({
+      msg: 'order {"id":"o-9"} 42',
+    });
   });
 });

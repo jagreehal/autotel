@@ -19,7 +19,10 @@ export interface MiddlewareHandler<TContext = unknown> {
     data?: unknown;
     method?: string;
     filename?: string;
+    /** Older TanStack Start (< 1.169). Newer versions send serverFnMeta instead. */
     functionId?: string;
+    /** TanStack Start >= 1.169: the server function's export name and file. */
+    serverFnMeta?: { id?: string; name?: string; filename?: string };
     signal?: AbortSignal;
   }): Promise<TContext>;
 }

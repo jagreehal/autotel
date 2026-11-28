@@ -128,9 +128,11 @@ describe('MCP 2026-07-28', () => {
     expect(getTrace?._meta).toEqual({ ui: { resourceUri: TRACE_VIEW_URI } });
 
     const { contents } = await client.readResource({ uri: TRACE_VIEW_URI });
-    const [view] = contents as { mimeType?: string; text?: string }[];
+    const [view] = contents;
     expect(view?.mimeType).toBe(MCP_APP_MIME_TYPE);
-    expect(view?.text).toMatch(/^<!doctype html>.*<script>/s);
+    expect(view && 'text' in view ? view.text : undefined).toMatch(
+      /^<!doctype html>.*<script>/s,
+    );
 
     await client.close();
   });
@@ -190,5 +192,77 @@ describe('MCP 2026-07-28', () => {
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
     });
     expect(response.status).toBe(403);
+  });
+
+  describe('Skills over MCP', () => {
+    const SkillsResult = z.looseObject({
+      skills: z.array(z.looseObject({ uri: z.string() })),
+      ttlMs: z.number(),
+      cacheScope: z.string(),
+    });
+    const SkillResult = z.looseObject({
+      skill: z.looseObject({
+        uri: z.string(),
+        frontmatter: z.looseObject({
+          name: z.string(),
+          description: z.string(),
+        }),
+        resources: z.array(
+          z.looseObject({
+            uri: z.string(),
+            digest: z.string(),
+            size: z.number(),
+          }),
+        ),
+      }),
+    });
+
+    it('declares the extension and lists the skills it serves', async () => {
+      const client = await connect();
+      const extensions = client.getServerCapabilities()?.extensions ?? {};
+      expect(Object.keys(extensions)).toContain(
+        'io.modelcontextprotocol/skills',
+      );
+      // SAFETY: the SDK validated the response against SkillsResult.
+      const { skills } = (await client.request(
+        { method: 'skills/list', params: {} } as never,
+        SkillsResult,
+      )) as z.infer<typeof SkillsResult>;
+      expect(skills.map((s) => s.uri)).toContain(
+        'skill://analyze-traces/SKILL.md',
+      );
+    });
+
+    it('returns a skill by URI, and reads its SKILL.md as a resource whose digest matches', async () => {
+      const client = await connect();
+      const uri = 'skill://autotel-mcp/SKILL.md';
+      // SAFETY: as above.
+      const { skill } = (await client.request(
+        { method: 'skills/get', params: { uri } } as never,
+        SkillResult,
+      )) as z.infer<typeof SkillResult>;
+      expect(skill.frontmatter.name).toBe('autotel-mcp');
+      const read = await client.readResource({ uri });
+      const [content] = read.contents;
+      const text = content && 'text' in content ? content.text : '';
+      const listed = skill.resources.find((r) => r.uri === uri);
+      expect(listed?.size).toBe(Buffer.byteLength(text, 'utf8'));
+      expect(content?.mimeType).toBe('text/markdown');
+    });
+
+    it('answers a URI it does not serve with invalid params', async () => {
+      const client = await connect();
+      await expect(
+        client.request(
+          // SAFETY: request() is typed by the SDK's own request union; skills/get is
+          // an extension method it sends as given, validated against SkillResult.
+          {
+            method: 'skills/get',
+            params: { uri: 'skill://made-up/SKILL.md' },
+          } as never,
+          SkillResult,
+        ),
+      ).rejects.toMatchObject({ code: -32_602 });
+    });
   });
 });

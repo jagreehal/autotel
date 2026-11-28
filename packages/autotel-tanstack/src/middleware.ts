@@ -1,6 +1,8 @@
 import { context, SpanStatusCode, type Attributes } from '@opentelemetry/api';
 import { trace } from 'autotel';
 import { extractContextFromRequest } from './context';
+import { reportError } from './error-reporting';
+import { metricsCollector } from './metrics';
 import { isServerSide } from './env';
 import { isControlFlowSignal, isRealError } from './control-flow';
 import { isExcludedPath } from './route-filter';
@@ -30,8 +32,9 @@ function buildRequestAttributes(
     [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'request',
   };
 
+  // url.query is the query without its leading '?'.
   if (url.search) {
-    attrs[SPAN_ATTRIBUTES.URL_QUERY] = url.search;
+    attrs[SPAN_ATTRIBUTES.URL_QUERY] = url.search.slice(1);
   }
 
   // Capture configured headers
@@ -53,13 +56,6 @@ function buildRequestAttributes(
 function buildServerFnAttributes(
   functionName: string,
   method: string,
-  args: unknown,
-  config: Required<
-    Omit<
-      TracingMiddlewareConfig,
-      'customAttributes' | 'service' | 'type' | 'router'
-    >
-  >,
 ): Attributes {
   const attrs: Attributes = {
     [SPAN_ATTRIBUTES.RPC_SYSTEM]: 'tanstack-start',
@@ -69,16 +65,12 @@ function buildServerFnAttributes(
     [SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_METHOD]: method,
   };
 
-  if (config.captureArgs && args !== undefined) {
-    try {
-      attrs[SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_ARGS] = JSON.stringify(args);
-    } catch {
-      attrs[SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_ARGS] = '[non-serializable]';
-    }
-  }
-
   return attrs;
 }
+
+import { httpServerStatus, responseOf } from './http-status';
+
+export { httpServerStatus, responseOf } from './http-status';
 
 /**
  * Generic middleware handler type (compatible with TanStack's middleware pattern)
@@ -95,7 +87,10 @@ export interface MiddlewareHandler<TContext = unknown> {
     data?: unknown;
     method?: string;
     filename?: string;
+    /** Older TanStack Start (< 1.169). Newer versions send serverFnMeta instead. */
     functionId?: string;
+    /** TanStack Start >= 1.169: the server function's export name and file. */
+    serverFnMeta?: { id?: string; name?: string; filename?: string };
     signal?: AbortSignal;
   }): Promise<TContext>;
 }
@@ -153,23 +148,27 @@ export function createTracingMiddleware<TContext = unknown>(
     if (!isServerSide()) {
       return opts.next();
     }
-    const { next, request, pathname, data, functionId } = opts;
+    const { next, request, pathname, data, functionId, serverFnMeta } = opts;
 
     // For function middleware
     if (mergedConfig.type === 'function') {
-      const fnName = functionId || 'unknown';
-      const method = (opts as { method?: string }).method || 'POST';
+      const fnName = serverFnMeta?.name || functionId || 'unknown';
+      const method = opts.method || 'POST';
 
       return trace.run(
         { name: `tanstack.serverFn.${fnName}`, isError: isRealError },
         async (ctx) => {
-          const attrs = buildServerFnAttributes(
-            fnName,
-            method,
-            data,
-            mergedConfig,
-          );
-          ctx.setAttributes(attrs as Record<string, string | number | boolean>);
+          const attrs = buildServerFnAttributes(fnName, method);
+          if (mergedConfig.captureArgs && data !== undefined) {
+            try {
+              attrs[SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_ARGS] =
+                JSON.stringify(data);
+            } catch {
+              attrs[SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_ARGS] =
+                '[non-serializable]';
+            }
+          }
+          ctx.setAttributes(attrs);
 
           // Add custom attributes if provided
           if (config?.customAttributes) {
@@ -178,20 +177,24 @@ export function createTracingMiddleware<TContext = unknown>(
               name: fnName,
               args: data,
             });
-            ctx.setAttributes(
-              customAttrs as Record<string, string | number | boolean>,
-            );
+            ctx.setAttributes(customAttrs);
           }
 
           try {
             const result = await next();
 
-            // Capture result if configured
-            if (mergedConfig.captureResults && result !== undefined) {
+            // next() resolves to the middleware context; the function's
+            // return value is its `result`. The rest (context, sendContext)
+            // is the app's own state and stays off the span.
+            // SAFETY: TanStack Start's function middleware next() always
+            // resolves to an object; `result` is absent before the handler runs.
+            const returned = (result as { result?: unknown } | undefined)
+              ?.result;
+            if (mergedConfig.captureResults && returned !== undefined) {
               try {
                 ctx.setAttribute(
                   SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_RESULT,
-                  JSON.stringify(result),
+                  JSON.stringify(returned),
                 );
               } catch {
                 ctx.setAttribute(
@@ -209,34 +212,21 @@ export function createTracingMiddleware<TContext = unknown>(
               throw error;
             }
             if (mergedConfig.captureErrors) {
-              if (
-                'recordError' in ctx &&
-                typeof ctx.recordError === 'function'
-              ) {
-                ctx.recordError(error);
-              } else if (
-                'recordException' in ctx &&
-                typeof ctx.recordException === 'function'
-              ) {
-                ctx.recordException(error);
-              }
+              ctx.recordError(error);
 
-              // Report error to error store
-              try {
-                const { reportError } = await import('./error-reporting');
-                reportError(error as Error, {
+              reportError(
+                error instanceof Error ? error : new Error(String(error)),
+                {
                   type: 'serverFn',
                   name: fnName,
                   method,
-                });
-              } catch {
-                // Error reporting not available, skip
-              }
+                },
+              );
             }
             throw error;
           }
         },
-      ) as Promise<TContext>;
+      );
     }
 
     // For request middleware
@@ -270,7 +260,7 @@ export function createTracingMiddleware<TContext = unknown>(
             ...buildRequestAttributes(request, mergedConfig),
             ...nameAttrs,
           };
-          ctx.setAttributes(attrs as Record<string, string | number | boolean>);
+          ctx.setAttributes(attrs);
 
           // Add custom attributes if provided
           if (config?.customAttributes) {
@@ -279,9 +269,7 @@ export function createTracingMiddleware<TContext = unknown>(
               name: spanName,
               request,
             });
-            ctx.setAttributes(
-              customAttrs as Record<string, string | number | boolean>,
-            );
+            ctx.setAttributes(customAttrs);
           }
 
           const startTime = Date.now();
@@ -295,23 +283,19 @@ export function createTracingMiddleware<TContext = unknown>(
               duration,
             );
 
-            // Record timing in metrics collector
-            try {
-              const { metricsCollector } = await import('./metrics');
-              metricsCollector.recordTiming(spanName, duration);
-            } catch {
-              // Metrics not available, skip
-            }
+            metricsCollector.recordTiming(spanName, duration);
 
-            // Try to get response status from result if it's a Response
-            if (result && typeof result === 'object' && 'status' in result) {
+            // SAFETY: request middleware next() resolves to TanStack's
+            // RequestServerResult, or a Response a later middleware returned.
+            const response = responseOf(result as { response?: unknown });
+            if (response) {
               ctx.setAttribute(
                 SPAN_ATTRIBUTES.HTTP_RESPONSE_STATUS_CODE,
-                (result as { status: number }).status,
+                response.status,
               );
             }
 
-            ctx.setStatus({ code: SpanStatusCode.OK });
+            ctx.setStatus(httpServerStatus(response?.status));
             return result;
           } catch (error) {
             const duration = Date.now() - startTime;
@@ -326,34 +310,21 @@ export function createTracingMiddleware<TContext = unknown>(
             }
 
             if (mergedConfig.captureErrors) {
-              if (
-                'recordError' in ctx &&
-                typeof ctx.recordError === 'function'
-              ) {
-                ctx.recordError(error);
-              } else if (
-                'recordException' in ctx &&
-                typeof ctx.recordException === 'function'
-              ) {
-                ctx.recordException(error);
-              }
+              ctx.recordError(error);
 
-              // Report error to error store
-              try {
-                const { reportError } = await import('./error-reporting');
-                reportError(error as Error, {
+              reportError(
+                error instanceof Error ? error : new Error(String(error)),
+                {
                   type: 'request',
                   method: request.method,
                   pathname: url.pathname,
-                });
-              } catch {
-                // Error reporting not available, skip
-              }
+                },
+              );
             }
             throw error;
           }
         },
-      ) as Promise<TContext>;
+      );
     });
   };
 }

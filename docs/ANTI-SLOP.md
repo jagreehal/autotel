@@ -274,8 +274,9 @@ things have no type to parse into:
   `packages/autotel-posthog/src/before-send.ts`, Sentry's
   `hint.originalException` in `packages/autotel-sentry/src/browser.ts`, and
   `reportError` / `reportReactError` in
-  `apps/example-datadog-react-express/src/telemetry.ts`. JavaScript lets
-  anything be thrown, and React, TanStack Query and Sentry all type it
+  `apps/example-datadog-react-express/src/telemetry.ts`, and the failure
+  classifiers in `packages/autotel-effect/src/semantics.ts` (an Effect can fail
+  with any value). JavaScript lets anything be thrown, and React, TanStack Query and Sentry all type it
   `unknown`. Each one reads it through its package's `values.ts`.
 - **A vendor's free-form payload.** RUM's `beforeSend` domain context
   (`packages/autotel-datadog/src/index.ts`) is a union across event types, and

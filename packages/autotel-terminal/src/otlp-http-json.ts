@@ -1,7 +1,8 @@
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Decodes OTLP/JSON request bodies off the wire: `readJsonBody` returns whatever JSON a client posted and the parsers take it as `unknown`, checking every level with the values.ts readers before it becomes an event. */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { TerminalSpanEvent, SpanEvent, SpanLink } from './span-stream';
 import type { TerminalLogEvent, LogLevel } from './lib/log-model';
-import { asRecord, asString } from './values.js';
+import { asRecord, asString, escapeControlDeep } from './values.js';
 
 const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -233,7 +234,8 @@ export function otlpSpanToTerminalEvent(
   };
   if (parsedEvents) collected.events = parsedEvents;
   if (parsedLinks) collected.links = parsedLinks;
-  return collected;
+  // Whatever a client posted is drawn in a terminal; control characters print as escapes.
+  return escapeControlDeep(collected);
 }
 
 export async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -338,6 +340,7 @@ export function parseOtlpLogEvents(payload: unknown): TerminalLogEvent[] {
   const events: TerminalLogEvent[] = [];
   for (const record of extractLogRecords(payload)) {
     const time = toMs(record.timeUnixNano || record.observedTimeUnixNano);
+    // Raw: logStream.emit() escapes every log once, whatever its source.
     events.push({
       time,
       level: mapSeverityToLevel(record.severityNumber, record.severityText),
@@ -357,7 +360,7 @@ interface OtlpMetricsExport {
 }
 
 export function countOtlpMetrics(payload: unknown): number {
-  if (!payload || typeof payload !== 'object') return 0;
+  if (!asRecord(payload)) return 0;
   let count = 0;
   // SAFETY: the one assertion for this walker; see OtlpTraceExport above.
   const { resourceMetrics } = payload as OtlpMetricsExport;

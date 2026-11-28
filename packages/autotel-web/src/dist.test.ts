@@ -16,4 +16,20 @@ describe.skipIf(!existsSync(dist))('dist', () => {
     expect(chunks.length).toBeGreaterThan(0);
     for (const js of chunks) expect(js).toContain('process.env.NODE_ENV');
   });
+
+  // A browser loading the lean entry without a bundler cannot resolve a bare
+  // `@opentelemetry/*` specifier, and the entry promises it needs none.
+  it('keeps every @opentelemetry import out of the lean entry', () => {
+    const seen = new Set<string>();
+    const visit = (file: string): void => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const js = readFileSync(new URL(file, dist), 'utf8');
+      expect(js, file).not.toMatch(/from\s*["']@opentelemetry\//);
+      for (const [, dep] of js.matchAll(/from\s*["']\.\/([^"']+)["']/g))
+        visit(dep);
+    };
+    visit('index.js');
+    expect(seen.size).toBeGreaterThan(1);
+  });
 });

@@ -218,18 +218,92 @@ HTTP GET /api/todos     (autotel node:http)
         └── db.query    (another withSpan or instrumented client)
 ```
 
-### Failures: put the detail in `message`
+## Span outcomes
 
-When a span fails, `@effect/opentelemetry` records `exception.message` and the
-span status message from `error.message`. `Data.TaggedError` sets that from a
-`message` prop. The `Error` constructor writes `message` as an own property,
-which shadows a getter on the class, so `new NotFound({ reason: "..." })`
-reaches your backend with an empty message ("Unknown error" in
-autotel-devtools). Name the prop `message`:
+`@effect/opentelemetry` marks every failed span as an error. `layer()` reads
+the exit the way the HTTP conventions and your domain do:
 
-```ts
+| The span ended with                                                                    | Status                                              | Exception event                                         |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------- |
+| A failure listed in `anticipatedErrorIdentifiers` (or matched by `isAnticipatedError`) | OK                                                  | none                                                    |
+| A failure Effect marks `ErrorReporter.ignore` (`RouteNotFound`)                        | OK                                                  | none                                                    |
+| A server span answering 5xx, even when the handler rendered it as a response           | Error, `error.type` = the status code               | `HttpServerErrorResponse`                               |
+| An `HttpClient` 4xx (`StatusCodeError`)                                                | Error, `error.type` = the status code               | none: whether the 4xx is a fault is the caller's to say |
+| Interruption only                                                                      | unchanged: `effect.fiber.interrupted`, not an error | none                                                    |
+| Anything else                                                                          | Error, with `error.type`                            | yes                                                     |
+
+An anticipated failure never hides a 5xx: a server span that answered 5xx is an
+error whatever it failed with.
+
+```typescript
 class NotFound extends Data.TaggedError('NotFound')<{ message: string }> {}
+
+const AutotelEffect = layer({
+  serviceName: 'orders-api',
+  spans: {
+    anticipatedErrorIdentifiers: ['NotFound', 'Unauthorized'],
+    isAnticipatedError: (error) => isUniqueViolation(error),
+  },
+});
 ```
+
+### Structured errors
+
+A failure that carries `why`, `fix`, `link`, `code` or `status` puts them on
+the span as `error.why`, `error.fix` and so on, the same attributes
+`createStructuredError` produces elsewhere in autotel:
+
+```typescript
+class PaymentDeclined extends Data.TaggedError('PaymentDeclined')<{
+  message: string;
+  why: string;
+  fix: string;
+  status: number;
+}> {}
+```
+
+Name the prop `message`: `Data.TaggedError` reads it for `exception.message`,
+and any other name reaches your backend as an empty message.
+
+### Dropping spans
+
+`spans.dropSpanSubtrees` takes name prefixes. A matching span starts
+unsampled, so neither it nor anything under it is recorded: Effect spans,
+database queries and outgoing `fetch` calls alike. Outgoing calls under it send
+`traceparent` with the sampled flag off, and errors inside it are not
+recorded, so keep real work out of a dropped span.
+
+```typescript
+layer({ serviceName: 'worker', spans: { dropSpanSubtrees: ['queue.poll'] } });
+```
+
+To drop one span and keep its children, filter it in `init()`.
+`effectSpanFilter` matches only Effect's spans, and autotel gives the dropped
+span's children its nearest kept ancestor as their parent, so the trace stays
+connected:
+
+```typescript
+import { init } from 'autotel';
+import { effectSpanFilter } from 'autotel-effect';
+
+init({
+  service: 'worker',
+  spanFilter: effectSpanFilter({
+    dropSpanNames: ['queue.tick'],
+    dropSpan: (span) => span.attributes['queue.empty'] === true,
+  }),
+});
+```
+
+A filtered span with no parent in this process drops its whole trace.
+
+### One trace with the rest of your app
+
+Effect spans go to the same provider as autotel's HTTP, fetch, database and MCP
+spans, so one request is one trace, whichever library opened each span. Inside
+`Effect.withSpan`, autotel's own helpers see the same span:
+`getActiveTraceContext()`, `getRequestLogger()` and `trace.run()` annotate it
+or nest under it.
 
 ## Example
 

@@ -84,6 +84,7 @@ Tools are registered per backend capability. Agents only see tools the backend c
 | OTel semantic conventions  | `semconv_list_namespaces`, `semconv_get_namespace`, `semconv_refresh_cache`                                                                                                                                         |
 | Collector schema           | `collector_list_components`, `collector_component_schema`, `collector_component_readme`, `collector_validate_component_config`, `collector_get_versions`, `collector_refresh_catalog`                               |
 | Health                     | `backend_health`, `backend_capabilities`, `list_capabilities`                                                                                                                                                       |
+| MCP server analytics       | `mcp_sessions`: agent sessions on an MCP server you instrument, with each call's intent, the outcome, common tool paths and where sessions fail                                                                     |
 | Coding agents (devtools)   | `agent_usage`: spend by session, prompt, repository or agent, with `cost` / `tokens` completeness                                                                                                                   |
 | Live validation (devtools) | `semconv_validate`: received telemetry against semantic conventions through `weaver`; `run: true` re-checks                                                                                                         |
 
@@ -94,6 +95,13 @@ Span `filters` take the names the tools use: `service`, `operation` (or `operati
 Ask `what_changed` first when behaviour shifted: it lists each `service.version` and `feature_flag.version` change in the window (`from` / `to`, or `lookbackMinutes`), with error rate and p95 before and after. Pass `serviceName` for one service.
 
 Start triage with `list_issues` (grouped failures with status, count, trend, versions and affected users), then `get_issue` for the stack, latest trace and nearby logs.
+
+## Skills
+
+The server publishes skills over MCP (`io.modelcontextprotocol/skills`):
+`autotel-mcp`, `analyze-traces` and `debug-missing-spans`. A client with the
+extension loads them through `skills/list` and `skills/get`; any client can
+read the files as `skill://<name>/<path>` resources.
 
 ## Resources
 

@@ -36,6 +36,8 @@ export const handler = trace(async function fetch(request: Request) {
 
 Without `exporter` or `spanProcessors`, `parseConfig` warns once and spans are dropped. A trace is flushed when its local root span ends; for traces that continue a remote parent, call `await provider.getTracer('autotel-edge').forceFlush(traceId)` (e.g. inside `waitUntil`). On Cloudflare, use `autotel-cloudflare` instead: its wrappers do all of this per request.
 
+`OTLPExporter` retries a network error, `408`, `429`, `502`, `503` and `504` up to three attempts, honouring `Retry-After` up to 5 seconds, and sends any other status once. A `2xx` whose `partialSuccess` reports rejected spans fails the export with the count.
+
 ## Entry points
 
 - `autotel-edge`: functional API (`trace`, `span`, `instrument`, `withTracing`, `getActiveTraceContext`), config (`parseConfig`, `createInitialiser`, `setConfig`, `getActiveConfig`), `WorkerTracerProvider`, `OTLPExporter`, `defineConfig`, `definePlugin`, `parseError`

@@ -115,6 +115,12 @@ export function buildToolCatalog(): ToolCatalogEntry[] {
       intent: 'see tool usage',
     },
     {
+      name: 'mcp_sessions',
+      description:
+        'Agent sessions on an instrumented MCP server: intents, outcomes, common tool paths and where sessions fail.',
+      intent: 'see how agents use your MCP server',
+    },
+    {
       name: 'service_map',
       description:
         'Build a service dependency map with node and edge health metrics.',

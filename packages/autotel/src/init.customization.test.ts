@@ -1,8 +1,17 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import type { MetricReader } from '@opentelemetry/sdk-metrics';
 import type { AutotelSdk, AutotelSdkOptions } from './sdk';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
+import type { EnrichedSpanProcessor } from './enriched-span-processor';
 import { mock, mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import { NeverSampler } from './sampling';
 import { safeRequire } from './node-require';
@@ -28,6 +37,29 @@ type ConfigValue =
   | ((...args: never[]) => ConfigValue)
   | Array<ConfigValue>
   | { [key: string]: ConfigValue };
+
+/** A record as a log processor receives it. */
+type EmittedLogRecord = Parameters<LogRecordProcessor['onEmit']>[0];
+
+/**
+ * The composite init() builds around `spanEnrichers`. Checked by constructor
+ * name: `vi.resetModules()` gives `init` its own copy of the class.
+ */
+function isEnrichedSpanProcessor(
+  processor: SpanProcessor | undefined,
+): processor is EnrichedSpanProcessor {
+  return processor?.constructor.name === 'EnrichedSpanProcessor';
+}
+
+/** The processors inside the single composite init() handed the SDK. */
+function compositeChildren(
+  processor: SpanProcessor | undefined,
+): readonly SpanProcessor[] {
+  if (!isEnrichedSpanProcessor(processor)) {
+    throw new Error('expected one EnrichedSpanProcessor');
+  }
+  return processor.processors;
+}
 
 type SdkRecord = {
   options: SdkOptions;
@@ -86,6 +118,10 @@ async function loadInitWithMocks() {
   // Reset modules immediately before mocking to ensure clean state
   vi.resetModules();
 
+  // The OTLP exporters, metric reader and log processor are imported statically
+  // by otlp-exporters.ts, instrumentation.ts and sdk.ts with no injection seam,
+  // and AutotelSdk is replaced so options are recorded without starting an SDK.
+  /* oxlint-disable anti-slop/no-module-mocking -- init() exposes no seam for the statically imported exporter classes this harness records */
   vi.doMock('./sdk', () => ({
     AutotelSdk: MockSdk,
     releaseOtelGlobals: vi.fn(),
@@ -139,6 +175,7 @@ async function loadInitWithMocks() {
   vi.doMock('@opentelemetry/sdk-logs', () => ({
     BatchLogRecordProcessor: MockBatchLogRecordProcessor,
   }));
+  /* oxlint-enable anti-slop/no-module-mocking */
 
   // vi.doMock is not hoisted, so ./init must be imported after the mocks
   // above are registered; a static import would bind the unmocked module.
@@ -146,10 +183,9 @@ async function loadInitWithMocks() {
   const mod = await import('./init');
   // Run as an app without OpenFeature, which this workspace has installed:
   // finding it turns log export on.
-  mod._setOptionalRequireForTesting(((id: string) =>
-    id === '@openfeature/server-sdk'
-      ? undefined
-      : safeRequire(id)) as typeof safeRequire);
+  mod._setOptionalRequireForTesting(<T>(id: string) =>
+    id === '@openfeature/server-sdk' ? undefined : safeRequire<T>(id),
+  );
 
   return {
     init: mod.init,
@@ -169,6 +205,17 @@ async function loadInitWithMocks() {
 }
 
 describe('init() customization', () => {
+  // These assert processor wiring. Outside production init() wraps every
+  // processor in a URL-query redactor, which would hide what was passed in.
+  const redactPii = process.env.AUTOTEL_REDACT_PII;
+  beforeAll(() => {
+    process.env.AUTOTEL_REDACT_PII = 'off';
+  });
+  afterAll(() => {
+    if (redactPii === undefined) delete process.env.AUTOTEL_REDACT_PII;
+    else process.env.AUTOTEL_REDACT_PII = redactPii;
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     delete process.env.AUTOTEL_METRICS;
@@ -734,13 +781,14 @@ describe('init() customization', () => {
 
   it('redacts logs sent through a caller-supplied log processor', async () => {
     const { init, sdkInstances } = await loadInitWithMocks();
-    const received: Array<{ attributes: Record<string, unknown> }> = [];
-    const own = {
-      onEmit: (record: { attributes: Record<string, unknown> }) =>
-        received.push(record),
+    const received: EmittedLogRecord[] = [];
+    const own: LogRecordProcessor = {
+      onEmit: (record) => {
+        received.push(record);
+      },
       shutdown: () => Promise.resolve(),
       forceFlush: () => Promise.resolve(),
-    } as unknown as LogRecordProcessor;
+    };
 
     init({
       service: 'own-log-processor',
@@ -749,6 +797,8 @@ describe('init() customization', () => {
       logRecordProcessors: [own],
     });
     const [wrapped] = sdkInstances.at(-1)!.options.logRecordProcessors!;
+    // SAFETY: the redacting wrapper reads only body and attributes, which this
+    // partial record carries.
     wrapped!.onEmit({
       body: 'login',
       attributes: { password: 'hunter2' },
@@ -867,8 +917,7 @@ describe('init() customization', () => {
     const [top, ...rest] = options.spanProcessors as SpanProcessor[];
     expect(rest).toEqual([]);
     // One composite, so the enrichers drain before the exporters shut down.
-    const processors = (top as unknown as { processors: SpanProcessor[] })
-      .processors;
+    const processors = compositeChildren(top);
     expect(processors[0]).toBe(enricher);
     expect(processors.length).toBeGreaterThan(1);
   });
@@ -938,8 +987,7 @@ describe('init() customization', () => {
     // SAFETY: init() passes the processors it built; the assertions below are
     // about which ones ended up in that list.
     const [top] = options.spanProcessors as SpanProcessor[];
-    const processors = (top as unknown as { processors: SpanProcessor[] })
-      .processors;
+    const processors = compositeChildren(top);
     // Identity, not just position: the enricher reaches the SDK unwrapped, so
     // it mutates the real span. Compared by constructor name because
     // `vi.resetModules()` gives `init` its own copy of the class.

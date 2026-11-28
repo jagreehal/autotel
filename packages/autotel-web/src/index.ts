@@ -95,7 +95,6 @@ export {
 
 // Session-consistent sampling
 export { sampleByKey } from './sampling';
-export { createSessionRatioSampler } from './sampler';
 
 // What happened before the error
 export {

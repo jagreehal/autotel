@@ -230,3 +230,6 @@ const exit = await callbacks.runPromiseExit(answer(message));
 - On serverless, the entry is `webHandler(handler)`: baggage, flush after the response, `WaitUntil`. Work after the response reads `WaitUntil`, never looks `waitUntil` up inside a fiber.
 - `HttpRouter.serve` apps add `baggageMiddleware({ spanKeys })`, so the request span carries the session too.
 - Effects run from callbacks use `runtime(layer, options)`, so their spans and logs export.
+- Expected failures (not found, validation, a duplicate) go in `layer({ spans: { anticipatedErrorIdentifiers, isAnticipatedError } })`, so their spans end OK with no exception event. A server span that answered 5xx stays an error regardless.
+- Noisy subtrees go in `spans.dropSpanSubtrees` (the span and everything under it go unrecorded); a single span goes in `init({ spanFilter: effectSpanFilter({ dropSpanNames }) })`, which keeps its children attached to the nearest kept span.
+- A `Data.TaggedError` with `why`, `fix`, `link`, `code` or `status` props puts them on the span as `error.*`, the same attributes `createStructuredError` produces.
