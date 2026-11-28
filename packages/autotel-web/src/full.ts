@@ -743,8 +743,9 @@ export function initFull(config: AutotelWebFullConfig): void {
   );
 
   if (toggles.frustration) {
+    // `true`, or switched on remotely: no local overrides.
     const localFrustration =
-      typeof config.captureFrustration === 'object'
+      config.captureFrustration && config.captureFrustration !== true
         ? config.captureFrustration
         : {};
     setupFrustrationSignals({
@@ -758,17 +759,16 @@ export function initFull(config: AutotelWebFullConfig): void {
   }
 
   if (config.captureConsoleLogs) {
-    captureConsoleAsLogs({
-      ...(typeof config.captureConsoleLogs === 'object'
-        ? config.captureConsoleLogs
-        : {}),
-      ...(stringRedactor && { redactor: stringRedactor }),
-    });
+    const consoleConfig: ConsoleLogsConfig =
+      config.captureConsoleLogs === true
+        ? {}
+        : { ...config.captureConsoleLogs };
+    if (stringRedactor) consoleConfig.redactor = stringRedactor;
+    captureConsoleAsLogs(consoleConfig);
   }
 
   if (config.breadcrumbs) {
-    const options =
-      typeof config.breadcrumbs === 'object' ? config.breadcrumbs : {};
+    const options = config.breadcrumbs === true ? {} : config.breadcrumbs;
     configureBreadcrumbs({
       ...options,
       ...(stringRedactor && { redactor: stringRedactor }),
@@ -890,6 +890,9 @@ function wrapXhrForBaggage(gate: BaggageGate, debug?: boolean): void {
   const urls = new WeakMap<XMLHttpRequest, string>();
   const ownBaggage = new WeakSet<XMLHttpRequest>();
 
+  // SAFETY: the wrapper takes exactly `open`'s parameters and returns what the
+  // original returns; the assertion only restores the overloads a rest
+  // parameter cannot spell.
   proto.open = function (
     this: XMLHttpRequest,
     ...args: Parameters<XMLHttpRequest['open']>
@@ -953,17 +956,20 @@ function isExcluded(
 }
 
 function fetchUrl(input: RequestInfo | URL): string {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating fetch's own `RequestInfo | URL` argument; `instanceof Request` would miss one from another realm
   if (typeof input === 'string') return input;
   if (input instanceof URL) return input.toString();
   return input.url;
 }
 
 /** A value that settles later, whatever produced it. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- a type guard over whatever the app's callback returned; taking `unknown` is what makes it the parse
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   // SAFETY: this is the thenable test itself - `then` is probed for before
   // anything treats the value as a promise.
   return (
     value instanceof Object &&
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- the definition of a thenable; `instanceof Promise` misses other promise libraries
     typeof (value as PromiseLike<unknown>).then === 'function'
   );
 }
@@ -1088,6 +1094,7 @@ export {
 } from './functional';
 export type { TraceContext } from './functional';
 export { captureException } from './error-tracking';
+export { createSessionRatioSampler } from './sampler';
 export { identify, clearIdentity, type IdentityAttributes } from './identity';
 export type {
   SessionConfig,

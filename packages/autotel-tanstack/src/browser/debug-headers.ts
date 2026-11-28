@@ -5,15 +5,19 @@
  * In browser, this returns pass-through middleware.
  */
 
-import type { MiddlewareHandler } from './middleware';
+import type { DebugHeadersConfig } from '../debug-headers';
 
 /**
  * Browser stub: Returns pass-through middleware
  */
-export function debugHeadersMiddleware<
-  TContext = unknown,
->(): MiddlewareHandler<TContext> {
-  return async function noopMiddleware(opts) {
+// oxlint-disable-next-line typescript/no-explicit-any -- Same TanStack createMiddleware().server() adapter shape as the server build.
+type ServerMiddleware = (opts: any) => any;
+
+export function debugHeadersMiddleware(
+  _config?: DebugHeadersConfig,
+): ServerMiddleware {
+  // oxlint-disable-next-line typescript/no-explicit-any -- Same adapter boundary.
+  return async function noopMiddleware(opts: any) {
     return opts.next();
   };
 }

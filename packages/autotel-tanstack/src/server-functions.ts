@@ -4,6 +4,26 @@ import { isServerSide } from './env';
 import { isControlFlowSignal, isRealError } from './control-flow';
 import { type TraceServerFnConfig, SPAN_ATTRIBUTES } from './types';
 
+// oxlint-disable-next-line typescript/no-explicit-any -- Same function-wrapper constraint as traceServerFn below.
+type AnyFunction = (...args: any[]) => any;
+
+/** The builder createServerFn() returns: `.handler(fn)` yields the server function. */
+interface ServerFnBuilder {
+  handler: (handlerFn: AnyFunction) => AnyFunction;
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Decode boundary: createServerFn is the caller's own function, so its return value is unchecked until this guard.
+function isServerFnBuilder(value: unknown): value is ServerFnBuilder {
+  return (
+    value !== null &&
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Same decode boundary: establishing the builder shape.
+    typeof value === 'object' &&
+    'handler' in value &&
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Same decode boundary.
+    typeof value.handler === 'function'
+  );
+}
+
 /**
  * Wrap a TanStack server function with OpenTelemetry tracing
  *
@@ -50,7 +70,7 @@ export function traceServerFn<T extends (...args: any[]) => any>(
   config: TraceServerFnConfig = {},
 ): T {
   const fnName = config.name || serverFn.name || 'serverFn';
-  const captureArgs = config.captureArgs ?? true;
+  const captureArgs = config.captureArgs ?? false;
   const captureResults = config.captureResults ?? false;
 
   return new Proxy(serverFn, {
@@ -91,7 +111,7 @@ export function traceServerFn<T extends (...args: any[]) => any>(
           }
 
           try {
-            const result = await Reflect.apply(target, thisArg, argArray);
+            const result = await target.apply(thisArg, argArray);
 
             // Capture result if configured
             if (captureResults && result !== undefined) {
@@ -115,24 +135,13 @@ export function traceServerFn<T extends (...args: any[]) => any>(
               ctx.setStatus({ code: SpanStatusCode.OK });
               throw error;
             }
-            if ('recordError' in ctx && typeof ctx.recordError === 'function') {
-              ctx.recordError(error);
-            } else if (
-              'recordException' in ctx &&
-              typeof ctx.recordException === 'function'
-            ) {
-              ctx.recordException(error);
-            }
+            ctx.recordError(error);
             throw error;
           }
         },
       );
     },
-
-    get(target, prop, receiver) {
-      return Reflect.get(target, prop, receiver);
-    },
-  }) as T;
+  });
 }
 
 /**
@@ -168,22 +177,17 @@ export function createTracedServerFnFactory<
 ): TCreateServerFn {
   return new Proxy(createServerFnOriginal, {
     apply(target, thisArg, argArray) {
-      const result = Reflect.apply(target, thisArg, argArray);
+      const result = target.apply(thisArg, argArray);
 
       // If the result has a .handler method, wrap it
-      if (
-        result &&
-        typeof result === 'object' &&
-        'handler' in result &&
-        typeof result.handler === 'function'
-      ) {
+      if (isServerFnBuilder(result)) {
         const originalHandler = result.handler.bind(result);
 
-        result.handler = function tracedHandler(handlerFn: unknown) {
-          const wrappedHandler = originalHandler(handlerFn as never);
+        result.handler = function tracedHandler(handlerFn: AnyFunction) {
+          const wrappedHandler = originalHandler(handlerFn);
 
           // Try to infer function name from the handler
-          const fnName = (handlerFn as { name?: string })?.name || 'serverFn';
+          const fnName = handlerFn.name || 'serverFn';
 
           return traceServerFn(wrappedHandler, {
             ...defaultConfig,
@@ -194,5 +198,5 @@ export function createTracedServerFnFactory<
 
       return result;
     },
-  }) as TCreateServerFn;
+  });
 }

@@ -40,7 +40,18 @@ import {
 } from './security';
 import { errorName } from './error-name.js';
 import { traceEventsHandlers } from './events';
-import { LOW_LEVEL, patchRequestHandlers } from './request-handlers';
+import {
+  createdTask,
+  elicitationActions,
+  relatedTaskId,
+  taskAttributes,
+  traceExtensionHandlers,
+} from './tasks-skills';
+import {
+  LOW_LEVEL,
+  patchRequestHandlers,
+  type RequestHandler,
+} from './request-handlers';
 import {
   carryClientIdentity,
   decodeClientIdentity,
@@ -61,10 +72,12 @@ import {
   callMethod,
   member,
   readProperty,
+  type UnknownRecord,
 } from './values.js';
 
 type ResolvedConfig = ReturnType<typeof resolveConfig> & {
   /** The connection's client, for a 2025-era request (the SDK's getClientVersion). */
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- the SDK's getClientVersion result; its shape varies by SDK version and is read by the client-attribute code.
   connectionClient?: () => unknown;
 };
 
@@ -89,6 +102,7 @@ async function classify(
   source: 'arguments' | 'result',
   type: 'tool' | 'resource' | 'prompt',
   name: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a tool's arguments or result: any payload the caller or handler supplies, handed to the user's classifier as is.
   value: unknown,
 ): Promise<void> {
   if (!config.securityClassifier) return;
@@ -127,7 +141,7 @@ function getEntityAttributes(
   type: 'tool' | 'resource' | 'prompt',
   name: string,
   resourceUri?: string,
-): Record<string, string> {
+) {
   switch (type) {
     case 'tool': {
       return { [MCP_SEMCONV.TOOL_NAME]: name };
@@ -162,11 +176,12 @@ const manifestAssessments = new WeakMap<
   object,
   Map<string, Promise<ManifestAssessment | undefined>>
 >();
-const NO_CLASSIFIER: object = {};
+const NO_CLASSIFIER = {};
 
 function getManifestAssessmentPromise(
   type: 'tool' | 'resource' | 'prompt',
   name: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- the registration config the SDK accepts, whose shape varies by SDK version; extractManifestTextSurface reads each field it uses.
   configObject: unknown,
   config: ResolvedConfig,
 ): Promise<ManifestAssessment | undefined> | undefined {
@@ -204,13 +219,15 @@ function getManifestAssessmentPromise(
 interface RequestFacts {
   /** Which argument the context was found at, so it is never read as a payload. */
   contextIndex?: number;
-  meta?: Record<string, unknown>;
+  meta?: UnknownRecord;
   sessionId?: string;
   protocolVersion?: string;
   /** The 2026-07-28 envelope's clientInfo. */
   client?: unknown;
   /** The client an `mcpci1.` id names, on a request with no native session. */
   headerClient?: unknown;
+  /** A retried request's answers to its `inputRequests` (2026-07-28). */
+  inputResponses?: UnknownRecord;
 }
 
 /**
@@ -241,19 +258,22 @@ interface RequestFacts {
  */
 function readRequestFacts(args: unknown[]): RequestFacts {
   for (let index = args.length - 1; index >= 0; index--) {
-    const arg = args[index] as any;
-    if (!asRecord(arg)) continue;
+    const arg = asRecord(args[index]);
+    if (!arg) continue;
 
     // 2026-07-28: ServerContext
     if (arg.mcpReq) {
+      const meta = asRecord(readProperty(arg.mcpReq, '_meta'));
+      const envelope = asRecord(readProperty(arg.mcpReq, 'envelope'));
       return {
         contextIndex: index,
-        meta: arg.mcpReq._meta,
-        sessionId: arg.sessionId,
-        protocolVersion: arg.mcpReq.envelope?.[MCP_PROTOCOL_VERSION_META_KEY],
+        meta,
+        sessionId: asString(arg.sessionId),
+        protocolVersion: asString(envelope?.[MCP_PROTOCOL_VERSION_META_KEY]),
         client:
-          arg.mcpReq.envelope?.[MCP_CLIENT_INFO_META_KEY] ??
-          arg.mcpReq._meta?.[MCP_CLIENT_INFO_META_KEY],
+          envelope?.[MCP_CLIENT_INFO_META_KEY] ??
+          meta?.[MCP_CLIENT_INFO_META_KEY],
+        inputResponses: asRecord(readProperty(arg.mcpReq, 'inputResponses')),
       };
     }
 
@@ -263,11 +283,16 @@ function readRequestFacts(args: unknown[]): RequestFacts {
       // A transport with sessions owns the header: it is no identity of ours.
       const headerClient = arg.sessionId
         ? undefined
-        : decodeClientIdentity(arg.requestInfo?.headers?.['mcp-session-id']);
+        : decodeClientIdentity(
+            readProperty(
+              readProperty(arg.requestInfo, 'headers'),
+              'mcp-session-id',
+            ),
+          );
       return {
         contextIndex: index,
-        meta: arg._meta,
-        sessionId: arg.sessionId,
+        meta: asRecord(arg._meta),
+        sessionId: asString(arg.sessionId),
         ...(headerClient && { headerClient }),
       };
     }
@@ -287,6 +312,7 @@ function readRequestFacts(args: unknown[]): RequestFacts {
 function readCallPayload(
   args: unknown[],
   facts: RequestFacts,
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- the handler's own payload, whatever the caller sent; it is only serialized or classified, never read here.
 ): unknown | undefined {
   return facts.contextIndex === 0 ? undefined : args[0];
 }
@@ -300,6 +326,7 @@ function readCallPayload(
  * members are NOT reliable tells — results are passthrough-typed, so a handler
  * may legitimately return a field by either name.
  */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- a handler's result, passthrough-typed by the SDK; only its discriminator is read.
 function isInputRequired(result: unknown): boolean {
   return readProperty(result, 'resultType') === 'input_required';
 }
@@ -330,6 +357,7 @@ function getSpanName(
   return `${getMethodName(type)} ${name}`;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- forwards getClientVersion's SDK-owned result, whose shape varies by SDK version.
 function safely(read: (() => unknown) | undefined): unknown {
   try {
     return read?.();
@@ -339,12 +367,13 @@ function safely(read: (() => unknown) | undefined): unknown {
 }
 
 /** The SDK's getClientVersion on an McpServer (`.server`) or a low-level Server. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- an McpServer or low-level Server of either SDK era, and getClientVersion's SDK-owned result; both shapes vary by SDK version.
 function connectionClientOf(server: unknown): () => unknown {
   return () => {
     for (const s of [readProperty(server, 'server'), server]) {
-      const get = readProperty(s, 'getClientVersion');
-      // SAFETY: get was read off s, so s is an object.
-      if (isFunction(get)) return callMethod(get, s as object, []);
+      const owner = asRecord(s);
+      const get = readProperty(owner, 'getClientVersion');
+      if (owner && isFunction(get)) return callMethod(get, owner, []);
     }
     return;
   };
@@ -389,6 +418,8 @@ function wrapHandler<T extends (...args: any[]) => any>(
   const methodName = getMethodName(type);
   const spanName = getSpanName(type, name);
 
+  // SAFETY: the wrapper forwards every argument to handler and resolves with
+  // its result; the SDK awaits whatever a handler returns, so it stands in for T.
   return (async (...args: any[]) => {
     // The request `_meta` (where traceparent rides) lives on the handler's
     // context argument, never in the validated arguments. Establishing where
@@ -411,6 +442,13 @@ function wrapHandler<T extends (...args: any[]) => any>(
 
         // Required: mcp.method.name
         ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
+        // A request made on behalf of a task names it in _meta.
+        const relatedTask = relatedTaskId(request.meta);
+        if (relatedTask) ctx.setAttribute(MCP_SEMCONV.TASK_ID, relatedTask);
+        // A retry after a pause: what the user answered.
+        const actions = elicitationActions(request.inputResponses);
+        if (actions.length > 0)
+          ctx.setAttribute(MCP_SEMCONV.ELICITATION_ACTION, actions);
 
         // Conditionally required: type-specific name attribute
         switch (type) {
@@ -590,6 +628,13 @@ function wrapHandler<T extends (...args: any[]) => any>(
           if (paused) {
             ctx.setAttribute(MCP_SEMCONV.INPUT_REQUIRED, true);
           }
+          // Ran as a task: the call only accepted the work, which tasks/* then
+          // report on. Status stays UNSET, as for a pause: nothing completed yet.
+          const createdAsTask = createdTask(result);
+          if (createdAsTask) {
+            ctx.setAttributes(taskAttributes(createdAsTask));
+            ctx.setAttribute(MCP_SEMCONV.TASK_AUGMENTED, true);
+          }
 
           // Error handling: tool error via isError
           let failureCategory: McpFailureCategory | undefined;
@@ -603,7 +648,10 @@ function wrapHandler<T extends (...args: any[]) => any>(
                 ? failureMessage(config, failureText, name)
                 : undefined,
             });
-          } else if (!paused) {
+          } else if (paused || createdAsTask) {
+            // Set, not left: an unset status is reported as OK when the span ends.
+            ctx.setStatus({ code: SpanStatusCode.UNSET });
+          } else {
             ctx.setStatus({ code: SpanStatusCode.OK });
           }
 
@@ -625,7 +673,7 @@ function wrapHandler<T extends (...args: any[]) => any>(
           // Record metric
           if (config.enableMetrics) {
             const durationS = (performance.now() - startTime) / 1000;
-            const metricAttrs: Record<string, string | boolean> = {
+            const metricAttrs: McpMetricAttributes = {
               [MCP_SEMCONV.METHOD_NAME]: methodName,
             };
             switch (type) {
@@ -648,6 +696,7 @@ function wrapHandler<T extends (...args: any[]) => any>(
               // Keeps "asked a question" out of the did-the-work latency bucket.
               metricAttrs[MCP_SEMCONV.INPUT_REQUIRED] = true;
             }
+            if (createdAsTask) metricAttrs[MCP_SEMCONV.TASK_AUGMENTED] = true;
             if (result?.isError) {
               metricAttrs[MCP_SEMCONV.ERROR_TYPE] = 'tool_error';
             }
@@ -677,13 +726,13 @@ function wrapHandler<T extends (...args: any[]) => any>(
 
           // Record exception if configured
           if (config.captureErrors) {
-            if ('recordError' in ctx && typeof ctx.recordError === 'function') {
-              ctx.recordError(recorded);
+            if ('recordError' in ctx && isFunction(ctx.recordError)) {
+              callMethod(ctx.recordError, ctx, [recorded]);
             } else if (
               'recordException' in ctx &&
-              typeof ctx.recordException === 'function'
+              isFunction(ctx.recordException)
             ) {
-              ctx.recordException(recorded as Error);
+              callMethod(ctx.recordException, ctx, [recorded]);
             }
             ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, errorName(error));
             applyFailureGrouping(ctx, thrownText);
@@ -735,6 +784,7 @@ function wrapHandler<T extends (...args: any[]) => any>(
  * with the same spans as a registered tool. The name comes from the request,
  * as in {@link traceMcpHandler}.
  */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- a low-level Server of either SDK era; patchRequestHandlers decodes its private handler map.
 function traceLowLevelHandlers(server: unknown, config: ResolvedConfig): void {
   patchRequestHandlers(
     server,
@@ -747,7 +797,7 @@ function traceLowLevelHandlers(server: unknown, config: ResolvedConfig): void {
       const traced = wrapHandler(
         facts.type,
         facts.name,
-        (_payload: unknown, _extra: unknown) => raw(request, extra),
+        (..._args: Parameters<RequestHandler>) => raw(request, extra),
         config,
         facts.type === 'resource' ? facts.name : undefined,
         undefined,
@@ -841,6 +891,7 @@ export function traceMcpHandler<A extends unknown[], R>(
  * };
  * ```
  */
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- public generic constraint: narrowing it would reject SDK instances typed without an index signature and change what ReturnType<typeof instrumentMcpServer> gives callers.
 export function instrumentMcpServer<T extends Record<string, any>>(
   server: T,
   config?: McpInstrumentationConfig,
@@ -854,6 +905,7 @@ export function instrumentMcpServer<T extends Record<string, any>>(
   const lowLevel = !isFunction(member(server, 'registerTool'));
   if (lowLevel) traceLowLevelHandlers(server, mergedConfig);
   traceEventsHandlers(server, mergedConfig);
+  traceExtensionHandlers(server, mergedConfig);
   if (config)
     installTaskHandles(server, config, (handler) =>
       wrapHandler('tool', GET_MORE_TOOLS, handler, mergedConfig),
@@ -889,6 +941,8 @@ export function instrumentMcpServer<T extends Record<string, any>>(
             toolConfig,
             mergedConfig,
           );
+          // SAFETY: applyToolAnnotations reads each hint through asBoolean, so
+          // an annotations value of any other shape sets nothing.
           const wrappedHandler = wrapHandler(
             'tool',
             name,
@@ -912,7 +966,7 @@ export function instrumentMcpServer<T extends Record<string, any>>(
           resourceConfig: any,
           readCallback: any,
         ) {
-          const uri = typeof uriOrTemplate === 'string' ? uriOrTemplate : name;
+          const uri = asString(uriOrTemplate) ?? name;
           const manifestAssessmentPromise = getManifestAssessmentPromise(
             'resource',
             name,

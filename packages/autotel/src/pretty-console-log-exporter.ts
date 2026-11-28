@@ -15,6 +15,7 @@ import type {
 } from '@opentelemetry/sdk-logs';
 
 import {
+  escapeControl,
   ExportResultCode,
   paint,
   useColors,
@@ -30,7 +31,8 @@ const TRACE_ID_CHARS = 8;
 
 /** The severity's name, from its text when set and its number otherwise. */
 function severityOf(record: ReadableLogRecord): string {
-  if (record.severityText) return record.severityText.toUpperCase();
+  if (record.severityText)
+    return escapeControl(record.severityText.toUpperCase());
   const number = record.severityNumber ?? SeverityNumber.UNSPECIFIED;
   if (number >= SeverityNumber.FATAL) return 'FATAL';
   if (number >= SeverityNumber.ERROR) return 'ERROR';
@@ -99,10 +101,13 @@ export class PrettyConsoleLogExporter implements LogRecordExporter {
     const parts = [
       this.paint('dim', 'log'),
       this.paint(colorOf(severity), severity.padEnd(5)),
-      display(record.body),
+      escapeControl(display(record.body)),
     ];
     const attributes = Object.entries(record.attributes)
-      .map(([key, value]) => `${key}=${truncate(display(value))}`)
+      .map(
+        ([key, value]) =>
+          `${escapeControl(key)}=${truncate(escapeControl(display(value)))}`,
+      )
       .join(' ');
     if (attributes) parts.push(this.paint('gray', attributes));
     const traceId = record.spanContext?.traceId;

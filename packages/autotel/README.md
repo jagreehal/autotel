@@ -4,6 +4,10 @@
 [![npm subscribers](https://img.shields.io/npm/v/autotel-subscribers.svg?label=subscribers)](https://www.npmjs.com/package/autotel-subscribers)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
+![A checkout click in the browser traced through shop-api, shop-auth, shop-worker and SQLite, then opened in autotel-devtools as a waterfall and a service map](https://raw.githubusercontent.com/jagreehal/autotel/main/apps/docs/public/media/devtools-demo.gif)
+
+<sub>One click, one trace across four services, shown in [autotel-devtools](https://github.com/jagreehal/autotel/tree/main/packages/autotel-devtools). Run it yourself: <code>pnpm --filter @jagreehal/example-devtools start</code></sub>
+
 **Write once, observe everywhere.** Instrument your Node.js code a single time, keep the DX you love, and stream traces, metrics, logs, and product events to **any** observability stack without vendor lock-in.
 
 - **Drop-in DX** : one `init()` and ergonomic helpers like `trace()`, `span()`, `withTracing()`, decorators, and batch instrumentation.

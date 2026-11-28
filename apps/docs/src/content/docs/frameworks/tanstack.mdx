@@ -1,13 +1,34 @@
 ---
 title: TanStack Start
-description: Automatic tracing for TanStack Start server functions, middleware, route loaders, and HTTP requests.
+description: OpenTelemetry for TanStack Start. Server functions, route loaders, requests and browser errors traced from two middleware lines, sent to any OTLP backend.
 ---
 
-`autotel-tanstack` instruments [TanStack Start](https://tanstack.com/start)
-applications using the framework's native middleware patterns. Configure global
-middleware once and every server function, route loader, and HTTP request is
-traced automatically. Works with both `@tanstack/react-start` and
-`@tanstack/solid-start` (^1.139.14).
+`autotel-tanstack` traces a [TanStack Start](https://tanstack.com/start) app
+through Start's own middleware. Add two middleware once and every request,
+server function and route loader becomes an OpenTelemetry span. Spans nest
+under each other, continue a trace from the browser, and go to any
+OTLP backend. Works with `@tanstack/react-start` and `@tanstack/solid-start`.
+
+## Compared with TanStack's observability guide
+
+TanStack Start's [observability guide](https://tanstack.com/start/latest/docs/framework/react/guide/observability)
+builds each pattern by hand: a `Date.now()` timer in every server function, a
+`console.log` request logger, an in-memory metrics class. Its OpenTelemetry
+section is marked experimental, and it says first-class support is coming.
+This package covers each pattern:
+
+| The guide hand-writes                                                | With autotel                                                                                                                      |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `try`/`catch` + `Date.now()` + `console.log` in each server function | One `functionMiddleware`: a span per call, named after the function, with duration and the recorded exception                     |
+| A request logger middleware                                          | One `requestMiddleware`: a span per request with method, route, status code, and the caller's trace continued from `traceparent`  |
+| Loader timing in `loader`, and an `isServer` check                   | `traceLoader` / `traceBeforeLoad`. `redirect()` and `notFound()` are recorded as control flow, not errors                         |
+| `MetricsCollector` with p50/p95 kept in process memory               | Durations are on the spans, so your backend computes percentiles across every instance                                            |
+| An `errorStore` map behind an `/admin/errors` route                  | Exceptions recorded on the span that threw them, with the trace attached                                                          |
+| `createIsomorphicFn` logger switching on `NODE_ENV`                  | `getRequestLogger()`: structured logs correlated to the active trace, plus one wide event per request                             |
+| `ErrorBoundary` that calls `console.error`                           | `captureException` from `autotel-web`, in the same trace as the server spans                                                      |
+| Debug headers middleware                                             | `debugHeadersMiddleware()`, which also returns `X-Debug-Trace-Id`                                                                 |
+| A New Relic agent, `setControllerName` and a browser snippet         | The same spans to New Relic, Datadog, Honeycomb or Grafana by changing one environment variable                                   |
+| "Never log sensitive data"                                           | Server function input is not recorded by default, query values are masked in every environment, and production adds PII redaction |
 
 ## Installation
 
@@ -17,85 +38,82 @@ npm install autotel-tanstack autotel
 
 ## Quick start
 
-Configure global middleware in `start.ts`:
-
-```typescript
-// src/start.ts
-import { createStart, createMiddleware } from '@tanstack/react-start';
-import { createTracingServerHandler } from 'autotel-tanstack/middleware';
-import './instrumentation';
-
-const requestTracingMiddleware = createMiddleware().server(
-  createTracingServerHandler({
-    captureHeaders: ['x-request-id', 'user-agent'],
-    excludePaths: ['/health', '/metrics'],
-  }),
-);
-
-const functionTracingMiddleware = createMiddleware({ type: 'function' }).server(
-  createTracingServerHandler({ type: 'function', captureArgs: true }),
-);
-
-export const startInstance = createStart(() => ({
-  requestMiddleware: [requestTracingMiddleware],
-  functionMiddleware: [functionTracingMiddleware],
-}));
-```
-
 ```typescript
 // src/instrumentation.ts
-import { init } from 'autotel';
+import { instrument } from 'autotel-tanstack';
 
-init({
+instrument({
   service: 'my-app',
   endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
 });
 ```
 
-## Zero-config alternative
-
-Skip the explicit `init()` and use environment variables instead:
-
 ```typescript
-// src/instrumentation.ts
-import 'autotel-tanstack/auto';
-export {};
+// src/start.ts
+import { createMiddleware, createStart } from '@tanstack/react-start';
+import { createTracingServerHandler } from 'autotel-tanstack/middleware';
+import { getRouter } from './router';
+import './instrumentation';
+
+const requestTracing = createMiddleware().server(
+  createTracingServerHandler({
+    captureHeaders: ['x-request-id'],
+    excludePaths: ['/health'],
+    router: getRouter(), // name spans after routes: GET /posts/$postId
+  }),
+);
+
+const functionTracing = createMiddleware({ type: 'function' }).server(
+  createTracingServerHandler({ type: 'function' }),
+);
+
+export const startInstance = createStart(() => ({
+  requestMiddleware: [requestTracing],
+  functionMiddleware: [functionTracing],
+}));
 ```
 
-`autotel-tanstack/auto` reads `OTEL_SERVICE_NAME`,
-`OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_EXPORTER_OTLP_HEADERS` at startup.
+That is the whole setup. Without an endpoint, development builds print spans
+to the server console. To look at them in a UI instead, run
+[autotel-devtools](/autotel/tools/devtools/).
+
+### Zero-config alternative
+
+`import 'autotel-tanstack/auto'` is `instrument()` with no options, reading
+`OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT` and
+`OTEL_EXPORTER_OTLP_HEADERS`.
 
 ## Server functions
 
-With `functionMiddleware` configured globally, every `createServerFn(...)` is
-auto-traced:
+With `functionMiddleware` registered, every server function is traced. There is
+nothing to add to the function itself:
 
 ```typescript
 import { createServerFn } from '@tanstack/react-start';
 
-export const getUser = createServerFn({ method: 'GET' }).handler(
-  async ({ data: id }) => {
-    return await db.users.findUnique({ where: { id } });
-  },
-);
-
-export const createUser = createServerFn({ method: 'POST' })
-  .validator((d: UserInput) => d)
-  .handler(async ({ data }) => {
-    return await db.users.create({ data });
+export const getUser = createServerFn({ method: 'GET' })
+  .validator((id: string) => id)
+  .handler(async ({ data: id }) => {
+    const user = await db.users.findUnique({ where: { id } });
+    if (!user) throw new Error('User not found'); // recorded on the span
+    return user;
   });
 ```
 
-### Per-function middleware
+The span is `tanstack.serverFn.getUser`. It is named from the export, so the
+name stays the same across deploys. A thrown error sets the span to error and
+records the exception. A `redirect()` or `notFound()` does neither.
 
-For per-function options (e.g. capturing results for one operation), chain a
-function-scoped middleware:
+### Recording input and output
+
+Input is off by default: it is whatever the client sent, a login form's password
+included. Turn it on for the functions where you need it:
 
 ```typescript
-import { createServerFn, createMiddleware } from '@tanstack/react-start';
+import { createMiddleware, createServerFn } from '@tanstack/react-start';
 import { createTracingServerHandler } from 'autotel-tanstack/middleware';
 
-const verboseTracing = createMiddleware({ type: 'function' }).server(
+const recordPayloads = createMiddleware({ type: 'function' }).server(
   createTracingServerHandler({
     type: 'function',
     captureArgs: true,
@@ -103,18 +121,20 @@ const verboseTracing = createMiddleware({ type: 'function' }).server(
   }),
 );
 
-export const sensitiveOperation = createServerFn({ method: 'POST' })
-  .middleware([verboseTracing])
-  .handler(async ({ data }) => {
-    /* ... */
-  });
+export const searchProducts = createServerFn({ method: 'GET' })
+  .middleware([recordPayloads])
+  .validator((query: string) => query)
+  .handler(async ({ data }) => searchIndex(data));
 ```
+
+`captureResults` records the value the function returned, never the middleware
+context beside it.
 
 ## Route loaders
 
 ```typescript
 import { createFileRoute, redirect } from '@tanstack/react-router';
-import { traceLoader, traceBeforeLoad } from 'autotel-tanstack/loaders';
+import { traceBeforeLoad, traceLoader } from 'autotel-tanstack/loaders';
 
 export const Route = createFileRoute('/users/$userId')({
   beforeLoad: (ctx) =>
@@ -122,96 +142,265 @@ export const Route = createFileRoute('/users/$userId')({
       if (!context.auth.isAuthenticated) throw redirect({ to: '/login' });
     }),
   loader: (ctx) =>
-    traceLoader(ctx, async ({ params }) => {
-      return await getUser(params.userId);
-    }),
+    traceLoader(ctx, async ({ params }) => getUser({ data: params.userId })),
 });
 ```
 
-Pass the route's `ctx` through. TanStack Router types `params`, `search` and the context from the function you write, and the traced function receives them typed.
+Pass the route's `ctx` through: TanStack Router types `params`, `search` and
+the context from the function you write, and the traced function receives them
+typed. A loader that calls a server function shows it as a child span, with
+any database or `fetch` spans under that.
 
-## Middleware options
+## Logs in the trace
 
-`createTracingServerHandler` accepts:
+`getRequestLogger()` writes structured log records attached to the active span.
+`canonicalLogLines` adds one wide event per request:
 
-| Option             | Type                                      | Default      | Description                                               |
-| ------------------ | ----------------------------------------- | ------------ | --------------------------------------------------------- |
-| `type`             | `'request' \| 'function'`                 | `'request'`  | Span kind for this middleware                             |
-| `captureHeaders`   | `string[]`                                | `[]`         | Request headers to attach as span attributes              |
-| `captureArgs`      | `boolean`                                 | `true`       | Record server-function arguments                          |
-| `captureResults`   | `boolean`                                 | `false`      | Record server-function results (off by default; PII risk) |
-| `excludePaths`     | `string[]`                                | `[]`         | Glob paths to skip                                        |
-| `sampling`         | `'always' \| 'adaptive' \| 'never'`       | `'adaptive'` | Sampling strategy                                         |
-| `customAttributes` | `({ type, name, request }) => Attributes` | —            | Per-span custom attributes                                |
-| `router`           | your router, such as `getRouter()`        | —            | Names requests after the route they match                 |
+```typescript
+// src/instrumentation.ts
+import { instrument } from 'autotel-tanstack';
 
-### Span names
+instrument({
+  service: 'my-app',
+  logs: true,
+  canonicalLogLines: { enabled: true, rootSpansOnly: true },
+});
+```
 
-Server-function requests are named `METHOD /_serverFn`, with the function id in `tanstack.server_function.name`, so names stay the same across deploys. Pass `router` and every other request is named after the route it matches, `GET /posts/$postId`, which also becomes `http.route` on the request span and on the HTTP server span. The router's `basepath` and `rewrite` apply as they do in the app: under basepath `/app`, `/app/posts/1` records `/app/posts/$postId`. A request no route matches keeps its path.
+```typescript
+import { createServerFn } from '@tanstack/react-start';
+import { createStructuredError, getRequestLogger } from 'autotel';
 
-## Span attributes
+export const checkout = createServerFn({ method: 'POST' })
+  .validator((order: Order) => order)
+  .handler(async ({ data: order }) => {
+    const log = getRequestLogger();
+    log.set({
+      cart: { items: order.items.length, total_cents: order.totalCents },
+    });
 
-### HTTP request spans
+    const payment = await charge(order);
+    if (!payment.ok) {
+      throw createStructuredError({
+        message: 'Payment failed',
+        why: payment.declineReason,
+        fix: 'Try another card',
+        status: 402,
+      });
+    }
+    return payment;
+  });
+```
 
-- `http.request.method`: `GET`, `POST`, etc.
-- `url.path`, `url.query`
-- `http.response.status_code`
-- `tanstack.request.duration_ms`
+The guide's `createIsomorphicFn` logger switches format on `NODE_ENV`. Here,
+records go out as OTLP logs, and the pretty console output in development comes
+from `AUTOTEL_DEBUG=pretty`.
+
+## Browser errors and traces
+
+`autotel-web` starts the trace in the browser and sends it to your server
+functions in the `traceparent` header. A server span then continues the trace
+of the click that called it. It also records uncaught errors:
+
+```tsx
+// src/routes/__root.tsx
+import { createRootRoute, HeadContent, Scripts } from '@tanstack/react-router';
+import { useEffect } from 'react';
+import { captureException, initFull } from 'autotel-web/full';
+
+export const Route = createRootRoute({
+  shellComponent: RootDocument,
+  errorComponent: ({ error }) => {
+    useEffect(() => captureException(error), [error]);
+    return <p role="alert">Something went wrong.</p>;
+  },
+});
+
+function RootDocument({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    initFull({ service: 'my-app-web', captureErrors: true });
+  }, []);
+  return (
+    <html lang="en">
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        {children}
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+```
+
+`captureErrors` records uncaught errors and unhandled rejections.
+`captureException` covers the errors an error component catches before they
+get that far.
+
+## Health checks, metrics and debug headers
+
+Keep a health route, and leave it out of tracing so a load balancer polling it
+does not fill your trace store:
+
+```typescript
+createTracingServerHandler({ excludePaths: ['/health', '/ready'] });
+```
+
+Request durations are already on the spans, so p50 and p95 per route come from
+your backend, across every instance. `autotel-tanstack/metrics` and
+`autotel-tanstack/error-reporting` provide the guide's in-memory
+`/metrics` and `/admin/errors` handlers if you want them. They only see the
+process that serves the request.
+
+`debugHeadersMiddleware()` adds `X-Debug-Timestamp`, `X-Debug-Node-Version`,
+`X-Debug-Uptime` and `X-Debug-Trace-Id` to responses in development. Paste
+the trace id into your backend to open that request's trace:
+
+```typescript
+import { createMiddleware } from '@tanstack/react-start';
+import { createTracingServerHandler } from 'autotel-tanstack/middleware';
+import { debugHeadersMiddleware } from 'autotel-tanstack/debug-headers';
+
+const debugHeaders = createMiddleware().server(debugHeadersMiddleware());
+// List it after requestTracing, so the trace id is the request's.
+// requestMiddleware: [requestTracing, debugHeaders]
+```
+
+## Sending to a backend
+
+Every backend below receives the same spans. Only the environment changes:
+
+| Backend       | `OTEL_EXPORTER_OTLP_ENDPOINT`                                   | `OTEL_EXPORTER_OTLP_HEADERS` |
+| ------------- | --------------------------------------------------------------- | ---------------------------- |
+| New Relic     | `https://otlp.nr-data.net`                                      | `api-key=YOUR_LICENSE_KEY`   |
+| Honeycomb     | `https://api.honeycomb.io`                                      | `x-honeycomb-team=YOUR_KEY`  |
+| Grafana Cloud | your stack's OTLP gateway                                       | `Authorization=Basic ...`    |
+| Local         | `http://localhost:4318` (autotel-devtools, a Collector, Jaeger) | none                         |
+
+Because spans are named after routes (`GET /posts/$postId`) and functions,
+they group the way the guide's `setControllerName` call groups New Relic
+transactions, without the call. [Backends](/autotel/integrations/backends/)
+has presets for Datadog, Grafana, Honeycomb and more.
+
+## Privacy
+
+- Server function input and output are not recorded unless you turn on
+  `captureArgs` / `captureResults`. They are recorded as JSON in one
+  attribute, and redaction matches attribute names, not the keys inside
+  that JSON: `{"password":"hunter2"}` is exported as sent. Turn them on only
+  for functions whose input and output hold no secrets, or redact the whole
+  attribute (a custom config replaces the preset, so keep its key patterns):
+
+  ```typescript
+  import { init, REDACTOR_PATTERNS } from 'autotel';
+
+  init({
+    attributeRedactor: {
+      keyPatterns: [
+        REDACTOR_PATTERNS.sensitiveKey,
+        REDACTOR_PATTERNS.personalKey,
+      ],
+      paths: [
+        'tanstack.server_function.args',
+        'tanstack.server_function.result',
+      ],
+    },
+  });
+  ```
+
+- Query values are masked before export in every environment:
+  `?token=secret` is recorded as `token=REDACTED`, names kept. In
+  production autotel also applies its `'default'` preset, which masks
+  emails, card numbers and attributes named like `password`. `attributeRedactor: false`
+  turns both off.
+- `captureHeaders` records only the headers you list. Leave out
+  `authorization` and `cookie`.
+
+## Span reference
+
+### Request spans
+
+Named `METHOD route`. Server function requests are named `METHOD /_serverFn`,
+with the function's id in `tanstack.server_function.name`: TanStack resolves
+the function after request middleware runs. The function's own span,
+`tanstack.serverFn.<name>`, is the request span's child. Pass `router` and
+other requests are named after the route they match (`GET /posts/$postId`),
+which also becomes `http.route`. The router's `basepath` and `rewrite` apply:
+under basepath `/app`, `/app/posts/1` records `/app/posts/$postId`. A request
+no route matches keeps its path.
+
+- `http.request.method`, `url.path`, `url.query`, `http.route`
+- `http.response.status_code`. A 5xx marks the span as an error. A 4xx is the
+  client's error, so the span's status stays unset.
+- `http.request.header.<name>` for each header in `captureHeaders`
 
 ### Server function spans
 
-- `rpc.system`: `tanstack-start`
-- `rpc.method`: function name
-- `tanstack.server_function.name`
-- `tanstack.server_function.method`
-- `tanstack.server_function.args`: when `captureArgs: true`
+- `rpc.system.name`: `tanstack-start`, `rpc.method`: the function name
+- `tanstack.server_function.name`, `tanstack.server_function.method`
+- `tanstack.server_function.args` / `.result` when enabled
 
 ### Loader spans
 
-- `tanstack.loader.route_id`
-- `tanstack.loader.type`: `loader` or `beforeLoad`
+- `tanstack.loader.route_id`, `tanstack.loader.type` (`loader` or `beforeLoad`)
 - `tanstack.loader.params`
 
-## Environment variables
+## Middleware options
 
-| Variable                      | Description                            | Example                     |
-| ----------------------------- | -------------------------------------- | --------------------------- |
-| `OTEL_SERVICE_NAME`           | Service name reported on every span    | `my-app`                    |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector URL                     | `https://api.honeycomb.io`  |
-| `OTEL_EXPORTER_OTLP_HEADERS`  | Auth headers (`key=value,key=value`)   | `x-honeycomb-team=YOUR_KEY` |
-| `AUTOTEL_DEBUG`               | Enable debug logging                   | `true`                      |
-| `E2E`                         | Switch to in-memory exporter for tests | `1`                         |
+| Option             | Type                                            | Default            | Description                               |
+| ------------------ | ----------------------------------------------- | ------------------ | ----------------------------------------- |
+| `type`             | `'request' \| 'function'`                       | `'request'`        | Which middleware this is                  |
+| `router`           | your router, such as `getRouter()`              | none               | Names requests after the route they match |
+| `captureHeaders`   | `string[]`                                      | `['x-request-id']` | Request headers to record                 |
+| `captureArgs`      | `boolean`                                       | `false`            | Record server function input              |
+| `captureResults`   | `boolean`                                       | `false`            | Record server function return values      |
+| `captureErrors`    | `boolean`                                       | `true`             | Record exceptions on the span             |
+| `excludePaths`     | `(string \| RegExp)[]`                          | `[]`               | Paths not to trace (globs)                |
+| `customAttributes` | `({ type, name, request, args }) => Attributes` | none               | Extra attributes per span                 |
+
+Sampling is set once for the whole trace with `init({ sampling })`, not per
+middleware.
 
 ## Distributed tracing
 
-Inject and extract W3C trace context for cross-service calls:
+Calls to other services carry the trace when the outgoing `fetch` is
+instrumented (add `UndiciInstrumentation` to `instrument({ instrumentations })`).
+To set the headers yourself:
 
 ```typescript
-import {
-  createTracedHeaders,
-  extractContextFromRequest,
-} from 'autotel-tanstack/context';
+import { createTracedHeaders } from 'autotel-tanstack/context';
 
-// Outgoing
 const headers = createTracedHeaders({ 'Content-Type': 'application/json' });
-await fetch('https://api.example.com', { headers, method: 'POST', body });
-
-// Incoming
-const parentContext = extractContextFromRequest(request);
+await fetch('https://api.example.com/orders', {
+  method: 'POST',
+  headers,
+  body,
+});
 ```
 
-## E2E testing
+## Testing
 
-Set `E2E=1` in your Playwright `webServer` command. `autotel-tanstack/auto`
-detects this and switches to an in-memory exporter so spans can be asserted on
-instead of being shipped to OTLP.
+### Unit tests
 
-```bash
-# playwright.config.ts webServer
-E2E=1 OTEL_SERVICE_NAME=my-app vite preview --port 3100
+```typescript
+import { describe, expect, it } from 'vitest';
+import { createTestCollector } from 'autotel-tanstack/testing';
+
+describe('getUser', () => {
+  it('creates a span', async () => {
+    const collector = createTestCollector();
+    await getUser({ data: '123' });
+    expect(collector.getSpans()[0]?.name).toContain('getUser');
+  });
+});
 ```
 
-Expose the spans over HTTP:
+### End to end
+
+With `E2E=1` in the server's environment, spans go to an in-memory exporter
+instead of OTLP. Serve them as a route and assert on them from Playwright with
+[`createTestSpansClient`](/autotel/testing/playwright/#server-side-span-inspection):
 
 ```typescript
 // src/routes/api/test-spans.ts
@@ -225,44 +414,23 @@ export const Route = createFileRoute('/api/test-spans')({
 });
 ```
 
-Then assert from Playwright using
-[`createTestSpansClient`](/autotel/testing/playwright/#server-side-span-inspection)
-from `autotel-playwright`.
-
-### Unit testing
-
-```typescript
-import { describe, it, expect } from 'vitest';
-import { createTestCollector } from 'autotel-tanstack/testing';
-
-describe('getUser', () => {
-  it('creates a span', async () => {
-    const collector = createTestCollector();
-    await getUser({ data: '123' });
-    const spans = collector.getSpans();
-    expect(spans[0].name).toContain('getUser');
-  });
-});
-```
-
 ## Entry points
 
-| Import                              | Contents                                           |
-| ----------------------------------- | -------------------------------------------------- |
-| `autotel-tanstack`                  | Everything                                         |
-| `autotel-tanstack/auto`             | Zero-config auto-instrumentation                   |
-| `autotel-tanstack/middleware`       | `createTracingServerHandler`                       |
-| `autotel-tanstack/server-functions` | `traceServerFn` (explicit wrapper)                 |
-| `autotel-tanstack/loaders`          | `traceLoader`, `traceBeforeLoad`                   |
-| `autotel-tanstack/handlers`         | `wrapStartHandler` (handler-level wrapping)        |
-| `autotel-tanstack/context`          | `createTracedHeaders`, `extractContextFromRequest` |
-| `autotel-tanstack/testing`          | `createTestCollector`, `createTestSpansHandlers`   |
+| Import                                         | Contents                                              |
+| ---------------------------------------------- | ----------------------------------------------------- |
+| `autotel-tanstack`                             | Everything, including `instrument()`                  |
+| `autotel-tanstack/auto`                        | Zero-config `instrument()` from environment variables |
+| `autotel-tanstack/middleware`                  | `createTracingServerHandler`                          |
+| `autotel-tanstack/loaders`                     | `traceLoader`, `traceBeforeLoad`                      |
+| `autotel-tanstack/server-functions`            | `traceServerFn`, for a function without middleware    |
+| `autotel-tanstack/handlers`                    | `wrapStartHandler`, wrapping the whole server entry   |
+| `autotel-tanstack/context`                     | `createTracedHeaders`, `extractContextFromRequest`    |
+| `autotel-tanstack/debug-headers`               | `debugHeadersMiddleware`                              |
+| `autotel-tanstack/metrics`, `/error-reporting` | In-process `/metrics` and `/admin/errors` handlers    |
+| `autotel-tanstack/testing`                     | `createTestCollector`, `createTestSpansHandlers`      |
 
-## Supported frameworks
+## Example
 
-- `@tanstack/react-start` ^1.139.14
-- `@tanstack/solid-start` ^1.139.14
-
-## Examples
-
-- [`example-tanstack-start`](https://github.com/jagreehal/autotel/tree/main/apps/example-tanstack-start): full-stack with request and server-function middleware, route loaders, and `autotel-web` for browser trace propagation.
+[`example-tanstack-start`](https://github.com/jagreehal/autotel/tree/main/apps/example-tanstack-start)
+uses request and function middleware, route loaders, outgoing `fetch` tracing
+and `autotel-web` in the browser.

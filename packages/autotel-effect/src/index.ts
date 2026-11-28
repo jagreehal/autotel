@@ -10,11 +10,14 @@ import * as Layer from 'effect/Layer';
 import * as ManagedRuntime from 'effect/ManagedRuntime';
 import * as Tracer from 'effect/Tracer';
 import { withBaggage } from './baggage.js';
+import { withEffectSemantics, type EffectSpanOptions } from './semantics.js';
 import * as Logger from 'effect/Logger';
+import * as Predicate from 'effect/Predicate';
 import type * as LogLevel from 'effect/LogLevel';
 import * as References from 'effect/References';
 
 export { baggageMiddleware, CurrentBaggage, parseBaggage } from './baggage.js';
+export { effectSpanFilter, type EffectSpanOptions } from './semantics.js';
 export {
   vercelWaitUntil,
   WaitUntil,
@@ -49,6 +52,12 @@ export interface AutotelEffectLayerOptions {
    * spans only, or an options object to configure the logger.
    */
   readonly logs?: boolean | AutotelEffectLoggerOptions;
+  /**
+   * How span exits are classified (expected failures stay OK) and which span
+   * subtrees are never recorded. To drop single spans, pass
+   * `effectSpanFilter()` to `init({ spanFilter })`.
+   */
+  readonly spans?: EffectSpanOptions;
 }
 
 /**
@@ -59,34 +68,36 @@ export interface AutotelEffectLayerOptions {
  * instrumentation module with `node --import` or `tsx --import`.
  */
 export function layer(options: AutotelEffectLayerOptions): Layer.Layer<never> {
-  // OtelTracer.layerGlobal, with the request's baggage active around each evaluation (see CurrentBaggage).
+  // OtelTracer.layerGlobal, with exits classified (see withEffectSemantics) and the request's baggage active
+  // around each evaluation (see CurrentBaggage).
   const tracer = Layer.effect(
     Tracer.Tracer,
-    Effect.map(OtelTracer.make, withBaggage),
+    Effect.map(OtelTracer.make, (otel) =>
+      withBaggage(withEffectSemantics(otel, options.spans)),
+    ),
   ).pipe(
     Layer.provideMerge(OtelTracer.layerGlobalTracer),
     Layer.provide(
       Resource.layer({
         serviceName: options.serviceName,
-        ...(options.serviceVersion
-          ? { serviceVersion: options.serviceVersion }
-          : {}),
+        // Resource.layer treats an empty serviceVersion as absent.
+        serviceVersion: options.serviceVersion,
       }),
     ),
   );
 
   const logs = options.logs ?? true;
+  const loggerOptions: AutotelEffectLoggerOptions =
+    logs === true || logs === false ? {} : logs;
 
   return Layer.mergeAll(
     tracer,
     logs === false
       ? Layer.empty
       : loggerLayer({
+          ...loggerOptions,
           serviceName: options.serviceName,
-          ...(options.serviceVersion
-            ? { serviceVersion: options.serviceVersion }
-            : {}),
-          ...(logs === true ? {} : logs),
+          serviceVersion: options.serviceVersion || undefined,
         }),
   );
 }
@@ -117,8 +128,8 @@ export function loggerLayer(
   options: Omit<AutotelEffectLayerOptions, 'logs'> & AutotelEffectLoggerOptions,
 ) {
   const log = createBuiltinLogger(options.serviceName, {
-    ...(options.level ? { level: options.level } : {}),
-    ...(options.pretty ? { pretty: options.pretty } : {}),
+    level: options.level,
+    pretty: options.pretty,
   });
   // Resolved per-emit, not here: `init()` installs the global LoggerProvider,
   // and the layer may well be built before it runs.
@@ -128,13 +139,11 @@ export function loggerLayer(
   return Logger.layer(
     [
       Logger.make(({ cause, date, fiber, logLevel, message }) => {
-        const method = LEVEL_TO_METHOD[logLevel];
+        const method = LEVEL_TO_METHOD.get(logLevel);
         if (!method) return;
 
         const parts = Array.isArray(message) ? message : [message];
-        const metadata: Record<string, unknown> = {
-          ...fiber.getRef(References.CurrentLogAnnotations),
-        };
+        const metadata = { ...fiber.getRef(References.CurrentLogAnnotations) };
         // `Effect.withLogSpan` durations in milliseconds.
         for (const [label, start] of fiber.getRef(References.CurrentLogSpans)) {
           metadata[`logSpan.${label}`] = date.getTime() - start;
@@ -162,12 +171,11 @@ export function loggerLayer(
           severityText: logLevel,
           // Annotations are `unknown`; only what flattens to an OTel attribute
           // reaches the record, in the same shape the rest of autotel emits.
-          attributes: flattenToAttributes({
-            ...metadata,
-            ...(Array.isArray(metadata.err)
-              ? { err: metadata.err.join('\n') }
-              : {}),
-          }),
+          attributes: flattenToAttributes(
+            Array.isArray(metadata.err)
+              ? { ...metadata, err: metadata.err.join('\n') }
+              : metadata,
+          ),
         });
       }),
     ],
@@ -175,19 +183,21 @@ export function loggerLayer(
   );
 }
 
-const LEVEL_TO_METHOD: Partial<
-  Record<LogLevel.LogLevel, 'debug' | 'info' | 'warn' | 'error'>
-> = {
-  Trace: 'debug',
-  Debug: 'debug',
-  Info: 'info',
-  Warn: 'warn',
-  Error: 'error',
-  Fatal: 'error',
-};
+const LEVEL_TO_METHOD = new Map<
+  LogLevel.LogLevel,
+  'debug' | 'info' | 'warn' | 'error'
+>([
+  ['Trace', 'debug'],
+  ['Debug', 'debug'],
+  ['Info', 'info'],
+  ['Warn', 'warn'],
+  ['Error', 'error'],
+  ['Fatal', 'error'],
+]);
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Effect.log* message parts can be any value the caller logged; this renders them.
 function formatPart(part: unknown): string {
-  if (typeof part === 'string') return part;
+  if (Predicate.isString(part)) return part;
   // `JSON.stringify(new Error('x'))` is `{}` — String() keeps the message.
   if (part instanceof Error) return String(part);
   try {

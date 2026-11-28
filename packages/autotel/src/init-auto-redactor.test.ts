@@ -23,10 +23,19 @@ describe('resolveAttributeRedactor', () => {
     expect(resolveAttributeRedactor(undefined, 'PRODUCTION')).toBe('default');
   });
 
-  it('stays off in non-production environments', () => {
+  it('masks only URL query values in non-production environments', () => {
     delete process.env.AUTOTEL_REDACT_PII;
+    expect(resolveAttributeRedactor(undefined, 'development')).toEqual({
+      urlQueryValues: true,
+    });
+    expect(resolveAttributeRedactor(undefined, 'staging')).toEqual({
+      urlQueryValues: true,
+    });
+  });
+
+  it('lets AUTOTEL_REDACT_PII=off keep query values outside production', () => {
+    process.env.AUTOTEL_REDACT_PII = 'off';
     expect(resolveAttributeRedactor(undefined, 'development')).toBeUndefined();
-    expect(resolveAttributeRedactor(undefined, 'test')).toBeUndefined();
   });
 
   it('honors an explicit preset in any environment', () => {

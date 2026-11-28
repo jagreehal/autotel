@@ -186,6 +186,14 @@ The provider packages are optional peers: install the one you use. With no model
 | `?`      | Show help overlay                      |
 | `Ctrl+C` | Exit                                   |
 
+### Untrusted text is escaped
+
+Span names, attributes, status messages and log bodies print control
+characters as escapes (`\r`, `\n`, `\u001b`), including events sent through
+`getTerminalLogStream().emit()`, so a client-sent value cannot rewrite the
+dashboard. Attribute keys double their backslashes, so two keys never collapse
+into one.
+
 ## Common Mistakes
 
 ### HIGH: Calling renderTerminal() before init()

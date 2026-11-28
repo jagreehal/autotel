@@ -135,6 +135,8 @@
     }
   },
   "devDependencies": {
+    "@tanstack/react-start": "^1.169.7",
+    "@tanstack/solid-start": "^1.169.7",
     "@types/node": "^26.6.5",
     "hono": "^4.13.13",
     "rimraf": "^6.1.3",

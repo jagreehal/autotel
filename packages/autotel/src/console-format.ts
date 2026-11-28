@@ -37,3 +37,19 @@ export function useColors(option: boolean | undefined): boolean {
 export function paint(colors: boolean, color: AnsiColor, text: string): string {
   return colors ? `${ANSI[color]}${text}${ANSI.reset}` : text;
 }
+
+/**
+ * `text` with control characters written as escapes (`\r`, `\n`, `\u001b`),
+ * the way JSON shows them. Span names, attributes and log bodies carry what a
+ * client sent: a user agent holding `\r\u001b[2K` would otherwise erase the
+ * line it is printed on and write a fake one in its place.
+ */
+export function escapeControl(text: string): string {
+  // oxlint-disable-next-line no-control-regex -- matching control characters is the point
+  return text.replaceAll(/[\u0000-\u001F\u007F-\u009F]/g, (char) => {
+    const json = JSON.stringify(char).slice(1, -1);
+    return json.length > 1
+      ? json
+      : `\\u${char.codePointAt(0)!.toString(16).padStart(4, '0')}`;
+  });
+}

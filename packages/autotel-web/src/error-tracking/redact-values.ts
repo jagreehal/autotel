@@ -21,7 +21,9 @@ const REDACTOR_PATTERNS = {
   email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/gi,
   phone: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
   ssn: /\b\d{3}[-]?\d{2}[-]?\d{4}\b/g,
-  creditCard: /\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/g,
+  // Not followed by another digit group, so a UUID's digit groups are not a card.
+  // No lookbehind: Safari before 16.4 cannot parse one.
+  creditCard: /\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}(?!\w|-\w)/g,
   bearerToken: /Bearer\s+[A-Za-z0-9._~+/=-]+/gi,
   apiKeyInValue: /(?:api[_-]?key|apikey|api_secret)[=:][\s"']*[A-Za-z0-9_-]+/gi,
   jwt: /eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/g,
@@ -60,6 +62,7 @@ export function createStringRedactor(
   config: RedactorConfig | RedactorPreset,
 ): StringRedactor {
   const resolved =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating the public `RedactorConfig | RedactorPreset` union the app passed: a preset name or a config
     typeof config === 'string' ? REDACTOR_PRESETS[config] : config;
   const valuePatterns: ValuePatternConfig[] = resolved.valuePatterns ?? [];
   const defaultReplacement = resolved.replacement ?? '[REDACTED]';

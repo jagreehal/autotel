@@ -1,15 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as Context from 'effect/Context';
+import { webHandler as baseWebHandler, WaitUntil } from './serverless.js';
 
-// Its own file: mocks autotel's flush to fail, which request.test.ts needs real.
-vi.mock('autotel', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('autotel')>()),
-  flush: vi.fn(() => Promise.reject(new Error('flush timed out'))),
-}));
+const failingFlush = () => Promise.reject(new Error('flush timed out'));
 
-const { webHandler, WaitUntil } = await import('./serverless.js');
+/** `webHandler` whose telemetry flush always fails. */
+const webHandler: typeof baseWebHandler = (handler, options = {}) =>
+  baseWebHandler(handler, { flush: failingFlush, ...options });
 
 describe('webHandler when flush fails', () => {
+  it('still returns the response when the flush hook throws synchronously', async () => {
+    const handler = baseWebHandler(async () => new Response('ok'), {
+      waitUntil: () => undefined,
+      flush: () => {
+        throw new Error('flush failed synchronously');
+      },
+    });
+    const response = await handler(new Request('http://localhost/'));
+    expect(await response.text()).toBe('ok');
+  });
+
   it('still returns the response', async () => {
     const handler = webHandler(async () => new Response('ok'), {
       waitUntil: () => undefined,

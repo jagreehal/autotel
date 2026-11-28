@@ -480,8 +480,9 @@ Correct: Call `init()` once at app startup. Subsequent calls are no-ops (with a 
 Wrong: adding a second delivery path because "spans get dropped on flaky
 networks".
 
-Correct: the exporter already retries with jittered backoff, queues while
-offline, caps at 1000 spans, and uses `sendBeacon` only on unload (it reports no
+Correct: the exporter already retries a timeout, `429` and `502`/`503`/`504`
+with jittered backoff (waiting as long as `Retry-After` asks, up to 10 minutes),
+queues while offline, caps at 1000 spans, and uses `sendBeacon` only on unload (it reports no
 outcome, so there is nothing to retry against). A request that dies before any
 HTTP status while the browser is online is treated as **blocked**, not broken —
 that is an ad blocker or CORS — and after three the exporter waits for an

@@ -1,4 +1,5 @@
 import type { TerminalLogEvent } from './lib/log-model';
+import { escapeControlDeep } from './values.js';
 
 /**
  * Stream interface for terminal log events.
@@ -25,9 +26,11 @@ class InMemoryTerminalLogStream implements TerminalLogStream {
   }
 
   emit(event: TerminalLogEvent): void {
+    // Request loggers emit what a client sent; draw control characters as escapes.
+    const safe = escapeControlDeep(event);
     for (const subscriber of this.subscribers) {
       try {
-        subscriber(event);
+        subscriber(safe);
       } catch (error) {
         console.error('[autotel-terminal] Log subscriber error:', error);
       }

@@ -133,7 +133,8 @@ tracingMiddleware({
 
 - Do NOT use `tracingMiddleware()` in browser: it no-ops. Server functions run server-side only.
 - Do NOT forget to wrap the start handler: without it, there's no root span for requests.
-- Use `captureArgs: true` carefully: it serializes function arguments into span attributes. Avoid for large payloads.
+- `captureArgs` is off by default. It records the input as JSON in `tanstack.server_function.args`, and redaction matches attribute names, not keys inside that JSON: turn it on only where the input holds no secrets, or redact the whole attribute with `init({ attributeRedactor: { keyPatterns: [REDACTOR_PATTERNS.sensitiveKey], paths: ['tanstack.server_function.args'] } })`.
+- A 4xx response leaves the request span UNSET and a 5xx makes it an error, as the HTTP conventions say. Query values are recorded as `REDACTED`, names kept.
 - Prefer middleware over explicit wrappers: middleware composes with TanStack's built-in patterns.
 - Do NOT externalize `autotel` at the top level of `build.rollupOptions`: scope it to `environments.ssr`, or the client bundle ships bare `autotel/*` specifiers.
 - Do NOT expect an `instrument()` change to apply on HMR: `init` runs once per process; restart the dev server.

@@ -34,6 +34,7 @@
 
 import { trace, context, SpanStatusCode } from '@opentelemetry/api';
 import { markSpanOk } from './trace-context';
+import { PreciseStartTracer, type SpanCallback } from './precise-start';
 import type { Span, SpanOptions, Tracer, Context } from '@opentelemetry/api';
 import { requireModule } from './node-require';
 import {
@@ -260,29 +261,26 @@ class CurrentTracer implements Tracer {
   ) {}
 
   private get current(): Tracer {
-    return trace.getTracer(this.name, this.version);
+    return new PreciseStartTracer(trace.getTracer(this.name, this.version));
   }
 
   startSpan(name: string, options?: SpanOptions, ctx?: Context): Span {
     return this.current.startSpan(name, options, ctx);
   }
 
-  startActiveSpan<F extends (span: Span) => unknown>(
-    name: string,
-    fn: F,
-  ): ReturnType<F>;
-  startActiveSpan<F extends (span: Span) => unknown>(
+  startActiveSpan<F extends SpanCallback>(name: string, fn: F): ReturnType<F>;
+  startActiveSpan<F extends SpanCallback>(
     name: string,
     options: SpanOptions,
     fn: F,
   ): ReturnType<F>;
-  startActiveSpan<F extends (span: Span) => unknown>(
+  startActiveSpan<F extends SpanCallback>(
     name: string,
     options: SpanOptions,
     ctx: Context,
     fn: F,
   ): ReturnType<F>;
-  startActiveSpan<F extends (span: Span) => unknown>(
+  startActiveSpan<F extends SpanCallback>(
     name: string,
     ...rest: [F] | [SpanOptions, F] | [SpanOptions, Context, F]
   ): ReturnType<F> {
@@ -743,11 +741,13 @@ export function flattenMetadata(
       if (nested !== undefined) {
         // Keyed on the value itself: a Map flattens to a fresh object each
         // time, which a WeakSet would never recognise.
+        // SAFETY: asPlainRecordOrMap returned a value, so `value` is a non-null object.
         if (seen.has(value as object)) {
           flattened[attributeKey] = '<circular-reference>';
           continue;
         }
 
+        // SAFETY: as above, `value` is a non-null object.
         seen.add(value as object);
         flatten(nested, attributeKey);
         continue;

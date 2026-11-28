@@ -20,26 +20,26 @@ import { readableSpanDouble } from './testing/doubles';
 /**
  * Create a mock span for testing
  */
-function createMockSpan(
-  overrides: Partial<{
-    name: string;
-    traceId: string;
-    spanId: string;
-    parentSpanId: string | undefined;
-    startTime: [number, number];
-    duration: [number, number];
-    status: { code: number; message?: string };
-    attributes: Attributes;
-    instrumentationScope: { name: string; version?: string };
-  }> = {},
-): ReadableSpan {
-  const defaults = {
+interface MockSpanConfig {
+  name: string;
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | undefined;
+  startTime: [number, number];
+  duration: [number, number];
+  status: { code: number; message?: string };
+  attributes: Attributes;
+  instrumentationScope: { name: string; version?: string };
+}
+
+function createMockSpan(overrides: Partial<MockSpanConfig> = {}): ReadableSpan {
+  const defaults: MockSpanConfig = {
     name: 'test-span',
     traceId: '0af7651916cd43dd8448eb211c80319c',
     spanId: 'b7ad6b7169203331',
-    parentSpanId: undefined as string | undefined,
-    startTime: [1000, 0] as [number, number],
-    duration: [0, 50_000_000] as [number, number], // 50ms
+    parentSpanId: undefined,
+    startTime: [1000, 0],
+    duration: [0, 50_000_000], // 50ms
     status: { code: SpanStatusCode.OK },
     attributes: {},
     instrumentationScope: { name: 'test', version: '1.0.0' },
@@ -192,6 +192,24 @@ describe('PrettyConsoleExporter', () => {
       expect(consoleLogs.some((log) => log.includes('GET /api/users'))).toBe(
         true,
       );
+    });
+
+    it('escapes control characters in names, attributes and errors', () => {
+      const exporter = new PrettyConsoleExporter({ colors: false });
+      const span = createMockSpan({
+        name: 'GET /\r\u001B[2Kfake',
+        attributes: { 'user_agent.original': 'x\n\u001B[1A' },
+        status: { code: SpanStatusCode.ERROR, message: 'boom\r\u001B[2K' },
+      });
+
+      exporter.export([span], () => {});
+
+      const output = consoleLogs.join('\n');
+      // oxlint-disable-next-line no-control-regex -- matching control characters is the point
+      expect(output).not.toMatch(/[\r\u001B]/);
+      expect(output).toContain(String.raw`GET /\r\u001b[2Kfake`);
+      expect(output).toContain(String.raw`user_agent.original=x\n\u001b[1A`);
+      expect(output).toContain(String.raw`Error: boom\r\u001b[2K`);
     });
 
     it('prints spans with error status', () => {

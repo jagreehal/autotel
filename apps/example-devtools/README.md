@@ -4,21 +4,15 @@ This example is the definitive `autotel-devtools` demo in `apps/`. It shows a br
 
 ## Preview
 
-Walkthrough video:
+A checkout click traced through every service, then opened in the standalone dashboard:
 
-- [Showcase walkthrough (`.webm`)](./assets/showcase-walkthrough.webm)
-
-Web app with embedded widget entry point:
-
-![Showcase web app](./assets/showcase-web.png)
-
-Standalone dashboard:
-
-![Standalone dashboard](./assets/showcase-dashboard.png)
+![A checkout click traced through shop-api, shop-auth, shop-worker and SQLite, opened in autotel-devtools](../docs/public/media/devtools-demo.gif)
 
 Service map after browser -> API -> auth/worker flows:
 
-![Service map](./assets/showcase-service-map.png)
+![Service map](../docs/public/media/devtools-service-map.png)
+
+To regenerate these, and the README, docs and social preview media, run `pnpm start`, then in another terminal `pnpm capture:media` (needs ffmpeg).
 
 ## What it demonstrates
 

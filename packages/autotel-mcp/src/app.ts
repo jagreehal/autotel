@@ -9,6 +9,8 @@ import { createBackend } from './backends/factory';
 import { registerTools } from './tools/index';
 import { registerTelemetryEvents } from './tools/events';
 import { EVENTS_EXTENSION } from './modules/telemetry-events';
+import { SKILLS_EXTENSION } from './modules/skills';
+import { registerSkills } from './tools/skills';
 import {
   probeSignalAvailability,
   type RuntimeSignalAvailability,
@@ -85,7 +87,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
         capabilities: {
           tools: {},
           resources: {},
-          extensions: { [EVENTS_EXTENSION]: {} },
+          extensions: { [EVENTS_EXTENSION]: {}, [SKILLS_EXTENSION]: {} },
         },
         cacheHints: {
           'tools/list': CATALOG_CACHE_HINT,
@@ -99,6 +101,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       omitTools: config.omitTools,
     });
     registerTelemetryEvents(server, backend);
+    registerSkills(server);
     return server;
   };
 

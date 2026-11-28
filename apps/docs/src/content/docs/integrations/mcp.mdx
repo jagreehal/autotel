@@ -299,6 +299,20 @@ const instrumented = instrumentMcpServer(server, {
 });
 ```
 
+### Tasks and Skills over MCP
+
+Requests the 2026-07-28 Tasks extension and the Skills extension add are traced
+on both sides with no setup. A tool call that runs as a task carries
+`mcp.task.augmented`, `mcp.task.id` and `mcp.task.status`, and stays UNSET,
+because it measures accepting the work, not doing it; the duration metric is
+labelled the same way. `tasks/get`, `tasks/update` and `tasks/cancel` carry the
+task's id and status, and a `tasks/get` that reports a failed task, or a tool
+error in its result, is an error span. A call retried with the user's answers
+to an elicitation records `mcp.elicitation.action` (`accept`, `decline` or
+`cancel`). `skills/get` is named after the skill
+the server served and records `mcp.skill.name`. 2025-11-25's experimental
+tasks (`tasks/result`, `tasks/list`) are traced too.
+
 ### Security observability
 
 MCP is where untrusted data crosses into your agent. The
@@ -440,6 +454,14 @@ legacy path, so existing MCP clients keep working unchanged.
 `--transport http` is Streamable HTTP. There is no SSE transport: HTTP+SSE has
 been deprecated since protocol `2025-03-26` and is gone.
 
+### Skills
+
+autotel-mcp publishes skills over MCP (`io.modelcontextprotocol/skills`):
+`autotel-mcp`, `analyze-traces` and `debug-missing-spans`. An agent that
+connects gets the investigation playbooks with the tools and nothing separate
+to install. Each file is also a `skill://` resource for clients without the
+extension.
+
 ### Standard config
 
 ```json
@@ -495,7 +517,7 @@ AUTOTEL_OMIT_TOOLS=service_map npx autotel-mcp
 | Toolset     | Tools                                                  |
 | ----------- | ------------------------------------------------------ |
 | `core`      | Everything for investigating traces, metrics and logs  |
-| `llm`       | LLM analytics and `agent_usage`                        |
+| `llm`       | LLM analytics, `mcp_sessions` and `agent_usage`        |
 | `collector` | Collector config validation, explanation and templates |
 | `semconv`   | Semantic-convention reference                          |
 | `estimate`  | `estimate_telemetry_cost`                              |

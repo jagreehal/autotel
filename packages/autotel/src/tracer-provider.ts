@@ -15,6 +15,7 @@
 import { ProxyTracerProvider, trace } from '@opentelemetry/api';
 import type { TracerProvider } from '@opentelemetry/api';
 import { asFunction, isFunction, readProperty } from './values';
+import { PreciseStartTracer } from './precise-start';
 
 /**
  * Symbol for storing isolated tracer provider in global scope
@@ -258,6 +259,7 @@ interface ForceFlushable {
 }
 
 /** The candidate if it can be force-flushed, or undefined. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Decodes a provider of any SDK version; the forceFlush probe is the parse.
 function asForceFlushable(value: unknown): ForceFlushable | undefined {
   // SAFETY: the only member this promises is the forceFlush just found on the
   // value. Everything else a real provider carries is read through OTel's own
@@ -281,6 +283,7 @@ function asForceFlushable(value: unknown): ForceFlushable | undefined {
  * @returns Something with `forceFlush()`, or `undefined` if none is registered.
  */
 export function getForceFlushableProvider(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A NodeSDK handle whose shape varies by sdk-node version; only getTracerProvider is probed.
   sdk?: unknown,
 ): ForceFlushable | undefined {
   // sdk-node dropped getTracerProvider() in 0.220, so an SDK handle either has
@@ -333,5 +336,7 @@ export function getForceFlushableProvider(
  * @public
  */
 export function getAutotelTracer(name = 'autotel', version?: string) {
-  return getAutotelTracerProvider().getTracer(name, version);
+  return new PreciseStartTracer(
+    getAutotelTracerProvider().getTracer(name, version),
+  );
 }

@@ -62,10 +62,7 @@ const requestTracingMiddleware = createMiddleware().server(
 
 // Global server function tracing middleware
 const functionTracingMiddleware = createMiddleware({ type: 'function' }).server(
-  createTracingServerHandler({
-    type: 'function',
-    captureArgs: true,
-  }),
+  createTracingServerHandler({ type: 'function' }),
 );
 
 export const startInstance = createStart(() => ({
@@ -146,6 +143,8 @@ export const sensitiveOperation = createServerFn({ method: 'POST' })
   });
 ```
 
+`captureArgs` records the input as JSON in `tanstack.server_function.args`. Redaction matches attribute names, not keys inside that JSON, so `{"password":"hunter2"}` is exported as sent. Turn it on only where the input holds no secrets, or redact the whole attribute with `init({ attributeRedactor: { paths: ['tanstack.server_function.args'] } })` (a custom config replaces the preset, so add `keyPatterns: [REDACTOR_PATTERNS.sensitiveKey]` back).
+
 ### Route Loaders
 
 Use `traceLoader` and `traceBeforeLoad` for route-level tracing. Call them from inside the route's own `beforeLoad` / `loader`, passing the context through:
@@ -184,8 +183,9 @@ const handler = createTracingServerHandler({
   // Headers to capture as span attributes
   captureHeaders: ['x-request-id', 'user-agent'],
 
-  // Whether to capture function arguments (default: true)
-  captureArgs: true,
+  // Whether to record server function input (default: false; it is whatever
+  // the client sent, passwords included)
+  captureArgs: false,
 
   // Whether to capture function results (default: false - PII concern)
   captureResults: false,
@@ -200,9 +200,6 @@ const handler = createTracingServerHandler({
   // records `/app/posts/$postId`.
   router: getRouter(),
 
-  // Sampling strategy: 'always' | 'adaptive' | 'never'
-  sampling: 'adaptive',
-
   // Custom attributes function
   customAttributes: ({ type, name, request }) => ({
     'custom.attribute': 'value',
@@ -213,7 +210,8 @@ const handler = createTracingServerHandler({
 ### Request span names
 
 Server-function requests are named `METHOD /_serverFn`, with the function id
-in `tanstack.server_function.name`. Other requests take the route `router`
+in `tanstack.server_function.name`; the function's own span, named after it,
+is the request span's child. Other requests take the route `router`
 matches, in TanStack's own syntax, and keep their path when they match none:
 
 | Request             | With `router`        | Without           |
@@ -239,8 +237,8 @@ matches, in TanStack's own syntax, and keep their path when they match none:
 
 - `http.request.method` - GET, POST, etc.
 - `url.path` - Request path
-- `url.query` - Query string
-- `http.response.status_code` - Response status
+- `url.query` - Query string, without the `?`, with values masked (`token=REDACTED`)
+- `http.response.status_code` - Response status. A 5xx marks the span as an error; a 4xx leaves the status unset
 - `tanstack.request.duration_ms` - Request duration
 
 ### Server Function Spans

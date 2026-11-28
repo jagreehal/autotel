@@ -500,11 +500,10 @@ describe('AttributeRedactingProcessor', () => {
       });
       processor.onEnd(span);
 
-      const redactedEmails = mockProcessor.endedSpans[0]!.attributes[
-        'user.emails'
-      ] as string[];
-      expect(redactedEmails[0]).toBe('j***@***.com');
-      expect(redactedEmails[1]).toBe('j***@***.org');
+      expect(mockProcessor.endedSpans[0]!.attributes['user.emails']).toEqual([
+        'j***@***.com',
+        'j***@***.org',
+      ]);
     });
 
     it('should preserve non-string array elements', () => {
@@ -517,10 +516,9 @@ describe('AttributeRedactingProcessor', () => {
       });
       processor.onEnd(span);
 
-      const ids = mockProcessor.endedSpans[0]!.attributes[
-        'request.ids'
-      ] as number[];
-      expect(ids).toEqual([1, 2, 3]);
+      expect(mockProcessor.endedSpans[0]!.attributes['request.ids']).toEqual([
+        1, 2, 3,
+      ]);
     });
   });
 
@@ -586,6 +584,8 @@ describe('AttributeRedactingProcessor', () => {
     it('should throw for unknown preset', () => {
       expect(() => {
         new AttributeRedactingProcessor(mockProcessor, {
+          // SAFETY: deliberately not a preset name; the constructor must reject
+          // it at runtime, which is what this test checks.
           redactor: 'unknown-preset' as 'default',
         });
       }).toThrow('Unknown attribute redactor preset');
@@ -861,17 +861,14 @@ describe('normalizeAttributeRedactorConfig', () => {
       replacement: '[MASKED]',
     });
 
-    expect(normalized).toBeTypeOf('object');
-    if (!normalized || typeof normalized === 'string') {
-      throw new Error('Expected object config');
-    }
-
-    expect(normalized.keyPatterns?.[0]).toBeInstanceOf(RegExp);
-    expect(normalized.patterns?.[0]).toBeInstanceOf(RegExp);
-    expect(normalized.valuePatterns?.[0]?.pattern).toBeInstanceOf(RegExp);
-    expect(normalized.paths).toEqual(['user.token']);
-    expect(normalized.builtins).toEqual(['email', 'jwt']);
-    expect(normalized.replacement).toBe('[MASKED]');
+    expect(normalized).toMatchObject({
+      keyPatterns: [expect.any(RegExp)],
+      patterns: [expect.any(RegExp)],
+      valuePatterns: [{ pattern: expect.any(RegExp) }],
+      paths: ['user.token'],
+      builtins: ['email', 'jwt'],
+      replacement: '[MASKED]',
+    });
   });
 
   it('should return undefined for unsupported raw values', () => {
@@ -1134,5 +1131,87 @@ describe('URL query values', () => {
     expect(
       redact({ 'url.full': url }, { urlQueryValues: true })['url.full'],
     ).toBe('https://bank.example/v1/x?id=REDACTED');
+  });
+});
+
+describe('credentials and false positives', () => {
+  const redact = createAttributeRedactor('default');
+
+  it('redacts any key ending in a credential word, and keeps counters', () => {
+    expect(redact('region', 'ASIA_PACIFIC_SOUTHEAST_2')).toBe(
+      'ASIA_PACIFIC_SOUTHEAST_2',
+    );
+    expect(redact('env', 'npm_config_user_agent_value')).toBe(
+      'npm_config_user_agent_value',
+    );
+    for (const key of [
+      'newPassword',
+      'client_secret',
+      'accessToken',
+      'x-api-key',
+      'aws.credentials',
+      'proxy-authorization',
+    ]) {
+      expect(redact(key, 'v')).toBe('[REDACTED]');
+    }
+    for (const key of [
+      'totalTokens',
+      'gen_ai.usage.input_tokens',
+      'tokensPerSecond',
+      'oauth.provider',
+      'author',
+    ]) {
+      expect(redact(key, 'v')).toBe('v');
+    }
+  });
+
+  it("leaves a UUID's digit groups alone and still masks cards", () => {
+    const path = '/api/orders/00000000-0000-4000-8000-000000000000';
+    expect(redact('url.path', path)).toBe(path);
+    expect(redact('note', 'pay 4111-1111-1111-1111 now')).toBe(
+      'pay ****1111 now',
+    );
+    expect(redact('note', '4111 1111 1111 1111')).toBe('****1111');
+  });
+
+  it('masks vendor tokens to their prefix under any key', () => {
+    expect(
+      redact(
+        'note',
+        'ghp_abcdefghijklmnopqrstuvwxyz0123456789 sk-ant-api03-abc123def456ghi789 AKIAIOSFODNN7EXAMPLE sk_live_abcdefghijklmnop1234 xoxb-1234567890-abcdefghij',
+      ),
+    ).toBe('ghp_*** sk-ant-*** AKIA*** sk_live_*** xoxb-***');
+  });
+
+  it('masks a PEM private key after its header, whole or truncated', () => {
+    expect(
+      redact(
+        'k',
+        'a -----BEGIN RSA PRIVATE KEY-----\nMIIEvQ\n-----END RSA PRIVATE KEY----- b',
+      ),
+    ).toBe('a -----BEGIN RSA PRIVATE KEY-----*** b');
+    expect(redact('k', '-----BEGIN PRIVATE KEY-----\nMIIE')).toBe(
+      '-----BEGIN PRIVATE KEY-----***',
+    );
+  });
+
+  it('masks the password in a URL and keeps the host', () => {
+    expect(
+      redact(
+        'db.connection_string',
+        'postgres://app:s3cret@db.example.com:5432/x',
+      ),
+    ).toBe('postgres://app:***@db.example.com:5432/x');
+    expect(redact('note', 'see https://example.com/a@b')).toBe(
+      'see https://example.com/a@b',
+    );
+  });
+
+  it('stays linear on long inputs', () => {
+    const start = performance.now();
+    redact('x', 'a.'.repeat(50_000));
+    redact('x', `-----BEGIN PRIVATE KEY-----${'A'.repeat(100_000)}`);
+    redact('x', `sk-${'a-'.repeat(50_000)}`);
+    expect(performance.now() - start).toBeLessThan(500);
   });
 });

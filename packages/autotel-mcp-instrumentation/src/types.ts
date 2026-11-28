@@ -62,6 +62,7 @@ export interface McpInstrumentationConfig {
    * (`captureToolArgs`, `captureToolResults`). Return what to record; throwing
    * records nothing. Nothing is scrubbed for you.
    */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Public redactor hook: receives a captured client payload of whatever shape the caller sent and returns whatever the application chooses to record.
   redactPayload?: (value: unknown, info: PayloadInfo) => unknown;
 
   /**
@@ -426,6 +427,7 @@ export type McpArguments = {
 };
 
 /** What an MCP tool, prompt or resource handler resolves with. */
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The SDK owns the result shape and adds fields by era (structuredContent, resultType, _meta); the wrapper forwards them unread.
 export type McpHandlerResult = {
   content?: Array<{ type: string; text?: string }>;
   contents?: Array<{ uri: string; text?: string }>;
@@ -439,10 +441,11 @@ export type McpHandlerResult = {
  */
 export type McpHandler = (
   ...args: McpHandlerArgument[]
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- McpHandlerResult's open index carries the SDK-owned result fields above.
 ) => Promise<McpHandlerResult>;
 
 /** One argument the SDK passes a handler: a payload, a URL, or an extra. */
 export type McpHandlerArgument = McpArguments | URL | string | undefined;
 
 /** The attributes recorded on an MCP metric; keys are added as they are known. */
-export type McpMetricAttributes = Record<string, string>;
+export type McpMetricAttributes = Record<string, string | boolean>;

@@ -38,12 +38,17 @@ export interface TimingStats {
 class MetricsCollector {
   private metrics = new Map<string, number[]>();
   private readonly maxSamples = 1000; // Limit memory usage
+  // Request spans without a router are named after the raw path, so names are
+  // unbounded (every /users/<id>, every bot probe). Past this many, new names
+  // are dropped rather than growing the map for the life of the process.
+  private readonly maxNames = 500;
 
   /**
    * Record a timing measurement
    */
   recordTiming(name: string, duration: number): void {
     if (!this.metrics.has(name)) {
+      if (this.metrics.size >= this.maxNames) return;
       this.metrics.set(name, []);
     }
 
@@ -81,7 +86,7 @@ class MetricsCollector {
   /**
    * Get all collected metrics
    */
-  getAllStats(): Record<string, TimingStats> {
+  getAllStats() {
     const stats: Record<string, TimingStats> = {};
     for (const [name] of this.metrics) {
       const stat = this.getStats(name);
@@ -122,7 +127,6 @@ export const metricsCollector = new MetricsCollector();
  * ```typescript
  * // routes/metrics.ts
  * import { createFileRoute } from '@tanstack/react-router';
- * import { json } from '@tanstack/react-start';
  * import { createMetricsHandler } from 'autotel-tanstack/metrics';
  *
  * export const Route = createFileRoute('/metrics')({
@@ -134,11 +138,9 @@ export const metricsCollector = new MetricsCollector();
  * });
  * ```
  */
-export function createMetricsHandler() {
+export function createMetricsHandler(): () => Promise<Response> {
   return async () => {
-    const { json } = await import('@tanstack/react-start');
-
-    return json({
+    return Response.json({
       system: {
         uptime: process.uptime(),
         memory: process.memoryUsage(),
@@ -169,13 +171,15 @@ export function recordTiming<T extends (...args: any[]) => any>(
   metricName: string,
   fn: T,
 ): T {
+  // SAFETY: the wrapper takes T's parameters and resolves to what fn returns;
+  // T is a server-fn handler, which is already async.
   return (async (...args: Parameters<T>) => {
     const startTime = Date.now();
     try {
       const result = await fn(...args);
       const duration = Date.now() - startTime;
       metricsCollector.recordTiming(metricName, duration);
-      return result as ReturnType<T>;
+      return result;
     } catch (error) {
       const duration = Date.now() - startTime;
       metricsCollector.recordTiming(`${metricName}.error`, duration);

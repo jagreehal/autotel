@@ -142,20 +142,33 @@ export const REDACTOR_PATTERNS = {
   email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/gi,
   phone: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
   ssn: /\b\d{3}[-]?\d{2}[-]?\d{4}\b/g,
-  creditCard: /\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/g,
+  creditCard: /(?<![\w-])\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}(?!\w|-\w)/g,
   bearerToken: /Bearer\s+[A-Za-z0-9._~+/=-]+/gi,
   apiKeyInValue: /(?:api[_-]?key|apikey|api_secret)[=:][\s"']*[A-Za-z0-9_-]+/gi,
   jwt: /eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/g,
 
   // Key patterns (match attribute names - redacts entire value)
+  // Any key ending in a credential word: `newPassword`, `client_secret`,
+  // `accessToken`, `x-api-key`. `auth` only whole, so `oauth.provider` stays.
+  // Counters such as `totalTokens` and `input_tokens` end in `tokens` and are kept.
   sensitiveKey:
-    /^(password|passwd|pwd|secret|token|api[_-]?key|auth|credential|private[_-]?key|authorization)$/i,
+    /(?:password|passwd|pwd|secret|token|api[_-]?key|credentials?|private[_-]?key|authorization)$|^auth$/i,
   /** Bank details and date of birth: `iban`, `account_number`, `accountNumber`, `dob`. */
   personalKey:
     /^(iban|bic(_?swift)?|swift(_?(code|bic))?|sort_?code|routing_?number|(bank_?)?acc(oun)?t_?(number|no)|date_?of_?birth|birth_?date|dob)$/i,
 } as const;
 
-const MASK_FIRST = new Set<string>(['bearer', 'iban']);
+const MASK_FIRST = new Set<string>([
+  'privateKey',
+  'urlPassword',
+  'apiKeys',
+  'bearer',
+  'iban',
+]);
+
+/** Vendor token prefixes `apiKeys` recognises, longest first so `sk-ant-` wins over `sk-`. */
+const API_KEY_PREFIX =
+  /^(?:github_pat_|gh[pousr]_|npm_|sk-ant-|sk-proj-|[sr]k_(?:live|test)_|sk-|xox[abposr]-|AKIA|ASIA)/;
 
 /**
  * Built-in PII detection patterns with smart masking.
@@ -165,7 +178,9 @@ const MASK_FIRST = new Set<string>(['bearer', 'iban']);
 export const builtinPatterns = {
   /** Credit card numbers → ****1111 (PCI DSS: last 4 allowed) */
   creditCard: {
-    pattern: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
+    // Not inside a longer run of digits and hyphens, so a UUID's digit groups
+    // (`00000000-0000-4000-8000-…`) are not read as a card.
+    pattern: /(?<![\w-])\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}(?!\w|-\w)/g,
     mask: (m: string) => `****${m.replaceAll(/[\s-]/g, '').slice(-4)}`,
   },
   /** Email addresses → a***@***.com */
@@ -227,6 +242,31 @@ export const builtinPatterns = {
     pattern: /\bBearer\s+[\w\-.~+/]{8,}=*/gi,
     mask: () => 'Bearer ***',
   },
+  /**
+   * Vendor API tokens under any key → their prefix: `ghp_***`, `sk-ant-***`,
+   * `sk_live_***`, `xoxb-***`, `AKIA***`. GitHub, npm, Anthropic, OpenAI,
+   * Stripe, Slack and AWS access key ids.
+   */
+  apiKeys: {
+    pattern:
+      /(?<![\w-])(?:(?:github_pat_|gh[pousr]_|sk-ant-|sk-proj-|[sr]k_(?:live|test)_|sk-|xox[abposr]-)[\w-]{16,}|npm_[A-Za-z0-9]{36}|(?:AKIA|ASIA)[A-Z0-9]{16})(?![\w-])/g,
+    mask: (m: string) => `${API_KEY_PREFIX.exec(m)?.[0] ?? ''}***`,
+  },
+  /** A PEM private key block → its header, then `***`, to the END line or the end of a truncated value. */
+  privateKey: {
+    pattern:
+      /-----BEGIN [A-Z ]{0,20}PRIVATE KEY-----(?:(?!-----END)[\s\S])*(?:-----END [A-Z ]{0,20}PRIVATE KEY-----)?/g,
+    mask: (m: string) => `${m.slice(0, m.indexOf('-----', 5) + 5)}***`,
+  },
+  /** The password in a URL → `postgres://app:***@db`. */
+  urlPassword: {
+    // Starts only where a scheme run starts, so no run is rescanned.
+    pattern: /(?<![\w+.-])[a-zA-Z][\w+.-]*:\/\/[^\s:/@]+:[^\s@/]+@/g,
+    mask: (m: string) => {
+      const colon = m.indexOf(':', m.indexOf('://') + 3);
+      return `${m.slice(0, colon + 1)}***@`;
+    },
+  },
   /** IBAN → FR76****189 (country + check digits + last 3) */
   iban: {
     pattern:
@@ -242,6 +282,7 @@ function cloneRegex(re: RegExp): RegExp {
   return new RegExp(re.source, re.flags);
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- decodes a field of a redactor config that may have come from JSON (normalizeAttributeRedactorConfig's raw input)
 function toRegExp(value: unknown): RegExp | undefined {
   if (value instanceof RegExp) return value;
   const literal = asString(value);
@@ -253,6 +294,7 @@ function toRegExp(value: unknown): RegExp | undefined {
     : new RegExp(source, asString(readProperty(value, 'flags')) ?? 'g');
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- decodes a field of a redactor config that may have come from JSON (normalizeAttributeRedactorConfig's raw input)
 function toRegExpArray(value: unknown): RegExp[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const out: RegExp[] = [];
@@ -272,6 +314,9 @@ function builtinToValuePattern(name: BuiltinPatternName): ValuePatternConfig {
  * Default value patterns for the 'default' preset
  */
 const DEFAULT_VALUE_PATTERNS: ValuePatternConfig[] = [
+  builtinToValuePattern('apiKeys'),
+  builtinToValuePattern('privateKey'),
+  builtinToValuePattern('urlPassword'),
   builtinToValuePattern('email'),
   builtinToValuePattern('phone'),
   { name: 'ssn', pattern: REDACTOR_PATTERNS.ssn },
@@ -284,8 +329,10 @@ const DEFAULT_VALUE_PATTERNS: ValuePatternConfig[] = [
 export const REDACTOR_PRESETS = {
   /**
    * Default preset - covers common PII patterns with smart masking
-   * Detects: emails (a***@***.com), phone numbers, SSNs, credit cards (****1111)
-   * Redacts keys: password, secret, token, apiKey, auth, credential, plus
+   * Detects: emails (a***@***.com), phone numbers, SSNs, credit cards (****1111),
+   * vendor tokens (ghp_***, sk-ant-***, AKIA***), PEM private keys, URL passwords
+   * Redacts keys ending in password, secret, token, apiKey, credential(s) or
+   * authorization (newPassword, client_secret, accessToken), `auth`, plus
    * bank details (iban, bic, account number, sort code) and date of birth
    */
   default: {
@@ -302,7 +349,8 @@ export const REDACTOR_PRESETS = {
 
   /**
    * Strict preset - more aggressive redaction for high-security environments
-   * Includes everything in default plus: Bearer tokens, JWTs, IBAN, API keys in values
+   * Includes everything in default plus: Bearer tokens, JWTs, IBAN, API keys in
+   * values
    */
   strict: {
     keyPatterns: [
@@ -415,6 +463,13 @@ export function normalizeAttributeRedactorConfig(
   return config;
 }
 
+/** A preset name rather than a config object: the only string the union holds. */
+function isPresetName(
+  config: AttributeRedactorConfig | AttributeRedactorPreset,
+): config is AttributeRedactorPreset {
+  return asString(config) !== undefined;
+}
+
 /**
  * Resolve config to a normalized form
  */
@@ -426,9 +481,7 @@ function resolveConfig(
     throw new Error('Invalid attribute redactor config');
   }
 
-  // typeof, not asString: this narrows a union of a preset name and a config
-  // object, and only the operator TypeScript understands does that.
-  if (typeof normalized === 'string') {
+  if (isPresetName(normalized)) {
     const preset = REDACTOR_PRESETS[normalized];
     if (!preset) {
       throw new Error(
@@ -859,9 +912,9 @@ function createRedactedSpan(
       if (prop === 'events') return redactedEvents;
       if (prop === 'links') return redactedLinks;
       // For all other properties, delegate to the original span
-      // SAFETY: a proxy get trap forwards whatever key it was asked for, which
-      // is what Reflect.get exists for; the value is redacted before it is
-      // returned, never read as a particular type here.
+      // A proxy get trap forwards whatever key it was asked for, which is what
+      // Reflect.get exists for; the value is never read as a particular type.
+      // oxlint-disable-next-line anti-slop/no-reflect-get -- proxy get trap forwarding an arbitrary property key to its target
       const value = Reflect.get(target, prop);
       // Bind methods to the original target
       return isFunction(value) ? value.bind(target) : value;

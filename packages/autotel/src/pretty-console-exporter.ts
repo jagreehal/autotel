@@ -31,6 +31,7 @@ import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 import {
+  escapeControl,
   ExportResultCode,
   paint,
   useColors,
@@ -314,7 +315,7 @@ export class PrettyConsoleExporter implements SpanExporter {
       prefix,
       this.color(statusChar, statusColor),
       ' ',
-      span.name.padEnd(Math.max(35 - prefix.length, 10)),
+      escapeControl(span.name).padEnd(Math.max(35 - prefix.length, 10)),
       this.color(durationStr.padStart(8), durationColor),
       scopeName,
     ].join('');
@@ -336,7 +337,10 @@ export class PrettyConsoleExporter implements SpanExporter {
     // Print error message if present
     if (isError && span.status.message) {
       console.log(
-        this.color(`${detailIndent}Error: ${span.status.message}`, 'red'),
+        this.color(
+          `${detailIndent}Error: ${escapeControl(span.status.message)}`,
+          'red',
+        ),
       );
     }
 
@@ -355,7 +359,7 @@ export class PrettyConsoleExporter implements SpanExporter {
    * Get short scope name from instrumentation scope
    */
   private getScopeName(span: ReadableSpan): string {
-    const name = span.instrumentationScope?.name ?? 'unknown';
+    const name = escapeControl(span.instrumentationScope?.name ?? 'unknown');
     // Extract short name from @opentelemetry/instrumentation-xxx format
     const match = name.match(/@opentelemetry\/instrumentation-(.+)/);
     if (match?.[1]) return match[1];
@@ -383,10 +387,12 @@ export class PrettyConsoleExporter implements SpanExporter {
 
       // Format value
       const strValue = this.truncate(
-        Array.isArray(value) ? `[${value.join(', ')}]` : String(value),
+        escapeControl(
+          Array.isArray(value) ? `[${value.join(', ')}]` : String(value),
+        ),
         this.options.maxValueLength,
       );
-      pairs.push(`${key}=${strValue}`);
+      pairs.push(`${escapeControl(key)}=${strValue}`);
     }
 
     return pairs.join(', ');

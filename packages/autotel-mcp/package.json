@@ -36,7 +36,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rimraf dist",
-    "format:check": "prettier --check src/**/*.ts"
+    "format:check": "prettier --check src/**/*.ts",
+    "sync:skills": "node scripts/sync-skills.mjs"
   },
   "keywords": [
     "opentelemetry",

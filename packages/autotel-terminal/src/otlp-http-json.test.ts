@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { Readable } from 'node:stream';
-import type { IncomingMessage } from 'node:http';
+import { describe, it, expect, vi } from 'vitest';
+import { Socket } from 'node:net';
+import { IncomingMessage, ServerResponse } from 'node:http';
 import {
   parseOtlpEvents,
   parseOtlpLogEvents,
@@ -505,14 +505,11 @@ describe('countOtlpMetrics', () => {
 // --- readJsonBody (size limit) ---
 
 describe('readJsonBody', () => {
-  function fakeRequest(body: string): IncomingMessage {
-    const stream = new Readable({
-      read() {
-        this.push(Buffer.from(body));
-        this.push(null);
-      },
-    });
-    return stream as unknown as IncomingMessage;
+  function fakeRequest(...chunks: Array<string | Buffer>): IncomingMessage {
+    const req = new IncomingMessage(new Socket());
+    for (const chunk of chunks) req.push(chunk);
+    req.push(null);
+    return req;
   }
 
   it('parses valid JSON body', async () => {
@@ -522,12 +519,7 @@ describe('readJsonBody', () => {
   });
 
   it('returns empty object for empty body', async () => {
-    const stream = new Readable({
-      read() {
-        this.push(null);
-      },
-    });
-    const result = await readJsonBody(stream as unknown as IncomingMessage);
+    const result = await readJsonBody(fakeRequest());
     expect(result).toEqual({});
   });
 
@@ -538,21 +530,9 @@ describe('readJsonBody', () => {
 
   it('throws when body exceeds 10MB limit', async () => {
     const largeChunk = Buffer.alloc(1024 * 1024, 'a'); // 1MB
-    let pushed = 0;
-    const stream = new Readable({
-      read() {
-        if (pushed < 11) {
-          this.push(largeChunk);
-          pushed++;
-        } else {
-          this.push(null);
-        }
-      },
-    });
+    const req = fakeRequest(...Array.from({ length: 11 }, () => largeChunk));
 
-    await expect(
-      readJsonBody(stream as unknown as IncomingMessage),
-    ).rejects.toThrow('Body exceeds');
+    await expect(readJsonBody(req)).rejects.toThrow('Body exceeds');
   });
 });
 
@@ -560,21 +540,43 @@ describe('readJsonBody', () => {
 
 describe('sendJson', () => {
   it('sends JSON response with correct headers', () => {
-    const res = {
-      statusCode: 0,
-      headers: {} as Record<string, string>,
-      body: '',
-      setHeader(key: string, value: string) {
-        this.headers[key] = value;
-      },
-      end(data: string) {
-        this.body = data;
-      },
-    };
+    const res = new ServerResponse(new IncomingMessage(new Socket()));
+    const end = vi.spyOn(res, 'end').mockReturnValue(res);
 
-    sendJson(res as any, 200, { ok: true });
+    sendJson(res, 200, { ok: true });
     expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toBe('application/json');
-    expect(JSON.parse(res.body)).toEqual({ ok: true });
+    expect(res.getHeader('content-type')).toBe('application/json');
+    expect(JSON.parse(String(end.mock.calls[0]?.[0]))).toEqual({ ok: true });
+  });
+});
+
+describe('control characters from clients', () => {
+  it('draws them as escapes in span names, attributes and log bodies', () => {
+    const span = otlpSpanToTerminalEvent({
+      name: 'GET /\r\u001B[2Kfake',
+      spanId: 'a'.repeat(16),
+      traceId: 'b'.repeat(32),
+      startTimeUnixNano: '0',
+      endTimeUnixNano: '1000000',
+      attributes: [
+        { key: 'user_agent.original', value: { stringValue: 'x\n\u009B2J' } },
+      ],
+    });
+    expect(span.name).toBe(String.raw`GET /\r\u001b[2Kfake`);
+    expect(span.attributes?.['user_agent.original']).toBe(
+      String.raw`x\n\u009b2J`,
+    );
+
+    // Log records are escaped once, by logStream.emit() (log-stream.control.test.ts), not here.
+    const [log] = parseOtlpLogEvents({
+      resourceLogs: [
+        {
+          scopeLogs: [
+            { logRecords: [{ body: { stringValue: 'ok\r\u001B[1A' } }] },
+          ],
+        },
+      ],
+    });
+    expect(log?.message).toBe('ok\r\u001B[1A');
   });
 });

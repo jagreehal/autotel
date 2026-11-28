@@ -28,6 +28,11 @@ import {
   traceEventsNotificationHandler,
 } from './events';
 import {
+  createdTask,
+  taskAttributes,
+  traceExtensionClientRequest,
+} from './tasks-skills';
+import {
   capturedPayload,
   failureMessage,
   recordableError,
@@ -42,6 +47,7 @@ import {
   callMethod,
   isFunction,
   member,
+  readProperty,
 } from './values.js';
 
 type ResolvedConfig = ReturnType<typeof resolveConfig>;
@@ -56,10 +62,13 @@ type ResolvedConfig = ReturnType<typeof resolveConfig>;
  * {@link applyFailureGrouping} because the span attributes are gated on
  * `captureErrors` while the duration metric is not.
  */
-function thrownFailure(error: unknown): {
+interface ThrownFailure {
   text: string;
   category: McpFailureCategory | undefined;
-} {
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- a thrown value can be anything; failureTextFromError decodes it.
+function thrownFailure(error: unknown): ThrownFailure {
   const text = failureTextFromError(error);
   return { text, category: text ? classifyFailure(text) : undefined };
 }
@@ -85,6 +94,7 @@ async function classifyClient(
   source: 'arguments' | 'result',
   type: 'tool' | 'resource' | 'prompt',
   name: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a tool's arguments or result: any payload the caller or server supplies, handed to the user's classifier as is.
   value: unknown,
 ): Promise<void> {
   if (!config.securityClassifier) return;
@@ -122,7 +132,7 @@ function getPayloadSizeAttribute(
 function getEntityAttributes(
   type: 'tool' | 'resource' | 'prompt',
   name: string,
-): Record<string, string> {
+) {
   switch (type) {
     case 'tool': {
       return { [MCP_SEMCONV.TOOL_NAME]: name };
@@ -183,13 +193,13 @@ function applyConnectionAttributes(
  * often a client actually pays for it. It is simply absent on a v1 client, and
  * the proxy never matches.
  */
-const DISCOVERY_METHODS: Record<string, string | undefined> = {
-  listTools: MCP_METHODS.TOOLS_LIST,
-  listResources: MCP_METHODS.RESOURCES_LIST,
-  listPrompts: MCP_METHODS.PROMPTS_LIST,
-  ping: MCP_METHODS.PING,
-  discover: MCP_METHODS.SERVER_DISCOVER,
-};
+const DISCOVERY_METHODS = new Map<string, string>([
+  ['listTools', MCP_METHODS.TOOLS_LIST],
+  ['listResources', MCP_METHODS.RESOURCES_LIST],
+  ['listPrompts', MCP_METHODS.PROMPTS_LIST],
+  ['ping', MCP_METHODS.PING],
+  ['discover', MCP_METHODS.SERVER_DISCOVER],
+]);
 
 /**
  * Create a traced wrapper for a discovery operation (listTools, listResources, etc.)
@@ -289,6 +299,7 @@ function wrapDiscoveryMethod(
  * });
  * ```
  */
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- public generic constraint: narrowing it would reject SDK instances typed without an index signature and change what ReturnType<typeof instrumentMcpClient> gives callers.
 export function instrumentMcpClient<T extends Record<string, any>>(
   client: T,
   config?: McpInstrumentationConfig,
@@ -391,9 +402,8 @@ export function instrumentMcpClient<T extends Record<string, any>>(
               // span and the guard would otherwise read it as a success —
               // computed here because the guard is fed before the span status is
               // set, and the two must not disagree.
-              const failed = Boolean(
-                (result as { isError?: unknown })?.isError,
-              );
+              const failed = Boolean(readProperty(result, 'isError'));
+              const createdAsTask = createdTask(result);
 
               // Security: result size, output budget, classifier (contaminated-output vector)
               if (result !== undefined) {
@@ -472,6 +482,12 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                     ? failureMessage(mergedConfig, failureText, name)
                     : undefined,
                 });
+              } else if (createdAsTask) {
+                // Accepted as a task, not done: tasks/* report the outcome.
+                // Set, not left: an unset status is reported as OK when the span ends.
+                ctx.setAttributes(taskAttributes(createdAsTask));
+                ctx.setAttribute(MCP_SEMCONV.TASK_AUGMENTED, true);
+                ctx.setStatus({ code: SpanStatusCode.UNSET });
               } else {
                 ctx.setStatus({ code: SpanStatusCode.OK });
               }
@@ -484,6 +500,9 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 };
                 if (failed) {
                   metricAttrs[MCP_SEMCONV.ERROR_TYPE] = 'tool_error';
+                }
+                if (createdAsTask) {
+                  metricAttrs[MCP_SEMCONV.TASK_AUGMENTED] = true;
                 }
                 if (failureCategory) {
                   metricAttrs[MCP_SEMCONV.FAILURE_CATEGORY] = failureCategory;
@@ -799,7 +818,11 @@ export function instrumentMcpClient<T extends Record<string, any>>(
       // notifications that deliver pushed occurrences.
       if (prop === 'request' && isFunction(value)) {
         // SAFETY: isFunction checked it; the wrapper forwards every argument.
-        return traceEventsClientRequest(value as never, target, mergedConfig);
+        return traceExtensionClientRequest(
+          traceEventsClientRequest(value as never, target, mergedConfig),
+          target,
+          mergedConfig,
+        );
       }
       if (prop === 'setNotificationHandler' && isFunction(value)) {
         return traceEventsNotificationHandler(
@@ -813,9 +836,10 @@ export function instrumentMcpClient<T extends Record<string, any>>(
       // Discovery operations (when enabled). One table, so adding an era
       // method is a single entry rather than another eight-line block.
       if (mergedConfig.captureDiscoveryOperations) {
+        const propName = asString(prop);
         const method =
-          typeof prop === 'string' ? DISCOVERY_METHODS[prop] : undefined;
-        if (method && typeof value === 'function') {
+          propName === undefined ? undefined : DISCOVERY_METHODS.get(propName);
+        if (method && isFunction(value)) {
           return wrapDiscoveryMethod(
             method,
             method,
@@ -835,6 +859,10 @@ export function instrumentMcpClient<T extends Record<string, any>>(
 interface SendingTransport {
   send(message: never, ...rest: never[]): Promise<void>;
 }
+
+/** A transport's send, as {@link instrumentMcpTransport} calls it. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- an outgoing JSON-RPC message of any kind; withTraceMeta decodes it.
+type SendMessage = (message: unknown, ...rest: never[]) => Promise<void>;
 
 /**
  * Add the active trace context to `params._meta` of every request a transport
@@ -865,36 +893,41 @@ interface SendingTransport {
 export function instrumentMcpTransport<T extends SendingTransport>(
   transport: T,
 ): T {
-  // SAFETY: send is called with whatever the client passes; withTraceMeta
-  // only rewrites JSON-RPC requests and hands everything else back untouched.
-  const send = transport.send.bind(transport) as (
-    message: unknown,
-    ...rest: unknown[]
-  ) => Promise<void>;
-  transport.send = ((message: unknown, ...rest: unknown[]) =>
-    send(withTraceMeta(message), ...rest)) as T['send'];
+  // SAFETY: send is called with the JSON-RPC message objects the client
+  // passes; withTraceMeta only rewrites requests and hands everything else
+  // back untouched.
+  const send = transport.send.bind(transport) as SendMessage;
+  const traced: SendMessage = (message, ...rest) =>
+    send(withTraceMeta(message) ?? message, ...rest);
+  // SAFETY: traced takes the same arguments as the original send and returns
+  // its promise.
+  transport.send = traced as T['send'];
   return transport;
 }
 
-function withTraceMeta(message: unknown): unknown {
+/** The trace context keys added to an outgoing request's `_meta`. */
+interface TraceMeta {
+  traceparent: string;
+  tracestate?: string;
+  baggage?: string;
+}
+
+/** The request with trace context in its `_meta`, or undefined to send the message untouched. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- an outgoing JSON-RPC message of any kind: this is where it is decoded.
+function withTraceMeta(message: unknown) {
   const request = asRecord(message);
   // A request has both a method and an id; notifications and responses don't.
-  if (!request || typeof request.method !== 'string' || !('id' in request))
-    return message;
+  if (!request || asString(request.method) === undefined || !('id' in request))
+    return;
   const { traceparent, tracestate, baggage } = injectOtelContextToMeta();
-  if (!traceparent) return message;
+  if (!traceparent) return;
   const params = asRecord(request.params) ?? {};
+  const traceMeta: TraceMeta = { traceparent };
+  if (tracestate) traceMeta.tracestate = tracestate;
+  if (baggage) traceMeta.baggage = baggage;
   return {
     ...request,
-    params: {
-      ...params,
-      _meta: {
-        traceparent,
-        ...(tracestate ? { tracestate } : {}),
-        ...(baggage ? { baggage } : {}),
-        ...asRecord(params._meta),
-      },
-    },
+    params: { ...params, _meta: { ...traceMeta, ...asRecord(params._meta) } },
   };
 }
 

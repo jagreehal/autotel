@@ -18,6 +18,7 @@ import { registerEstimateTools } from './estimate';
 import { registerAgentUsageTools } from './agent-usage';
 import { registerLiveValidationTools } from './live-validation';
 import { registerAnalyticsTools } from './analytics';
+import { registerMcpSessionTools } from './mcp-sessions';
 import { registerResources } from '../resources/index';
 import type { RuntimeSignalAvailability } from '../modules/signal-availability';
 
@@ -58,8 +59,10 @@ function scoped(
           return target.registerTool(name, scopedConfig, callback);
         };
       }
+      /* oxlint-disable anti-slop/no-reflect-get, anti-slop/no-runtime-typeof -- A Proxy forwarding every other McpServer member; methods are bound so they run against the real server. */
       const value: unknown = Reflect.get(target, property, target);
       return typeof value === 'function' ? value.bind(target) : value;
+      /* oxlint-enable anti-slop/no-reflect-get, anti-slop/no-runtime-typeof */
     },
   });
 }
@@ -102,6 +105,7 @@ export function registerTools(
     registerInvestigationTools(server, backend);
     registerTopologyTools(server, backend);
     registerLlmAnalyticsTools(llm, backend);
+    registerMcpSessionTools(llm, backend);
     registerDiagnosisTools(server, backend);
     registerCorrelationTools(server, backend);
   }

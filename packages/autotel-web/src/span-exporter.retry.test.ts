@@ -1,16 +1,26 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'vitest';
 import {
   configureExporter,
   flushSpans,
   pendingSpanCount,
   recordSpan,
+  rejectedCount,
   resetForTesting,
+  retryAfterMs,
   setRawFetch,
 } from './span-exporter';
 import { resetSessionForTesting } from './session';
 
-let fetchMock: ReturnType<typeof vi.fn>;
+let fetchMock: Mock;
 
 function span(name = 'test'): void {
   recordSpan('a'.repeat(32), 'b'.repeat(16), name, 1, 2);
@@ -21,7 +31,7 @@ beforeEach(() => {
   resetForTesting();
   resetSessionForTesting();
   fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-  setRawFetch(fetchMock as unknown as typeof globalThis.fetch);
+  setRawFetch((input, init) => fetchMock(input, init));
   // sendBeacon is fire-and-forget and reports nothing, so it cannot be retried
   // against; the exporter must prefer fetch while the page is alive.
   Object.defineProperty(navigator, 'sendBeacon', {
@@ -68,6 +78,63 @@ describe('delivery', () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200 });
     await vi.advanceTimersByTimeAsync(60_000);
     expect(pendingSpanCount()).toBe(0);
+  });
+
+  it.each([400, 500])(
+    'sends a batch the collector answers %i once',
+    async (status) => {
+      fetchMock.mockResolvedValue({ ok: false, status });
+      span();
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(pendingSpanCount()).toBe(0);
+    },
+  );
+
+  it('waits as long as Retry-After asks', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      headers: new Headers({ 'retry-after': '120' }),
+    });
+    span();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(100_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(pendingSpanCount()).toBe(0);
+  });
+
+  it('drops a batch the collector asks to hold past ten minutes', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      headers: new Headers({ 'retry-after': '3600' }),
+    });
+    span();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pendingSpanCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns in debug when a 2xx carries rejected records', async () => {
+    configureExporter('web', 'https://collector.example.com', true);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ partialSuccess: { rejectedSpans: '1' } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    span();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('rejected 1 of 1 traces'),
+    );
+    vi.restoreAllMocks();
   });
 
   it('backs off rather than hammering', async () => {
@@ -230,9 +297,7 @@ describe('unload and exhaustion keep what they should', () => {
     recordSpan('e'.repeat(32), 'f'.repeat(16), 'healthy-2', 1, 2);
     await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
 
-    const bodies = fetchMock.mock.calls.map(([, init]) =>
-      String((init as RequestInit).body),
-    );
+    const bodies = fetchMock.mock.calls.map(([, init]) => String(init.body));
     // The healthy records reached the collector on their own, rather than
     // riding — and dying — with the batch in front of them.
     expect(
@@ -268,5 +333,31 @@ describe('unload during backoff', () => {
     vi.mocked(navigator.sendBeacon).mockReturnValue(false);
     flushSpans({ beacon: true });
     expect(pendingSpanCount()).toBe(1);
+  });
+});
+
+describe('response parsing', () => {
+  it('reads Retry-After in seconds or as a date, capped', () => {
+    expect(retryAfterMs('3')).toBe(3000);
+    expect(
+      retryAfterMs(new Date(Date.now() + 60_000).toUTCString()),
+    ).toBeGreaterThan(50_000);
+    expect(retryAfterMs('3600')).toBe(3_600_000);
+    expect(retryAfterMs('soon')).toBeUndefined();
+    expect(retryAfterMs(null)).toBeUndefined();
+  });
+
+  it('counts partialSuccess rejections for spans and logs', async () => {
+    const json = (body: string) =>
+      new Response(body, { headers: { 'content-type': 'application/json' } });
+    await expect(
+      rejectedCount(json('{"partialSuccess":{"rejectedSpans":"2"}}')),
+    ).resolves.toBe(2);
+    await expect(
+      rejectedCount(json('{"partialSuccess":{"rejectedLogRecords":3}}')),
+    ).resolves.toBe(3);
+    await expect(rejectedCount(json('{"partialSuccess":{}}'))).resolves.toBe(0);
+    await expect(rejectedCount(json('not json'))).resolves.toBe(0);
+    await expect(rejectedCount(new Response('{}'))).resolves.toBe(0);
   });
 });

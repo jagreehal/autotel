@@ -33,10 +33,13 @@ import { getIdentityAttributes } from './identity';
 import { otlpEndpointFor, type OtlpSignal } from './otlp-endpoint';
 import { sampleByKey } from './sampling';
 import { RESOURCE, SESSION } from './semconv';
-import { asString, readProperty } from './values';
+import { asRecord, asString, readProperty } from './values';
 
 /** Retries for one batch before it is given up on. */
 const MAX_RETRIES = 8;
+/** The longest `Retry-After` honoured; a batch asked to wait longer is dropped. */
+const MAX_RETRY_AFTER_MS = 10 * 60_000;
+const TRANSIENT_STATUS = new Set([408, 429, 502, 503, 504]);
 /** Consecutive responseless failures before the exporter stops trying. */
 const MAX_BLOCKED_FAILURES = 3;
 /** Ceiling on a single backoff step. */
@@ -50,14 +53,36 @@ const MAX_QUEUED_SPANS = 1000;
  * share the blocked-request count, because that describes the network rather
  * than the payload.
  */
+/** An OTLP `AnyValue` as this exporter writes it. */
+type OtlpAnyValue =
+  | { boolValue: boolean }
+  | { intValue: string }
+  | { doubleValue: number }
+  | { stringValue: string };
+
+interface OtlpKeyValue {
+  key: string;
+  value: OtlpAnyValue;
+}
+
+/**
+ * A queued span or log record, as far as this module reads it: session
+ * settling reads `attributes`, log grouping reads `scope`. The rest of the
+ * record rides along untouched to `JSON.stringify`.
+ */
+interface OtlpRecord {
+  attributes?: OtlpKeyValue[];
+  scope?: string;
+}
+
 interface SignalQueue {
-  pending: unknown[];
+  pending: OtlpRecord[];
   /**
    * The batch currently being retried, held apart from `pending` so that giving
    * up on it discards exactly it — and not the records queued behind it, which
    * have never been attempted.
    */
-  retryBatch?: unknown[];
+  retryBatch?: OtlpRecord[];
   retries: number;
   retryTimer?: ReturnType<typeof setTimeout>;
   inFlight: boolean;
@@ -73,10 +98,10 @@ let debug = false;
 let serviceName = 'browser';
 let extraResource: Record<string, string> = {};
 let exportEndpoint: string | undefined;
-let queues: Record<OtlpSignal, SignalQueue> = {
+let queues = {
   traces: emptyQueue(),
   logs: emptyQueue(),
-};
+} satisfies Record<OtlpSignal, SignalQueue>;
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 let rawFetch: typeof globalThis.fetch | undefined;
 /**
@@ -244,7 +269,7 @@ export function recordSpan(
   flushSpans();
 }
 
-function enqueue(signal: OtlpSignal, record: unknown): void {
+function enqueue<R extends OtlpRecord>(signal: OtlpSignal, record: R): void {
   const queue = queues[signal];
   queue.pending.push(record);
   if (queue.pending.length > MAX_QUEUED_SPANS) {
@@ -254,7 +279,7 @@ function enqueue(signal: OtlpSignal, record: unknown): void {
   }
 }
 
-function resourceAttributes(): { key: string; value: unknown }[] {
+function resourceAttributes(): OtlpKeyValue[] {
   return [
     { key: RESOURCE.SERVICE_NAME, value: { stringValue: serviceName } },
     ...Object.entries(extraResource).map(([key, value]) => ({
@@ -267,7 +292,7 @@ function resourceAttributes(): { key: string; value: unknown }[] {
 /** OTLP attribute list from a flat record. */
 function otlpAttributes(
   values: Record<string, string | number | boolean>,
-): { key: string; value: unknown }[] {
+): OtlpKeyValue[] {
   return Object.entries(values).map(([key, value]) => ({
     key,
     value: otlpValue(value),
@@ -275,8 +300,10 @@ function otlpAttributes(
 }
 
 /** An OTLP `AnyValue`. Numbers keep their type — an int is not a double. */
-function otlpValue(value: string | number | boolean): unknown {
+function otlpValue(value: string | number | boolean): OtlpAnyValue {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating an already-typed OTel attribute value; the union is what the wire format carries
   if (typeof value === 'boolean') return { boolValue: value };
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- as above: an int and a double are different OTLP fields
   if (typeof value === 'number') {
     return Number.isInteger(value)
       ? { intValue: String(value) }
@@ -304,22 +331,14 @@ function settleSession(record: OtlpRecord): OtlpRecord {
   return changed ? { ...record, attributes } : record;
 }
 
-/** A queued span or log record, as far as session settling reads it. */
-interface OtlpRecord {
-  attributes?: { key: string; value: unknown }[];
-}
-
-function payloadFor(signal: OtlpSignal, unsettled: unknown[]): string {
-  // SAFETY: the queues hold only records `recordSpan` and `recordLog` built,
-  // each with an `otlpAttributes` list.
-  const built = unsettled as OtlpRecord[];
-  const records = built.map(settleSession);
+function payloadFor(signal: OtlpSignal, unsettled: OtlpRecord[]): string {
+  const records = unsettled.map(settleSession);
   if (signal === 'logs') {
     // Grouped by scope so console auto-capture is distinguishable from what the
     // application logged deliberately.
-    const byScope = new Map<string, unknown[]>();
+    const byScope = new Map<string | undefined, OtlpRecord[]>();
     for (const record of records) {
-      const { scope, ...rest } = record as { scope: string };
+      const { scope, ...rest } = record;
       const bucket = byScope.get(scope) ?? [];
       bucket.push(rest);
       byScope.set(scope, bucket);
@@ -346,7 +365,36 @@ function payloadFor(signal: OtlpSignal, unsettled: unknown[]): string {
   });
 }
 
-function scheduleRetry(signal: OtlpSignal, batch: unknown[]): void {
+/** The wait a `Retry-After` header asks for, in seconds or as an HTTP date. */
+export function retryAfterMs(
+  header: string | null | undefined,
+): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header);
+  const ms = Number.isFinite(seconds)
+    ? seconds * 1000
+    : Date.parse(header) - Date.now();
+  return Number.isFinite(ms) && ms >= 0 ? ms : undefined;
+}
+
+/** Records an OTLP collector refused inside a 2xx (`partialSuccess`), or 0. */
+export async function rejectedCount(response: Response): Promise<number> {
+  if (!response.headers?.get('content-type')?.includes('json')) return 0;
+  const partial = asRecord(
+    readProperty(await response.json().catch(() => null), 'partialSuccess'),
+  );
+  // int64 fields arrive as strings in OTLP/JSON.
+  const count = Number(
+    partial?.rejectedSpans ?? partial?.rejectedLogRecords ?? 0,
+  );
+  return Number.isFinite(count) ? count : 0;
+}
+
+function scheduleRetry(
+  signal: OtlpSignal,
+  batch: OtlpRecord[],
+  waitMs?: number,
+): void {
   const queue = queues[signal];
   if (queue.retries >= MAX_RETRIES) {
     // This batch has had its chances. Only this batch: the records queued
@@ -362,7 +410,7 @@ function scheduleRetry(signal: OtlpSignal, batch: unknown[]): void {
   }
   queue.retryBatch = batch;
   if (queue.retryTimer !== undefined) return;
-  const delay = backoffMs(queue.retries);
+  const delay = waitMs ?? backoffMs(queue.retries);
   queue.retries += 1;
   queue.retryTimer = setTimeout(() => {
     queue.retryTimer = undefined;
@@ -444,16 +492,31 @@ function flushSignal(signal: OtlpSignal, options?: FlushOptions): void {
       if (response.ok) {
         queue.retries = 0;
         blockedFailures = 0;
+        // A collector can accept the request and still refuse records in it.
+        if (debug) {
+          void rejectedCount(response).then((rejected) => {
+            if (rejected > 0)
+              console.warn(
+                `[autotel-web] collector rejected ${rejected} of ${records.length} ${signal} record(s) (partialSuccess)`,
+              );
+          });
+        }
         return;
       }
-      // A 4xx that is not 408/429 will fail identically next time; only a
-      // server or throttling error is worth repeating.
-      const worthRetrying =
-        response.status >= 500 ||
-        response.status === 408 ||
-        response.status === 429;
-      if (worthRetrying) {
-        scheduleRetry(signal, records);
+      // Only what can succeed later: a timeout, throttling, or a gateway or
+      // collector that is down. A 400 or a plain 500 is the payload, and fails
+      // identically next time.
+      const wait = retryAfterMs(response.headers?.get('retry-after'));
+      if (wait !== undefined && wait > MAX_RETRY_AFTER_MS) {
+        // Sending sooner than the collector asked only earns another refusal,
+        // and holding the batch longer outlives most visits: drop it.
+        queue.retries = 0;
+        if (debug)
+          console.warn(
+            `[autotel-web] collector asked to wait ${Math.round(wait / 60_000)} min; dropping ${records.length} ${signal} record(s)`,
+          );
+      } else if (TRANSIENT_STATUS.has(response.status)) {
+        scheduleRetry(signal, records, wait);
       } else if (debug) {
         console.warn(
           `[autotel-web] collector rejected ${records.length} ${signal} record(s): ${response.status}`,

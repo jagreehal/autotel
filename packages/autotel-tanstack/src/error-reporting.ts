@@ -33,7 +33,7 @@ class ErrorStore {
   /**
    * Report an error
    */
-  reportError(error: Error, context?: unknown): string {
+  reportError<TContext>(error: Error, context?: TContext): string {
     const key = `${error.name}:${error.message}`;
     const existing = this.errors.get(key);
 
@@ -42,10 +42,11 @@ class ErrorStore {
       existing.lastSeen = new Date();
       if (context) {
         // Merge context
-        existing.error.context = {
-          ...(existing.error.context as Record<string, unknown>),
-          ...(context as Record<string, unknown>),
-        };
+        existing.error.context = Object.assign(
+          {},
+          existing.error.context,
+          context,
+        );
       }
       return key;
     }
@@ -138,7 +139,10 @@ export const errorStore = new ErrorStore();
  * }
  * ```
  */
-export function reportError(error: Error, context?: unknown): string {
+export function reportError<TContext>(
+  error: Error,
+  context?: TContext,
+): string {
   return errorStore.reportError(error, context);
 }
 
@@ -152,7 +156,6 @@ export function reportError(error: Error, context?: unknown): string {
  * ```typescript
  * // routes/admin/errors.ts
  * import { createFileRoute } from '@tanstack/react-router';
- * import { json } from '@tanstack/react-start';
  * import { createErrorReportingHandler } from 'autotel-tanstack/error-reporting';
  *
  * export const Route = createFileRoute('/admin/errors')({
@@ -164,11 +167,9 @@ export function reportError(error: Error, context?: unknown): string {
  * });
  * ```
  */
-export function createErrorReportingHandler() {
+export function createErrorReportingHandler(): () => Promise<Response> {
   return async () => {
-    const { json } = await import('@tanstack/react-start');
-
-    return json({
+    return Response.json({
       errors: errorStore.getAllErrors(),
     });
   };
@@ -189,15 +190,18 @@ export function createErrorReportingHandler() {
  *   }, { operation: 'riskyOperation' }));
  * ```
  */
-export function withErrorReporting<TArgs extends unknown[], TReturn>(
+export function withErrorReporting<TArgs extends unknown[], TReturn, TContext>(
   fn: (...args: TArgs) => Promise<TReturn>,
-  context?: Record<string, unknown>,
+  context?: TContext,
 ): (...args: TArgs) => Promise<TReturn> {
   return async (...args: TArgs): Promise<TReturn> => {
     try {
       return await fn(...args);
     } catch (error) {
-      reportError(error as Error, context);
+      reportError(
+        error instanceof Error ? error : new Error(String(error)),
+        context,
+      );
       throw error;
     }
   };

@@ -34,6 +34,8 @@ export const vercelWaitUntil = (): Work | undefined =>
 export interface WebHandlerOptions {
   /** The platform's waitUntil for this request. Default: Vercel's, when running there. */
   readonly waitUntil?: () => Work | undefined;
+  /** Flushes telemetry after the response. Default: autotel's `flush`. */
+  readonly flush?: () => Promise<void>;
 }
 
 /**
@@ -53,6 +55,15 @@ export function webHandler(
   options: WebHandlerOptions = {},
 ): (request: Request) => Promise<Response> {
   const findWaitUntil = options.waitUntil ?? vercelWaitUntil;
+  const flushTelemetry = options.flush ?? flush;
+  // A telemetry failure, thrown or rejected, must never replace the request's own outcome.
+  const safeFlush = async (): Promise<void> => {
+    try {
+      await flushTelemetry();
+    } catch {
+      // flush() logs its own timeout.
+    }
+  };
   return async (request) => {
     const platform = findWaitUntil();
     // No platform hook (Lambda): hold the work here and await it before returning, since the function freezes then.
@@ -77,6 +88,3 @@ export function webHandler(
     }
   };
 }
-
-// flush() rejects on timeout and already logs it; a telemetry failure must never replace the request's own outcome.
-const safeFlush = (): Promise<void> => flush().catch(() => {});

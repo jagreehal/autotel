@@ -176,7 +176,7 @@ See `packages/autotel/.env.example` for a complete template.
 
 ## PII Redaction
 
-Redaction is auto-enabled in production. When you leave `attributeRedactor` unset and the resolved environment is `production` (`config.environment` or `NODE_ENV`), autotel applies the `'default'` preset so span attributes, span events, links and log records never carry raw PII to your backend. In non-production environments redaction stays off so local debugging shows real values.
+Redaction is auto-enabled in production. When you leave `attributeRedactor` unset and the resolved environment is `production` (`config.environment` or `NODE_ENV`), autotel applies the `'default'` preset so span attributes, span events, links and log records never carry raw PII to your backend. In every other environment only URL query values are masked (`url.full`, `url.query`, `http.url`, `http.target` keep parameter names, lose values), since staging exports to real backends too and a query string carries tokens no pattern recognises. Everything else shows real values for local debugging. `attributeRedactor: false` or `AUTOTEL_REDACT_PII=off` exports queries as sent.
 
 Set a stronger preset, or control the default, three ways:
 
@@ -190,7 +190,7 @@ init({ service: 'checkout-api', attributeRedactor: 'strict' });
 init({ service: 'checkout-api', attributeRedactor: false });
 ```
 
-The `AUTOTEL_REDACT_PII` env var overrides the default without a code change: `off` (or `false` / `none`) disables it, `default` / `strict` / `pci-dss` selects a preset, and `on` (or `true`) forces the `default` preset on in any environment. Precedence is explicit config, then env var, then the production default.
+The `AUTOTEL_REDACT_PII` env var overrides the default without a code change: `off` (or `false` / `none`) disables it, `default` / `strict` / `pci-dss` selects a preset, and `on` (or `true`) forces the `default` preset on in any environment. Precedence is explicit config, then env var, then the environment default.
 
 The presets mask values before any exporter sees them:
 

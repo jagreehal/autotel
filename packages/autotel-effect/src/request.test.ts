@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { flush, init, track } from 'autotel';
+import type { EventAttributes } from 'autotel/event-subscriber';
 import { createMemoryExporter } from 'autotel/testing';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
@@ -18,7 +19,7 @@ import {
 // on the server span, on every span below it and on its events; work after the response kept alive; spans flushed.
 
 const exporter = createMemoryExporter();
-const events: { name: string; attributes?: Record<string, unknown> }[] = [];
+const events: { name: string; attributes?: EventAttributes }[] = [];
 
 beforeAll(() => {
   init({

@@ -6,6 +6,7 @@
  */
 
 import type { SpanAttributes } from './attrs.js';
+import { asString, escapeControlDeep } from './values.js';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 import { SpanStatusCode, SpanKind } from 'autotel';
 import type { StreamingSpanProcessor } from './streaming-processor';
@@ -136,9 +137,7 @@ export function createTerminalSpanStream(
         // parentSpanId is not part of the standard ReadableSpan interface
         // but some implementations (like Node.js SDK) include it
         const parentSpanId =
-          'parentSpanId' in span && typeof span.parentSpanId === 'string'
-            ? span.parentSpanId
-            : undefined;
+          'parentSpanId' in span ? asString(span.parentSpanId) : undefined;
 
         // Convert time tuples to milliseconds
         const startTime = timeToMs(span.startTime);
@@ -189,7 +188,8 @@ export function createTerminalSpanStream(
           links: spanLinks,
         };
 
-        callback(event);
+        // Span names and attributes can carry what a client sent; draw control characters as escapes.
+        callback(escapeControlDeep(event));
       });
     },
   };
